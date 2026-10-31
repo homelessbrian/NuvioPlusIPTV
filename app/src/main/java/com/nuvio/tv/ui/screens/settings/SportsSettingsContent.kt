@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.livetv.record.LiveTvNotice
+import com.nuvio.tv.livetv.sports.ChannelRegions
 import com.nuvio.tv.livetv.sports.League
 import com.nuvio.tv.livetv.sports.SportsCatalog
 import com.nuvio.tv.livetv.sports.SportsSettings
@@ -79,6 +80,16 @@ fun SportsSettingsContent(
             contentPadding = PaddingValues(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
+            if (!s.showInSidebar) item(key = "off") {
+                SettingsGroupCard {
+                    SettingsActionRow(
+                        title = "Sports Is Turned Off",
+                        subtitle = "The Sports page, game reminders and scores on the info bar are off. It's switched on and off in Settings → Menu & Features.",
+                        value = "Turn On",
+                        onClick = { update { it.copy(showInSidebar = true) } }
+                    )
+                }
+            }
             item(key = "teams") {
                 SettingsGroupCard(title = "Your Teams") {
                     val names = (f.teams.map { it.name } + f.pins.mapNotNull { SportsCatalog.league(it)?.name } + f.words.map { "\"$it\"" })
@@ -103,12 +114,6 @@ fun SportsSettingsContent(
                         value = SportsCatalog.regionName(region) + if (s.region.isBlank()) " (this TV)" else "",
                         leadingIcon = Icons.Default.Public,
                         onClick = { dialog = "region" }
-                    )
-                    SettingsToggleRow(
-                        "Show Sports in the Side Menu",
-                        "Off: the Sports page, reminders and scores on the info bar are all switched off",
-                        s.showInSidebar,
-                        { update { it.copy(showInSidebar = !it.showInSidebar) } }
                     )
                 }
             }
@@ -184,6 +189,14 @@ fun SportsSettingsContent(
                         onClick = { viewModel.repo.refreshNow(); LiveTvNotice.show("Updating Sports…") }
                     )
                     SettingsActionRow(
+                        title = "Channels From",
+                        subtitle = "Each game lists only this region's (or language's) channels, with the others one click away. " +
+                            "Also on each game's page",
+                        value = ChannelRegions.shortName(s.channelRegion),
+                        leadingIcon = Icons.Default.Public,
+                        onClick = { dialog = "channelRegion" }
+                    )
+                    SettingsActionRow(
                         title = "Preferred Channel Groups",
                         subtitle = "Channels in these groups go to the top of every game's list (your UK sports channels, say). " +
                             "Without any, channels from your region come first",
@@ -222,6 +235,13 @@ fun SportsSettingsContent(
                 SportsCatalog.regions.map { SettingsPickerOption(it.first, it.second) },
             selectedValue = s.region,
             onOptionSelected = { v -> update { it.copy(region = v) }; close() },
+            onDismiss = close
+        )
+        "channelRegion" -> SettingsSingleChoiceDialog(
+            title = "Channels from",
+            options = ChannelRegions.all.map { SettingsPickerOption(it.first, it.second) },
+            selectedValue = s.channelRegion,
+            onOptionSelected = { v -> update { it.copy(channelRegion = v) }; close() },
             onDismiss = close
         )
         "remind" -> SettingsSingleChoiceDialog(

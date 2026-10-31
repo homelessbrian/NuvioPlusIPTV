@@ -58,6 +58,12 @@ fun LiveTvReminderHost(navController: NavController) {
         runCatching { EntryPointAccessors.fromApplication(context.applicationContext, ReminderEntryPoint::class.java) }.getOrNull()
     } ?: return
     val scope = rememberCoroutineScope()
+    // A show's page asked for Live TV (Watch live on its next episode).
+    LaunchedEffect(Unit) {
+        com.nuvio.tv.livetv.calendar.CalendarNav.openLive.collect {
+            com.nuvio.tv.livetv.sports.openLiveTvFullscreen(navController)
+        }
+    }
     var due by remember { mutableStateOf<Reminder?>(null) }
     val shown = remember { HashSet<String>() }
 

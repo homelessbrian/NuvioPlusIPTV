@@ -7,6 +7,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -209,6 +211,54 @@ internal fun GuideGearButton(modifier: Modifier = Modifier, onOpen: () -> Unit, 
             androidx.compose.material.icons.Icons.Default.Settings,
             contentDescription = "Guide display",
             tint = focusedTextColor(focused),
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+/**
+ * Recordings, beside the guide's ⚙: what's recorded and set to record, and Schedule a
+ * Recording. A red dot while something is recording.
+ */
+@Composable
+internal fun GuideRecordingsButton(modifier: Modifier = Modifier, onOpen: () -> Unit, onDown: () -> Unit) {
+    var focused by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val recorder = androidx.compose.runtime.remember {
+        runCatching {
+            dagger.hilt.android.EntryPointAccessors.fromApplication(
+                context.applicationContext, com.nuvio.tv.livetv.startup.LiveTvStartupEntryPoint::class.java
+            ).liveTvRecorder()
+        }.getOrNull()
+    }
+    val recordingNow = recorder?.recordings?.collectAsState()?.value.orEmpty()
+        .any { it.status == com.nuvio.tv.livetv.record.RecordingStatus.RECORDING }
+    val cell = liveCellColors(focused, Color.White.copy(alpha = 0.10f))
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        modifier = modifier
+            .size(34.dp)
+            .clip(shape)
+            .background(cell.background)
+            .border(if (focused) 2.dp else 1.dp, if (focused) cell.border else GuideGlassEdge, shape)
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { e ->
+                if (e.key == Key.DirectionDown) {
+                    if (e.type == KeyEventType.KeyDown) onDown()
+                    true
+                } else false
+            }
+            .combinedClickable(
+                interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onOpen
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.tv.material3.Icon(
+            androidx.compose.material.icons.Icons.Default.RadioButtonChecked,
+            contentDescription = "Recordings",
+            tint = if (recordingNow) LIVE_RED else focusedTextColor(focused),
             modifier = Modifier.size(18.dp)
         )
     }

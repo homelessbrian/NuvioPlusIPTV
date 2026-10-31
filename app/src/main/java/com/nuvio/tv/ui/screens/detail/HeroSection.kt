@@ -76,6 +76,8 @@ import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
 import com.nuvio.tv.ui.components.MDBListRatingsRow
 import com.nuvio.tv.ui.components.SynopsisDescription
 import com.nuvio.tv.ui.theme.NuvioTheme
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
@@ -282,6 +284,20 @@ fun HeroContentSection(
                             onFocused = onHeroActionFocused
                         )
 
+                        // Live TV fork: the bell puts it on your Calendar (new episodes on Home).
+                        com.nuvio.tv.livetv.calendar.rememberCalendarBell(meta)?.let { bell ->
+                            ActionIconButton(
+                                icon = if (bell.on) Icons.Default.NotificationsActive
+                                else Icons.Default.NotificationsNone,
+                                contentDescription = if (bell.on) "Turn off the bell" else "Ring the bell: new episodes on Home and in your Calendar",
+                                onClick = bell.toggle,
+                                selected = bell.on,
+                                selectedContainerColor = Color.White,
+                                selectedContentColor = Color.Black,
+                                onFocused = onHeroActionFocused
+                            )
+                        }
+
                         if (meta.apiType == "movie") {
                             ActionIconButton(
                                 icon = if (isMovieWatched) {
@@ -325,6 +341,9 @@ fun HeroContentSection(
                     }
 
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
+
+                    // Live TV fork: when the next episode airs (and Record, when it's in your guide).
+                    com.nuvio.tv.livetv.calendar.CalendarNextLine(meta = meta, onFocused = onHeroActionFocused)
 
                     // Director/Writer line above description
                     if (!creditLine.isNullOrBlank()) {

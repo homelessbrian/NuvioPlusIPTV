@@ -94,6 +94,11 @@ class RecordingsViewModel @Inject constructor(
             (user.favorites + user.recent).distinct().mapNotNull { byKey[it] }.take(80)
         }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Playlist id -> its name, to say which playlist a recording is from (and which it uses). */
+    val playlistNames: kotlinx.coroutines.flow.StateFlow<Map<String, String>> = livePrefs.playlists
+        .map { list -> list.associate { it.id to it.name } }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyMap())
+
     /** The guide's look (background, panel darkness, highlight style), so this screen matches it. */
     val look: kotlinx.coroutines.flow.StateFlow<com.nuvio.tv.livetv.model.LiveTvSettings> = livePrefs.settings
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, com.nuvio.tv.livetv.model.LiveTvSettings())
@@ -234,6 +239,13 @@ fun RecordingsScreen(
     }
     var seriesMenu by remember { mutableStateOf<SeriesRule?>(null) }
     var seriesKeepMenu by remember { mutableStateOf<SeriesRule?>(null) }
+    // Which playlist each recording uses: shown on the cards when there's more than one (handy
+    // with a one-connection login: don't watch that playlist while it records).
+    val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()
+    fun playlistOf(sourceId: String): String? = playlistNames[sourceId]
+    val showPlaylist = playlistNames.size > 1
+    fun withPlaylist(channelName: String, sourceId: String): String =
+        if (showPlaylist) listOfNotNull(channelName, playlistOf(sourceId)).joinToString(" · ") else channelName
     LaunchedEffect(recordings) { viewModel.loadPosters(recordings); viewModel.loadArt(recordings) }
     var menuFor by remember { mutableStateOf<LiveTvRecording?>(null) }
     var confirmDelete by remember { mutableStateOf<LiveTvRecording?>(null) }
@@ -350,7 +362,7 @@ fun RecordingsScreen(
                         items(schedules, key = { it.id }) { s ->
                             InfoCard(
                                 title = s.title + (s.episode?.let { "  ·  $it" } ?: ""),
-                                line = s.channel.name + " · " + dateLabel(s.startMs),
+                                line = withPlaylist(s.channel.name, s.channel.sourceId) + " · " + dateLabel(s.startMs),
                                 note = if (s.useCatchup) viewModel.catchupNote(s) else null,
                                 modifier = if (s.id == firstScheduleId) Modifier.focusRequester(first) else Modifier,
                                 onClick = { scheduleMenu = s }
@@ -368,7 +380,7 @@ fun RecordingsScreen(
                         items(seriesRules, key = { it.id }) { r ->
                             InfoCard(
                                 title = r.title,
-                                line = r.channel.name + " · " + (if (r.keepLast > 0) "Keep last ${r.keepLast}" else "Keep all"),
+                                line = withPlaylist(r.channel.name, r.channel.sourceId) + " · " + (if (r.keepLast > 0) "Keep last ${r.keepLast}" else "Keep all"),
                                 note = null,
                                 modifier = if (r.id == firstSeriesId) Modifier.focusRequester(first) else Modifier,
                                 onClick = { seriesMenu = r }
@@ -415,7 +427,8 @@ fun RecordingsScreen(
     scheduleMenu?.let { s ->
         RecordingActionDialog(
             title = s.title,
-            detail = s.channel.name + " · " + dateLabel(s.startMs),
+            detail = s.channel.name + " · " + dateLabel(s.startMs) +
+                (playlistOf(s.channel.sourceId)?.let { "\nRecording from playlist: $it" } ?: ""),
             actions = listOf(
                 "Cancel Recording" to { scheduleMenu = null; viewModel.scheduler.cancel(s.id) },
                 "Close" to { scheduleMenu = null }
@@ -428,7 +441,8 @@ fun RecordingsScreen(
     seriesMenu?.let { r ->
         RecordingActionDialog(
             title = r.title,
-            detail = "Every airing on " + r.channel.name + ". Stopping it also cancels the airings it set that haven't started; what's recorded is kept.",
+            detail = (playlistOf(r.channel.sourceId)?.let { "Recording from playlist: $it\n" } ?: "") +
+                "Every new episode on " + r.channel.name + " (repeats of episodes already recorded are skipped). Stopping it also cancels the airings it set that haven't started; what's recorded is kept.",
             actions = listOf(
                 "Stop Recording Series" to { seriesMenu = null; viewModel.scheduler.removeSeries(r.id) },
                 ("Episodes to Keep: " + (if (r.keepLast == 0) "All" else "Last ${r.keepLast}")) to { seriesMenu = null; seriesKeepMenu = r },
@@ -479,7 +493,7 @@ fun RecordingsScreen(
         // Live: a recording still going keeps its size and length up to date.
         val rec = recordings.firstOrNull { it.id == picked.id } ?: picked
         val context = androidx.compose.ui.platform.LocalContext.current
-        RecordingInfoDialog(rec, savedOnLabel(context, rec.dir), onDismiss = { infoFor = null })
+        RecordingInfoDialog(rec, savedOnLabel(context, rec.dir), playlistOf(rec.channelKey.substringBefore('|')), onDismiss = { infoFor = null })
     }
     confirmDelete?.let { rec ->
         RecordingActionDialog(
@@ -838,7 +852,7 @@ private fun RecordingActionDialog(
         LiveText(title, size = 20.sp, weight = FontWeight.Bold, maxLines = 2)
         if (!detail.isNullOrBlank()) {
             Spacer(Modifier.height(4.dp))
-            LiveText(detail, size = 13.sp, color = NuvioTheme.colors.TextSecondary, maxLines = 4)
+            LiveText(detail, size = 13.sp, color = NuvioTheme.colors.TextSecondary, maxLines = 6)
         }
         Spacer(Modifier.height(14.dp))
         // Scrolls when the choices don't all fit (the last ones used to sit off the bottom of
@@ -858,7 +872,7 @@ private fun RecordingActionDialog(
 
 /** Hold OK → Information: what a recording is, how big it is and where it's kept. */
 @Composable
-private fun RecordingInfoDialog(rec: LiveTvRecording, savedOn: String, onDismiss: () -> Unit) {
+private fun RecordingInfoDialog(rec: LiveTvRecording, savedOn: String, playlist: String?, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } }
     val day = SimpleDateFormat("EEE d MMM", Locale.getDefault())
@@ -868,6 +882,7 @@ private fun RecordingInfoDialog(rec: LiveTvRecording, savedOn: String, onDismiss
     else day.format(Date(rec.startedAtMs)) + ", " + time.format(Date(rec.startedAtMs))
     val rows = buildList {
         add("Channel" to rec.channelName)
+        playlist?.let { add("Playlist" to it) }
         rec.episode?.let { add("Episode" to it) }
         add("Aired" to aired)
         add("Length" to if (rec.durationSec > 0) durationLabel(rec.durationSec) + (if (rec.isRecording) " so far" else "") else "—")

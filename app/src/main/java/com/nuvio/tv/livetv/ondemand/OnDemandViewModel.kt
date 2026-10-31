@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.sync.withPermit
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
@@ -223,8 +225,14 @@ class OnDemandViewModel @Inject constructor(
         val merge = s.vodMergeDuplicates
         // Fair between logins: one from each in turn, so the login imported first can't fill
         // every place when two catalogs have similar titles.
-        val movies = interleaveByPlaylist(repository.search(VodKind.MOVIE, q, hidden, merge = merge))
-        val series = interleaveByPlaylist(repository.search(VodKind.SERIES, q, hidden, merge = merge))
+        // Movies and series at the same time.
+        val (moviesRaw, seriesRaw) = kotlinx.coroutines.coroutineScope {
+            val m = async { repository.search(VodKind.MOVIE, q, hidden, merge = merge) }
+            val sr = async { repository.search(VodKind.SERIES, q, hidden, merge = merge) }
+            m.await() to sr.await()
+        }
+        val movies = interleaveByPlaylist(moviesRaw)
+        val series = interleaveByPlaylist(seriesRaw)
         // Some of each, so a long list of movies doesn't hide the series.
         val half = limit / 2
         val m = movies.take(maxOf(half, limit - series.size))
@@ -566,15 +574,38 @@ class OnDemandViewModel @Inject constructor(
     fun enrichSeeAll(uid: String) {
         seeAllJob?.cancel()
         seeAllJob = viewModelScope.launch {
-            var changed = 0
-            for (item in homeItems[uid].orEmpty()) {
-                kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                if (!homeTried.add(item.uid)) continue
-                enrichOne(item)
-                if (++changed % 6 == 0) updateHomeRows()
-            }
-            if (changed > 0) updateHomeRows()
+            val list = homeItems[uid].orEmpty()
+            enrichAll(list.filter { posters[it.uid] == null } + list.filter { posters[it.uid] != null })
         }
+    }
+
+    /**
+     * Posters and names for [queue], a few titles at a time (one at a time took half a minute
+     * for a row), in order. The page is redrawn a few times a second while they come in.
+     */
+    private suspend fun enrichAll(queue: List<VodItem>) {
+        val dirty = java.util.concurrent.atomic.AtomicBoolean(false)
+        kotlinx.coroutines.coroutineScope {
+            val redraw = launch {
+                while (true) {
+                    kotlinx.coroutines.delay(400)
+                    if (dirty.getAndSet(false)) updateHomeRows()
+                }
+            }
+            val gate = kotlinx.coroutines.sync.Semaphore(ENRICH_AT_ONCE)
+            queue.map { item ->
+                launch {
+                    gate.withPermit {
+                        if (!homeTried.add(item.uid)) return@withPermit
+                        // One title failing doesn't stop the others.
+                        try { enrichOne(item) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { }
+                        dirty.set(true)
+                    }
+                }
+            }.joinAll()
+            redraw.cancel()
+        }
+        if (dirty.get()) updateHomeRows()
     }
 
     fun stopSeeAll() { seeAllJob?.cancel() }
@@ -624,16 +655,14 @@ class OnDemandViewModel @Inject constructor(
     private fun enrichHome() {
         homeEnrichJob?.cancel()
         homeEnrichJob = viewModelScope.launch {
-            var changed = 0
-            for ((c, _) in homeGroups) {
-                for (item in homeItems[c.uid].orEmpty().take(ENRICH_PER_ROW)) {
-                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                    if (!homeTried.add(item.uid)) continue
-                    enrichOne(item)
-                    if (++changed % 6 == 0) updateHomeRows()
-                }
-            }
-            if (changed > 0) updateHomeRows()
+            // What's on screen first (the first titles of the first rows), and titles still
+            // showing the provider's picture before ones that already have a saved poster.
+            val queue = homeGroups.withIndex().flatMap { (row, g) ->
+                homeItems[g.first.uid].orEmpty().take(ENRICH_PER_ROW).withIndex().map { (i, item) -> Triple(row, i, item) }
+            }.sortedBy { (row, i, item) ->
+                (if (posters[item.uid] != null) 2 else if (row < 4 && i < 8) 0 else 1)
+            }.map { it.third }
+            enrichAll(queue)
             // Full details (clear logos) for the first few titles of the first rows.
             var detailed = 0
             for ((c, _) in homeGroups.take(3)) {
@@ -866,6 +895,8 @@ class OnDemandViewModel @Inject constructor(
         private val SEASON_TAIL = Regex("(?i)[\\s\\-–—:._]*(?:(?:season|saison|temporada|staffel)\\s*\\d{1,2}|s\\d{1,2})(?:\\s*(?:e|ep|episode|x)\\s*\\d{1,4})?\\s*$")
         private val YEAR = Regex("""\b(19|20)\d{2}\b""")
         const val ENRICH_PER_ROW = 12
+        /** Titles looked up at once for posters. */
+        const val ENRICH_AT_ONCE = 4
         /** The sort you picked, kept while the app is open. */
         @Volatile var lastSort: VodSort = VodSort.DEFAULT
         const val PAGE = 120

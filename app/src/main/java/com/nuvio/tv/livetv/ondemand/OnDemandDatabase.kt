@@ -565,9 +565,44 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         return query("SELECT *$copies FROM items WHERE $where$group ORDER BY $order, $tieBreak LIMIT $limit OFFSET $offset", args)
     }
 
-    fun search(kind: VodKind, text: String, excludeCategories: Set<String>, limit: Int = 300, sort: VodSort = VodSort.DEFAULT, merge: Boolean = true): List<VodItem> {
+    /**
+     * Titles matching [text]. Quick even with several big providers: the matches are found in
+     * the small name index (not the whole table), titles that start with what was typed first
+     * (an instant range in the index), then titles with every word anywhere in the name. Only
+     * those are then read in full, merged and sorted. [signal] stops a search that's no longer
+     * wanted (the next letter was typed).
+     */
+    fun search(
+        kind: VodKind, text: String, excludeCategories: Set<String>, limit: Int = 300,
+        sort: VodSort = VodSort.DEFAULT, merge: Boolean = true, signal: android.os.CancellationSignal? = null
+    ): List<VodItem> {
         val words = normalizeWords(text)
         if (words.isEmpty()) return emptyList()
+        try {
+            val joined = words.joinToString("")
+            val starts = rowids(
+                "SELECT rowid FROM items WHERE kind = ? AND norm >= ? AND norm < ? LIMIT 1500",
+                listOf(kind.key, joined, joined + "\uFFFF"), signal
+            )
+            val anywhere = rowids(
+                "SELECT rowid FROM items WHERE kind = ? AND " + words.joinToString(" AND ") { "instr(norm, ?) > 0" } + " LIMIT 4000",
+                listOf(kind.key) + words, signal
+            )
+            val ids = LinkedHashSet<Long>(starts).apply { addAll(anywhere) }
+            if (ids.isEmpty()) return emptyList()
+            val group = if (merge) " GROUP BY $DUP_KEY" else ""
+            val copies = if (merge) ", COUNT(*) AS copies" else ""
+            // Best first: what you typed at the start of the name, then the shortest names.
+            val first = if (sort == VodSort.DEFAULT && starts.isNotEmpty()) "(rowid IN (${starts.joinToString(",")})) DESC, " else ""
+            return query(
+                "SELECT *$copies FROM items WHERE rowid IN (${ids.joinToString(",")})$group ORDER BY $first${sort.orderBy("length(name)")} LIMIT $limit",
+                emptyList(), signal
+            ).filter { "${it.kind.key}:${it.playlistId}:${it.categoryId}" !in excludeCategories }
+        } catch (e: android.os.OperationCanceledException) {
+            throw e
+        } catch (e: Exception) {
+            // Anything unexpected: the plain search, as before.
+        }
         val where = StringBuilder("kind = ?")
         val args = arrayListOf(kind.key)
         words.forEach { w -> where.append(" AND norm LIKE ?"); args += "%$w%" }
@@ -603,9 +638,15 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
     fun item(playlistId: String, kind: VodKind, id: String): VodItem? =
         query("SELECT * FROM items WHERE pl = ? AND kind = ? AND id = ?", arrayListOf(playlistId, kind.key, id)).firstOrNull()
 
-    private fun query(sql: String, args: List<String>): List<VodItem> {
+    private fun query(sql: String, args: List<String>, signal: android.os.CancellationSignal? = null): List<VodItem> {
         val out = ArrayList<VodItem>()
-        readableDatabase.rawQuery(sql, args.toTypedArray()).use { c -> while (c.moveToNext()) out += c.toItem() }
+        readableDatabase.rawQuery(sql, args.toTypedArray(), signal).use { c -> while (c.moveToNext()) out += c.toItem() }
+        return out
+    }
+
+    private fun rowids(sql: String, args: List<String>, signal: android.os.CancellationSignal?): List<Long> {
+        val out = ArrayList<Long>()
+        readableDatabase.rawQuery(sql, args.toTypedArray(), signal).use { c -> while (c.moveToNext()) out += c.getLong(0) }
         return out
     }
 

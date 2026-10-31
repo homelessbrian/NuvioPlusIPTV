@@ -60,6 +60,7 @@ class LiveTvPreferences @Inject constructor(
         val showInSidebar = booleanPreferencesKey("show_in_sidebar")
         val showNames = booleanPreferencesKey("show_channel_names")
         val showNumbers = booleanPreferencesKey("show_channel_numbers")
+        val markPlaying = booleanPreferencesKey("mark_playing_channel")
         val showLogos = booleanPreferencesKey("show_channel_logos")
         val showPreview = booleanPreferencesKey("show_preview")
         val showDetails = booleanPreferencesKey("show_program_details")
@@ -102,6 +103,9 @@ class LiveTvPreferences @Inject constructor(
         val overlayMode = booleanPreferencesKey("overlay_mode")
         val startOnLiveTv = booleanPreferencesKey("start_on_live_tv")
         val startPage = stringPreferencesKey("start_page")
+        val openOn = stringPreferencesKey("open_on")
+        val launcherCardShape = stringPreferencesKey("launcher_card_shape")
+        val logoSourcesOff = stringPreferencesKey("logo_sources_off")
         val catchupPreferHls = booleanPreferencesKey("catchup_prefer_hls")
         val catchupShift = intPreferencesKey("catchup_shift_minutes")
         val parentalPin = stringPreferencesKey("parental_pin")
@@ -112,6 +116,22 @@ class LiveTvPreferences @Inject constructor(
         val frameRateMode = stringPreferencesKey("frame_rate_mode")
         val onDemandInSidebar = booleanPreferencesKey("on_demand_in_sidebar")
         val recordingsInSidebar = booleanPreferencesKey("recordings_in_sidebar")
+        val sideMenuOrder = stringPreferencesKey("side_menu_order")
+        val sideMenuHidden = stringPreferencesKey("side_menu_hidden")
+        val calendarInMenu = booleanPreferencesKey("calendar_in_menu")
+        val calendarUpcomingRow = booleanPreferencesKey("calendar_upcoming_row")
+        val calendarNewEpisodeCards = booleanPreferencesKey("calendar_new_episode_cards")
+        val calendarHideSpoilers = booleanPreferencesKey("calendar_hide_spoilers")
+        val calendarCountry = stringPreferencesKey("calendar_country")
+        val calendarSkipNewsTalk = booleanPreferencesKey("calendar_skip_news_talk")
+        val calendarView = stringPreferencesKey("calendar_view")
+        val calendarOkAction = stringPreferencesKey("calendar_ok_action")
+        val calendarHideWatched = booleanPreferencesKey("calendar_hide_watched")
+        val calendarSports = booleanPreferencesKey("calendar_sports")
+        val calendarFollows = stringPreferencesKey("calendar_follows")
+        val calendarHiddenShows = stringPreferencesKey("calendar_hidden_shows")
+        val calendarChannelPicks = stringPreferencesKey("calendar_channel_picks")
+        val calendarPlans = stringPreferencesKey("calendar_plans")
         val onDemandInStreams = booleanPreferencesKey("on_demand_in_streams")
         val onDemandStreamsPosition = stringPreferencesKey("on_demand_streams_position")
         val onDemandAutoPlay = booleanPreferencesKey("on_demand_auto_play")
@@ -188,6 +208,7 @@ class LiveTvPreferences @Inject constructor(
         val previousChannel = stringPreferencesKey("previous_channel")
         val lastGroup = stringPreferencesKey("last_group")
         val channelNames = stringPreferencesKey("channel_names")
+        val channelLogos = stringPreferencesKey("channel_logos")
         val channelNumbers = stringPreferencesKey("channel_numbers")
         val groupNames = stringPreferencesKey("group_names")
         val groupOrder = stringPreferencesKey("group_order")
@@ -297,6 +318,7 @@ class LiveTvPreferences @Inject constructor(
             showInSidebar = p[Keys.showInSidebar] ?: d.showInSidebar,
             showChannelNames = p[Keys.showNames] ?: d.showChannelNames,
             showChannelNumbers = p[Keys.showNumbers] ?: d.showChannelNumbers,
+            markPlayingChannel = p[Keys.markPlaying] ?: d.markPlayingChannel,
             showChannelLogos = p[Keys.showLogos] ?: d.showChannelLogos,
             showPreview = p[Keys.showPreview] ?: d.showPreview,
             showProgramDetails = p[Keys.showDetails] ?: d.showProgramDetails,
@@ -339,6 +361,9 @@ class LiveTvPreferences @Inject constructor(
             overlayMode = p[Keys.overlayMode] ?: d.overlayMode,
             startOnLiveTv = p[Keys.startOnLiveTv] ?: d.startOnLiveTv,
             startPage = p[Keys.startPage] ?: d.startPage,
+            openOn = p[Keys.openOn] ?: d.openOn,
+            launcherCardShape = p[Keys.launcherCardShape] ?: d.launcherCardShape,
+            logoSourcesOff = p[Keys.logoSourcesOff] ?: d.logoSourcesOff,
             catchupPreferHls = p[Keys.catchupPreferHls] ?: d.catchupPreferHls,
             catchupShiftMinutes = p[Keys.catchupShift] ?: d.catchupShiftMinutes,
             parentalPin = p[Keys.parentalPin] ?: d.parentalPin,
@@ -349,6 +374,18 @@ class LiveTvPreferences @Inject constructor(
             frameRateMode = p[Keys.frameRateMode] ?: if (p[Keys.matchFrameRate] == true) "START_STOP" else d.frameRateMode,
             onDemandInSidebar = p[Keys.onDemandInSidebar] ?: d.onDemandInSidebar,
             recordingsInSidebar = p[Keys.recordingsInSidebar] ?: d.recordingsInSidebar,
+            sideMenuOrder = p[Keys.sideMenuOrder] ?: d.sideMenuOrder,
+            sideMenuHidden = p[Keys.sideMenuHidden] ?: d.sideMenuHidden,
+            calendarInMenu = p[Keys.calendarInMenu] ?: d.calendarInMenu,
+            calendarUpcomingRow = p[Keys.calendarUpcomingRow] ?: d.calendarUpcomingRow,
+            calendarNewEpisodeCards = p[Keys.calendarNewEpisodeCards] ?: d.calendarNewEpisodeCards,
+            calendarHideSpoilers = p[Keys.calendarHideSpoilers] ?: d.calendarHideSpoilers,
+            calendarCountry = p[Keys.calendarCountry] ?: d.calendarCountry,
+            calendarSkipNewsTalk = p[Keys.calendarSkipNewsTalk] ?: d.calendarSkipNewsTalk,
+            calendarView = p[Keys.calendarView] ?: d.calendarView,
+            calendarOkAction = p[Keys.calendarOkAction] ?: d.calendarOkAction,
+            calendarHideWatched = p[Keys.calendarHideWatched] ?: d.calendarHideWatched,
+            calendarSports = p[Keys.calendarSports] ?: d.calendarSports,
             onDemandInStreams = p[Keys.onDemandInStreams] ?: d.onDemandInStreams,
             onDemandStreamsPosition = p[Keys.onDemandStreamsPosition] ?: d.onDemandStreamsPosition,
             onDemandAutoPlay = p[Keys.onDemandAutoPlay] ?: d.onDemandAutoPlay,
@@ -443,6 +480,7 @@ class LiveTvPreferences @Inject constructor(
             previousChannelKey = p[Keys.previousChannel],
             lastGroupId = p[Keys.lastGroup],
             channelNames = decodeStringMap(p[Keys.channelNames]),
+            channelLogos = decodeStringMap(p[Keys.channelLogos]),
             channelNumbers = decodeStringMap(p[Keys.channelNumbers]).mapNotNull { (k, v) -> v.toIntOrNull()?.let { k to it } }.toMap(),
             groupNames = decodeStringMap(p[Keys.groupNames]),
             groupOrder = decodeStringList(p[Keys.groupOrder]),
@@ -508,6 +546,36 @@ class LiveTvPreferences @Inject constructor(
         deviceStore.edit { it[Keys.removedSources] = (it[Keys.removedSources] ?: emptySet()) - ids }
     }
 
+    // ---------- calendar (synced with the rest of Live TV's settings) ----------
+
+    /** Shows whose bell is rung: a JSON list (see CalendarFollow). */
+    val calendarFollows: Flow<String> = store.data.map { it[Keys.calendarFollows] ?: "" }.distinctUntilChanged()
+
+    suspend fun editCalendarFollows(transform: (String) -> String) {
+        store.edit { it[Keys.calendarFollows] = transform(it[Keys.calendarFollows] ?: "") }
+    }
+
+    /** Shows hidden from the Calendar: a JSON list of { id, name }. */
+    val calendarHiddenShows: Flow<String> = store.data.map { it[Keys.calendarHiddenShows] ?: "" }.distinctUntilChanged()
+
+    suspend fun editCalendarHiddenShows(transform: (String) -> String) {
+        store.edit { it[Keys.calendarHiddenShows] = transform(it[Keys.calendarHiddenShows] ?: "") }
+    }
+
+    /** The channel picked for each network ("Always use the channel I pick for FX"): a JSON object. */
+    val calendarChannelPicks: Flow<String> = store.data.map { it[Keys.calendarChannelPicks] ?: "" }.distinctUntilChanged()
+
+    suspend fun editCalendarChannelPicks(transform: (String) -> String) {
+        store.edit { it[Keys.calendarChannelPicks] = transform(it[Keys.calendarChannelPicks] ?: "") }
+    }
+
+    /** The Calendar's Live TV plans ("record when it's in my guide", "record every new episode"), as JSON. */
+    val calendarPlans: Flow<String> = store.data.map { it[Keys.calendarPlans] ?: "" }.distinctUntilChanged()
+
+    suspend fun editCalendarPlans(transform: (String) -> String) {
+        store.edit { it[Keys.calendarPlans] = transform(it[Keys.calendarPlans] ?: "") }
+    }
+
     // ---------- settings ----------
 
     suspend fun updateSettings(transform: (LiveTvSettings) -> LiveTvSettings) {
@@ -519,6 +587,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.showInSidebar] = s.showInSidebar
         p[Keys.showNames] = s.showChannelNames
         p[Keys.showNumbers] = s.showChannelNumbers
+        p[Keys.markPlaying] = s.markPlayingChannel
         p[Keys.showLogos] = s.showChannelLogos
         p[Keys.showPreview] = s.showPreview
         p[Keys.showDetails] = s.showProgramDetails
@@ -561,6 +630,9 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.overlayMode] = s.overlayMode
         p[Keys.startOnLiveTv] = s.startOnLiveTv
         p[Keys.startPage] = s.startPage
+        p[Keys.openOn] = s.openOn
+        p[Keys.launcherCardShape] = s.launcherCardShape
+        p[Keys.logoSourcesOff] = s.logoSourcesOff
         p[Keys.catchupPreferHls] = s.catchupPreferHls
         p[Keys.catchupShift] = s.catchupShiftMinutes
         p[Keys.parentalPin] = s.parentalPin
@@ -571,6 +643,18 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.matchFrameRate] = s.matchFrameRate
         p[Keys.onDemandInSidebar] = s.onDemandInSidebar
         p[Keys.recordingsInSidebar] = s.recordingsInSidebar
+        p[Keys.sideMenuOrder] = s.sideMenuOrder
+        p[Keys.sideMenuHidden] = s.sideMenuHidden
+        p[Keys.calendarInMenu] = s.calendarInMenu
+        p[Keys.calendarUpcomingRow] = s.calendarUpcomingRow
+        p[Keys.calendarNewEpisodeCards] = s.calendarNewEpisodeCards
+        p[Keys.calendarHideSpoilers] = s.calendarHideSpoilers
+        p[Keys.calendarCountry] = s.calendarCountry
+        p[Keys.calendarSkipNewsTalk] = s.calendarSkipNewsTalk
+        p[Keys.calendarView] = s.calendarView
+        p[Keys.calendarOkAction] = s.calendarOkAction
+        p[Keys.calendarHideWatched] = s.calendarHideWatched
+        p[Keys.calendarSports] = s.calendarSports
         p[Keys.onDemandInStreams] = s.onDemandInStreams
         p[Keys.onDemandStreamsPosition] = s.onDemandStreamsPosition
         p[Keys.onDemandAutoPlay] = s.onDemandAutoPlay
@@ -631,6 +715,15 @@ class LiveTvPreferences @Inject constructor(
             val m = decodeStringMap(p[Keys.channelNames]).toMutableMap()
             if (name.isNullOrBlank()) m.remove(key) else m[key] = name.trim()
             p[Keys.channelNames] = encodeStringMap(m)
+        }
+    }
+
+    /** The logo picked for a channel ("Change Logo"); null puts its own back. */
+    suspend fun setChannelLogo(key: String, url: String?) {
+        store.edit { p ->
+            val m = decodeStringMap(p[Keys.channelLogos]).toMutableMap()
+            if (url.isNullOrBlank()) m.remove(key) else m[key] = url.trim()
+            p[Keys.channelLogos] = encodeStringMap(m)
         }
     }
 
@@ -999,6 +1092,20 @@ class LiveTvPreferences @Inject constructor(
         store.edit { p ->
             val cur = decodeStringList(p[my(Keys.favorites)])
             p[my(Keys.favorites)] = encodeStringList(if (key in cur) cur - key else cur + key)
+        }
+    }
+
+    /**
+     * Pick favorites (several at once): of [inList], exactly [chosen] are favorites afterwards.
+     * One save; favorites outside [inList] keep their place, new ones go at the end in list order.
+     */
+    suspend fun setFavoritesIn(inList: List<String>, chosen: Set<String>) {
+        store.edit { p ->
+            val cur = decodeStringList(p[my(Keys.favorites)])
+            val inSet = inList.toHashSet()
+            val kept = cur.filter { it !in inSet || it in chosen }
+            val keptSet = kept.toHashSet()
+            p[my(Keys.favorites)] = encodeStringList(kept + inList.filter { it in chosen && it !in keptSet }.distinct())
         }
     }
 

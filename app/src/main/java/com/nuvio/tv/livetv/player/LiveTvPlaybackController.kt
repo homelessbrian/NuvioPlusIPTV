@@ -534,7 +534,7 @@ class LiveTvPlaybackController @Inject constructor(
         lastFrameUs = Long.MIN_VALUE
     }
 
-    /** Live TV buffer size ("small", "normal", "large", "xlarge"); changing it rebuilds the player. */
+    /** Live TV buffer size ("none", "small", "normal", "large", "xlarge"); changing it rebuilds the player. */
     var bufferSize: String = "normal"
         set(value) {
             if (field == value) return
@@ -599,6 +599,9 @@ class LiveTvPlaybackController @Inject constructor(
         // Something chosen to play (back from the background through a launcher row, say):
         // that wins over picking up what was on before.
         resumeAfterBackground = null
+        // Picked by you (not a switch to the next channel for a game): start the game's list afresh.
+        if (!switchingForGame) gameTried.clear()
+        if (currentChannel?.key != channel.key) recentStalls.clear()
         shiftStartPending = false
         if (_shiftStartedAt.value != null) stopShift()
         if (_recordingPlayback.value != null) { _recordingPlayback.value = null; shiftJob?.cancel() }
@@ -879,7 +882,18 @@ class LiveTvPlaybackController @Inject constructor(
             return
         }
         Log.w(TAG, "Stream stalled on ${ch.name}; reloading")
-        if (!archive && awaitingFrame && ++neverStartedCount >= 2 && onLiveFailure?.invoke(ch.key) == true) return
+        if (!archive && awaitingFrame) neverStartedCount++
+        // A live game: a channel that won't start, or that froze twice in a few minutes, moves on
+        // to the next channel showing the game (its other copies first). Other channels keep
+        // reloading as before.
+        if (!archive && !awaitingFrame) {
+            recentStalls.addLast(now)
+            while (recentStalls.isNotEmpty() && now - recentStalls.first() > FREEZE_WINDOW_MS) recentStalls.removeFirst()
+        }
+        if (!archive && ((awaitingFrame && neverStartedCount >= 2) || (!awaitingFrame && recentStalls.size >= 2)) &&
+            tryGameFailover(ch, if (awaitingFrame) "never started" else "kept freezing")
+        ) return
+        if (!archive && awaitingFrame && neverStartedCount >= 2 && onLiveFailure?.invoke(ch.key) == true) return
         com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
             "Channel ${ch.name} " + (if (awaitingFrame) "never started (nothing came in for ${STALL_MS / 1000}s)" else "stalled") +
                 "; reloading · ${redact(currentUrl ?: ch.url)}"
@@ -1016,7 +1030,15 @@ class LiveTvPlaybackController @Inject constructor(
         captionWatch?.cancel()
         return if (captionsOn()) { selectTrack(C.TRACK_TYPE_TEXT, null); false }
         else {
-            val pick = subtitleTracks().firstOrNull() ?: return false
+            val all = tracksOf(C.TRACK_TYPE_TEXT)
+            val pick = subtitleTracks().firstOrNull()
+            // For the report: what the stream offers and what has been seen carrying text.
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
+                "Captions: " + (pick?.let { "turned on \"${it.label}\"" } ?: "nothing to turn on") +
+                    "; caption tracks in the stream: " + (all.joinToString(", ") { it.kind ?: (it.label) }.ifBlank { "none" }) +
+                    "; seen with text: " + (LiveCaptions.found.value.joinToString(", ").ifBlank { if (LiveCaptions.watching()) "none yet" else "not checked" })
+            )
+            pick ?: return false
             selectTrack(C.TRACK_TYPE_TEXT, pick)
             if (pick.kind != null) watchCaptions()
             true
@@ -1202,8 +1224,17 @@ class LiveTvPlaybackController @Inject constructor(
     fun subtitleTracks(): List<LiveTrackOption> {
         val all = tracksOf(C.TRACK_TYPE_TEXT)
         val primary = primaryCaption(all)
-        val showPrimary = primary != null && (!LiveCaptions.noneFound() || primary.selected)
-        return all.filter { it.kind == null || (showPrimary && it == primary) }
+        // Closed captions stay on offer even when none have been seen yet (some streams carry
+        // them in ways the check misses): just labelled so.
+        val shown = primary?.let { if (LiveCaptions.noneFound() && !it.selected) it.copy(label = it.label + " (none seen yet)") else it }
+        val subs = all.filter { it.kind == null }
+        return when {
+            shown == null -> subs
+            // Captions seen carrying text (or switched on): first, for the CC button.
+            LiveCaptions.found.value.isNotEmpty() || shown.selected -> listOf(shown) + subs
+            // None seen yet: after the stream's own subtitles, still there to pick.
+            else -> subs + shown
+        }
     }
 
     fun selectTrack(type: Int, option: LiveTrackOption?) {
@@ -1273,6 +1304,9 @@ class LiveTvPlaybackController @Inject constructor(
         // Buffer size setting: how much is downloaded ahead. Bigger rides out a shaky connection or
         // a slow provider; smaller starts channels a little faster.
         val (minMs, maxMs, startMs, rebufferMs) = when (bufferSize) {
+            // None: as little as the player can play with (a second or two ahead): closest to
+            // live and the quickest channel changes, but any hiccup in the stream shows as a pause.
+            "none" -> listOf(1_500, 4_000, 250, 500)
             "small" -> listOf(10_000, 30_000, 1_000, 2_000)
             "large" -> listOf(40_000, 90_000, 3_000, 6_000)
             "xlarge" -> listOf(60_000, 150_000, 5_000, 10_000)
@@ -1688,6 +1722,29 @@ class LiveTvPlaybackController @Inject constructor(
      * channel. True when it did, and this channel isn't tried again.
      */
     var onLiveFailure: ((channelKey: String) -> Boolean)? = null
+
+    /**
+     * Sports: the next channel showing the same live game, when [failedKey] won't play or keeps
+     * freezing ([tried]: channels already tried for it). Null when it isn't a live game's channel,
+     * when none are left, or when "Switch to a backup channel" is off. Asked before [onLiveFailure].
+     */
+    var gameFailover: ((failedKey: String, tried: Set<String>) -> LiveChannel?)? = null
+    private val gameTried = HashSet<String>()
+    private var switchingForGame = false
+    /** When the channel playing froze recently (not counting it never starting). */
+    private val recentStalls = ArrayDeque<Long>()
+
+    private fun tryGameFailover(ch: LiveChannel, why: String): Boolean {
+        val f = gameFailover ?: return false
+        gameTried += ch.key
+        val next = runCatching { f(ch.key, gameTried.toSet()) }.getOrNull() ?: return false
+        if (next.key == ch.key) return false
+        com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Channel ${ch.name} $why: switched to ${next.name} (${next.group}), same game")
+        com.nuvio.tv.livetv.record.LiveTvNotice.show("${ch.name} isn't working right now. Switched to ${next.name}, showing the same game.")
+        switchingForGame = true
+        try { play(next) } finally { switchingForGame = false }
+        return true
+    }
     /** Times the channel playing sat loading with nothing coming in. */
     private var neverStartedCount = 0
 
@@ -1710,6 +1767,7 @@ class LiveTvPlaybackController @Inject constructor(
         }
         _state.value = _state.value.copy(error = reason, isBuffering = false, reconnectAttempt = attempt)
         if (_state.value.catchupTitle == null && attempt == 2) {
+            currentChannel?.let { if (tryGameFailover(it, "failed")) return }
             val key = currentChannel?.key
             if (key != null && onLiveFailure?.invoke(key) == true) return
         }
@@ -1861,6 +1919,7 @@ class LiveTvPlaybackController @Inject constructor(
             // almost no room for a slow segment, so some providers kept buffering; now it
             // follows the stream's own recommendation, with more room for bigger buffers.
             val offset = when (bufferSize) {
+                "none" -> 3_000L
                 "small" -> 10_000L
                 "large" -> 30_000L
                 "xlarge" -> 45_000L
@@ -1908,6 +1967,8 @@ class LiveTvPlaybackController @Inject constructor(
         private const val MAX_RECONNECTS = 8
         /** No progress for this long while it should be playing = stalled. */
         private const val STALL_MS = 15_000L
+        /** Two freezes within this long: the channel counts as failing (live games only). */
+        private const val FREEZE_WINDOW_MS = 3 * 60_000L
         private val FORMAT_GUESSES = listOf(MimeTypes.APPLICATION_M3U8, MimeTypes.APPLICATION_MPD)
         /** Xtream live links: ".../live/user/pass/123.m3u8" or "host/user/pass/123.m3u8". */
         private val XTREAM_HLS = Regex("""/(?:live/)?[^/]+/[^/]+/\d+\.m3u8$""", RegexOption.IGNORE_CASE)

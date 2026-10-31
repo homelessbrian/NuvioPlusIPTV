@@ -401,6 +401,10 @@ fun OnDemandHomeScreen(
                     uiState = ui,
                     modernPresentation = modernPresentation,
                     focusState = focusState,
+                    // On Demand has no hero enrichment: always empty, as before Nuvio made these State.
+                    enrichingItemId = remember { mutableStateOf<String?>(null) },
+                    enrichedPreviews = remember { mutableStateOf(emptyMap<String, MetaPreview>()) },
+                    failedEnrichmentIds = remember { mutableStateOf(emptySet<String>()) },
                     trailerPreviewUrls = trailerUrls,
                     trailerPreviewAudioUrls = trailerAudioUrls,
                     onNavigateToDetail = onNavigateToDetail,

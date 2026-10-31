@@ -203,9 +203,9 @@ fun LiveTvSearchRow(
     posterCardStyle: com.nuvio.tv.ui.components.PosterCardStyle = com.nuvio.tv.ui.components.PosterCardDefaults.Style
 ) {
     if (results.hits.isEmpty()) return
-    var menuFor by remember { mutableStateOf<LiveChannel?>(null) }
-    menuFor?.let { ch ->
-        results.viewModel?.let { vm -> ChannelQuickMenu(ch, vm, onDismiss = { menuFor = null }) }
+    var menuFor by remember { mutableStateOf<LiveSearchHit?>(null) }
+    menuFor?.let { hit ->
+        results.viewModel?.let { vm -> ChannelQuickMenu(hit.channel, vm, program = hit.program, onDismiss = { menuFor = null }) }
     }
     val previewOn = results.viewModel?.settings?.collectAsStateWithLifecycle()?.value?.searchPreview ?: false
     SearchResultsRow(title = "Live TV", modifier = modifier) {
@@ -222,7 +222,7 @@ fun LiveTvSearchRow(
                 onClick = {
                     if (previewOn && hit.channel.key != results.previewKey) results.preview(hit) else results.open(hit)
                 },
-                onLongClick = { menuFor = hit.channel }
+                onLongClick = { menuFor = hit }
             )
         }
     }
@@ -418,7 +418,7 @@ object LiveTvSearchBridge {
  * Long-press menu for a Live TV search result: favorites, groups, rename, renumber, hide.
  */
 @Composable
-private fun ChannelQuickMenu(channel: LiveChannel, viewModel: LiveTvViewModel, onDismiss: () -> Unit) {
+private fun ChannelQuickMenu(channel: LiveChannel, viewModel: LiveTvViewModel, program: EpgProgram? = null, onDismiss: () -> Unit) {
     var step by remember { mutableStateOf("menu") }
     val first = remember { FocusRequester() }
     when (step) {
@@ -456,6 +456,8 @@ private fun ChannelQuickMenu(channel: LiveChannel, viewModel: LiveTvViewModel, o
         )
         else -> {
             val isFavorite = channel.key in viewModel.userState.value.favorites
+            // The Calendar's bell for the show in this result (follow the show / put the movie on the Calendar).
+            val bell = com.nuvio.tv.livetv.calendar.rememberLiveBell(program, channel)
             LiveDialog(onDismiss = onDismiss, width = 440.dp) {
                 LiveText("${channel.number}  ${channel.name}", size = 20.sp, weight = FontWeight.Bold)
                 LiveText(channel.group, color = NuvioTheme.colors.TextSecondary, size = 13.sp)
@@ -463,6 +465,10 @@ private fun ChannelQuickMenu(channel: LiveChannel, viewModel: LiveTvViewModel, o
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     MenuItem(if (isFavorite) "Remove from favorites" else "Add to favorites", Modifier.focusRequester(first)) {
                         viewModel.toggleFavorite(channel)
+                        onDismiss()
+                    }
+                    if (bell != null) MenuItem(bell.label) {
+                        bell.toggle()
                         onDismiss()
                     }
                     MenuItem("Add to group…") { step = "group" }
@@ -519,5 +525,8 @@ fun rememberSearchScope(): SearchScope {
         LiveTvSearchBridge.ON_DEMAND -> SearchScope(s.onDemandSearchLive, s.onDemandSearchCatalog, s.onDemandSearchOnDemand)
         else -> SearchScope(live = true, catalog = true, onDemand = true)
     }.let { if (!it.live && !it.catalog && !it.onDemand) SearchScope(true, true, true) else it }
+        // Live TV or On Demand switched off (Settings → Menu & Features): none of their results.
+        .let { it.copy(live = it.live && s.showInSidebar, onDemand = it.onDemand && s.onDemandInSidebar) }
+        .let { if (!it.live && !it.catalog && !it.onDemand) it.copy(catalog = true) else it }
         .copy(order = parseSearchOrder(s.searchOrder))
 }

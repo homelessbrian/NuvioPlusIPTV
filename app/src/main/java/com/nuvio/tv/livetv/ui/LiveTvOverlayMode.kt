@@ -152,10 +152,18 @@ private fun OverlayModeContent(
     var futurePrompt by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
     val focus = remember { FocusRequester() }
 
-    // After changing group, keep the cursor on the playing channel if it's in the new list.
+    // Opening: the cursor on the playing channel. Picking another group: its first channel
+    // (it used to stay at the same position as in the last group, somewhere in the middle).
+    var shownGroup by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(ui.selectedGroupId, channels.size) {
+        val changed = shownGroup != null && shownGroup != ui.selectedGroupId
+        shownGroup = ui.selectedGroupId
         val playing = channels.indexOfFirst { it.key == playback.channelKey }
-        chIndex = if (playing >= 0) playing else chIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+        chIndex = when {
+            changed -> 0
+            playing >= 0 -> playing
+            else -> chIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+        }
     }
     LaunchedEffect(Unit) { delay(60); runCatching { focus.requestFocus() } }
     // Closes itself after a while without a key press.
@@ -408,6 +416,7 @@ private fun OverlayModeContent(
 
     futurePrompt?.let { (ch, p) ->
         val first = remember { FocusRequester() }
+        val bell = com.nuvio.tv.livetv.calendar.rememberLiveBell(p, ch)
         LiveDialog(onDismiss = { futurePrompt = null; activity++ }, width = 460.dp) {
             LiveText(p.title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
             LiveText(
@@ -424,6 +433,11 @@ private fun OverlayModeContent(
                     if (user.reminders.any { it.channelKey == ch.key && it.startMs == p.startMs }) "Cancel reminder" else "Remind me"
                 ) {
                     viewModel.toggleReminder(ch, p)
+                    futurePrompt = null
+                    activity++
+                }
+                if (bell != null) MenuItem(bell.label) {
+                    bell.toggle()
                     futurePrompt = null
                     activity++
                 }
@@ -447,15 +461,46 @@ private fun OverlayModeContent(
 private val PanelDark = Color(0xE6141416)
 private val PanelMid = Color(0x99141416)
 
+/**
+ * Keeps the highlighted row on screen the way a normal list does: the list moves one row at a
+ * time once the highlight reaches the top or bottom row (with the next row peeking in), instead
+ * of jumping so the highlight sat near the middle again. A big jump (wrapping round, a page at
+ * a time, another group) lands it with a few rows above it.
+ */
 @Composable
 private fun keepVisible(state: LazyListState, index: Int) {
+    // When the last move was a moment ago (holding the button, quick presses), the list moves
+    // at once instead of sliding: a slide that's cut short by the next press never finished, so
+    // the highlight could run off the bottom of the panel faster than the list followed.
+    val lastMove = remember { longArrayOf(0L) }
     LaunchedEffect(index) {
         if (index < 0) return@LaunchedEffect
-        val visible = state.layoutInfo.visibleItemsInfo
-        val first = visible.firstOrNull()?.index ?: 0
-        val last = visible.lastOrNull()?.index ?: 0
-        if (visible.isEmpty() || index <= first + 1 || index >= last - 1) {
+        val nowMs = android.os.SystemClock.uptimeMillis()
+        val quick = nowMs - lastMove[0] < 400
+        lastMove[0] = nowMs
+        val info = state.layoutInfo
+        val visible = info.visibleItemsInfo
+        if (visible.isEmpty()) {
             state.scrollToItem((index - 3).coerceAtLeast(0))
+            return@LaunchedEffect
+        }
+        // Rows fully on screen.
+        val full = visible.filter { it.offset >= info.viewportStartOffset && it.offset + it.size <= info.viewportEndOffset }
+        val first = full.firstOrNull()?.index ?: visible.first().index
+        val last = full.lastOrNull()?.index ?: visible.last().index
+        val rows = (last - first + 1).coerceAtLeast(1)
+        val lastItem = info.totalItemsCount - 1
+        when {
+            index in (first + 1) until last -> Unit
+            index == first && first == 0 -> Unit
+            index == last && last == lastItem -> Unit
+            index > last + rows || index < first - rows -> state.scrollToItem((index - 3).coerceAtLeast(0))
+            index >= last -> (index - rows + 2).coerceIn(0, maxOf(0, lastItem - rows + 1)).let {
+                if (quick) state.scrollToItem(it) else state.animateScrollToItem(it)
+            }
+            else -> (index - 1).coerceAtLeast(0).let {
+                if (quick) state.scrollToItem(it) else state.animateScrollToItem(it)
+            }
         }
     }
 }

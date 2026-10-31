@@ -14,10 +14,12 @@ internal enum class SettingsCategory(val group: SettingsRailGroup) {
     WATCH_PARTY(SettingsRailGroup.YOU),
     APPEARANCE(SettingsRailGroup.LOOK),
     LAYOUT(SettingsRailGroup.LOOK),
+    SIDE_MENU(SettingsRailGroup.LOOK), // Live TV fork
     CONTENT_DISCOVERY(SettingsRailGroup.WATCH),
     PLAYBACK(SettingsRailGroup.WATCH),
     LIVE_TV(SettingsRailGroup.WATCH), // Live TV fork
     SPORTS(SettingsRailGroup.WATCH), // Live TV fork
+    CALENDAR(SettingsRailGroup.WATCH), // Live TV fork
     INTEGRATION(SettingsRailGroup.SERVICES),
     TRACKING(SettingsRailGroup.SERVICES),
     ADVANCED(SettingsRailGroup.SYSTEM),

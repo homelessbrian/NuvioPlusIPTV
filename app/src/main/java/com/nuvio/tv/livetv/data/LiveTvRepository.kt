@@ -898,13 +898,16 @@ class LiveTvRepository @Inject constructor(
         }
     }
 
-    /** Builds the full guide details (for Assign EPG) if the saved guide was used. */
+    /**
+     * What Assign EPG needs when the stored guide was used: only the guides' channel lists. It
+     * used to read every guide again here (minutes on big guides, "Reading guide…" as soon as
+     * Assign EPG opened), but the automatic matches come from the stored guide and the channel
+     * lists are saved or read on their own, which is all Assign EPG uses.
+     */
     fun ensureEpgDetails() {
         if (!epgDetailsPending) return
         epgDetailsPending = false
-        scope.launch {
-            mutex.withLock { buildPrograms(prefs.currentSettings(), collectEpgTargets()) }
-        }
+        ensureSourceLists()
     }
 
     private val savedGuideFile get() = File(baseDir, "guide_cache.bin")

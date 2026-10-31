@@ -503,7 +503,11 @@ private fun LeagueCard(
                 listOfNotNull(
                     if (teamsFollowed > 0) "$teamsFollowed followed" else null,
                     if (league.sport == Sport.WRESTLING || league.id == "guide/boxing") "Schedule + your guide" else if (league.guideOnly) "From your guide" else null,
-                    if (!inRegion) "Outside your region" else null
+                    // "inRegion" is really "shown on the Hub by default" (your region, or your
+                    // own choice from the Leagues dialog) — the old wording implied a broadcast
+                    // restriction that was never real, and games and scores are fetched for
+                    // every league regardless of this.
+                    if (!inRegion) "Not on your Hub by default" else null
                 ).joinToString(" · ").ifBlank { if (league.kind == LeagueKind.EVENT) "Events" else "Teams" },
                 color = SportsLook.Dim, size = 10.sp
             )

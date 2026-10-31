@@ -44,7 +44,7 @@ class CrashReportActivity : Activity() {
         }
         val hint = TextView(this).apply {
             text = "To send this report: put your phone on the same Wi-Fi as this TV, scan the code with " +
-                "your phone's camera, tap Copy report and paste it in your message. No Wi-Fi? Take a " +
+                "your phone's camera, tap Copy short report and paste it in your message. No Wi-Fi? Take a " +
                 "photo of this screen instead. Use up/down to scroll."
             setTextColor(Color.parseColor("#B0B0B8"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
@@ -54,7 +54,7 @@ class CrashReportActivity : Activity() {
         // 2,000 characters comfortably, so the full trace stays on screen only.
         // The whole report is a web page on the home network (opened from a phone on the same
         // Wi-Fi); the code holds its address. Without a network, the start of the report instead.
-        server = ReportServer.start("Nuvio + IPTV crash report") { report }
+        server = ReportServer.start("Nuvio + IPTV crash report", short = { shortCrash(report) }) { report }
         val summary = report.substringBefore("FULL TRACE:").trim().take(1_800)
         val qr = runCatching {
             com.nuvio.tv.core.qr.QrCodeGenerator.generate(server?.url ?: summary, dp(200))
@@ -135,4 +135,43 @@ class CrashReportActivity : Activity() {
         scroll.requestFocus()
         scroll.nextFocusDownId = View.NO_ID
     }
+}
+
+/**
+ * A crash or freeze report cut down to fit one Discord message: the version, device and what
+ * happened stay; of the stack, the app's own lines stay and Android's own plumbing (the same in
+ * every report) is folded into one line; the repeated full trace keeps only its "Caused by" lines.
+ */
+internal fun shortCrash(report: String, limit: Int = 1_900): String {
+    val system = listOf("android.", "com.android.", "java.lang.reflect.", "dalvik.", "libcore.", "sun.", "java.lang.Thread.run", "java.util.concurrent.")
+    val out = ArrayList<String>()
+    var frames = 0
+    var folded = 0
+    var inFull = false
+    fun flushFold() { if (folded > 0) { out += "    … $folded Android lines"; folded = 0 } }
+    for (raw in report.lines()) {
+        val line = raw.trimEnd()
+        if (line.startsWith("FULL TRACE:")) { flushFold(); inFull = true; continue }
+        if (inFull) {
+            if (line.trimStart().startsWith("Caused by:")) out += line.trim()
+            continue
+        }
+        val t = line.trim()
+        if (t.startsWith("at ") || t.startsWith("- ") || t.startsWith("native:")) {
+            frames++
+            val where = t.removePrefix("at ").trim()
+            // The first lines show where it happened: always kept. After those, only the app's own.
+            if (frames > 8 && system.any { where.startsWith(it) }) { folded++; continue }
+            if (frames > 30) { folded++; continue }
+            flushFold()
+            out += line
+        } else {
+            flushFold()
+            if (t.isNotEmpty() || out.lastOrNull()?.isNotEmpty() == true) out += line
+        }
+    }
+    flushFold()
+    var text = out.joinToString("\n").trim()
+    if (text.length > limit) text = text.take(limit - 3) + "..."
+    return text
 }

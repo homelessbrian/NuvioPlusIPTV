@@ -183,8 +183,9 @@ class LiveTvPosterResolver @Inject constructor(
     private val inFlight = ConcurrentHashMap<String, kotlinx.coroutines.Deferred<String?>>()
     // A few lookups at once, so one slow title doesn't hold up every other poster.
     private val permits = kotlinx.coroutines.sync.Semaphore(3)
-    private val vodPermits = kotlinx.coroutines.sync.Semaphore(2)
-    private val requestPermits = kotlinx.coroutines.sync.Semaphore(2)
+    // On Demand's posters: four titles at once, each asking your addons' catalogs together.
+    private val vodPermits = kotlinx.coroutines.sync.Semaphore(4)
+    private val requestPermits = kotlinx.coroutines.sync.Semaphore(4)
     private val urgentPermits = kotlinx.coroutines.sync.Semaphore(2)
 
     /**

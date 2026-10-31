@@ -135,6 +135,7 @@ fun DiscoverScreen(
 
         val posterOptionsState by viewModel.posterOptions.state.collectAsState()
         com.nuvio.tv.ui.components.posteroptions.PosterOptionsHost(
+        calendarBell = true,
             state = posterOptionsState,
             controller = viewModel.posterOptions,
             onNavigateToDetail = { id, type, addonBaseUrl ->

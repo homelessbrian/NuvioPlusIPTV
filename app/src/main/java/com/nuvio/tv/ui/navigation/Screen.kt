@@ -148,6 +148,8 @@ sealed class Screen(val route: String) {
     data object OnDemand : Screen("on_demand")
     /** Live TV fork: recorded shows. */
     data object Recordings : Screen("recordings")
+    /** Live TV fork: release dates of your shows and movies. */
+    data object Calendar : Screen("calendar")
     /** Live TV fork: scores, schedules and where to watch. */
     data object Sports : Screen("sports")
     data object Tracking : Screen("trakt")

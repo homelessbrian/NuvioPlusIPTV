@@ -69,8 +69,11 @@ internal class SportsMatcher(private val db: EpgDatabase) {
         for (ch in channels) fp = fp * 31 + ch.key.hashCode() * 17L + ch.name.hashCode()
         nameData?.let { if (it.fingerprint == fp) return it }
         // Separator "channels" ("##### USA SPORTS #####", "==== UK ====") are never a game's channel.
+        // No minimum length any more: short real names ("FS1", "TNT", "TSN1", "ESPN") used to be
+        // dropped here and could never be found by channel-name or network matching. isBanner()
+        // alone still catches separator rows (it needs a run of symbols, or mostly-symbol text).
         val names = channels.mapNotNull { ch ->
-            if (ch.name.length < 6 || isBanner(ch.name)) null
+            if (isBanner(ch.name)) null
             else ch to norm(ch.name.replace("+", " plus ").replace("@", " at "))
         }
         // Channel names by word, so a game's channels are found without going through every channel.
@@ -252,12 +255,22 @@ internal class SportsMatcher(private val db: EpgDatabase) {
         val networkEvents = teamEvents.filter { it.broadcasts.isNotEmpty() && it.startMs > input.now - 5 * HOUR }
         val candidates = HashMap<String, List<LiveChannel>>()
         networkEvents.flatMap { it.broadcasts }.map { networkKey(it) }.distinct().forEach { n ->
-            val pats = NETWORKS[n] ?: listOf(n).filter { it.length >= 3 }
+            val mapped = NETWORKS[n]
+            // A network not on the hand-built list is usually a regional sports network (ESPN's
+            // broadcasts say "Bally Sports Detroit", "FanDuel Sports Network - Detroit", "NESN",
+            // "MSG Network"...). Requiring the whole phrase, as one unit, almost never matches a
+            // real channel name; requiring every distinctive word in it (dropping "sports",
+            // "network" and the like) does, and needs no per-network brand list to keep working
+            // through a rebrand.
+            val words = if (mapped == null) n.split(' ').filter { it.length >= 3 && it !in GENERIC_NETWORK_WORDS } else emptyList()
+            val pats = mapped ?: (words.ifEmpty { listOf(n).filter { it.length >= 3 } })
             if (pats.isEmpty()) return@forEach
             val not = NETWORK_NOT[n].orEmpty()
             val list = ArrayList<LiveChannel>()
-            forNamed(tokenIndex, pats.mapNotNull { it.trim().substringBefore(' ').takeIf { w -> w.isNotEmpty() } }.toSet(), names) { ch, nn ->
-                if (pats.any { hasWord(nn, it) } && not.none { hasWord(nn, it) }) list += ch
+            val anchors = pats.mapNotNull { it.trim().substringBefore(' ').takeIf { w -> w.isNotEmpty() } }.toSet()
+            forNamed(tokenIndex, anchors, names) { ch, nn ->
+                val isMatch = if (mapped != null) pats.any { hasWord(nn, it) } else pats.all { hasWord(nn, it) }
+                if (isMatch && not.none { hasWord(nn, it) }) list += ch
             }
             candidates[n] = list
         }
@@ -303,7 +316,9 @@ internal class SportsMatcher(private val db: EpgDatabase) {
                             compareByDescending<Triple<LiveChannel, Int, EpgProgram?>> { rank(it.first) }
                                 .thenByDescending { qualityRank(input.quality[it.first.key] ?: nameQuality(it.first.name)) }
                         )
-                        .take(if (national) 4 else 6)
+                        // More than the top few: their FHD/HD/SD copies (one row on the game page)
+                        // and the same network from other providers, as backups if one freezes.
+                        .take(if (national) 8 else 12)
                         .forEach { (ch, score, p) -> add(ev.id, ch.key, score, "$b listed by ESPN", p); byNetwork++ }
                 }
             }
@@ -336,7 +351,10 @@ internal class SportsMatcher(private val db: EpgDatabase) {
                     )
                 }
             if (list.isEmpty()) continue
-            out[eventId] = sortMatches(list, input.settings.bestChannelFirst, rank).take(8)
+            // Every channel the guide has for it (FHD/HD/SD copies are folded into one row on the
+            // game page, other regions under "+ N from other regions"), so nothing the guide shows
+            // is left out. 40 is only a guard against a runaway list; it costs no extra searching.
+            out[eventId] = sortMatches(list, input.settings.bestChannelFirst, rank).take(40)
         }
         // Events that run for days (golf, race weekends): what was looked for and found, for the report.
         val multi = teamEvents.filter { it.id in noStart }.joinToString(" | ") { ev ->
@@ -626,8 +644,16 @@ internal class SportsMatcher(private val db: EpgDatabase) {
             "nba tv", "nhl net", "nhl network", "mlb net", "mlb network", "tnt", "tbs", "trutv", "usa net", "usa network",
             "cbssn", "cbs sports network", "btn", "big ten network", "secn", "sec network", "accn", "acc network",
             "golf", "golf channel", "tennis channel", "fox deportes", "tudn", "univision", "telemundo", "universo", "peacock",
-            "prime video", "paramount plus", "apple tv", "netflix", "bein sports", "nbcsn", "mlb tv", "max", "truetv"
+            "prime video", "paramount plus", "apple tv", "netflix", "bein sports", "nbcsn", "mlb tv", "max", "truetv",
+            // UK, Canada, Australia: these don't vary by local market the way US RSNs do.
+            "sky sports", "sky sports main event", "sky sports football", "sky sports premier league", "sky sports arena",
+            "tnt sports", "dazn", "itv", "itv1", "itv4", "bbc", "bbc one", "bbc two", "bbc iplayer",
+            "tsn", "sportsnet", "sportsnet one", "ctv", "cbc",
+            "fox sports australia", "kayo", "stan sport", "seven", "nine", "optus sport"
         )
+
+        /** Words a network's own name is never worth searching on (too common to mean anything alone). */
+        private val GENERIC_NETWORK_WORDS = setOf("sports", "network", "tv", "channel", "the", "regional", "home", "plus")
 
         /** How each network appears in channel names. */
         private val NETWORKS: Map<String, List<String>> = mapOf(
@@ -678,7 +704,43 @@ internal class SportsMatcher(private val db: EpgDatabase) {
             "apple tv" to listOf("apple tv", "mls season pass"),
             "netflix" to listOf("netflix"),
             "bein sports" to listOf("bein sports", "bein"),
-            "max" to listOf("max", "hbo max")
+            "max" to listOf("max", "hbo max"),
+            // ---- UK
+            "sky sports" to listOf("sky sports"),
+            "sky sports main event" to listOf("sky sports main event", "sky sports 1"),
+            "sky sports football" to listOf("sky sports football"),
+            "sky sports premier league" to listOf("sky sports premier league", "sky sports prem"),
+            "sky sports arena" to listOf("sky sports arena"),
+            "sky sports racing" to listOf("sky sports racing"),
+            "sky sports f1" to listOf("sky sports f1", "sky sports formula 1"),
+            "sky sports cricket" to listOf("sky sports cricket"),
+            "sky sports golf" to listOf("sky sports golf"),
+            "sky sports tennis" to listOf("sky sports tennis"),
+            "tnt sports" to listOf("tnt sports"),
+            "tnt sports 1" to listOf("tnt sports 1"),
+            "tnt sports 2" to listOf("tnt sports 2"),
+            "dazn" to listOf("dazn"),
+            "itv" to listOf("itv1", "itv"),
+            "itv4" to listOf("itv4"),
+            "bbc" to listOf("bbc one", "bbc two", "bbc"),
+            "bbc iplayer" to listOf("bbc iplayer", "bbc one", "bbc two"),
+            // ---- Canada
+            "tsn" to listOf("tsn"),
+            "sportsnet" to listOf("sportsnet"),
+            "sportsnet one" to listOf("sportsnet one"),
+            "ctv" to listOf("ctv"),
+            "cbc" to listOf("cbc"),
+            // ---- Australia
+            "fox sports australia" to listOf("fox sports", "foxsports"),
+            "kayo" to listOf("kayo"),
+            "stan sport" to listOf("stan sport"),
+            "seven" to listOf("channel 7", "seven network", "7mate"),
+            "nine" to listOf("channel 9", "nine network", "9gem"),
+            "optus sport" to listOf("optus sport"),
+            // ---- bein sports numbered variants (ESPN lists these for several international competitions)
+            "bein sports 1" to listOf("bein sports 1", "bein 1"),
+            "bein sports 2" to listOf("bein sports 2", "bein 2"),
+            "bein sports 3" to listOf("bein sports 3", "bein 3")
         )
 
         /** Channel-name words that rule a channel out for that network (FOX News isn't FOX). */
@@ -692,7 +754,11 @@ internal class SportsMatcher(private val db: EpgDatabase) {
             "tbs" to listOf("news"),
             "max" to listOf("cinemax", "maximum", "maxx", "movies"),
             "golf" to listOf("tv"),
-            "paramount plus" to listOf("network", "comedy")
+            "paramount plus" to listOf("network", "comedy"),
+            "itv" to listOf("itv2", "itv3", "itv4", "itvbe"),
+            "bbc" to listOf("news", "parliament", "alba", "four"),
+            "seven" to listOf("news", "mate extra"),
+            "nine" to listOf("news", "gem extra")
         )
 
         fun nameQuality(name: String): String? {
@@ -711,7 +777,7 @@ internal class SportsMatcher(private val db: EpgDatabase) {
         }
 
         /** Your own region's words, as channel names and groups use them ("UK: TNT Sports 1", group "UK | Sports"). */
-        private val REGION_WORDS = mapOf(
+        internal val REGION_WORDS = mapOf(
             "UK" to listOf("uk", "gb", "united kingdom", "britain", "england", "scotland"),
             "IE" to listOf("ie", "ireland", "irish", "irl", "eir"),
             "US" to listOf("us", "usa", "united states"),
@@ -747,6 +813,45 @@ internal class SportsMatcher(private val db: EpgDatabase) {
             return LANGUAGE_WORDS.entries.firstOrNull { (_, w) ->
                 w.any { hasWord(prefix, it) || hasWord(tags, it) || (it.length > 3 && hasWord(group, it)) }
             }?.key
+        }
+
+        /**
+         * Where a channel says it's from: a language other than English ("lang:es", from its
+         * name or group: "ES: ESPN", "USA | Latino"), else a region ("UK", "US", "IE", "CA", "AU",
+         * from its group, the start of its name, or a tag like "[UK]"). Null when it doesn't say.
+         */
+        fun channelRegionCode(ch: LiveChannel): String? {
+            channelLanguage(ch)?.let { return "lang:$it" }
+            val prefix = if (ch.name.contains(':') || ch.name.contains('|'))
+                norm(ch.name.substringBefore(':').substringBefore('|').take(16)) else " "
+            val tags = norm(LANGUAGE_TAG.findAll(ch.name).joinToString(" ") { it.groupValues[1] })
+            val group = norm(ch.group)
+            return REGION_WORDS.entries.firstOrNull { (_, w) ->
+                w.any { hasWord(prefix, it) || hasWord(tags, it) || hasWord(group, it) }
+            }?.key
+        }
+
+        /** Words that only say which copy of a channel it is (its quality, a backup feed). */
+        private val COPY_WORDS = setOf(
+            "4k", "uhd", "2160", "2160p", "fhd", "1080", "1080p", "1080i", "hd", "720", "720p", "sd", "480", "576",
+            "hevc", "h265", "h264", "50fps", "60fps", "fps", "backup", "alt"
+        )
+
+        /** The same channel's copies (ESPN FHD, ESPN HD, ESPN SD) share this; other regions' don't. */
+        fun copyKey(ch: LiveChannel): String =
+            norm(ch.name.replace("+", " plus ")).split(' ').filter { it.isNotEmpty() && it !in COPY_WORDS }.joinToString(" ")
+
+        /**
+         * [list] (in order) with each channel's copies together: one entry per channel, the first
+         * copy in the list leading (or [playingKey]'s, while it plays).
+         */
+        fun groupCopies(list: List<ChannelMatch>, playingKey: String? = null): List<List<ChannelMatch>> {
+            val groups = LinkedHashMap<String, MutableList<ChannelMatch>>()
+            list.forEach { m -> groups.getOrPut(copyKey(m.channel).ifBlank { m.channel.key }) { ArrayList() } += m }
+            return groups.values.map { g ->
+                val i = g.indexOfFirst { it.channel.key == playingKey }
+                if (i > 0) listOf(g[i]) + g.filterIndexed { j, _ -> j != i } else g
+            }
         }
 
         fun preferenceRank(settings: SportsSettings): (LiveChannel) -> Int {

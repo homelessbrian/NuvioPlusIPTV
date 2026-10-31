@@ -271,7 +271,10 @@ internal object LiveCaptions {
             playerId: PlayerId
         ): HlsMediaChunkExtractor = SpyChunk(
             inner.createExtractor(
-                uri, format, muxedCaptionFormats ?: formats, timestampAdjuster,
+                // A playlist saying "no captions" (CLOSED-CAPTIONS=NONE) is often wrong: many
+                // providers write it on every channel and carry the captions anyway. Looked for
+                // regardless, as TiviMate does; the menu still only offers ones with text.
+                uri, format, muxedCaptionFormats?.takeIf { it.isNotEmpty() } ?: formats, timestampAdjuster,
                 responseHeaders, sniffingExtractorInput, playerId
             )
         )

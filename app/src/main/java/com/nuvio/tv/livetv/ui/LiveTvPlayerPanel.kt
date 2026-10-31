@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.runtime.LaunchedEffect
@@ -56,7 +58,7 @@ internal enum class PanelMode { LIVE, CATCHUP, SHIFT }
  * the timeline, back 30, play/pause, forward 30 and the gear; the rest are kept for the keys
  * that still name them, and live in the gear panel.
  */
-internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, MORE }
+internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, BELL, MORE }
 
 /** Timeline: everything in wall-clock milliseconds. */
 internal data class PanelTimeline(
@@ -83,6 +85,7 @@ internal object BarPart {
     const val CLOCK = "clock"
     const val NEXT = "next"
     const val RECENT = "recent"
+    const val BELL = "bell"
 
     /** In the order the toggles show, with what each is called there. */
     val ALL: List<Triple<String, String, String?>> = listOf(
@@ -93,7 +96,8 @@ internal object BarPart {
         Triple(PROGRESS, "Progress bar", "Always shown while paused"),
         Triple(CLOCK, "Clock", null),
         Triple(NEXT, "Up next", null),
-        Triple(RECENT, "Recent channels", "The row under the bar (OK)")
+        Triple(RECENT, "Recent channels", "The row under the bar (OK)"),
+        Triple(BELL, "Bell", "Follow the show, or put the movie on your Calendar")
     )
 
     fun parse(raw: String): Set<String> = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
@@ -101,13 +105,15 @@ internal object BarPart {
 }
 
 /** Which controls the bar offers: back 30 / forward 30 only where you can skip, and the gear. */
-internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean): List<PanelControl> = buildList {
+internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, bell: Boolean = false): List<PanelControl> = buildList {
     val transport = mode != PanelMode.LIVE || paused
     // The timeline itself can be grabbed (Up from the buttons) and moved with ◀ / ▶.
     if (transport && canSkip) add(PanelControl.TIMELINE)
     if (transport && canSkip) add(PanelControl.BACK)
     add(PanelControl.PLAY)
     if (transport && canSkip) add(PanelControl.FORWARD)
+    // The Calendar's bell, beside the gear.
+    if (bell) add(PanelControl.BELL)
     add(PanelControl.MORE)
 }
 
@@ -184,7 +190,9 @@ internal fun LiveTvPlayerPanel(
     /** How see-through the glass is: "standard", "darker" or "solid" (Live TV settings). */
     background: String = "standard",
     /** Parts switched off (see [BarPart]). */
-    hidden: Set<String> = emptySet()
+    hidden: Set<String> = emptySet(),
+    /** The Calendar's bell is on for what's playing. */
+    bellOn: Boolean = false
 ) {
     val colors = NuvioTheme.colors
     val accent = colors.Secondary
@@ -308,6 +316,13 @@ internal fun LiveTvPlayerPanel(
                             }
                             if (full) {
                                 Spacer(Modifier.width(10.dp))
+                                if (PanelControl.BELL in controls) {
+                                    RoundButton(
+                                        if (bellOn) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
+                                        focused = focused == PanelControl.BELL && recentFocus == null, big = false
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                }
                                 RoundButton(Icons.Default.Settings, focused = focused == PanelControl.MORE && recentFocus == null, big = false)
                             }
                         }

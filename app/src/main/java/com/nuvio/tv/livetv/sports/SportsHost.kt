@@ -179,7 +179,15 @@ fun SportsHost(navController: NavController) {
                 due = null
                 armed = null
                 repo.dropReminder(ev.id)
-                SportsLaunch.openEvent(ev.id)
+                // Back on the game: the page you were on when the reminder came up.
+                val from = when (navController.currentDestination?.route) {
+                    Screen.Calendar.route -> SportsLaunch.Origin(Screen.Calendar.route, "Calendar")
+                    Screen.Home.route -> SportsLaunch.Origin(Screen.Home.route, "Home")
+                    Screen.LiveTv.route -> SportsLaunch.Origin(Screen.LiveTv.route, "Live TV")
+                    Screen.OnDemand.route -> SportsLaunch.Origin(Screen.OnDemand.route, "On Demand")
+                    else -> null
+                }
+                SportsLaunch.openEvent(ev.id, from)
                 navController.navigate(Screen.Sports.route) {
                     popUpTo(navController.graph.startDestinationId) { saveState = true }
                     launchSingleTop = true
@@ -382,3 +390,68 @@ fun SportsCornerCard(channelKey: String?, use24h: Boolean, modifier: Modifier = 
         StatusColumn(ev, playing = false, now = now, use24h = use24h, hideScores = settings.hideScores, modifier = Modifier.width(112.dp))
     }
 }
+
+/**
+ * The live game on [channelKey] (the same one the info bar's score uses), or null: Sports
+ * off, the channel isn't showing a game we know of, or no channel.
+ */
+@Composable
+fun rememberLiveGameOn(channelKey: String?): SportsEvent? {
+    if (channelKey == null) return null
+    val context = LocalContext.current
+    val repo = remember {
+        runCatching { EntryPointAccessors.fromApplication(context.applicationContext, SportsEntryPoint::class.java).sportsRepository() }.getOrNull()
+    } ?: return null
+    val settings by repo.settings.collectAsState()
+    val cards by SportsLive.cardByChannel.collectAsState()
+    if (!settings.showInSidebar) return null
+    val ev = cards[channelKey] ?: return null
+    return ev.takeIf { it.away != null && it.home != null }
+}
+
+/**
+ * A game as a poster, for the guide's poster space: the two teams on their colours, the score
+ * between them (unless scores are hidden), the clock underneath. Sized to whatever poster box
+ * it's in (the small info panel's too).
+ */
+@Composable
+fun SportsPosterCard(ev: SportsEvent, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val repo = remember {
+        runCatching { EntryPointAccessors.fromApplication(context.applicationContext, SportsEntryPoint::class.java).sportsRepository() }.getOrNull()
+    }
+    val hideScores = repo?.settings?.collectAsState()?.value?.hideScores ?: false
+    val league = SportsCatalog.league(ev.leagueId)
+    val sides = if (league != null) ev.ordered(league.sport) else listOfNotNull(ev.away, ev.home)
+    if (sides.size != 2) return
+    val top = bandColor(teamColor(sides[0].team))
+    val bottom = bandColor(teamColor(sides[1].team))
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier.background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(top, lerpInk(top), lerpInk(bottom), bottom)))
+    ) {
+        val h = maxHeight
+        val logo = h * 0.27f
+        val tiny = h < 100.dp
+        Column(
+            Modifier.fillMaxSize().padding(vertical = if (tiny) 4.dp else 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceEvenly
+        ) {
+            TeamLogo(sides[0].team, logo)
+            val score = if (!hideScores && ev.hasScore) "${sides[0].score} – ${sides[1].score}" else "vs"
+            LiveText(
+                score,
+                color = Color.White,
+                size = (h.value * (if (score == "vs") 0.10f else 0.13f)).sp,
+                weight = FontWeight.Black,
+                maxLines = 1
+            )
+            TeamLogo(sides[1].team, logo)
+            if (!tiny) ev.status?.takeIf { it.isNotBlank() }?.let {
+                LiveText(it, color = Color.White.copy(alpha = 0.9f), size = (h.value * 0.065f).coerceAtLeast(9f).sp, weight = FontWeight.Bold, maxLines = 1)
+            }
+        }
+    }
+}
+
+private fun lerpInk(c: Color): Color = androidx.compose.ui.graphics.lerp(c, SportsLook.Ink, 0.45f)

@@ -890,6 +890,20 @@ fun SearchScreen(
                         }
                     }
 
+                    // Live TV fork: On Demand is still looking (big providers take a few seconds):
+                    // say so, instead of "no results" until its row turns up.
+                    (!searchScope.catalog || (!uiState.isSearching && !hasPendingUnsubmittedQuery)) &&
+                        visibleCatalogRows.isEmpty() &&
+                        liveTvResults.hits.isEmpty() && onDemandResults.items.isEmpty() && onDemandResults.searching -> {
+                        item {
+                            EmptyScreenState(
+                                title = "Still searching…",
+                                subtitle = "Looking through your On Demand movies and series",
+                                icon = Icons.Default.Search
+                            )
+                        }
+                    }
+
                     (!searchScope.catalog || (!uiState.isSearching && !hasPendingUnsubmittedQuery)) &&
                         visibleCatalogRows.isEmpty() &&
                         liveTvResults.hits.isEmpty() && onDemandResults.items.isEmpty() -> {
@@ -1052,6 +1066,7 @@ fun SearchScreen(
 
     val posterOptionsState by viewModel.posterOptions.state.collectAsState()
     com.nuvio.tv.ui.components.posteroptions.PosterOptionsHost(
+        calendarBell = true,
         state = posterOptionsState,
         controller = viewModel.posterOptions,
         onNavigateToDetail = { id, type, addonBaseUrl ->

@@ -362,6 +362,17 @@ class HomeViewModel @Inject constructor(
         }
 
         observeStartupAuthNotice()
+        // Live TV fork: the Calendar's cards changed (a new episode is out, a bell rung): put
+        // them in again without waiting for Continue Watching's next update.
+        viewModelScope.launch {
+            com.nuvio.tv.livetv.calendar.CalendarHomeFeed.version.collect {
+                _uiState.update { st ->
+                    val (main, up) = com.nuvio.tv.livetv.calendar.CalendarHomeFeed.apply(st.continueWatchingItems, st.upcomingItems)
+                    if (main == st.continueWatchingItems && up == st.upcomingItems) st
+                    else st.copy(continueWatchingItems = main, upcomingItems = up)
+                }
+            }
+        }
         viewModelScope.launch {
             profileManager.activeProfileReady.first { it }
             observeLayoutPreferences()
@@ -693,12 +704,17 @@ class HomeViewModel @Inject constructor(
         when (event) {
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
             is HomeEvent.OnLoadMoreCatalog -> loadMoreCatalogItems(event.catalogId, event.addonId, event.type)
-            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(
-                contentId = event.contentId,
-                season = event.season,
-                episode = event.episode,
-                isNextUp = event.isNextUp
-            )
+            is HomeEvent.OnRemoveContinueWatching -> {
+                // Live TV fork: a Calendar card is just taken away (there's no progress to remove).
+                if (!com.nuvio.tv.livetv.calendar.CalendarHomeFeed.dismiss(event.contentId, event.season, event.episode)) {
+                    removeContinueWatching(
+                        contentId = event.contentId,
+                        season = event.season,
+                        episode = event.episode,
+                        isNextUp = event.isNextUp
+                    )
+                }
+            }
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache, forceReload = true) }
         }
     }

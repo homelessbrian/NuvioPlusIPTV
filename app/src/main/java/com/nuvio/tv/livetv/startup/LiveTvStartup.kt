@@ -1,9 +1,7 @@
 package com.nuvio.tv.livetv.startup
 
 import android.content.Context
-import androidx.navigation.NavController
 import com.nuvio.tv.livetv.data.LiveTvPreferences
-import com.nuvio.tv.livetv.model.effectiveStartPage
 import com.nuvio.tv.ui.navigation.Screen
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -19,6 +17,9 @@ interface LiveTvStartupEntryPoint {
     fun onDemandRepository(): com.nuvio.tv.livetv.ondemand.OnDemandRepository
     fun liveTvRepository(): com.nuvio.tv.livetv.data.LiveTvRepository
     fun profileManager(): com.nuvio.tv.core.profile.ProfileManager
+    fun epgDatabase(): com.nuvio.tv.livetv.data.EpgDatabase
+    fun channelStore(): com.nuvio.tv.livetv.data.LiveTvChannelStore
+    fun liveTvRecorder(): com.nuvio.tv.livetv.record.LiveTvRecorder
 }
 
 /**
@@ -70,36 +71,47 @@ private fun clearOldBuffers(context: android.content.Context, before: Long) {
 }
 
 /**
- * "Open Live TV when Nuvio starts": the first time the home screen appears after the app
- * starts, go straight to Live TV (Back from Live TV still leads to Nuvio's menu and home).
+ * "Open the App On" (Live TV settings → Integration): the page the app opens on.
+ *
+ * The app starts straight on that page: it's the first screen, in place of Home. (The old way
+ * opened Home and then jumped, which raced Home's own loading: laggy, Home flashed, and on some
+ * boxes it didn't jump at all.) The choice has to be known before the first screen is drawn,
+ * so a copy is kept in a small file that reads instantly, refreshed whenever the setting changes.
  */
-object LiveTvStartup {
-    @Volatile private var handled = false
+object StartPage {
+    private const val PREFS = "livetv_start_page"
+    private const val KEY = "route"
 
-    suspend fun maybeOpenLiveTv(context: Context, nav: NavController) {
-        if (handled) return
-        handled = true
-        val entry = EntryPointAccessors.fromApplication(context.applicationContext, LiveTvStartupEntryPoint::class.java)
-        val settings = runCatching { entry.liveTvPreferences().settings.first() }.getOrNull() ?: return
-        val route = when (settings.effectiveStartPage) {
-            "LIVE_TV" -> Screen.LiveTv.route
-            // On Demand only when something has been imported; otherwise stay on Home.
-            "ON_DEMAND" -> Screen.OnDemand.route.takeIf {
-                runCatching { entry.onDemandRepository().also { r -> r.start() }.hasContent.value || waitForOnDemand(entry) }.getOrDefault(false)
-            }
-            "SEARCH" -> Screen.Search.route
-            "LIBRARY" -> Screen.Library.route
-            "DISCOVER" -> Screen.Discover.route
+    private val ROUTES = setOf(
+        Screen.LiveTv.route, Screen.OnDemand.route, Screen.Sports.route,
+        Screen.Calendar.route, Screen.Library.route, Screen.Search.route
+    )
+
+    /** The page to open on, or null for Home. */
+    fun cachedRoute(context: Context): String? = runCatching {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
+    }.getOrNull()?.takeIf { it in ROUTES }
+
+    /** The page for a setting ([LiveTvSettings.openOn]); null for Home. Live TV only while it's in the menu. */
+    fun routeFor(s: com.nuvio.tv.livetv.model.LiveTvSettings, sportsOn: Boolean = true): String? {
+        val off = com.nuvio.tv.livetv.calendar.SideMenuPages.hidden(s.sideMenuHidden)
+        // Only pages that are switched on (Settings → Menu & Features); otherwise Home.
+        return when (s.openOn) {
+            "LIVE_TV" -> Screen.LiveTv.route.takeIf { s.showInSidebar }
+            "ON_DEMAND" -> Screen.OnDemand.route.takeIf { s.onDemandInSidebar }
+            "SPORTS" -> Screen.Sports.route.takeIf { sportsOn }
+            "CALENDAR" -> Screen.Calendar.route.takeIf { com.nuvio.tv.livetv.calendar.SideMenuPages.CALENDAR !in off }
+            "LIBRARY" -> Screen.Library.route.takeIf { com.nuvio.tv.livetv.calendar.SideMenuPages.LIBRARY !in off }
+            "SEARCH" -> Screen.Search.route.takeIf { com.nuvio.tv.livetv.calendar.SideMenuPages.SEARCH !in off }
             else -> null
-        } ?: return
-        nav.navigate(route) {
-            popUpTo(nav.graph.startDestinationId) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
         }
     }
 
-    /** The On Demand index is checked in the background at start-up; give it a moment. */
-    private suspend fun waitForOnDemand(entry: LiveTvStartupEntryPoint): Boolean =
-        kotlinx.coroutines.withTimeoutOrNull(2_000) { entry.onDemandRepository().hasContent.first { it } } ?: false
+    fun save(context: Context, route: String?) {
+        runCatching {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            if (prefs.getString(KEY, null) == route) return
+            prefs.edit().apply { if (route == null) remove(KEY) else putString(KEY, route) }.apply()
+        }
+    }
 }

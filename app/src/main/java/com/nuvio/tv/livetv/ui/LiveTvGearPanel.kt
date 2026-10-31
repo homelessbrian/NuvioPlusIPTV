@@ -97,6 +97,8 @@ internal fun GearPanel(
     onTimeAction: () -> Unit,
     onPrevious: () -> Unit,
     onSearch: (() -> Unit)?,
+    /** The Calendar's bell: its name, its state ("On" / "Off"), and ringing it. */
+    bell: Triple<String, String, () -> Unit>? = null,
     onReload: () -> Unit,
     onHide: () -> Unit,
     onSettings: () -> Unit,
@@ -236,6 +238,7 @@ internal fun GearPanel(
                 val items = buildList<Triple<String, String?, () -> Unit>> {
                     // Watch from the beginning / Go live: first, where it's easiest to reach.
                     timeAction?.let { add(Triple(it, null, onTimeAction)) }
+                    bell?.let { (label, value, action) -> add(Triple(label, value, action)) }
                     add(Triple("Screen size", sizeLabel, { sizing = true }))
                     add(Triple("Sleep timer", sleepLabel, { page = "sleep" }))
                     add(Triple("Previous channel", null, onPrevious))

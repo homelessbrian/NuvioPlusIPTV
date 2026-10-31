@@ -147,7 +147,7 @@ class OnDemandRepository @Inject constructor(
         if (started) return
         started = true
         scope.launch {
-            kotlinx.coroutines.flow.combine(hasContent, prefs.settings) { has, s -> has && s.onDemandInStreams }
+            kotlinx.coroutines.flow.combine(hasContent, prefs.settings) { has, s -> has && s.onDemandInStreams && s.onDemandInSidebar }
                 .collect { OnDemandStreams.offeredInStreams = it }
         }
         scope.launch {
@@ -539,8 +539,16 @@ class OnDemandRepository @Inject constructor(
         runCatching { db.genres(kind) }.getOrDefault(emptyList())
     }
 
-    suspend fun search(kind: VodKind, text: String, hidden: Set<String>, sort: VodSort = VodSort.DEFAULT, merge: Boolean = true) = withContext(Dispatchers.IO) {
-        runCatching { db.search(kind, text, hidden, sort = sort, merge = merge) }.getOrDefault(emptyList())
+    /** A search that stops as soon as it isn't wanted any more (typing on, leaving the screen). */
+    @OptIn(kotlinx.coroutines.InternalCoroutinesApi::class)
+    suspend fun search(kind: VodKind, text: String, hidden: Set<String>, sort: VodSort = VodSort.DEFAULT, merge: Boolean = true): List<VodItem> = withContext(Dispatchers.IO) {
+        val signal = android.os.CancellationSignal()
+        val stop = coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion(onCancelling = true, invokeImmediately = true) { if (it != null) signal.cancel() }
+        try {
+            runCatching { db.search(kind, text, hidden, sort = sort, merge = merge, signal = signal) }.getOrDefault(emptyList())
+        } finally {
+            stop?.dispose()
+        }
     }
 
     private suspend fun playlist(id: String): PlaylistSource? = prefs.playlists.first().firstOrNull { it.id == id }

@@ -106,7 +106,7 @@ object OnDemandStreams {
         title: String,
         year: String?
     ): List<Stream> {
-        val show = runCatching { entry.liveTvPreferences().settings.first().onDemandInStreams }.getOrDefault(true)
+        val show = runCatching { entry.liveTvPreferences().settings.first().let { it.onDemandInStreams && it.onDemandInSidebar } }.getOrDefault(true)
         if (!show) return emptyList()
         val repo = entry.onDemandRepository()
         repo.start()

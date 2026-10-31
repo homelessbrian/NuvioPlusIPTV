@@ -119,7 +119,9 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
     /**
      * @param force bypass throttle and content-change check (use at end of pipeline or for clears)
      */
-    suspend fun saveNextUpSnapshot(items: List<CachedNextUpItem>, force: Boolean = false) = withContext(Dispatchers.IO) {
+    suspend fun saveNextUpSnapshot(allItems: List<CachedNextUpItem>, force: Boolean = false) = withContext(Dispatchers.IO) {
+        // Live TV fork: the Calendar's cards aren't kept (the Calendar puts them in again).
+        val items = allItems.filterNot { com.nuvio.tv.livetv.calendar.CalendarHomeFeed.isInjected(it.contentId, it.videoId) }
         val contentHash = items.hashCode()
         if (!force) {
             if (contentHash == lastNextUpHash) return@withContext
@@ -165,7 +167,9 @@ class ContinueWatchingEnrichmentCache @Inject constructor(
     /**
      * @param force bypass throttle and content-change check (use at end of pipeline or for clears)
      */
-    suspend fun saveInProgressSnapshot(items: List<CachedInProgressItem>, force: Boolean = false) = withContext(Dispatchers.IO) {
+    suspend fun saveInProgressSnapshot(allItems: List<CachedInProgressItem>, force: Boolean = false) = withContext(Dispatchers.IO) {
+        // Live TV fork: the Calendar's movie cards aren't kept (the Calendar puts them in again).
+        val items = allItems.filterNot { com.nuvio.tv.livetv.calendar.CalendarHomeFeed.isInjectedMovie(it.contentId) }
         val contentHash = items.hashCode()
         if (!force) {
             if (contentHash == lastInProgressHash) return@withContext

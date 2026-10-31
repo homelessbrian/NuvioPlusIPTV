@@ -16,14 +16,15 @@ object SportsCatalog {
 
     val leagues: List<League> = listOf(
         // ---- American football
+        // NFL and NBA: on by default in the US and Canada only (elsewhere, add them in Leagues or follow a team).
         League("football/nfl", Sport.AMERICAN_FOOTBALL, "NFL", "NFL", "football/nfl", guideWords = listOf("NFL"),
-            regions = EVERYWHERE, minutes = 195, color = 0xFF013369),
+            regions = NA, minutes = 195, color = 0xFF013369),
         League("football/college-football", Sport.AMERICAN_FOOTBALL, "College Football", "NCAAF", "football/college-football",
             guideWords = listOf("College Football", "NCAA Football", "NCAAF", "CFB"), regions = NA, minutes = 210,
             schoolNames = true, espnQuery = "&groups=80", color = 0xFF1E3A5F),
         // ---- Basketball
         League("basketball/nba", Sport.BASKETBALL, "NBA", "NBA", "basketball/nba", guideWords = listOf("NBA"),
-            regions = EVERYWHERE, minutes = 150, color = 0xFF1D428A),
+            regions = NA, minutes = 150, color = 0xFF1D428A),
         League("basketball/wnba", Sport.BASKETBALL, "WNBA", "WNBA", "basketball/wnba", guideWords = listOf("WNBA"),
             regions = NA, minutes = 120, color = 0xFFC8102E),
         League("basketball/mens-college-basketball", Sport.BASKETBALL, "Men's College Basketball", "NCAAM",
@@ -118,6 +119,21 @@ object SportsCatalog {
         rug("270563", "NPC (New Zealand)", "NPC", listOf("NPC", "Bunnings NPC", "Mitre 10 Cup"), setOf("AU"), 0xFF111111),
         rug("270555", "Currie Cup", "CURRIE", listOf("Currie Cup"), color = 0xFF006400),
         rug("289262", "Major League Rugby", "MLR", listOf("Major League Rugby", "MLR"), setOf("US"), 0xFF0B2545),
+        // ---- Rugby league
+        League("rugby-league/3", Sport.RUGBY, "NRL", "NRL", "rugby-league/3", guideWords = listOf("NRL", "National Rugby League", "NRL Premiership"),
+            regions = setOf("AU"), minutes = 110, color = 0xFF1E2A5E),
+        // ---- Cricket (live scores from ESPN; the guide's "Cricket" still finds the rest)
+        League("cricket/8048", Sport.CRICKET, "Indian Premier League", "IPL", "cricket/8048", guideWords = listOf("IPL", "Indian Premier League"),
+            regions = setOf("UK", "IE", "AU", "OTHER"), minutes = 230, color = 0xFF19398A),
+        League("cricket/8044", Sport.CRICKET, "Big Bash League", "BBL", "cricket/8044", guideWords = listOf("Big Bash", "BBL", "KFC BBL"),
+            regions = setOf("AU"), minutes = 200, color = 0xFF00A3E0),
+        League("cricket/21275", Sport.CRICKET, "SA20", "SA20", "cricket/21275", guideWords = listOf("SA20", "Betway SA20"),
+            regions = emptySet(), minutes = 220, color = 0xFF003B71),
+        League("cricket/21266", Sport.CRICKET, "Major League Cricket", "MLC", "cricket/21266", guideWords = listOf("Major League Cricket", "MLC"),
+            regions = US, minutes = 220, color = 0xFF0A2240),
+        League("cricket/panel", Sport.CRICKET, "International Cricket", "INTL", "cricket/panel",
+            guideWords = listOf("Test Match", "ODI", "One Day International", "T20 International", "The Ashes"),
+            regions = setOf("UK", "IE", "AU", "OTHER"), minutes = 480, color = 0xFF0E5A3A),
         // ---- Aussie rules
         League("australian-football/afl", Sport.AUSSIE_RULES, "AFL", "AFL", "australian-football/afl", guideWords = listOf("AFL", "Aussie Rules"),
             regions = setOf("AU"), minutes = 150, color = 0xFF01285E),
@@ -180,6 +196,63 @@ object SportsCatalog {
         soc("uefa.weuro", "Women's Euro", "WEURO", listOf("Women's Euro", "Women's European Championship"), color = 0xFF143CDB, women = true, national = true),
         soc("uefa.w.nations", "Women's Nations League", "WUNL", listOf("Women's Nations League"), color = 0xFF0E1B4D, women = true, national = true),
         soc("fifa.friendly.w", "Women's International Friendlies", "W FRIEND", listOf("Women's International", "Women's Friendly"), color = 0xFF33415C, women = true, national = true),
+        // More from ESPN: Brazil's state leagues, the other World Cup qualifiers and continental
+        // cups, US college soccer. (Ireland, Northern Ireland, Wales, Scottish League One and Two
+        // and Switzerland aren't on ESPN any more: they come from TheSportsDB's files.)
+        soc("bra.camp.paulista", "Campeonato Paulista", "PAULISTA", listOf("Paulista", "Paulistão"), color = 0xFF111111),
+        soc("bra.camp.carioca", "Campeonato Carioca", "CARIOCA", listOf("Carioca", "Cariocão"), color = 0xFF0B4F2E),
+        soc("bra.camp.mineiro", "Campeonato Mineiro", "MINEIRO", listOf("Mineiro"), color = 0xFF1A1A1A),
+        soc("bra.camp.gaucho", "Campeonato Gaúcho", "GAUCHO", listOf("Gaúcho", "Gauchão"), color = 0xFF0B5394),
+        soc("fifa.worldq.conmebol", "World Cup Qualifying (South America)", "WCQ SA", listOf("World Cup Qualifier", "World Cup Qualifying"), color = 0xFF003876, national = true),
+        soc("fifa.worldq.afc", "World Cup Qualifying (Asia)", "WCQ AS", listOf("World Cup Qualifier", "World Cup Qualifying"), color = 0xFF1A3C6E, national = true),
+        soc("fifa.worldq.caf", "World Cup Qualifying (Africa)", "WCQ AF", listOf("World Cup Qualifier", "World Cup Qualifying"), color = 0xFF006233, national = true),
+        soc("fifa.worldq.ofc", "World Cup Qualifying (Oceania)", "WCQ OC", listOf("World Cup Qualifier", "World Cup Qualifying"), color = 0xFF1B4F72, national = true),
+        soc("caf.nations", "Africa Cup of Nations", "AFCON", listOf("Africa Cup of Nations", "AFCON"), color = 0xFF006233, national = true),
+        soc("afc.asian.cup", "AFC Asian Cup", "ASIAN", listOf("Asian Cup"), color = 0xFF1A3C6E, national = true),
+        soc("fifa.olympics", "Olympic Football", "OLY", listOf("Olympic Football", "Olympics Football"), color = 0xFF0081C8),
+        soc("club.friendly", "Club Friendlies", "FRIENDLY", listOf("Club Friendly", "Pre-Season Friendly", "Friendly"), color = 0xFF33415C),
+        soc("eng.fa_qual", "FA Cup Qualifying", "FA Q", listOf("FA Cup Qualifying"), color = 0xFF7A0019),
+        soc("sco.challenge", "Scottish Challenge Cup", "SCO CC", listOf("Scottish Challenge Cup", "SPFL Trust Trophy"), color = 0xFF2B2D7A),
+        soc("ned.2", "Eerste Divisie", "NED 2", listOf("Eerste Divisie", "Keuken Kampioen Divisie"), color = 0xFFE87722),
+        soc("esp.w.1", "Liga F", "LIGA F", listOf("Liga F"), color = 0xFF7A1F5C, women = true),
+        soc("fra.w.1", "Première Ligue (Women)", "FRA W", listOf("Première Ligue", "Arkema Première Ligue"), color = 0xFF1F3A93, women = true),
+        soc("ned.w.1", "Vrouwen Eredivisie", "NED W", listOf("Vrouwen Eredivisie"), color = 0xFFE87722, women = true),
+        soc("esp.copa_de_la_reina", "Copa de la Reina", "REINA", listOf("Copa de la Reina"), color = 0xFF7A1F5C, women = true),
+        soc("uefa.w.europa", "Women's Europa Cup", "UWEC", listOf("Women's Europa Cup"), color = 0xFF0E1B4D, women = true),
+        soc("can.w.nsl", "Northern Super League", "NSL", listOf("Northern Super League"), setOf("CA"), 0xFF8B0000, women = true),
+        soc("bra.2", "Brasileirão Série B", "BRA 2", listOf("Serie B Brazil", "Brasileirão Série B"), color = 0xFF009C3B),
+        soc("bra.copa_do_brazil", "Copa do Brasil", "CDB", listOf("Copa do Brasil"), color = 0xFF009C3B),
+        soc("arg.2", "Primera Nacional (Argentina)", "ARG 2", listOf("Primera Nacional", "Nacional B"), color = 0xFF6CACE4),
+        soc("arg.3", "Primera B (Argentina)", "ARG 3", listOf("Primera B Metropolitana"), color = 0xFF6CACE4),
+        soc("arg.copa", "Copa Argentina", "COPA ARG", listOf("Copa Argentina"), color = 0xFF6CACE4),
+        soc("col.copa", "Copa Colombia", "COPA COL", listOf("Copa Colombia"), color = 0xFFFCD116),
+        soc("chi.copa_chi", "Copa Chile", "COPA CHI", listOf("Copa Chile"), color = 0xFFD52B1E),
+        soc("per.1", "Liga 1 (Peru)", "PER", listOf("Liga 1 Peru", "Liga1"), color = 0xFFD91023),
+        soc("par.1", "Paraguayan Primera", "PAR", listOf("Primera División Paraguay"), color = 0xFFD52B1E),
+        soc("par.1.supercopa", "Supercopa Paraguay", "SUPERCOPA", listOf("Supercopa Paraguay"), color = 0xFFD52B1E),
+        soc("uru.1", "Liga AUF (Uruguay)", "URU", listOf("Liga AUF", "Uruguayan Primera"), color = 0xFF0038A8),
+        soc("ecu.1", "LigaPro (Ecuador)", "ECU", listOf("LigaPro", "Liga Pro Ecuador"), color = 0xFFFFD100),
+        soc("bol.1", "Bolivian Primera", "BOL", listOf("Liga Profesional Boliviana"), color = 0xFF007934),
+        soc("ven.1", "Venezuelan Primera", "VEN", listOf("Liga FUTVE"), color = 0xFF8B1A1A),
+        soc("mex.2", "Liga de Expansión MX", "MX 2", listOf("Liga de Expansión"), color = 0xFF00543D),
+        soc("gua.1", "Liga Nacional (Guatemala)", "GUA", listOf("Liga Nacional Guatemala"), color = 0xFF4997D0),
+        soc("hon.1", "Liga Nacional (Honduras)", "HON", listOf("Liga Nacional Honduras"), color = 0xFF0073CF),
+        soc("crc.1", "Primera División (Costa Rica)", "CRC", listOf("Liga Promérica", "Costa Rica Primera"), color = 0xFF002B7F),
+        soc("slv.1", "Primera División (El Salvador)", "SLV", listOf("Primera División El Salvador"), color = 0xFF0047AB),
+        // On by default in the US and "Somewhere else" (Central America); named as Concacaf does, so searching "Concacaf" finds it.
+        soc("concacaf.central.american.cup", "Concacaf Central American Cup", "CAC", listOf("Central American Cup", "Copa Centroamericana"), setOf("US", "OTHER"), color = 0xFF0B2545),
+        soc("ksa.kings.cup", "King's Cup (Saudi)", "KINGS", listOf("King's Cup"), color = 0xFF006C35),
+        soc("ind.2", "I-League", "I-LEAGUE", listOf("I-League"), color = 0xFFFF9933),
+        soc("afc.cup", "AFC Champions League Two", "ACL2", listOf("AFC Champions League Two", "ACL Two"), color = 0xFF1A3C6E),
+        soc("caf.confed", "CAF Confederation Cup", "CAF CC", listOf("Confederation Cup"), color = 0xFF006233),
+        soc("fifa.world.u17", "U-17 World Cup", "U17 WC", listOf("U-17 World Cup", "Under-17 World Cup"), color = 0xFF326295),
+        soc("fifa.wworld.u17", "Women's U-17 World Cup", "WU17", listOf("Women's U-17 World Cup"), color = 0xFF56042C, women = true),
+        soc("uefa.euro_u21_qual", "U-21 Euro Qualifying", "U21 Q", listOf("Under-21", "U21 Euro"), color = 0xFF143CDB),
+        soc("fifa.wworldq.uefa", "Women's World Cup Qualifying (Europe)", "WWCQ", listOf("Women's World Cup Qualifier"), color = 0xFF56042C, women = true, national = true),
+        League("soccer/usa.ncaa.m.1", Sport.FOOTBALL, "Men's College Soccer", "NCAAS", "soccer/usa.ncaa.m.1",
+            guideWords = listOf("College Soccer", "NCAA Soccer"), regions = emptySet(), minutes = 120, schoolNames = true, color = 0xFF2B4C7E),
+        League("soccer/usa.ncaa.w.1", Sport.FOOTBALL, "Women's College Soccer", "NCAAWS", "soccer/usa.ncaa.w.1",
+            guideWords = listOf("Women's College Soccer", "NCAA Women's Soccer"), regions = emptySet(), minutes = 120, schoolNames = true, color = 0xFF5B3A8C, women = true),
         // ---- More basketball, hockey, American football, baseball
         League("basketball/nba-development", Sport.BASKETBALL, "NBA G League", "G LEAGUE", "basketball/nba-development",
             guideWords = listOf("G League"), regions = emptySet(), minutes = 130, color = 0xFF002B5C),
@@ -199,6 +272,65 @@ object SportsCatalog {
             guideWords = listOf("Premier Lacrosse", "PLL"), regions = emptySet(), minutes = 120, color = 0xFF111111),
         League("lacrosse/nll", Sport.LACROSSE, "National Lacrosse League", "NLL", "lacrosse/nll",
             guideWords = listOf("National Lacrosse League", "NLL"), regions = emptySet(), minutes = 150, color = 0xFF1D3C8F),
+        // ---- More US college sports (ESPN)
+        League("hockey/womens-college-hockey", Sport.HOCKEY, "Women's College Hockey", "NCAAWH", "hockey/womens-college-hockey",
+            guideWords = listOf("Women's College Hockey", "NCAA Women's Hockey"), regions = emptySet(), minutes = 160, schoolNames = true, color = 0xFF5B3A8C, women = true),
+        League("baseball/college-softball", Sport.BASEBALL, "College Softball", "NCAASB", "baseball/college-softball",
+            guideWords = listOf("College Softball", "NCAA Softball", "Softball"), regions = emptySet(), minutes = 150, schoolNames = true, color = 0xFF5B3A8C, women = true),
+        League("volleyball/mens-college-volleyball", Sport.VOLLEYBALL, "Men's College Volleyball", "NCAAMV", "volleyball/mens-college-volleyball",
+            guideWords = listOf("Men's College Volleyball", "NCAA Men's Volleyball"), regions = emptySet(), minutes = 120, schoolNames = true, color = 0xFF2B4C7E),
+        League("lacrosse/mens-college-lacrosse", Sport.LACROSSE, "Men's College Lacrosse", "NCAAL", "lacrosse/mens-college-lacrosse",
+            guideWords = listOf("College Lacrosse", "NCAA Lacrosse"), regions = emptySet(), minutes = 140, schoolNames = true, color = 0xFF2B4C7E),
+        League("lacrosse/womens-college-lacrosse", Sport.LACROSSE, "Women's College Lacrosse", "NCAAWL", "lacrosse/womens-college-lacrosse",
+            guideWords = listOf("Women's College Lacrosse", "NCAA Women's Lacrosse"), regions = emptySet(), minutes = 130, schoolNames = true, color = 0xFF5B3A8C, women = true),
+        // ---- Big tournaments (ESPN): only while they're on
+        League("hockey/olympics-mens-ice-hockey", Sport.HOCKEY, "Olympic Hockey", "OLY", "hockey/olympics-mens-ice-hockey",
+            guideWords = listOf("Olympic Hockey", "Olympics Ice Hockey", "Men's Ice Hockey"), regions = emptySet(), minutes = 160, color = 0xFF0081C8, national = true),
+        League("hockey/olympics-womens-ice-hockey", Sport.HOCKEY, "Olympic Women's Hockey", "OLY W", "hockey/olympics-womens-ice-hockey",
+            guideWords = listOf("Women's Olympic Hockey", "Women's Ice Hockey"), regions = emptySet(), minutes = 160, color = 0xFF0081C8, women = true, national = true),
+        League("baseball/world-baseball-classic", Sport.BASEBALL, "World Baseball Classic", "WBC", "baseball/world-baseball-classic",
+            guideWords = listOf("World Baseball Classic", "WBC"), regions = emptySet(), minutes = 190, color = 0xFF0A2240, national = true),
+        // ---- Winter baseball (from late October) and more college sports
+        League("baseball/dominican-winter-league", Sport.BASEBALL, "Dominican Winter League", "LIDOM", "baseball/dominican-winter-league",
+            guideWords = listOf("LIDOM", "Dominican Winter League", "Liga Dominicana"), regions = emptySet(), minutes = 190, color = 0xFF002D62),
+        League("baseball/puerto-rican-winter-league", Sport.BASEBALL, "Puerto Rican Winter League", "LBPRC", "baseball/puerto-rican-winter-league",
+            guideWords = listOf("LBPRC", "Puerto Rico Winter League"), regions = emptySet(), minutes = 190, color = 0xFFED0A3F),
+        League("baseball/venezuelan-winter-league", Sport.BASEBALL, "Venezuelan Winter League", "LVBP", "baseball/venezuelan-winter-league",
+            guideWords = listOf("LVBP", "Venezuelan Winter League"), regions = emptySet(), minutes = 190, color = 0xFF8B1A1A),
+        League("baseball/mexican-winter-league", Sport.BASEBALL, "Mexican Pacific League", "LMP", "baseball/mexican-winter-league",
+            guideWords = listOf("LMP", "Liga Mexicana del Pacífico", "Mexican Pacific League"), regions = emptySet(), minutes = 190, color = 0xFF00543D),
+        League("baseball/caribbean-series", Sport.BASEBALL, "Caribbean Series", "SERIE C", "baseball/caribbean-series",
+            guideWords = listOf("Caribbean Series", "Serie del Caribe"), regions = emptySet(), minutes = 190, color = 0xFF0B5394),
+        League("field-hockey/womens-college-field-hockey", Sport.OTHER, "College Field Hockey", "NCAAFH", "field-hockey/womens-college-field-hockey",
+            guideWords = listOf("Field Hockey"), regions = emptySet(), minutes = 100, schoolNames = true, color = 0xFF5B3A8C, women = true),
+        League("golf/ntw", Sport.GOLF, "Korn Ferry Tour", "KFT", "golf/ntw", LeagueKind.EVENT, guideWords = listOf("Korn Ferry Tour"),
+            regions = emptySet(), minutes = 300, color = 0xFF003865),
+        League("baseball/llb", Sport.BASEBALL, "Little League World Series", "LLWS", "baseball/llb",
+            guideWords = listOf("Little League World Series", "Little League"), regions = emptySet(), minutes = 150, color = 0xFF0B5394),
+        // ---- Hockey below the NHL and juniors (HockeyTech: the leagues' own live scores)
+        League("hockeytech/ahl", Sport.HOCKEY, "AHL", "AHL", "hockeytech/ahl", guideWords = listOf("AHL", "American Hockey League"),
+            regions = NA, minutes = 150, color = 0xFF003E7E),
+        League("hockeytech/pwhl", Sport.HOCKEY, "PWHL", "PWHL", "hockeytech/pwhl", guideWords = listOf("PWHL", "Professional Women's Hockey"),
+            regions = NA, minutes = 150, color = 0xFF2E1A47, women = true),
+        League("hockeytech/echl", Sport.HOCKEY, "ECHL", "ECHL", "hockeytech/echl", guideWords = listOf("ECHL"),
+            regions = emptySet(), minutes = 150, color = 0xFF1C3F94),
+        League("hockeytech/ohl", Sport.HOCKEY, "OHL", "OHL", "hockeytech/ohl", guideWords = listOf("OHL", "Ontario Hockey League"),
+            regions = emptySet(), minutes = 150, color = 0xFF0B3D91),
+        League("hockeytech/whl", Sport.HOCKEY, "WHL", "WHL", "hockeytech/whl", guideWords = listOf("WHL", "Western Hockey League"),
+            regions = emptySet(), minutes = 150, color = 0xFF111111),
+        League("hockeytech/lhjmq", Sport.HOCKEY, "QMJHL", "QMJHL", "hockeytech/lhjmq", guideWords = listOf("QMJHL", "LHJMQ"),
+            regions = emptySet(), minutes = 150, color = 0xFF003DA5),
+        League("hockeytech/ushl", Sport.HOCKEY, "USHL", "USHL", "hockeytech/ushl", guideWords = listOf("USHL"),
+            regions = emptySet(), minutes = 150, color = 0xFF002868),
+        // ---- Minor League Baseball (MLB's own live scores)
+        League("milb/11", Sport.BASEBALL, "Triple-A", "AAA", "milb/11", guideWords = listOf("Triple-A", "MiLB", "Minor League Baseball"),
+            regions = emptySet(), minutes = 170, color = 0xFF0A2240),
+        League("milb/12", Sport.BASEBALL, "Double-A", "AA", "milb/12", guideWords = listOf("Double-A", "MiLB"),
+            regions = emptySet(), minutes = 170, color = 0xFF0A2240),
+        League("milb/13", Sport.BASEBALL, "High-A", "HIGH-A", "milb/13", guideWords = listOf("High-A", "MiLB"),
+            regions = emptySet(), minutes = 170, color = 0xFF0A2240),
+        League("milb/14", Sport.BASEBALL, "Single-A", "A", "milb/14", guideWords = listOf("Single-A", "MiLB"),
+            regions = emptySet(), minutes = 170, color = 0xFF0A2240),
         // ---- More events
         League("mma/pfl", Sport.FIGHTING, "PFL", "PFL", "mma/pfl", LeagueKind.EVENT, guideWords = listOf("PFL", "Professional Fighters League"),
             regions = emptySet(), minutes = 240, color = 0xFF111111),
@@ -296,11 +428,20 @@ object SportsCatalog {
         "soccer/usa.1" to listOf("soccer/usa.open", "soccer/concacaf.champions", "soccer/concacaf.leagues.cup"),
         "soccer/mex.1" to listOf("soccer/concacaf.champions", "soccer/concacaf.leagues.cup"),
         "soccer/usa.usl.1" to listOf("soccer/usa.open"), "soccer/usa.usl.l1" to listOf("soccer/usa.open"),
-        "soccer/bra.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana"),
-        "soccer/arg.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana"),
-        "soccer/col.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana"),
-        "soccer/chi.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana"),
-        "soccer/jpn.1" to listOf("soccer/afc.champions"), "soccer/ksa.1" to listOf("soccer/afc.champions"),
+        "soccer/bra.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana", "soccer/bra.copa_do_brazil"),
+        "soccer/bra.2" to listOf("soccer/bra.copa_do_brazil"),
+        "soccer/arg.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana", "soccer/arg.copa"),
+        "soccer/arg.2" to listOf("soccer/arg.copa"),
+        "soccer/col.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana", "soccer/col.copa"),
+        "soccer/chi.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana", "soccer/chi.copa_chi"),
+        "soccer/per.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana"),
+        "soccer/par.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana", "soccer/par.1.supercopa"),
+        "soccer/uru.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana"),
+        "soccer/ecu.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana"),
+        "soccer/bol.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana"),
+        "soccer/ven.1" to listOf("soccer/conmebol.libertadores", "soccer/conmebol.sudamericana"),
+        "soccer/esp.w.1" to listOf("soccer/esp.copa_de_la_reina", "soccer/uefa.wchampions"),
+        "soccer/jpn.1" to listOf("soccer/afc.champions", "soccer/afc.cup"), "soccer/ksa.1" to listOf("soccer/afc.champions", "soccer/afc.cup", "soccer/ksa.kings.cup"),
         "soccer/chn.1" to listOf("soccer/afc.champions"), "soccer/aus.1" to listOf("soccer/afc.champions"),
         "soccer/rsa.1" to listOf("soccer/caf.champions"),
         "rugby/267979" to listOf("rugby/271937", "rugby/272073"), "rugby/270557" to listOf("rugby/271937", "rugby/272073"),
@@ -366,10 +507,19 @@ object SportsCatalog {
     fun regionName(code: String): String = regions.firstOrNull { it.first == code }?.second ?: code
 
     /**
-     * In All Events: the region's leagues (anything you follow is added on top, see
-     * SportsRepository.activeLeagues).
+     * In All Events: the region's leagues, with your own choices from the Leagues dialog applied
+     * on top (anything you follow is added separately, see SportsRepository.activeLeagues).
+     * [SportsSettings.hiddenLeagues] holds a plain league id for one taken off that's normally
+     * shown in your region, and "+id" for one added from outside it.
      */
-    fun shown(league: League, s: SportsSettings): Boolean = regionOf(s) in league.regions
+    fun shown(league: League, s: SportsSettings): Boolean {
+        val inRegion = regionOf(s) in league.regions
+        return when {
+            inRegion && league.id in s.hiddenLeagues -> false
+            !inRegion && "+${league.id}" in s.hiddenLeagues -> true
+            else -> inRegion
+        }
+    }
 
     /** Leagues in the order the region cares about them. */
     fun ordered(s: SportsSettings): List<League> {

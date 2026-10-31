@@ -202,7 +202,18 @@ data class Standings(
                 StandingsKind.RECORD -> listOfNotNull(c("wins", "W"), c("losses", "L"), if (anyTies) c("ties", "T") else null, c("winPercent", "PCT"), c("gamesBehind", "GB"), c("streak", "STRK"))
             }
             // Only columns the feed actually filled in.
-            val filled = columns.filter { col -> col.key == "behind" || groups.any { g -> g.rows.any { !it.values[col.key].isNullOrBlank() } } }
+            var filled = columns.filter { col -> col.key == "behind" || groups.any { g -> g.rows.any { !it.values[col.key].isNullOrBlank() } } }
+            // A table in the feed's own words (cricket: matches, won, lost, no result, points, net
+            // run rate): its columns as it labels them, when the usual ones aren't there.
+            if (filled.size < 2 && !athletes) {
+                val first = used.first().third.optJSONObject("standings")?.optJSONArray("entries")?.optJSONObject(0)
+                val own = first?.optJSONArray("stats").objs().mapNotNull { st ->
+                    val name = st.str("name") ?: return@mapNotNull null
+                    if (name in setOf("rank", "rankChange", "clincher", "playoffSeed") || st.str("displayValue").isNullOrBlank()) return@mapNotNull null
+                    c(name, (st.str("abbreviation") ?: st.str("shortDisplayName") ?: st.str("displayName") ?: name).uppercase().take(5))
+                }.distinctBy { it.key }.take(7)
+                if (own.size >= 2) filled = own
+            }
             return Standings(league.id, season, kind, filled, groups, "ESPN", now)
         }
 
@@ -242,9 +253,8 @@ data class Standings(
             fun shown(name: String): String? = stats[name]?.let { s -> s.str("displayValue")?.trim()?.takeIf { it.isNotEmpty() } }
             fun num(name: String): Double? = stats[name]?.opt("value")?.let { (it as? Number)?.toDouble() ?: it.toString().toDoubleOrNull() }
             val values = HashMap<String, String>()
-            for (k in listOf("gamesPlayed", "wins", "losses", "ties", "otLosses", "pointDifferential", "points", "winPercent", "gamesBehind", "streak")) {
-                shown(k)?.let { values[k] = it }
-            }
+            // Every stat by its name (the usual columns, and a feed's own ones like cricket's).
+            for (k in stats.keys) shown(k)?.let { values[k] = it }
             if (kind == StandingsKind.RACING) (shown("championshipPts") ?: shown("points"))?.let { values["points"] = it }
             if (values["gamesBehind"] == "-") values["gamesBehind"] = "–"
             val rank = num("rank")?.toInt() ?: 0

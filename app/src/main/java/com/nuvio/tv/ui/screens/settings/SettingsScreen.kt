@@ -49,6 +49,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -171,6 +173,8 @@ private fun settingsSectionSpec(category: SettingsCategory): SettingsSectionSpec
     // Live TV fork
     SettingsCategory.LIVE_TV -> SettingsSectionSpec(category, "Live TV", Icons.Default.LiveTv, destination = SettingsSectionDestination.Inline)
     SettingsCategory.SPORTS -> SettingsSectionSpec(category, "Sports", Icons.Default.EmojiEvents, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.SIDE_MENU -> SettingsSectionSpec(category, "Menu & Features", Icons.Default.Menu, destination = SettingsSectionDestination.Inline)
+    SettingsCategory.CALENDAR -> SettingsSectionSpec(category, "Calendar", Icons.Default.DateRange, destination = SettingsSectionDestination.Inline)
     SettingsCategory.EXPERIENCE -> SettingsSectionSpec(category, stringResource(R.string.settings_experience), Icons.Default.Tune, destination = SettingsSectionDestination.Inline)
 }
 
@@ -243,6 +247,8 @@ fun SettingsScreen(
             SettingsCategory.TRACKING to FocusRequester(),
             SettingsCategory.LIVE_TV to FocusRequester(),
             SettingsCategory.SPORTS to FocusRequester(),
+            SettingsCategory.SIDE_MENU to FocusRequester(),
+            SettingsCategory.CALENDAR to FocusRequester(),
             SettingsCategory.PLAYBACK to FocusRequester(),
             SettingsCategory.ADVANCED to FocusRequester(),
             SettingsCategory.ABOUT to FocusRequester(),
@@ -997,6 +1003,20 @@ private fun SettingsDetailPane(
             page = LiveTvPage.HUB,
             initialFocusRequester = if (allowDetailAutofocus) {
                 contentFocusRequesters[SettingsCategory.LIVE_TV]
+            } else {
+                null
+            }
+        )
+        SettingsCategory.SIDE_MENU -> SideMenuSettingsContent(
+            initialFocusRequester = if (allowDetailAutofocus) {
+                contentFocusRequesters[SettingsCategory.SIDE_MENU]
+            } else {
+                null
+            }
+        )
+        SettingsCategory.CALENDAR -> CalendarSettingsContent(
+            initialFocusRequester = if (allowDetailAutofocus) {
+                contentFocusRequesters[SettingsCategory.CALENDAR]
             } else {
                 null
             }

@@ -393,9 +393,9 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         duration = playerDuration,
                         bufferedPosition = (pos + (view.demuxerCacheDurationSec() * 1000.0).toLong())
                             .coerceAtLeast(displayPosition),
-                        // Live TV fork: a recording still being made looks live to the player, but
-                        // it's a recording: skipping back and forward stay on.
-                        playerReportsLive = view.isLiveStreamNow() &&
+                        // Live TV fork: a recording still being made looks live to the player (and its
+                        // length keeps growing), but it's a recording: skipping back and forward stay on.
+                        playerReportsLive = (view.isLiveStreamNow() || mpvDurationGrowth.grew) &&
                             !com.nuvio.tv.livetv.record.RecordingResume.isRecording(contentType),
                         isPlaying = playingForWatchClock
                     )

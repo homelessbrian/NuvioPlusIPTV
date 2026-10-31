@@ -63,7 +63,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.livetv.model.ChannelSort
-import com.nuvio.tv.livetv.model.effectiveStartPage
 import com.nuvio.tv.livetv.model.EpgSource
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.PlaylistSource
@@ -242,12 +241,10 @@ private fun hoursLabel(h: Int): String = when {
 /** Typed into the channel name editor, this turns the hidden developer tools on or off. */
 private const val DEVELOPER_WORD = "#nuviodev"
 
-private fun startPageLabel(page: String): String = when (page) {
+private fun openOnLabel(page: String): String = when (page) {
     "LIVE_TV" -> "Live TV"
     "ON_DEMAND" -> "On Demand"
-    "DISCOVER" -> "Discover"
-    "SEARCH" -> "Search"
-    "LIBRARY" -> "Library"
+    "SPORTS" -> "Sports"
     else -> "Home"
 }
 
@@ -311,6 +308,17 @@ internal fun LiveTvSettingsContent(
             title = page.title,
             subtitle = if (status.loading && !flat) (status.message ?: "Updating…") else page.subtitle
         )
+        // Live TV switched off (Settings → Menu & Features): say so, with a way to turn it back on.
+        if (!s.showInSidebar) {
+            SettingsGroupCard {
+                SettingsActionRow(
+                    title = "Live TV Is Turned Off",
+                    subtitle = "The guide, its row on Home and everything else of Live TV's is off. It's switched on and off in Settings → Menu & Features.",
+                    value = "Turn On",
+                    onClick = { update { it.copy(showInSidebar = true) } }
+                )
+            }
+        }
         if (hub) LiveTabRow(selected = tab, first = initialFocusRequester, onSelect = { tab = it })
         androidx.compose.runtime.key(page) {
         androidx.compose.runtime.CompositionLocalProvider(LocalLiveFlat provides flat) {
@@ -622,13 +630,6 @@ internal fun LiveTvSettingsContent(
                             { viewModel.savePlaylist(pl.copy(importVod = !pl.importVod)) }
                         )
                     }
-                    SubHeading("In Nuvio")
-                    SettingsToggleRow(
-                        "Show On Demand in the Side Menu",
-                        "Its own page in Nuvio's menu, once a provider's movies or series are imported",
-                        s.onDemandInSidebar,
-                        { update { it.copy(onDemandInSidebar = !it.onDemandInSidebar) } }
-                    )
                     SubHeading("Browsing")
                     var pickingSort by remember { mutableStateOf(false) }
                     val defaultSort = com.nuvio.tv.livetv.ondemand.VodSort.parse(s.vodDefaultSort)?.first
@@ -836,6 +837,12 @@ internal fun LiveTvSettingsContent(
                         "The logo in front of each channel name",
                         s.showChannelLogos,
                         { update { it.copy(showChannelLogos = !it.showChannelLogos) } }
+                    )
+                    SettingsToggleRow(
+                        "Outline the Playing Channel",
+                        "A red outline around the channel you're watching",
+                        s.markPlayingChannel,
+                        { update { it.copy(markPlayingChannel = !it.markPlayingChannel) } }
                     )
                     var pickingGuideSize by remember { mutableStateOf(false) }
                     val guideSizes = listOf(
@@ -1120,10 +1127,10 @@ internal fun LiveTvSettingsContent(
                     SubHeading("Connection")
                     SettingsActionRow(
                         title = "Buffer Size",
-                        subtitle = "Larger rides out a slow connection or provider (fewer pauses); smaller changes channels a little faster",
-                        value = when (s.bufferSize) { "small" -> "Small"; "large" -> "Large"; "xlarge" -> "Extra large"; else -> "Normal" },
+                        subtitle = "Larger rides out a slow connection or provider (fewer pauses); smaller changes channels a little faster. None: the closest to live and the quickest channel changes, but any hiccup shows as a pause",
+                        value = when (s.bufferSize) { "none" -> "None"; "small" -> "Small"; "large" -> "Large"; "xlarge" -> "Extra large"; else -> "Normal" },
                         onClick = {
-                            update { st -> st.copy(bufferSize = when (st.bufferSize) { "small" -> "normal"; "normal" -> "large"; "large" -> "xlarge"; else -> "small" }) }
+                            update { st -> st.copy(bufferSize = when (st.bufferSize) { "none" -> "small"; "small" -> "normal"; "normal" -> "large"; "large" -> "xlarge"; else -> "none" }) }
                         }
                     )
                     SettingsToggleRow(
@@ -1134,7 +1141,8 @@ internal fun LiveTvSettingsContent(
                     )
                     SettingsToggleRow(
                         "Switch to a Backup Channel",
-                        "If a channel won't play, switch to another channel with the same name from another group or playlist (like \"ESPN\" and \"ESPN Backup\")",
+                        "If a channel won't play, switch to another channel with the same name from another group or playlist (like \"ESPN\" and \"ESPN Backup\"). " +
+                            "During a live game, also when it keeps freezing, moving on to the next channel showing the game",
                         s.autoBackupChannel,
                         { update { it.copy(autoBackupChannel = !it.autoBackupChannel) } }
                     )
@@ -1201,6 +1209,16 @@ internal fun LiveTvSettingsContent(
                         ).profileManager()
                     }.activeProfileId.collectAsStateWithLifecycle()
                     val homeRowOn = homeProfileId !in s.homeRowHiddenProfiles
+                    SubHeading("Rows on Your TV's Home Screen")
+                    SettingsActionRow(
+                        title = "Card Shape",
+                        subtitle = "Match your launcher's row: Wide for Google TV and most launchers, Tall for poster rows, Square for square rows. Each card shows the channel, what's on and until when.",
+                        value = when (s.launcherCardShape) { "TALL" -> "Tall"; "SQUARE" -> "Square"; else -> "Wide" },
+                        onClick = {
+                            update { st -> st.copy(launcherCardShape = when (st.launcherCardShape) { "WIDE" -> "TALL"; "TALL" -> "SQUARE"; else -> "WIDE" }) }
+                            com.nuvio.tv.livetv.home.LiveTvLauncherRows.refresh(homeProfileContext, afterMs = 1_500)
+                        }
+                    )
                     SubHeading("Row Inside Nuvio's Home Page")
                     SettingsToggleRow(
                         "Live TV Row on the Home Screen",
@@ -1273,13 +1291,6 @@ internal fun LiveTvSettingsContent(
                             { update { it.copy(homeRowCompact = !it.homeRowCompact) } }
                         )
                     }
-                    SubHeading("Menu")
-                    SettingsToggleRow(
-                        "Show Live TV in the Side Menu",
-                        "Off: Live TV leaves Nuvio's main menu. You can still reach it from Settings.",
-                        s.showInSidebar,
-                        { update { it.copy(showInSidebar = !it.showInSidebar) } }
-                    )
                 }
             }
 
@@ -1444,12 +1455,6 @@ internal fun LiveTvSettingsContent(
                     open = "recordings" in open,
                     onToggle = { toggle("recordings") }
                 ) {
-                    SettingsToggleRow(
-                        "Show Recordings in the Side Menu",
-                        "Once anything is recorded or set to record",
-                        s.recordingsInSidebar,
-                        { update { it.copy(recordingsInSidebar = !it.recordingsInSidebar) } }
-                    )
                     SettingsActionRow(
                         title = "Save Recordings To",
                         subtitle = if (chosen == null && s.recordingStorage.isNotEmpty())
@@ -1775,18 +1780,16 @@ internal fun LiveTvSettingsContent(
             }
         )
         LiveDialog.StartPage -> SettingsSingleChoiceDialog(
-            title = "Start page",
-            // On Demand is only offered once something has been imported.
+            title = "Open the App On",
+            // Live TV while it's in the menu; On Demand once something has been imported.
             options = buildList {
                 add(SettingsPickerOption("HOME", "Home"))
-                add(SettingsPickerOption("LIVE_TV", "Live TV"))
+                if (s.showInSidebar) add(SettingsPickerOption("LIVE_TV", "Live TV"))
                 if (onDemandHas) add(SettingsPickerOption("ON_DEMAND", "On Demand"))
-                add(SettingsPickerOption("DISCOVER", "Discover"))
-                add(SettingsPickerOption("SEARCH", "Search"))
-                add(SettingsPickerOption("LIBRARY", "Library"))
+                add(SettingsPickerOption("SPORTS", "Sports"))
             },
-            selectedValue = s.effectiveStartPage,
-            onOptionSelected = { v -> update { it.copy(startPage = v, startOnLiveTv = v == "LIVE_TV") }; close() },
+            selectedValue = s.openOn,
+            onOptionSelected = { v -> update { it.copy(openOn = v) }; close() },
             onDismiss = close
         )
         LiveDialog.Reminders -> ActionListDialog(

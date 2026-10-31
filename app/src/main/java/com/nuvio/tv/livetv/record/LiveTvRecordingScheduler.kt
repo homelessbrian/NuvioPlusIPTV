@@ -135,15 +135,25 @@ data class SeriesRule(
     val channel: ChannelSnapshot,
     val title: String,
     /** Keep only the newest this many episodes (0 = keep them all). */
-    val keepLast: Int = 0
+    val keepLast: Int = 0,
+    /**
+     * Episodes this series has recorded (see [LiveTvRecordingScheduler.episodeKey]), kept even
+     * after a recording is deleted or dropped by "keep the last N", so a repeat later in the
+     * week is never recorded again.
+     */
+    val seen: List<String> = emptyList()
 ) {
     val norm: String get() = LiveTvRepository.normalize(title)
 
-    fun toJson(): JSONObject = JSONObject().apply { put("id", id); put("channel", channel.toJson()); put("title", title); put("keepLast", keepLast) }
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("id", id); put("channel", channel.toJson()); put("title", title); put("keepLast", keepLast)
+        put("seen", org.json.JSONArray(seen))
+    }
 
     companion object {
         fun fromJson(o: JSONObject) = SeriesRule(
-            o.optString("id"), ChannelSnapshot.fromJson(o.getJSONObject("channel")), o.optString("title"), o.optInt("keepLast")
+            o.optString("id"), ChannelSnapshot.fromJson(o.getJSONObject("channel")), o.optString("title"), o.optInt("keepLast"),
+            o.optJSONArray("seen")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } }.orEmpty()
         )
     }
 }
@@ -359,11 +369,20 @@ class LiveTvRecordingScheduler @Inject constructor(
             val listings = runCatching { repository.upcomingListings(rule.channel.key, days = 7) }.getOrDefault(emptyList())
             val channel = repository.channels.value.firstOrNull { it.key == rule.channel.key } ?: rule.channel.toChannel()
             listings.filter { LiveTvRepository.normalize(cleanTitle(it.title)) == rule.norm && it.stopMs > now }.forEach { p ->
+                // The episode by its season and episode number from the guide, however the guide
+                // writes it ("S02E05", "S2 E5", "1.4."): a repeat of one recorded before (even
+                // one deleted since) or already set is skipped. Airings without an episode
+                // number are all recorded, as before.
+                val ep = episodeKey(p.episode)
+                val current = _series.value.firstOrNull { it.id == rule.id } ?: rule
                 val already = _schedules.value.any { it.channel.key == rule.channel.key && it.startMs == p.startMs } ||
                     recorder.recordings.value.any { it.channelKey == rule.channel.key && it.programStartMs == p.startMs } ||
-                    // Same episode already recorded or set (repeats).
-                    (p.episode != null && (_schedules.value.any { it.seriesId == rule.id && it.episode == p.episode } ||
-                        recorder.recordings.value.any { it.channelKey == rule.channel.key && it.episode == p.episode }))
+                    (ep != null && (ep in current.seen ||
+                        _schedules.value.any { it.seriesId == rule.id && episodeKey(it.episode) == ep } ||
+                        recorder.recordings.value.any {
+                            (it.seriesId == rule.id || it.channelKey == rule.channel.key) && episodeKey(it.episode) == ep &&
+                                LiveTvRepository.normalize(cleanTitle(it.title)) == rule.norm
+                        }))
                 if (!already && p.startMs > now) add(channel, p, seriesId = rule.id)
             }
         }
@@ -434,6 +453,7 @@ class LiveTvRecordingScheduler @Inject constructor(
                 // Too early (the alarm came early): set it again.
                 if (now < s.startMs - s.pre - 60_000L) { arm(s); recorder.stopServiceIfIdle(); return@launch }
                 val channel = freshChannel(s.channel)
+                markSeen(s)
                 recorder.start(channel, channel.url, s.title, s.episode, s.description, s.startMs, s.stopMs, s.stopMs + s.post,
                     onFinished = { rec -> s.seriesId?.let { keepOnlyNewest(it) } }, seriesId = s.seriesId)
                 remove(s)
@@ -457,6 +477,7 @@ class LiveTvRecordingScheduler @Inject constructor(
                 return@launch
             }
             remove(s)
+            markSeen(s)
             recorder.start(
                 channel, url, s.title, s.episode, s.description, s.startMs, s.stopMs,
                 stopAtMs = now + (s.stopMs - s.startMs) * 3 + 30 * 60_000L,
@@ -554,6 +575,18 @@ class LiveTvRecordingScheduler @Inject constructor(
     private fun freshChannel(saved: ChannelSnapshot): LiveChannel =
         repository.channels.value.firstOrNull { it.key == saved.key } ?: saved.toChannel()
 
+    /** A series episode is being recorded: remember it, so its repeats are skipped from now on. */
+    private suspend fun markSeen(s: RecordingSchedule) {
+        val id = s.seriesId ?: return
+        val ep = episodeKey(s.episode) ?: return
+        mutex.withLock {
+            _series.value = _series.value.map { r ->
+                if (r.id == id && ep !in r.seen) r.copy(seen = (r.seen + ep).takeLast(500)) else r
+            }
+            save()
+        }
+    }
+
     private suspend fun remove(s: RecordingSchedule) {
         mutex.withLock {
             _schedules.value = _schedules.value.filterNot { it.id == s.id }
@@ -610,6 +643,26 @@ class LiveTvRecordingScheduler @Inject constructor(
         const val CATCHUP_DELAY_MS = 10 * 60_000L
         const val RETRY_MS = 30 * 60_000L
         const val MAX_TRIES = 3
+
+        private val SE = Regex("""(?i)\bS(?:eason)?\s*0*(\d{1,3})\s*[\-.:,x]?\s*E(?:p(?:isode)?)?\s*0*(\d{1,4})\b""")
+        private val SXE = Regex("""\b0*(\d{1,2})\s*x\s*0*(\d{1,4})\b""")
+        private val XMLTV_NS = Regex("""^\s*(\d{1,3})\s*(?:/\s*\d+)?\s*\.\s*(\d{1,4})""")
+        private val EP_ONLY = Regex("""(?i)^\s*(?:e|ep|episode)\.?\s*0*(\d{1,4})\s*$""")
+
+        /**
+         * One key per episode, whatever way the guide writes its number: "S02E05", "S2 E5",
+         * "Season 2 Episode 5", "2x05" and XMLTV's "1.4." (counted from 0) all give "s2e5".
+         * Other episode codes (a guide's own ids) are kept as they are. Null: no episode number.
+         */
+        fun episodeKey(episode: String?): String? {
+            val e = episode?.trim().orEmpty()
+            if (e.isEmpty()) return null
+            SE.find(e)?.let { return "s${it.groupValues[1].toInt()}e${it.groupValues[2].toInt()}" }
+            XMLTV_NS.find(e)?.let { return "s${it.groupValues[1].toInt() + 1}e${it.groupValues[2].toInt() + 1}" }
+            SXE.find(e)?.let { return "s${it.groupValues[1].toInt()}e${it.groupValues[2].toInt()}" }
+            EP_ONLY.find(e)?.let { return "e${it.groupValues[1].toInt()}" }
+            return "x:" + e.lowercase().filter { it.isLetterOrDigit() }.ifEmpty { return null }
+        }
     }
 }
 

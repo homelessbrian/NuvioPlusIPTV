@@ -149,3 +149,8 @@
 
 -dontwarn java.beans.ConstructorProperties
 -dontwarn java.beans.Transient
+# ── Live TV fork: readable crash and freeze reports ───────────────────────────
+# Keeps the app's own class and function names (unused code is still removed and the rest
+# still optimised), so a crash or freeze report names the real screen and function instead
+# of scrambled letters like "za.q2.f".
+-keep,allowshrinking,allowoptimization class com.nuvio.tv.** { *; }

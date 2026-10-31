@@ -69,6 +69,15 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Live TV fork: brings the launcher's home screen rows up to date (a new show, a new score). -->
+        <receiver
+            android:name=".livetv.home.LauncherRowsReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.nuvio.tv.livetv.LAUNCHER_ROWS" />
+            </intent-filter>
+        </receiver>
+
         <!-- Live TV fork: the pictures for the launcher's home screen rows. -->
         <provider
             android:name=".livetv.home.LauncherImageProvider"

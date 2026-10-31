@@ -806,6 +806,8 @@ internal fun SportsChannelRow(
     /** The event's start: a channel airing it at another time shows its own time. */
     eventStartMs: Long? = null,
     use24h: Boolean = false,
+    /** The same channel's other copies folded into this row (ESPN HD, ESPN SD): kept as backups. */
+    copies: List<ChannelMatch> = emptyList(),
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -870,6 +872,15 @@ internal fun SportsChannelRow(
                     q,
                     modifier = Modifier.border(1.dp, accent.copy(alpha = 0.7f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
                     color = accent, size = 9.sp, weight = FontWeight.Black
+                )
+            }
+            // Its other copies: their qualities ("+ HD SD"), or how many when they don't say.
+            if (copies.isNotEmpty()) {
+                val qs = copies.mapNotNull { it.quality }.distinct().filter { it != m.quality }
+                Spacer(Modifier.width(5.dp))
+                LiveText(
+                    if (qs.size == copies.size) "+ " + qs.joinToString(" ") else "+${copies.size}",
+                    color = sub, size = 9.sp, weight = FontWeight.Black
                 )
             }
         }

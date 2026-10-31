@@ -139,7 +139,9 @@ data class NextUpInfo(
     val seedSeason: Int? = null,
     val seedEpisode: Int? = null,
     val contentLanguage: String? = null,
-    val mdbListRatings: com.nuvio.tv.domain.model.MDBListRatings? = null
+    val mdbListRatings: com.nuvio.tv.domain.model.MDBListRatings? = null,
+    /** Live TV fork: a card from the Calendar (a show whose bell is rung, or an upcoming episode). */
+    val fromCalendar: Boolean = false
 )
 
 @Immutable

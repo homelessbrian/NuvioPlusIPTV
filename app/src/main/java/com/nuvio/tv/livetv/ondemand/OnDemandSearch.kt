@@ -48,7 +48,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Your provider's On Demand titles matching a search, for Nuvio's search screen. */
-class OnDemandSearchResults(val items: List<VodItem>, internal val viewModel: OnDemandViewModel?)
+class OnDemandSearchResults(
+    val items: List<VodItem>,
+    internal val viewModel: OnDemandViewModel?,
+    /** Still looking for the current words (so the search screen doesn't say "no results" yet). */
+    val searching: Boolean = false
+)
 
 /**
  * The On Demand matches for [query] (your provider's own movies and series, including ones
@@ -59,12 +64,14 @@ fun rememberOnDemandSearchResults(query: String, enabled: Boolean): OnDemandSear
     if (!enabled) return remember { OnDemandSearchResults(emptyList(), null) }
     val viewModel: OnDemandViewModel = hiltViewModel()
     val q = query.trim()
-    val items by produceState(initialValue = emptyList<VodItem>(), q) {
-        if (q.length < 2) { value = emptyList(); return@produceState }
+    // The results with the words they're for: until they match what's typed, it's still searching.
+    val found by produceState(initialValue = "" to emptyList<VodItem>(), q) {
+        if (q.length < 2) { value = q to emptyList(); return@produceState }
         delay(300) // typing: only once it pauses
-        value = runCatching { viewModel.searchEverywhere(q) }.getOrDefault(emptyList())
+        value = q to runCatching { viewModel.searchEverywhere(q) }.getOrDefault(emptyList())
     }
-    return OnDemandSearchResults(items, viewModel)
+    val current = found.first == q
+    return OnDemandSearchResults(found.second, viewModel, searching = q.length >= 2 && !current)
 }
 
 /**
