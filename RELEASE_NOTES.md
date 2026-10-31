@@ -10,6 +10,7 @@ Now based on Nuvio 1.1.0-beta.9.
 
 ### Calendar
 - A new **Calendar** page in the side menu: new episodes of the shows you follow, when your movies come out in theaters and at home, and games for the teams you follow
+- **Works with Trakt and Simkl:** shows in your Trakt or Simkl library and shows you're watching are on your Calendar automatically, no setup needed (MDBList too)
 - **List**, **Week** or **Month** view. Pick the one it opens on in Settings
 - **Filters:** All, Shows, Movies, Sports and **On my TV**
 - **Airing today**, with a switch to leave out news and talk shows, and **Recently aired** with an **Unwatched only** switch

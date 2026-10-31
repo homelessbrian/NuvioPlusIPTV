@@ -99,6 +99,7 @@ Sports in the side menu shows scores and schedules, and works out **which of you
 **Calendar** in the side menu shows what's coming for the things you care about.
 
 - **What's on it:** new episodes of the shows you follow, when your movies come out in theaters and at home, and games for the teams you follow in Sports.
+- **Works with Trakt and Simkl:** shows in your Trakt or Simkl library and shows you're watching are added automatically, no bells needed. MDBList works too.
 - **Your Country:** sets which country's TV schedule Airing Today shows, and the movie release dates you see.
 - **Views:** List, Week or Month. Choose the one it opens on under **Settings → Calendar → Opens In**.
 - **Filters:** All, Shows, Movies, Sports and **On my TV**.
