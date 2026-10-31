@@ -185,12 +185,14 @@ class WatchStateMutationStore @Inject constructor(
     private fun parseProgressUpserts(raw: Set<String>?): Map<String, WatchProgress> {
         return raw.orEmpty().mapNotNull { json ->
             runCatching { gson.fromJson(json, PendingProgressUpsert::class.java) }.getOrNull()
+                ?.takeIf { com.nuvio.tv.data.local.allPresent(it.key, it.progress) }
         }.associate { it.key to it.progress }
     }
 
     private fun parseWatchedUpserts(raw: Set<String>?): Map<WatchedMutationKey, WatchedItem> {
         return raw.orEmpty().mapNotNull { json ->
             runCatching { gson.fromJson(json, PendingWatchedUpsert::class.java) }.getOrNull()
+                ?.takeIf { com.nuvio.tv.data.local.allPresent(it.key, it.item) }
         }.associate { it.key to it.item }
     }
 
