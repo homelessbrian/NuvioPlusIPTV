@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -76,6 +77,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.livetv.record.LiveTvNotice
+import com.nuvio.tv.livetv.sports.SportsLook
+import com.nuvio.tv.livetv.sports.bandColor
 import com.nuvio.tv.livetv.ui.LIVE_RED
 import com.nuvio.tv.livetv.ui.LiveFocusRow
 import com.nuvio.tv.livetv.ui.LiveTag
@@ -966,16 +969,20 @@ private fun WideCard(
     width: Dp = CARD_W,
     /** One line under the card (the month's strip is short on room). */
     compactCaption: Boolean = false,
+    /** Width divided by height of the picture (shows and movies). */
+    aspect: Float = 16f / 9f,
+    /** A game's card height when it differs from the picture's (the month's strip). */
+    gameHeight: Dp? = null,
     onFocus: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(12.dp)
-    val height = width * 9f / 16f
     val airMs = e.airMs
     val onNow = e.live || (airMs != null && now in airMs until airMs + (e.runtimeMin ?: 30) * 60_000L)
     val game = e.kind == CalendarKind.GAME && e.teams.size == 2
+    val height = if (game && gameHeight != null) gameHeight else width / aspect
     Column(Modifier.width(width), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
             modifier
@@ -988,7 +995,7 @@ private fun WideCard(
                 .combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick, onLongClick = onLongClick)
         ) {
             if (game) {
-                GameArt(e, big = false, modifier = Modifier.fillMaxSize())
+                GameHubCard(e, use24h, onNow, st, Modifier.fillMaxSize())
             } else {
                 val art = when {
                     e.kind == CalendarKind.GAME -> null
@@ -1004,16 +1011,18 @@ private fun WideCard(
                 // A dark edge at the bottom so the name reads on any picture.
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.88f))))
             }
-            Row(Modifier.align(Alignment.TopStart).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                LiveTag(cardTime(e, use24h), Color.Black.copy(alpha = 0.78f), Color.White)
-                LiveBadges(st, compact = true)
-            }
-            Box(Modifier.align(Alignment.TopEnd).padding(7.dp)) {
-                when {
-                    onNow -> LiveTag("LIVE", LIVE_RED, Color.White)
-                    e.watched -> LiveTag("✓", Color.Black.copy(alpha = 0.78f), Color.White)
-                    e.tags.isNotEmpty() && !game -> TagChip(e.tags.first())
-                    else -> Unit
+            if (!game) {
+                Row(Modifier.align(Alignment.TopStart).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    LiveTag(cardTime(e, use24h), Color.Black.copy(alpha = 0.78f), Color.White)
+                    LiveBadges(st, compact = true)
+                }
+                Box(Modifier.align(Alignment.TopEnd).padding(7.dp)) {
+                    when {
+                        onNow -> LiveTag("LIVE", LIVE_RED, Color.White)
+                        e.watched -> LiveTag("✓", Color.Black.copy(alpha = 0.78f), Color.White)
+                        e.tags.isNotEmpty() -> TagChip(e.tags.first())
+                        else -> Unit
+                    }
                 }
             }
             if (!game) {
@@ -1030,15 +1039,8 @@ private fun WideCard(
                 }
             }
         }
-        if (game && !compactCaption) {
-            // Under a game: who plays, then the league and where to watch.
-            LiveText(
-                e.teams.joinToString(" vs ") { it.name },
-                size = 13.sp, weight = FontWeight.Bold, color = NuvioTheme.colors.TextPrimary,
-                modifier = Modifier.padding(horizontal = 2.dp), marquee = focused
-            )
-        }
-        LiveText(
+        // A game's card already says who plays, the league, when and where: nothing under it.
+        if (!game) LiveText(
             when (e.kind) {
                 CalendarKind.GAME ->
                     if (compactCaption) listOfNotNull(e.teams.takeIf { it.size == 2 }?.joinToString(" vs ") { it.abbr ?: it.name }, e.league).joinToString(" · ")
@@ -1065,8 +1067,7 @@ private fun seasonDrop(e: CalendarEntry): String? {
 /**
  * A game: the card split into two plain halves, each in a dark version of its own team's colour
  * (the colours never blend), a stripe in the real colours along the bottom, both logos the same
- * size, and the score (or "vs") in a small dark box in the middle that can't take room from the
- * logos. The winner of a finished game stays bright and the other team is dimmed.
+ * size, and the score (or "vs") written plainly in the middle, with no box behind it. The winner of a finished game stays bright and the other team is dimmed.
  *
  * [standalone]: nothing else on the card says when it starts or that it is live (the month's day
  * cells and the big picture behind the hero), so the middle says so itself.
@@ -1111,18 +1112,11 @@ private fun GameArt(e: CalendarEntry, big: Boolean, modifier: Modifier, standalo
             Box(Modifier.weight(1f).fillMaxHeight().background(ca))
             Box(Modifier.weight(1f).fillMaxHeight().background(cb))
         }
-        val boxShape = RoundedCornerShape(if (big) 12.dp else 8.dp)
+        // The score (or "vs") sits straight on the two colours, no box behind it.
         Column(
             Modifier
                 .align(Alignment.Center)
-                .offset(y = if (big || compact) 0.dp else 6.dp)
-                .clip(boxShape)
-                .background(ink.copy(alpha = 0.92f))
-                .border(1.dp, Color.White.copy(alpha = 0.16f), boxShape)
-                .padding(
-                    horizontal = if (big) 16.dp else if (compact) 4.dp else 8.dp,
-                    vertical = if (big) 8.dp else if (compact) 1.dp else 3.dp
-                ),
+                .offset(y = if (big || compact) 0.dp else 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
@@ -1132,22 +1126,93 @@ private fun GameArt(e: CalendarEntry, big: Boolean, modifier: Modifier, standalo
                     val base = if (big) 40f else if (compact) 13f else 19f
                     // A long score (112 – 124) steps down instead of squeezing the logos.
                     val factor = if (text.length >= 9) 0.78f else if (text.length >= 7) 0.9f else 1f
-                    LiveText(text, size = (base * factor).sp, weight = FontWeight.ExtraBold, color = theme.TextPrimary, maxLines = 1)
+                    LiveText(text, size = (base * factor).sp, weight = FontWeight.ExtraBold, color = Color.White, maxLines = 1, shadow = true)
                 }
                 standalone -> LiveText(
                     e.airMs?.let { formatClock(it, false) } ?: "vs",
                     size = if (big) 34.sp else if (compact) 12.sp else 16.sp, weight = FontWeight.ExtraBold,
-                    color = theme.TextPrimary, maxLines = 1
+                    color = Color.White, maxLines = 1, shadow = true
                 )
-                else -> LiveText("vs", size = if (compact) 11.sp else 14.sp, weight = FontWeight.SemiBold, color = theme.TextSecondary)
+                else -> LiveText("vs", size = if (compact) 11.sp else 14.sp, weight = FontWeight.Bold, color = Color.White.copy(alpha = 0.9f), shadow = true)
             }
             when {
                 e.live && standalone -> LiveTag("LIVE", LIVE_RED, Color.White)
-                finished && !compact -> LiveText("FINAL", size = if (big) 14.sp else 10.sp, weight = FontWeight.Bold, color = theme.TextSecondary)
-                // Before the game, on a card: where it's on, under the "vs".
-                !hasScore && !standalone && !compact ->
-                    (e.guide?.channelName ?: e.network)?.let { LiveText(it.take(12), size = 10.sp, weight = FontWeight.Medium, color = theme.TextSecondary, maxLines = 1) }
+                finished && !compact -> LiveText("FINAL", size = if (big) 14.sp else 10.sp, weight = FontWeight.Bold, color = Color.White.copy(alpha = 0.85f), shadow = true)
                 else -> Unit
+            }
+        }
+    }
+}
+
+/**
+ * A game on the Calendar, drawn like the cards on the Sports hub: the league and a LIVE / TODAY /
+ * FINAL badge on top, each team on its own colour band (with its score), and the time and channel
+ * along the bottom. Fills whatever size it's given.
+ */
+@Composable
+private fun GameHubCard(e: CalendarEntry, use24h: Boolean, live: Boolean, st: CalendarLiveStatus, modifier: Modifier = Modifier) {
+    val a = e.teams.getOrNull(0)
+    val b = e.teams.getOrNull(1)
+    val hasScore = a?.score != null && b?.score != null
+    val finished = hasScore && !live
+    val sa = a?.score?.toDoubleOrNull()
+    val sb = b?.score?.toDoubleOrNull()
+    val tied = sa != null && sa == sb
+    val shape = RoundedCornerShape(5.dp)
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.background(SportsLook.Card)) {
+        val bandH = ((maxHeight - 44.dp) / 2).coerceAtLeast(18.dp)
+        val logo = (bandH * 0.74f).coerceIn(14.dp, 30.dp)
+        val nameSize = if (bandH >= 30.dp) 13.sp else 11.sp
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().height(22.dp).padding(start = 8.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                LiveText(e.league ?: "", color = Color(0xFFB4B9C6), size = 9.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                if (st != CalendarLiveStatus()) { LiveBadges(st, compact = true); Spacer(Modifier.width(4.dp)) }
+                when {
+                    live -> LiveText("● LIVE", modifier = Modifier.clip(shape).background(SportsLook.Live).padding(horizontal = 5.dp, vertical = 1.dp), color = Color.White, size = 8.sp, weight = FontWeight.Black)
+                    finished -> LiveText("FINAL", modifier = Modifier.clip(shape).background(Color.White.copy(alpha = 0.12f)).padding(horizontal = 5.dp, vertical = 1.dp), color = Color.White, size = 8.sp, weight = FontWeight.Black)
+                    e.day == LocalDate.now() -> {
+                        val ring = NuvioTheme.colors.Secondary
+                        LiveText("TODAY", modifier = Modifier.clip(shape).background(ring.copy(alpha = 0.16f)).border(1.dp, ring.copy(alpha = 0.6f), shape).padding(horizontal = 5.dp, vertical = 1.dp), color = Color.White, size = 8.sp, weight = FontWeight.Black)
+                    }
+                    else -> Unit
+                }
+            }
+            listOf(a, b).forEachIndexed { i, t ->
+                val c = bandColor(t?.color?.let { Color(it).copy(alpha = 1f) } ?: Color(0xFF3A4150))
+                val mine = (if (i == 0) sa else sb)
+                val other = (if (i == 0) sb else sa)
+                val dim = hasScore && !tied && mine != null && other != null && mine < other
+                Row(
+                    Modifier.fillMaxWidth().height(bandH)
+                        .background(Brush.horizontalGradient(0f to c.copy(alpha = 0.92f), 0.7f to c.copy(alpha = 0.28f), 1f to c.copy(alpha = 0.05f)))
+                        .padding(start = 8.dp, end = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(logo), contentAlignment = Alignment.Center) {
+                        if (t?.logo != null) {
+                            coil3.compose.AsyncImage(model = t.logo, contentDescription = t.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                        } else {
+                            Box(Modifier.fillMaxSize().clip(RoundedCornerShape(50)).background(t?.color?.let { Color(it).copy(alpha = 1f) } ?: Color(0xFF3A4150)), contentAlignment = Alignment.Center) {
+                                LiveText((t?.abbr ?: t?.name?.take(3)?.uppercase()).orEmpty(), size = 8.sp, weight = FontWeight.ExtraBold, color = Color.White)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    LiveText(
+                        t?.name ?: t?.abbr ?: "", modifier = Modifier.weight(1f),
+                        color = if (dim) Color.White.copy(alpha = 0.75f) else Color.White, size = nameSize, weight = FontWeight.ExtraBold
+                    )
+                    if (hasScore) LiveText(t?.score.orEmpty(), color = if (dim) Color.White.copy(alpha = 0.5f) else Color.White, size = if (bandH >= 30.dp) 20.sp else 14.sp, weight = FontWeight.Black)
+                }
+            }
+            Row(Modifier.fillMaxWidth().weight(1f).padding(start = 8.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                LiveText(if (live) "On now" else cardTime(e, use24h), color = Color.White, size = 9.sp, weight = FontWeight.Black, modifier = Modifier.weight(1f))
+                (e.guide?.channelName ?: e.network)?.let {
+                    LiveText(
+                        it, modifier = Modifier.widthIn(max = 72.dp).clip(shape).background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 5.dp, vertical = 1.dp),
+                        color = Color.White, size = 8.sp, weight = FontWeight.Black
+                    )
+                }
             }
         }
     }
@@ -1446,7 +1511,11 @@ private fun MonthView(
     }
     val stripFocus = remember { FocusRequester() }
     val list = byDay[selected].orEmpty()
-    Column(Modifier.fillMaxSize().padding(end = 32.dp)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().padding(end = 32.dp)) {
+    // Five cards always fit across the screen (the fifth used to run off the edge).
+    val stripGap = 10.dp
+    val stripW = (maxWidth - 64.dp - 6.dp - stripGap * 4) / 5
+    Column(Modifier.fillMaxSize()) {
         // The highlighted day, big: its releases as cards.
         Row(Modifier.padding(start = 64.dp), verticalAlignment = Alignment.CenterVertically) {
             LiveText(selected.format(DateTimeFormatter.ofPattern("EEEE, MMM d")), size = 22.sp, weight = FontWeight.ExtraBold)
@@ -1461,7 +1530,7 @@ private fun MonthView(
             Pill("›", false) { shown = shown.plusMonths(1) }
         }
         Spacer(Modifier.height(6.dp))
-        Box(Modifier.height(CARD_W * 0.8f * 9f / 16f + 36.dp)) {
+        Box(Modifier.height(stripW / 2f + 34.dp)) {
             if (list.isEmpty()) {
                 LiveText("Highlight a day with a picture to see what's out", size = 14.sp, color = NuvioTheme.colors.TextSecondary, modifier = Modifier.padding(start = 64.dp, top = 30.dp))
             } else {
@@ -1473,11 +1542,11 @@ private fun MonthView(
                     // Right at the end of the strip stays there (it used to jump up to the month arrows).
                     modifier = Modifier.keepFocusIn(right = true),
                     state = stripState,
-                    contentPadding = PaddingValues(start = 64.dp, end = 20.dp, top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    contentPadding = PaddingValues(start = 64.dp, end = 6.dp, top = 4.dp), horizontalArrangement = Arrangement.spacedBy(stripGap)
                 ) {
                     itemsIndexed(list, key = { _, e -> e.key }) { i, e ->
                         WideCard(
-                            e = e, use24h = use24h, now = now, st = status(e), width = CARD_W * 0.8f, compactCaption = true,
+                            e = e, use24h = use24h, now = now, st = status(e), width = stripW, aspect = 2f, gameHeight = 96.dp, compactCaption = true,
                             modifier = (if (i == 0) Modifier.focusRequester(stripFocus) else Modifier).cardFocus(e.key),
                             onFocus = {}, onClick = { onOpen(e) }, onLongClick = { onOptions(e) }
                         )
@@ -1515,6 +1584,7 @@ private fun MonthView(
                 }
             }
         }
+    }
     }
 }
 
