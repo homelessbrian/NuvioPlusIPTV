@@ -1,6 +1,6 @@
-# Merge a Nuvio release into this fork by hand, keeping the fork's side wherever both changed
-# the same lines. Use it when "Sync Nuvio releases" stops with a merge conflict, then upload the
-# matching nuvio-livetv-kit.zip, which contains the properly combined versions of those files.
+# Merge a Nuvio release into the dev branch by hand, keeping the fork's side wherever both changed
+# the same lines. Then fix anything the update broke, run "Build Test APK" and check it on a TV.
+# Users only get it through "Release Nuvio + IPTV update" (which releases from main).
 name: Merge Nuvio release (manual)
 
 on:
@@ -19,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: dev
           fetch-depth: 0
           token: ${{ secrets.SYNC_TOKEN || github.token }}
 
