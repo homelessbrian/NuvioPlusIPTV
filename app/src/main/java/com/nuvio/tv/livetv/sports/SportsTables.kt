@@ -165,8 +165,6 @@ internal fun TablesPage(
 
     val content: @Composable (Modifier) -> Unit = { m ->
         Column(m) {
-            header()
-            Spacer(Modifier.height(8.dp))
             if (shown.isEmpty()) {
                 LiveText(
                     if (follows.isEmpty) "Follow a team or a league and its table shows here."
@@ -219,29 +217,39 @@ internal fun TablesPage(
         }
     }
 
+    // The Sports top bar across the top (like My Sports), then the table, with the video window
+    // beside it.
     Box(Modifier.fillMaxSize()) {
         if (videoOn) {
-            Row(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 26.dp)) {
-                content(Modifier.width(470.dp).fillMaxHeight())
-                Spacer(Modifier.width(18.dp))
-                Column(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp)) {
-                    videoSlot(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
-                    Spacer(Modifier.height(10.dp))
-                    if (table != null && !settings.hideScores) {
-                        val row = focusedRow?.takeIf { r -> table.find(r.id) != null }
-                            ?: marked.firstNotNullOfOrNull { table.find(it)?.second }
-                        row?.let { TeamSummary(table, it, it.id in marked, viewModel, now, use24h) }
-                        Spacer(Modifier.height(8.dp))
-                        TableKey(table, view)
+            Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 26.dp)) {
+                header()
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    content(Modifier.width(470.dp).fillMaxHeight())
+                    Spacer(Modifier.width(18.dp))
+                    Column(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp)) {
+                        videoSlot(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                        Spacer(Modifier.height(10.dp))
+                        if (table != null && !settings.hideScores) {
+                            val row = focusedRow?.takeIf { r -> table.find(r.id) != null }
+                                ?: marked.firstNotNullOfOrNull { table.find(it)?.second }
+                            row?.let { TeamSummary(table, it, it.id in marked, viewModel, now, use24h) }
+                            Spacer(Modifier.height(8.dp))
+                            TableKey(table, view)
+                        }
                     }
                 }
             }
         } else {
-            Row(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = 26.dp)) {
-                content(Modifier.weight(1f).fillMaxHeight())
-                if (table != null && !settings.hideScores) {
-                    Spacer(Modifier.width(18.dp))
-                    Column(Modifier.width(300.dp).padding(top = 90.dp)) { TableKey(table, view) }
+            Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = 26.dp)) {
+                header()
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    content(Modifier.weight(1f).fillMaxHeight())
+                    if (table != null && !settings.hideScores) {
+                        Spacer(Modifier.width(18.dp))
+                        Column(Modifier.width(300.dp).padding(top = 46.dp)) { TableKey(table, view) }
+                    }
                 }
             }
         }

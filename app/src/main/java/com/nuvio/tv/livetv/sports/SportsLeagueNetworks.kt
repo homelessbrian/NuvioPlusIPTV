@@ -233,12 +233,12 @@ internal fun LeagueNetworksPage(
         }
     }
 
-    // The title, as on the other Sports pages (they show the days here).
-    val header: @Composable (Modifier) -> Unit = { hm ->
-        Row(hm, verticalAlignment = Alignment.CenterVertically) {
+    // The Sports top bar, the same on every Sports page.
+    val topBar: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
             Spacer(Modifier.width(14.dp))
-            LiveText("League Networks · each league's own channel", color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+            filters(Modifier.weight(1f))
         }
     }
 
@@ -291,36 +291,39 @@ internal fun LeagueNetworksPage(
         }
     }
 
-    // The same layout as the other Sports pages: the list under the title and buttons, the
-    // video window to the right of it (not above the buttons).
+    // The top bar across the page (like My Sports), then the list with the video window beside it.
     Box(Modifier.fillMaxSize()) {
         if (videoOn) {
-            Row(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 26.dp)) {
-                Column(Modifier.width(470.dp).fillMaxHeight()) {
-                    header(Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(8.dp))
-                    filters(Modifier.fillMaxWidth())
-                    list(Modifier.weight(1f))
-                }
-                Spacer(Modifier.width(18.dp))
-                Column(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp)) {
-                    videoSlot(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
-                    Spacer(Modifier.height(10.dp))
-                    playingTile?.let { t ->
-                        LiveText(t.network.name, color = Color.White, size = 16.sp, weight = FontWeight.ExtraBold, maxLines = 1)
-                        val key = playingKey
-                        val p = key?.let { guide[it]?.first }
-                        if (p != null) LiveText(p.title, color = SportsLook.Dim, size = 12.sp, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
+            Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 26.dp)) {
+                topBar()
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(Modifier.width(470.dp).fillMaxHeight()) {
+                        LiveText(
+                            "Each league's own channel, found in your playlists by name.",
+                            color = SportsLook.Dim, size = 12.sp, maxLines = 2, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                        )
+                        list(Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.width(18.dp))
+                    Column(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp)) {
+                        videoSlot(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                        Spacer(Modifier.height(10.dp))
+                        playingTile?.let { t ->
+                            LiveText(t.network.name, color = Color.White, size = 16.sp, weight = FontWeight.ExtraBold, maxLines = 1)
+                            val key = playingKey
+                            val p = key?.let { guide[it]?.first }
+                            if (p != null) LiveText(p.title, color = SportsLook.Dim, size = 12.sp, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
+                        }
                     }
                 }
             }
         } else {
             Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = 26.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    header(Modifier.weight(1f))
-                    filters(Modifier.width(470.dp))
-                }
-                Spacer(Modifier.height(4.dp))
+                topBar()
+                LiveText(
+                    "Each league's own channel, found in your playlists by name.",
+                    color = SportsLook.Dim, size = 12.sp, maxLines = 2, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                )
                 list(Modifier.weight(1f))
             }
         }

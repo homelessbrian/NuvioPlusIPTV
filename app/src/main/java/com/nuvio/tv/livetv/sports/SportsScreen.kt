@@ -666,44 +666,38 @@ private fun SportsHub(
             LiveText(it, color = NuvioTheme.colors.Error, size = 10.sp, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 8.dp))
         }
     }
-    val header: @Composable (Modifier) -> Unit = { hm ->
-        Row(hm, verticalAlignment = Alignment.CenterVertically) {
-            LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
-            Spacer(Modifier.width(14.dp))
-            val lv = leagueView?.let { SportsCatalog.league(it) }
-            if (lv != null) {
-                LiveText("${lv.name} · the next 7 days", color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            } else {
-                // A week back to a week ahead; opens on Yesterday and Today, and scrolls.
-                val dayFmt = remember { SimpleDateFormat("EEE d", Locale.getDefault()) }
-                LazyRow(
-                    Modifier.weight(1f)
-                        .onFocusChanged { if (!it.hasFocus) showPickedDay() }
-                        .keepFocusWhileHeld(vertical = false),
-                    state = tabsState,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    contentPadding = PaddingValues(end = 12.dp)
-                ) {
-                    items((-SportsRepository.DAYS_BACK..SportsRepository.DAYS_AHEAD).toList(), key = { it }) { offset ->
-                        val label = when (offset) {
-                            -1 -> "Yesterday"
-                            0 -> "Today"
-                            1 -> "Tomorrow"
-                            else -> dayFmt.format(Date(viewModel.repo.dayStart(offset) + 12 * 3_600_000L))
-                        }
-                        DayTab(label, selected = day == offset, modifier = Modifier.focusRequester(dayTabReq(offset)), onClick = { onDay(offset); focusedOnce = true })
+    // The days (or the league's name): under the top bar on All Events and league pages.
+    val dayBar: @Composable (Modifier) -> Unit = { dm ->
+        val lv = leagueView?.let { SportsCatalog.league(it) }
+        if (lv != null) {
+            LiveText("${lv.name} · the next 7 days", color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold, modifier = dm)
+        } else {
+            // A week back to a week ahead; opens on Yesterday and Today, and scrolls.
+            val dayFmt = remember { SimpleDateFormat("EEE d", Locale.getDefault()) }
+            LazyRow(
+                dm
+                    .onFocusChanged { if (!it.hasFocus) showPickedDay() }
+                    .keepFocusWhileHeld(vertical = false),
+                state = tabsState,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                contentPadding = PaddingValues(end = 12.dp)
+            ) {
+                items((-SportsRepository.DAYS_BACK..SportsRepository.DAYS_AHEAD).toList(), key = { it }) { offset ->
+                    val label = when (offset) {
+                        -1 -> "Yesterday"
+                        0 -> "Today"
+                        1 -> "Tomorrow"
+                        else -> dayFmt.format(Date(viewModel.repo.dayStart(offset) + 12 * 3_600_000L))
                     }
+                    DayTab(label, selected = day == offset, modifier = Modifier.focusRequester(dayTabReq(offset)), onClick = { onDay(offset); focusedOnce = true })
                 }
             }
         }
     }
     val filters: @Composable (Modifier) -> Unit = { m ->
         LazyRow(m.keepFocusWhileHeld(vertical = false), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)) {
-            // ↑ from the filters on All Events: the day you're looking at (on screen: it's the one picked).
-            val upTo = if (!rowsPage) Modifier.focusProperties {
-                up = if (tabsState.layoutInfo.visibleItemsInfo.any { it.key == day }) dayTabReq(day) else FocusRequester.Default
-            } else Modifier
+            val upTo: Modifier = Modifier
             item(key = CHIP_MINE) { FilterIcon("★", "My Sports", effectiveChip == CHIP_MINE, Modifier.focusRequester(firstChip).then(upTo), withLabel = true) { pickChip(CHIP_MINE) } }
             // Everything on, day by day (live games first), with how many are on now.
             item(key = CHIP_ALL) {
@@ -849,27 +843,35 @@ private fun SportsHub(
 
     Box(Modifier.fillMaxSize()) {
     if (videoOn) {
+        // The same top bar as every Sports page, then the list with the video window beside it.
         // Stops above the hint line at the bottom, so no game sits behind it.
-        Row(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 26.dp)) {
-            Column(Modifier.width(LIST_WIDTH).fillMaxHeight()) {
-                header(Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                filters(Modifier.fillMaxWidth())
-                list(Modifier.weight(1f))
+        Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 26.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
+                Spacer(Modifier.width(14.dp))
+                filters(Modifier.weight(1f))
             }
-            Spacer(Modifier.width(18.dp))
-            Column(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp)) {
-                videoSlot(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
-                Spacer(Modifier.height(10.dp))
-                NowPlayingPanel(events, matches, settings, now, use24h, playingKey, viewModel)
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                Column(Modifier.width(LIST_WIDTH).fillMaxHeight()) {
+                    dayBar(Modifier.fillMaxWidth())
+                    list(Modifier.weight(1f))
+                }
+                Spacer(Modifier.width(18.dp))
+                Column(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp)) {
+                    videoSlot(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                    Spacer(Modifier.height(10.dp))
+                    NowPlayingPanel(events, matches, settings, now, use24h, playingKey, viewModel)
+                }
             }
         }
     } else {
         Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = 26.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                header(Modifier.weight(1f))
-                filters(Modifier.width(470.dp))
+                LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
+                Spacer(Modifier.width(14.dp))
+                filters(Modifier.weight(1f))
             }
+            dayBar(Modifier.fillMaxWidth())
             Spacer(Modifier.height(4.dp))
             list(Modifier.weight(1f))
         }
