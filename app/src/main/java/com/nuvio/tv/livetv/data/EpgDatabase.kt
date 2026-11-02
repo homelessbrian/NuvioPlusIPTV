@@ -267,6 +267,28 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     }
 
     /**
+     * Sports: every listing starting in [fromMs, toMs) and still on after [minStopMs], one at a
+     * time, read in a single pass (the caller picks out what it wants as the rows go by).
+     */
+    fun scanListings(
+        fromMs: Long,
+        toMs: Long,
+        minStopMs: Long,
+        onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?) -> Unit
+    ) {
+        val sql = "SELECT ch, start, stop, title, descr, cat FROM programs WHERE start >= ? AND start < ? AND stop > ?"
+        readableDatabase.rawQuery(sql, arrayOf(fromMs.toString(), toMs.toString(), minStopMs.toString())).use { c ->
+            while (c.moveToNext()) {
+                onRow(
+                    c.getString(0), c.getLong(1), c.getLong(2), c.getString(3),
+                    if (c.isNull(4)) null else c.getString(4),
+                    if (c.isNull(5)) null else c.getString(5)
+                )
+            }
+        }
+    }
+
+    /**
      * Sports: listings starting in [fromMs, toMs) and still on at [minStopMs] whose title (or, with
      * [inDescription], description) contains any of [words], ignoring case. Channel key -> show.
      * Asked in parts so a busy day's team names never go over SQLite's limit on placeholders.

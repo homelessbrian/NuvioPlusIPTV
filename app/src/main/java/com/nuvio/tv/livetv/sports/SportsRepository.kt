@@ -1043,7 +1043,8 @@ class SportsRepository @Inject constructor(
                     quality = user.channelQuality,
                     shiftMs = shift,
                     settings = s,
-                    now = now
+                    now = now,
+                    gentle = viewers.value == 0
                 )
             )
             _matches.value = result.matches
