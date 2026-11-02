@@ -333,13 +333,19 @@ class SportsRepository @Inject constructor(
             liveRepo.ensureLoaded(updateCheckDelayMs = 20_000)
             kick.value++
             // Nothing matched yet (or not for a while): do it now, don't wait for the next round.
-            if (_matches.value.isEmpty() || System.currentTimeMillis() - lastMatchAt > 15 * MINUTE) matchKick.value++
+            // (or one was put off while the app was away / video was playing, or the last one is
+            // hours old).
+            if (_matches.value.isEmpty() || matchMissed || System.currentTimeMillis() - lastMatchAt > SAFETY_ROUND) matchKick.value++
         }
     }
 
     fun setForeground(on: Boolean) {
         foreground.value = on
-        if (on) kick.value++
+        if (on) {
+            kick.value++
+            // Something changed while the app was away: find channels for it now.
+            if (matchMissed) matchKick.value++
+        }
     }
 
     /** Update now (the page's refresh, a day picked). */
@@ -915,22 +921,61 @@ class SportsRepository @Inject constructor(
 
     // ------------------------------------------------------------------ matching channels
 
+    /**
+     * Finding channels for the games is heavy (it reads the whole guide), so it only runs when
+     * something it depends on has really changed: the games (a new game, a start time moved, a
+     * network added), your channels, the guide itself being replaced, Sports settings or
+     * follows, a new day, or a Fix Channel pick. Plus one round every few hours as a safety
+     * net. It used to run every 15 minutes and after every automatic playlist / guide check,
+     * even when nothing was new, and that work made video stutter on slower boxes.
+     * Never while video is playing full screen (Live TV or Nuvio's player), unless you're on the
+     * Sports page: it waits until you're back in the guide or the menus.
+     */
     @OptIn(FlowPreview::class)
     private suspend fun matchLoop() {
-        // Run again when the games, your channels, Sports settings or Live TV's state change…
         val trigger = combine(
-            events.map { list -> list.filter { it.source != EventSource.GUIDE }.map { "${it.id}@${it.startMs}:${it.broadcasts.size}" } }.distinctUntilChanged(),
-            channelStore.displayChannels.map { it.size to it.firstOrNull()?.key }.distinctUntilChanged(),
+            // The games: only what changes the search (not scores or clocks). A number instead of
+            // a list of ~1000 strings each time the feed updates.
+            events.map { list ->
+                var h = 17L
+                var n = 0
+                for (e in list) {
+                    if (e.source == EventSource.GUIDE) continue
+                    h = h * 31 + e.id.hashCode(); h = h * 31 + e.startMs; h = h * 31 + e.broadcasts.size
+                    n++
+                }
+                n to h
+            }.distinctUntilChanged(),
+            // Your channels (any added, removed or renamed in a playlist update).
+            channelStore.displayChannels.map { list ->
+                var h = 17L
+                for (c in list) h = h * 31 + c.key.hashCode()
+                list.size to h
+            }.distinctUntilChanged(),
             settings.map { listOf(it.networkChannels, it.eventChannels, it.teamChannels, it.leagueChannels, it.blocked, it.bestChannelFirst, it.hiddenLeagues, it.region, it.preferredGroups) }.distinctUntilChanged(),
             follows.map { it.words to it.leagues }.distinctUntilChanged(),
-            liveRepo.status.map { it.loading }.distinctUntilChanged()
+            // Live TV ready, and the guide really replaced (not every update check that found nothing new).
+            combine(liveRepo.status.map { it.loadedOnce }, liveRepo.guideGeneration) { a, b -> a to b }.distinctUntilChanged()
         ) { a, b, c, d, e -> listOf(a, b, c, d, e) }
         var lastRun = 0L
         scope.launch {
-            // …and every 15 minutes (shows move on; new guide listings).
+            // Safety net: a round every few hours, in case something changed that we didn't hear about.
             while (true) {
                 delay(15 * MINUTE)
-                if (foreground.value && System.currentTimeMillis() - lastRun > 10 * MINUTE) matchKick.value++
+                if (System.currentTimeMillis() - lastRun > SAFETY_ROUND) matchKick.value++
+            }
+        }
+        scope.launch {
+            // A new day: "yesterday to tomorrow" moves on, so other games come into range.
+            while (true) {
+                delay((dayStart(1) + MINUTE - System.currentTimeMillis()).coerceAtLeast(MINUTE))
+                matchKick.value++
+            }
+        }
+        scope.launch {
+            // A round put off because Live TV was busy updating: run it once the update is done.
+            liveRepo.status.map { it.loading }.distinctUntilChanged().collect { loading ->
+                if (!loading && matchMissed) matchKick.value++
             }
         }
         // Last time's matches straight away (the games, the channels), so the page isn't empty
@@ -943,14 +988,15 @@ class SportsRepository @Inject constructor(
             }
         }
         combine(trigger, matchKick) { t, k -> t to k }.debounce { if (_matches.value.isEmpty()) 0L else 1_500L }.collect {
-            if (!foreground.value && viewers.value == 0) return@collect
-            if (!settings.value.showInSidebar && viewers.value == 0) return@collect
+            // Put off (not lost): it runs when the app is back in front / the update is done.
+            if (!foreground.value && viewers.value == 0) { matchMissed = true; return@collect }
+            if (!settings.value.showInSidebar && viewers.value == 0) { matchMissed = true; return@collect }
             val status = liveRepo.status.value
             // Never the very first match against a playlist that's still importing: it would
             // both fight the import for the database (which is what made this take minutes) and
             // match against a guide that isn't fully there yet (so real channels get missed).
-            if (!status.loadedOnce) return@collect
-            if (status.loading && !status.quiet && _matches.value.isNotEmpty() && !pickPending) return@collect
+            if (!status.loadedOnce) { matchMissed = true; return@collect }
+            if (status.loading && !status.quiet && _matches.value.isNotEmpty() && !pickPending) { matchMissed = true; return@collect }
             pickPending = false
             // The very first search (nothing shown yet) waits for the start-up guide read to finish:
             // both work on the same guide database, which made the search take many minutes, and
@@ -975,6 +1021,9 @@ class SportsRepository @Inject constructor(
             }
             // "Start in Full Screen": not while the last channel is starting / playing full screen.
             com.nuvio.tv.livetv.data.BackgroundWork.awaitLiveHold()
+            // Not while video is playing full screen (unless you're on the Sports page).
+            awaitNotWatching()
+            matchMissed = false
             lastRun = System.currentTimeMillis()
             val t0 = System.currentTimeMillis()
             runCatching { com.nuvio.tv.livetv.data.BackgroundWork.heavy { runMatch() } }.onFailure { Log.w(TAG, "Sports matching failed", it) }
@@ -987,6 +1036,26 @@ class SportsRepository @Inject constructor(
 
     private val matchKick = MutableStateFlow(0)
     @Volatile private var lastMatchAt = 0L
+    /** A round was put off (app in the background, Live TV updating): run it at the next chance. */
+    @Volatile private var matchMissed = false
+
+    /** Live TV full screen or Nuvio's player open: someone is watching. */
+    private fun watching(): Boolean =
+        com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying.value || com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.value
+
+    /** Waits while video plays full screen; the Sports page being open ends the wait. */
+    private suspend fun awaitNotWatching() {
+        if (viewers.value > 0 || !watching()) return
+        val t0 = System.currentTimeMillis()
+        combine(
+            com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying,
+            com.nuvio.tv.livetv.ui.LiveTvFullscreen.active,
+            viewers
+        ) { nuvio, live, v -> v > 0 || (!nuvio && !live) }.first { it }
+        // Back from the video: a moment for the guide / menu to settle first.
+        if (viewers.value == 0) delay(5_000)
+        LiveTvLoadReport.add("Sports matching waited ${(System.currentTimeMillis() - t0) / 1000} s while video was playing")
+    }
 
     /** Saves which channels were matched to which games, to show right away next time. */
     private suspend fun saveMatches() = withContext(Dispatchers.IO) {
@@ -1549,6 +1618,8 @@ class SportsRepository @Inject constructor(
         private val EUROPEAN_TABLES = setOf("soccer/uefa.champions", "soccer/uefa.europa", "soccer/uefa.europa.conf")
         private const val MINUTE = 60_000L
         private const val HOUR = 60 * MINUTE
+        /** The safety-net round: this long after the last one. */
+        private const val SAFETY_ROUND = 4 * HOUR
         private const val DAY = 24 * HOUR
         /** The page's days run from this many days back to [DAYS_AHEAD] ahead. */
         const val DAYS_AHEAD = 7
