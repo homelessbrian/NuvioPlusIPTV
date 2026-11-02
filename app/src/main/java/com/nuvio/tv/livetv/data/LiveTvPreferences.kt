@@ -569,19 +569,29 @@ class LiveTvPreferences @Inject constructor(
 
     // ---------- calendar (synced with the rest of Live TV's settings) ----------
 
-    /** Shows whose bell is rung: a JSON list (see CalendarFollow). */
-    val calendarFollows: Flow<String> = store.data.map { it[Keys.calendarFollows] ?: "" }.distinctUntilChanged()
+    // Each Nuvio profile has its own followed and hidden shows. The first profile keeps the original
+    // keys; another profile sees the first profile's list until it changes its own, then keeps its own.
+    private fun mineOrShared(p: Preferences, key: Preferences.Key<String>, id: Int): String =
+        (if (id <= 1) p[key] else (p[my(key, id)] ?: p[key])) ?: ""
 
-    suspend fun editCalendarFollows(transform: (String) -> String) {
-        store.edit { it[Keys.calendarFollows] = transform(it[Keys.calendarFollows] ?: "") }
+    private suspend fun editMine(key: Preferences.Key<String>, transform: (String) -> String) {
+        val me = currentProfile
+        store.edit { it[my(key, me)] = transform(mineOrShared(it, key, me)) }
     }
 
-    /** Shows hidden from the Calendar: a JSON list of { id, name }. */
-    val calendarHiddenShows: Flow<String> = store.data.map { it[Keys.calendarHiddenShows] ?: "" }.distinctUntilChanged()
+    /** Shows whose bell is rung (this profile's): a JSON list (see CalendarFollow). */
+    val calendarFollows: Flow<String> = kotlinx.coroutines.flow.combine(store.data, profileManager.activeProfileId) { p, id ->
+        mineOrShared(p, Keys.calendarFollows, id)
+    }.distinctUntilChanged()
 
-    suspend fun editCalendarHiddenShows(transform: (String) -> String) {
-        store.edit { it[Keys.calendarHiddenShows] = transform(it[Keys.calendarHiddenShows] ?: "") }
-    }
+    suspend fun editCalendarFollows(transform: (String) -> String) = editMine(Keys.calendarFollows, transform)
+
+    /** Shows hidden from this profile's Calendar: a JSON list of { id, name }. */
+    val calendarHiddenShows: Flow<String> = kotlinx.coroutines.flow.combine(store.data, profileManager.activeProfileId) { p, id ->
+        mineOrShared(p, Keys.calendarHiddenShows, id)
+    }.distinctUntilChanged()
+
+    suspend fun editCalendarHiddenShows(transform: (String) -> String) = editMine(Keys.calendarHiddenShows, transform)
 
     /** The channel picked for each network ("Always use the channel I pick for FX"): a JSON object. */
     val calendarChannelPicks: Flow<String> = store.data.map { it[Keys.calendarChannelPicks] ?: "" }.distinctUntilChanged()
