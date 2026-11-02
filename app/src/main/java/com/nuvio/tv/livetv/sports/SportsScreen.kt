@@ -793,13 +793,7 @@ private fun SportsHub(
             videoOn = videoOn,
             videoSlot = videoSlot,
             playingKey = playingKey,
-            header = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
-                    Spacer(Modifier.width(14.dp))
-                    filters(Modifier.weight(1f))
-                }
-            },
+            filters = filters,
             onWatchFull = onWatchChannel
         )
         return

@@ -174,7 +174,8 @@ internal fun LeagueNetworksPage(
     videoOn: Boolean,
     videoSlot: @Composable (Modifier) -> Unit,
     playingKey: String?,
-    header: @Composable () -> Unit,
+    /** The Sports top bar's buttons (the same row every Sports page has). */
+    filters: @Composable (Modifier) -> Unit,
     onWatchFull: (LiveChannel) -> Unit
 ) {
     val found by viewModel.repo.leagueNetworks.collectAsStateWithLifecycle()
@@ -232,66 +233,75 @@ internal fun LeagueNetworksPage(
         }
     }
 
-    val content: @Composable (Modifier) -> Unit = { m ->
-        Column(m) {
-            header()
-            LiveText(
-                "Each league's own channel, found in your playlists by name.",
-                color = SportsLook.Dim, size = 12.sp, maxLines = 2, modifier = Modifier.padding(top = 4.dp, start = 4.dp, bottom = 2.dp)
-            )
-            LazyColumn(
-                Modifier.fillMaxWidth().weight(1f).keepFocusWhileHeld(horizontal = false),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                val bySport = tiles.groupBy { it.network.sport }
-                bySport.forEach { (sport, all) ->
-                    item(key = "h|$sport") { SectionHeader(sport) }
-                    val sorted = all.sortedBy { it.lead == null }
-                    if (sorted.size > 1 && sorted.all { it.lead == null }) {
-                        // Nothing found for this sport: one tile, then pick which network to set by hand.
-                        item(key = "c|$sport") {
-                            NetworkCard(
-                                name = sorted.joinToString(" · ") { it.network.name },
-                                mark = sorted.first().network.mark, color = sorted.first().network.color,
-                                logo = null, others = 0, line = "Not found. OK to choose a channel", live = false,
-                                found = false, playing = false, modifier = Modifier.fillMaxWidth(),
-                                onClick = { chooseFrom = sorted.map { it.network } }, onLongClick = { chooseFrom = sorted.map { it.network } }
-                            )
-                        }
-                    } else {
-                        sorted.chunked(columns).forEach { row ->
-                            item(key = "r|" + row.first().network.id) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    row.forEach { t ->
-                                        val lead = t.lead
-                                        val info: Pair<String, Boolean> =
-                                            if (lead != null) tileLine(guide[lead.key], now, use24h)
-                                            else Pair("Not found. OK to choose a channel", false)
-                                        NetworkCard(
-                                            name = t.network.name, mark = t.network.mark, color = t.network.color,
-                                            logo = lead?.logo, others = t.others.size, line = info.first, live = info.second,
-                                            found = lead != null,
-                                            playing = videoOn && playingTile === t,
-                                            modifier = Modifier.weight(1f),
-                                            onClick = { playTile(t) },
-                                            onLongClick = { if (t.lead == null) { pickFor = t.network } else { menuFor = t } }
-                                        )
-                                    }
-                                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+    // The title, as on the other Sports pages (they show the days here).
+    val header: @Composable (Modifier) -> Unit = { hm ->
+        Row(hm, verticalAlignment = Alignment.CenterVertically) {
+            LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
+            Spacer(Modifier.width(14.dp))
+            LiveText("League Networks · each league's own channel", color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+        }
+    }
+
+    val list: @Composable (Modifier) -> Unit = { m ->
+        LazyColumn(
+            m.fillMaxWidth().keepFocusWhileHeld(horizontal = false),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            val bySport = tiles.groupBy { it.network.sport }
+            bySport.forEach { (sport, all) ->
+                item(key = "h|$sport") { SectionHeader(sport) }
+                val sorted = all.sortedBy { it.lead == null }
+                if (sorted.size > 1 && sorted.all { it.lead == null }) {
+                    // Nothing found for this sport: one tile, then pick which network to set by hand.
+                    item(key = "c|$sport") {
+                        NetworkCard(
+                            name = sorted.joinToString(" · ") { it.network.name },
+                            mark = sorted.first().network.mark, color = sorted.first().network.color,
+                            logo = null, others = 0, line = "Not found. OK to choose a channel", live = false,
+                            found = false, playing = false, modifier = Modifier.fillMaxWidth(),
+                            onClick = { chooseFrom = sorted.map { it.network } }, onLongClick = { chooseFrom = sorted.map { it.network } }
+                        )
+                    }
+                } else {
+                    sorted.chunked(columns).forEach { row ->
+                        item(key = "r|" + row.first().network.id) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                row.forEach { t ->
+                                    val lead = t.lead
+                                    val info: Pair<String, Boolean> =
+                                        if (lead != null) tileLine(guide[lead.key], now, use24h)
+                                        else Pair("Not found. OK to choose a channel", false)
+                                    NetworkCard(
+                                        name = t.network.name, mark = t.network.mark, color = t.network.color,
+                                        logo = lead?.logo, others = t.others.size, line = info.first, live = info.second,
+                                        found = lead != null,
+                                        playing = videoOn && playingTile === t,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { playTile(t) },
+                                        onLongClick = { if (t.lead == null) { pickFor = t.network } else { menuFor = t } }
+                                    )
                                 }
+                                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                             }
                         }
                     }
                 }
-                item(key = "end") { Spacer(Modifier.height(30.dp)) }
             }
+            item(key = "end") { Spacer(Modifier.height(30.dp)) }
         }
     }
 
+    // The same layout as the other Sports pages: the list under the title and buttons, the
+    // video window to the right of it (not above the buttons).
     Box(Modifier.fillMaxSize()) {
         if (videoOn) {
             Row(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 26.dp)) {
-                content(Modifier.width(500.dp).fillMaxHeight())
+                Column(Modifier.width(470.dp).fillMaxHeight()) {
+                    header(Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    filters(Modifier.fillMaxWidth())
+                    list(Modifier.weight(1f))
+                }
                 Spacer(Modifier.width(18.dp))
                 Column(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp)) {
                     videoSlot(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
@@ -305,8 +315,13 @@ internal fun LeagueNetworksPage(
                 }
             }
         } else {
-            Row(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = 26.dp)) {
-                content(Modifier.weight(1f).fillMaxHeight())
+            Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = 26.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    header(Modifier.weight(1f))
+                    filters(Modifier.width(470.dp))
+                }
+                Spacer(Modifier.height(4.dp))
+                list(Modifier.weight(1f))
             }
         }
         LiveText(
