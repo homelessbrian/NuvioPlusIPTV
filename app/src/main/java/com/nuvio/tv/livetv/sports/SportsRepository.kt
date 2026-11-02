@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -68,6 +70,28 @@ class SportsRepository @Inject constructor(
     val follows: StateFlow<SportsFollows> = prefs.sportsMineJson
         .map { SportsFollows.fromJson(it) }
         .stateIn(scope, SharingStarted.Eagerly, SportsFollows())
+
+    /**
+     * League Networks: the channels whose names say they're a league's own channel (NFL Network,
+     * NBA TV…), by network id. Found by name only, so it's redone only when the channel list
+     * changes; channels you've hidden or locked are left out.
+     */
+    val leagueNetworks: StateFlow<Map<String, List<LiveChannel>>> = combine(
+        channelStore.displayChannels
+            .distinctUntilChangedBy { list -> list.size to list.fold(0) { h, c -> h * 31 + c.name.hashCode() } }
+            .map { LeagueNetworks.find(it) }
+            .flowOn(Dispatchers.Default),
+        prefs.userState,
+        prefs.settings
+    ) { found, user, live ->
+        found.mapValues { (_, list) ->
+            list.filter { ch ->
+                ch.key !in user.hiddenChannels && ch.groupId !in user.hiddenGroups &&
+                    !ParentalControls.isLocked(ch.groupId, ch.group, live, user.lockedGroups) &&
+                    !(ParentalControls.enabled(live) && live.lockAdultContent && ParentalControls.isAdult(ch.name))
+            }
+        }.filterValues { it.isNotEmpty() }
+    }.stateIn(scope, SharingStarted.Lazily, emptyMap())
 
     private class LeagueData(val events: List<SportsEvent>, val fetchedAt: Long, val error: String?)
 
@@ -1464,6 +1488,32 @@ class SportsRepository @Inject constructor(
         _matches.value[eventId]?.let { ChannelRegions.regionFirst(it, settings.value.channelRegion) }?.firstOrNull()
 
     fun channelsForPicker(): List<LiveChannel> = channelStore.displayChannels.value
+
+    /** League Networks: use this channel for the network (saved, and synced with the other Sports settings). */
+    fun pickLeagueNetwork(networkId: String, channelKey: String) =
+        updateSettings { it.copy(leagueNetworkChannels = it.leagueNetworkChannels + (networkId to channelKey)) }
+
+    /** League Networks: back to the automatic channel. */
+    fun resetLeagueNetwork(networkId: String) =
+        updateSettings { it.copy(leagueNetworkChannels = it.leagueNetworkChannels - networkId) }
+
+    /**
+     * What's on now and what's next on each channel, from the stored guide (a week ahead, so a
+     * channel that's only on some nights still says when). Times are shifted by the guide offset.
+     */
+    suspend fun nowAndNext(keys: Collection<String>): Map<String, Pair<com.nuvio.tv.livetv.model.EpgProgram?, com.nuvio.tv.livetv.model.EpgProgram?>> =
+        withContext(Dispatchers.IO) {
+            if (keys.isEmpty()) return@withContext emptyMap()
+            val shift = prefs.settings.first().epgOffsetMinutes * MINUTE
+            val now = System.currentTimeMillis()
+            val listings = runCatching { guideDb.range(now - shift, now - shift + 7 * DAY, channels = keys) }.getOrDefault(emptyMap())
+            keys.associateWith { k ->
+                val list = listings[k].orEmpty()
+                    .map { p -> if (shift == 0L) p else p.copy(startMs = p.startMs + shift, stopMs = p.stopMs + shift) }
+                    .sortedBy { it.startMs }
+                list.firstOrNull { it.isLive(now) } to list.firstOrNull { it.startMs > now }
+            }
+        }
 
     // ------------------------------------------------------------------ days
 

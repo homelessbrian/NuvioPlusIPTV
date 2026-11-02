@@ -137,6 +137,7 @@ private const val CHIP_LEAGUE = "lg:"
 private const val CHIP_SPORT = "sp:"
 /** Tables: your leagues' tables (see SportsTables). */
 private const val CHIP_TABLES = "tables"
+private const val CHIP_NETWORKS = "networks"
 
 /** Width of the game list next to the video window. */
 private val LIST_WIDTH = 470.dp
@@ -410,7 +411,8 @@ fun SportsScreen(
                 // Opened here: Back comes back here.
                 onOpen = { ev -> fromRoute = null; fromLabel = null; openId = ev.id },
                 onQuickWatch = ::quickWatch,
-                onPick = { picker = true }
+                onPick = { picker = true },
+                onWatchChannel = { ch -> viewModel.watchChannel(ch); onOpenLive() }
             )
         }
         // The picture, on top of the page where its slot is (one view for every page, so it
@@ -516,7 +518,8 @@ private fun SportsHub(
     viewModel: SportsViewModel,
     onOpen: (SportsEvent) -> Unit,
     onQuickWatch: (SportsEvent) -> Unit,
-    onPick: () -> Unit
+    onPick: () -> Unit,
+    onWatchChannel: (LiveChannel) -> Unit
 ) {
     // Back opens the side menu first, like the guide and On Demand (it used to go straight to
     // Home). With the menu open, Back is left to the app. A game page, Pick Your Teams and the
@@ -711,6 +714,8 @@ private fun SportsHub(
             }
             // Your leagues' tables.
             item(key = CHIP_TABLES) { FilterIcon("🏆", "Tables", effectiveChip == CHIP_TABLES, upTo, withLabel = true) { pickChip(CHIP_TABLES) } }
+            // Each league's own channel (NFL Network, NBA TV…).
+            item(key = CHIP_NETWORKS) { FilterIcon("📡", "League Networks", effectiveChip == CHIP_NETWORKS, upTo, withLabel = true) { pickChip(CHIP_NETWORKS) } }
             // Sports you follow: My Teams for that sport only.
             if (followedSports.size > 1) {
                 item(key = "sep1") { ChipGap() }
@@ -774,6 +779,28 @@ private fun SportsHub(
             focusTable = false,
             onOpen = onOpen,
             onQuickWatch = onQuickWatch
+        )
+        return
+    }
+
+    // ---- League Networks: each league's own channel
+    if (effectiveChip == CHIP_NETWORKS) {
+        LeagueNetworksPage(
+            viewModel = viewModel,
+            settings = settings,
+            now = now,
+            use24h = use24h,
+            videoOn = videoOn,
+            videoSlot = videoSlot,
+            playingKey = playingKey,
+            header = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
+                    Spacer(Modifier.width(14.dp))
+                    filters(Modifier.weight(1f))
+                }
+            },
+            onWatchFull = onWatchChannel
         )
         return
     }
@@ -1600,7 +1627,7 @@ private fun FixChannelDialog(ev: SportsEvent, matches: List<ChannelMatch>, hideS
 
 /** A channel in a Sports pop-up: logo, name, and a note on the right; white when highlighted. */
 @Composable
-private fun ChannelLine(channel: LiveChannel, detail: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun ChannelLine(channel: LiveChannel, detail: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Row(
         modifier
@@ -1622,7 +1649,7 @@ private fun ChannelLine(channel: LiveChannel, detail: String, modifier: Modifier
 
 /** Type part of a channel's name; OK on one picks it. */
 @Composable
-private fun ChannelPickerDialog(
+internal fun ChannelPickerDialog(
     title: String,
     initial: String,
     viewModel: SportsViewModel,

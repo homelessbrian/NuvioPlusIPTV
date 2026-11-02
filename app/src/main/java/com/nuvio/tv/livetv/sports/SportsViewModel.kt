@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.player.LiveTvPlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -114,6 +115,15 @@ class SportsViewModel @Inject constructor(
         SportsLaunch.catchup(SportsLaunch.Catchup(m.channel.key, program))
         return true
     }
+
+    /** League Networks: a channel straight from its tile (not tied to a game). */
+    private fun asMatch(ch: LiveChannel) = ChannelMatch(ch, 150, "League network", null, null, false)
+
+    /** Plays the channel in the Sports page's window. */
+    fun playChannelHere(ch: LiveChannel) = playHere(asMatch(ch))
+
+    /** Tunes Live TV to the channel (the screen then opens it full screen). */
+    fun watchChannel(ch: LiveChannel) = watch(asMatch(ch))
 
     /** Nothing followed yet and Pick Your Teams never seen: it opens by itself. */
     suspend fun isFirstVisit(): Boolean {
