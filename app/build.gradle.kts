@@ -404,8 +404,8 @@ android.defaultConfig.buildConfigField("String", "NUVIO_CHANNEL", "\"${if (livet
 android.defaultConfig.buildConfigField("String", "TEST_UPDATES_URL", "\"https://livetv-cloud.nuvioplusiptv.workers.dev\"")
 android.defaultConfig.buildConfigField("String", "TESTER_KEY", buildConfigString(livetvTesterKey))
 if (livetvIsTestBuild) {
-    val minutesSince2026 = ((java.time.Instant.now().epochSecond -
-        java.time.Instant.parse("2026-01-01T00:00:00Z").epochSecond) / 60).toInt()
+    // 1767225600 = 2026-01-01 00:00 UTC, in seconds.
+    val minutesSince2026: Int = ((System.currentTimeMillis() / 1000L - 1767225600L) / 60L).toInt()
     android.defaultConfig.versionCode = 200_000_000 + minutesSince2026
     if ((findProperty("livetvVersionName") as String?).isNullOrBlank()) {
         val base = android.defaultConfig.versionName ?: "0.0.0"
