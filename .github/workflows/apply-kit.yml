@@ -1,4 +1,4 @@
-name: Apply Live TV kit
+name: Apply Kit
 
 # Upload nuvio-livetv-kit.zip to the root of the repo and this runs automatically.
 # It unzips the kit over the repo, commits the result and removes the zip.

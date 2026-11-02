@@ -1,7 +1,7 @@
 # Merge a Nuvio release into the dev branch by hand, keeping the fork's side wherever both changed
-# the same lines. Then fix anything the update broke, run "Build Test APK" and check it on a TV.
-# Users only get it through "Release Nuvio + IPTV update" (which releases from main).
-name: Merge Nuvio release (manual)
+# the same lines. Then fix anything the update broke, run "Build Test App" and check it on a TV.
+# Users only get it through "Release to Users" (which releases from main).
+name: Merge Nuvio Update
 
 on:
   workflow_dispatch:

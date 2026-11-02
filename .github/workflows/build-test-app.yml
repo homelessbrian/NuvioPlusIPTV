@@ -1,4 +1,4 @@
-name: Build Test APK
+name: Build Test App
 
 # Builds "Nuvio + IPTV Test" from the dev branch and sends the APK to the private test repo
 # (homelessbrian/Nuvio_Testing) as a release, where the test app finds it through the tester-only

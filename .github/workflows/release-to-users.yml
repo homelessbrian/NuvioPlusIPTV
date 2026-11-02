@@ -1,4 +1,4 @@
-name: Release Nuvio + IPTV update
+name: Release to Users
 
 # Publishes an update of your fork between Nuvio releases, for example after you
 # change Live TV. Run it from the Actions tab. It picks the next version number
