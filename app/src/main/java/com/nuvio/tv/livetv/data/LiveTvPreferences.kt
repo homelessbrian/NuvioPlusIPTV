@@ -315,7 +315,22 @@ class LiveTvPreferences @Inject constructor(
         .map { decodeEpgs(it[Keys.epgs]) }
         .distinctUntilChanged()
 
-    val settings: Flow<LiveTvSettings> = store.data.map { p ->
+    /**
+     * Which side-menu pages are off (Calendar and the others) is chosen per Nuvio profile. The first
+     * profile keeps the original key. A profile that hasn't made its own choice yet sees the first
+     * profile's, so nothing changes for people who already turned a page off.
+     */
+    private fun withMyMenu(p: Preferences, id: Int): Preferences {
+        if (id <= 1) return p
+        val own = p[my(Keys.sideMenuHidden, id)] ?: return p
+        val m = p.toMutablePreferences()
+        m[Keys.sideMenuHidden] = own
+        return m
+    }
+
+    val settings: Flow<LiveTvSettings> = kotlinx.coroutines.flow.combine(store.data, profileManager.activeProfileId) { p0, id ->
+        withMyMenu(p0, id)
+    }.map { p ->
         val d = LiveTvSettings()
         LiveTvSettings(
             showInSidebar = p[Keys.showInSidebar] ?: d.showInSidebar,
@@ -650,7 +665,13 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.onDemandInSidebar] = s.onDemandInSidebar
         p[Keys.recordingsInSidebar] = s.recordingsInSidebar
         p[Keys.sideMenuOrder] = s.sideMenuOrder
-        p[Keys.sideMenuHidden] = s.sideMenuHidden
+        val me = currentProfile
+        if (me <= 1) {
+            p[Keys.sideMenuHidden] = s.sideMenuHidden
+        } else {
+            val seen = p[my(Keys.sideMenuHidden, me)] ?: p[Keys.sideMenuHidden] ?: ""
+            if (s.sideMenuHidden != seen) p[my(Keys.sideMenuHidden, me)] = s.sideMenuHidden
+        }
         p[Keys.calendarInMenu] = s.calendarInMenu
         p[Keys.sideMenuLine] = s.sideMenuLine
         p[Keys.sideMenuFit] = s.sideMenuFit
