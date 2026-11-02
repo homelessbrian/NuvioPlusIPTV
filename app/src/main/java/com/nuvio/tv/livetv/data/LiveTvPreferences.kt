@@ -119,6 +119,8 @@ class LiveTvPreferences @Inject constructor(
         val sideMenuOrder = stringPreferencesKey("side_menu_order")
         val sideMenuHidden = stringPreferencesKey("side_menu_hidden")
         val calendarInMenu = booleanPreferencesKey("calendar_in_menu")
+        val sideMenuLine = booleanPreferencesKey("side_menu_line")
+        val sideMenuFit = booleanPreferencesKey("side_menu_fit")
         val calendarUpcomingRow = booleanPreferencesKey("calendar_upcoming_row")
         val calendarNewEpisodeCards = booleanPreferencesKey("calendar_new_episode_cards")
         val calendarHideSpoilers = booleanPreferencesKey("calendar_hide_spoilers")
@@ -135,6 +137,7 @@ class LiveTvPreferences @Inject constructor(
         val onDemandInStreams = booleanPreferencesKey("on_demand_in_streams")
         val onDemandStreamsPosition = stringPreferencesKey("on_demand_streams_position")
         val onDemandAutoPlay = booleanPreferencesKey("on_demand_auto_play")
+        val onDemandPlayDirect = booleanPreferencesKey("on_demand_play_direct")
         val searchOrder = stringPreferencesKey("search_order")
         val searchPreview = booleanPreferencesKey("search_preview")
         val onDemandAddonPosters = booleanPreferencesKey("on_demand_addon_posters")
@@ -377,6 +380,8 @@ class LiveTvPreferences @Inject constructor(
             sideMenuOrder = p[Keys.sideMenuOrder] ?: d.sideMenuOrder,
             sideMenuHidden = p[Keys.sideMenuHidden] ?: d.sideMenuHidden,
             calendarInMenu = p[Keys.calendarInMenu] ?: d.calendarInMenu,
+            sideMenuLine = p[Keys.sideMenuLine] ?: d.sideMenuLine,
+            sideMenuFit = p[Keys.sideMenuFit] ?: d.sideMenuFit,
             calendarUpcomingRow = p[Keys.calendarUpcomingRow] ?: d.calendarUpcomingRow,
             calendarNewEpisodeCards = p[Keys.calendarNewEpisodeCards] ?: d.calendarNewEpisodeCards,
             calendarHideSpoilers = p[Keys.calendarHideSpoilers] ?: d.calendarHideSpoilers,
@@ -389,6 +394,7 @@ class LiveTvPreferences @Inject constructor(
             onDemandInStreams = p[Keys.onDemandInStreams] ?: d.onDemandInStreams,
             onDemandStreamsPosition = p[Keys.onDemandStreamsPosition] ?: d.onDemandStreamsPosition,
             onDemandAutoPlay = p[Keys.onDemandAutoPlay] ?: d.onDemandAutoPlay,
+            onDemandPlayDirect = p[Keys.onDemandPlayDirect] ?: d.onDemandPlayDirect,
             searchOrder = p[Keys.searchOrder] ?: d.searchOrder,
             searchPreview = p[Keys.searchPreview] ?: d.searchPreview,
             onDemandAddonPosters = p[Keys.onDemandAddonPosters] ?: d.onDemandAddonPosters,
@@ -646,6 +652,8 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.sideMenuOrder] = s.sideMenuOrder
         p[Keys.sideMenuHidden] = s.sideMenuHidden
         p[Keys.calendarInMenu] = s.calendarInMenu
+        p[Keys.sideMenuLine] = s.sideMenuLine
+        p[Keys.sideMenuFit] = s.sideMenuFit
         p[Keys.calendarUpcomingRow] = s.calendarUpcomingRow
         p[Keys.calendarNewEpisodeCards] = s.calendarNewEpisodeCards
         p[Keys.calendarHideSpoilers] = s.calendarHideSpoilers
@@ -658,6 +666,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.onDemandInStreams] = s.onDemandInStreams
         p[Keys.onDemandStreamsPosition] = s.onDemandStreamsPosition
         p[Keys.onDemandAutoPlay] = s.onDemandAutoPlay
+        p[Keys.onDemandPlayDirect] = s.onDemandPlayDirect
         p[Keys.searchOrder] = s.searchOrder
         p[Keys.searchPreview] = s.searchPreview
         p[Keys.onDemandAddonPosters] = s.onDemandAddonPosters

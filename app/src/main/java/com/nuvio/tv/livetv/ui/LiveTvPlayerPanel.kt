@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -58,7 +60,7 @@ internal enum class PanelMode { LIVE, CATCHUP, SHIFT }
  * the timeline, back 30, play/pause, forward 30 and the gear; the rest are kept for the keys
  * that still name them, and live in the gear panel.
  */
-internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, BELL, MORE }
+internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, PIN, BELL, MORE }
 
 /** Timeline: everything in wall-clock milliseconds. */
 internal data class PanelTimeline(
@@ -105,13 +107,15 @@ internal object BarPart {
 }
 
 /** Which controls the bar offers: back 30 / forward 30 only where you can skip, and the gear. */
-internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, bell: Boolean = false): List<PanelControl> = buildList {
+internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, bell: Boolean = false, pin: Boolean = false): List<PanelControl> = buildList {
     val transport = mode != PanelMode.LIVE || paused
     // The timeline itself can be grabbed (Up from the buttons) and moved with ◀ / ▶.
     if (transport && canSkip) add(PanelControl.TIMELINE)
     if (transport && canSkip) add(PanelControl.BACK)
     add(PanelControl.PLAY)
     if (transport && canSkip) add(PanelControl.FORWARD)
+    // Sports: pin the live game's score to the corner.
+    if (pin) add(PanelControl.PIN)
     // The Calendar's bell, beside the gear.
     if (bell) add(PanelControl.BELL)
     add(PanelControl.MORE)
@@ -192,7 +196,9 @@ internal fun LiveTvPlayerPanel(
     /** Parts switched off (see [BarPart]). */
     hidden: Set<String> = emptySet(),
     /** The Calendar's bell is on for what's playing. */
-    bellOn: Boolean = false
+    bellOn: Boolean = false,
+    /** The game on this channel is pinned to the corner (the pin button shows filled). */
+    pinOn: Boolean = false
 ) {
     val colors = NuvioTheme.colors
     val accent = colors.Secondary
@@ -255,7 +261,7 @@ internal fun LiveTvPlayerPanel(
                     if (showChannel || showTags) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (showChannel) {
-                                if (showPoster && !channel.logo.isNullOrBlank()) {
+                                if (showPoster && !poster.isNullOrBlank() && !channel.logo.isNullOrBlank()) {
                                     ChannelLogo(channel.logo, 22.dp)
                                     Spacer(Modifier.width(8.dp))
                                 }
@@ -272,10 +278,11 @@ internal fun LiveTvPlayerPanel(
                                     PanelMode.CATCHUP -> LiveTag("CATCH-UP", accent, colors.OnSecondary)
                                     PanelMode.SHIFT -> LiveTag(timeline?.status?.uppercase() ?: "PAUSED LIVE", Color.White.copy(alpha = 0.22f), Color.White)
                                 }
+                                // The score first, so a long line of chips can't push it off the bar.
+                                if (mode == PanelMode.LIVE) com.nuvio.tv.livetv.sports.SportsScoreTag(channel.key)
                                 resolution?.let { Spacer(Modifier.width(6.dp)); GlassChip(it.uppercase()) }
                                 audioBadge?.let { Spacer(Modifier.width(6.dp)); GlassChip(it) }
                                 if (catchupAvailable && mode == PanelMode.LIVE) { Spacer(Modifier.width(6.dp)); GlassChip("CATCH-UP") }
-                                if (mode == PanelMode.LIVE) com.nuvio.tv.livetv.sports.SportsScoreTag(channel.key)
                             }
                         }
                         Spacer(Modifier.height(4.dp))
@@ -316,6 +323,13 @@ internal fun LiveTvPlayerPanel(
                             }
                             if (full) {
                                 Spacer(Modifier.width(10.dp))
+                                if (PanelControl.PIN in controls) {
+                                    RoundButton(
+                                        if (pinOn) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                                        focused = focused == PanelControl.PIN && recentFocus == null, big = false
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                }
                                 if (PanelControl.BELL in controls) {
                                     RoundButton(
                                         if (bellOn) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,

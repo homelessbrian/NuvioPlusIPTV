@@ -345,8 +345,9 @@ object SportsCatalog {
         // ---- Fighting
         League("mma/ufc", Sport.FIGHTING, "UFC", "UFC", "mma/ufc", LeagueKind.EVENT, guideWords = listOf("UFC"),
             regions = EVERYWHERE, minutes = 300, color = 0xFFD20A0A),
+        // A fight card's listed time is when the card starts; the main event is often 5 or 6 hours later.
         League("guide/boxing", Sport.FIGHTING, "Boxing", "BOXING", guideWords = listOf("Boxing"), regions = EVERYWHERE,
-            guideOnly = true, fixtureSlug = "boxing", kind = LeagueKind.EVENT, color = 0xFF7A1F1F),
+            guideOnly = true, fixtureSlug = "boxing", kind = LeagueKind.EVENT, minutes = 420, color = 0xFF7A1F1F),
         // ---- Wrestling (from the guide: weekly shows and big events)
         League("guide/wwe", Sport.WRESTLING, "WWE", "WWE",
             guideWords = listOf("WWE", "SmackDown", "Monday Night Raw", "WWE Raw", "NXT", "WrestleMania", "Royal Rumble", "SummerSlam", "Survivor Series"),
@@ -571,6 +572,29 @@ object SportsCatalog {
         val plain = Normalizer.normalize(plainSmall(s), Normalizer.Form.NFD).replace(MARKS, "")
         return " " + plain.lowercase(Locale.ROOT).replace("&", " and ").replace(NOT_WORD, " ").trim().replace(SPACES, " ") + " "
     }
+
+    /**
+     * A fight's two sides, from a title like "Canelo Álvarez vs Christian Mbilli", "UFC 310: Pantoja
+     * vs. Asakura" or "Boxing : Canelo v Mbilli": each side's name words (4 letters or more, without
+     * card or promoter words), or null when the title isn't "someone vs someone".
+     */
+    fun fightSides(title: String): Pair<List<String>, List<String>>? {
+        val parts = norm(title).trim().split(" vs ", " v ", " versus ")
+        if (parts.size != 2) return null
+        fun words(part: String) = part.trim().split(' ')
+            .filter { w -> w.length >= 4 && w.any { it.isLetter() } && w !in FIGHT_NOISE }
+            .distinct()
+        val a = words(parts[0])
+        val b = words(parts[1])
+        return if (a.isEmpty() || b.isEmpty()) null else a to b
+    }
+
+    private val FIGHT_NOISE = setOf(
+        "boxing", "fight", "fights", "night", "card", "main", "event", "live", "title", "world", "championship",
+        "undercard", "prelims", "preliminary", "presents", "from", "replay", "full", "saturday", "friday", "sunday",
+        "season", "riyadh", "zuffa", "showdown", "heavyweight", "middleweight", "welterweight", "lightweight",
+        "featherweight", "bantamweight", "flyweight", "cruiserweight", "rematch", "undisputed", "unified", "bout"
+    )
 
     /** [term] (already normalized, no padding) as whole words in [normText] (from [norm]). */
     fun hasWord(normText: String, term: String): Boolean = term.isNotBlank() && normText.contains(" $term ")

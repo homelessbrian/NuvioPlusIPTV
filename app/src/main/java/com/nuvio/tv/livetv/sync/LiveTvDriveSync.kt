@@ -91,6 +91,10 @@ class LiveTvDriveSync @Inject constructor(
     @Volatile private var applying = false
     /** When a restore or sync last wrote this TV's setup (its own changes come after that). */
     @Volatile private var appliedAtMs = 0L
+    /** True while Google sign-in is only to bring the backup over to the Nuvio account (not to keep Drive synced). */
+    @Volatile private var importOnly = false
+    /** Called when an import-only sign-in finishes: the Nuvio account sync takes the backup from here. */
+    @Volatile var importListener: (() -> Unit)? = null
 
     /** The copy in Google Drive: when it was saved, on which TV, and whether that was this one. */
     data class BackupInfo(val savedAtMs: Long, val device: String, val fromThisTv: Boolean)
@@ -153,8 +157,9 @@ class LiveTvDriveSync @Inject constructor(
 
     // ------------------------------------------------------------------ sign-in
 
-    fun beginSignIn() {
+    fun beginSignIn(forImport: Boolean = false) {
         if (!_state.value.available) return
+        importOnly = forImport
         signInJob?.cancel()
         signInJob = scope.launch {
             _state.value = _state.value.copy(busy = true, message = null, signIn = null)
@@ -222,6 +227,7 @@ class LiveTvDriveSync @Inject constructor(
     }
 
     fun cancelSignIn() {
+        importOnly = false
         signInJob?.cancel()
         _state.value = _state.value.copy(signIn = null, busy = false)
     }
@@ -237,6 +243,12 @@ class LiveTvDriveSync @Inject constructor(
         val email = emailFromIdToken(token.optString("id_token"))
         store.edit().putString(KEY_REFRESH, refresh).putString(KEY_EMAIL, email).apply()
         _state.value = _state.value.copy(connected = true, email = email, signIn = null, message = null)
+        if (importOnly) {
+            // Only here to hand the backup over: don't restore it onto this TV or back anything up.
+            importOnly = false
+            importListener?.invoke()
+            return
+        }
         // First connection: use the Drive copy if there is one, otherwise back this TV up.
         if (!pull(force = true, onlyIfExists = true)) push(force = true)
     }
@@ -404,7 +416,7 @@ class LiveTvDriveSync @Inject constructor(
 
     // ------------------------------------------------------------------ merging
 
-    private suspend fun applyLocally(data: JSONObject) {
+    internal suspend fun applyLocally(data: JSONObject) {
         applying = true
         appliedAtMs = System.currentTimeMillis()
         try {
@@ -430,6 +442,12 @@ class LiveTvDriveSync @Inject constructor(
         }
     }
 
+    /** The Live TV setup saved in Google Drive, or null if there isn't one or it can't be read. Changes nothing. */
+    suspend fun backupData(): JSONObject? = withContext(Dispatchers.IO) {
+        val token = token() ?: return@withContext null
+        remoteCopy(token)?.optJSONObject("data")
+    }
+
     /** The Drive copy, or null if there isn't one or it can't be read. */
     private suspend fun remoteCopy(token: String): JSONObject? = runCatching {
         val fileId = fileId(token) ?: return null
@@ -449,7 +467,7 @@ class LiveTvDriveSync @Inject constructor(
      * ([base]) is kept, everything else comes from the other TV. Without a base, [localWinsWithoutBase]
      * decides.
      */
-    private fun merge(
+    internal fun merge(
         base: JSONObject?,
         local: JSONObject,
         remote: JSONObject,

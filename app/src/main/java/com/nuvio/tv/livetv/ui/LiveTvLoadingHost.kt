@@ -31,6 +31,9 @@ import com.nuvio.tv.livetv.ondemand.OnDemandRepository
 import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.theme.NuvioTheme
 import dagger.hilt.EntryPoint
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -41,6 +44,7 @@ interface LoadingEntryPoint {
     fun liveTvRepository(): LiveTvRepository
     fun onDemandRepository(): OnDemandRepository
     fun liveTvPlayback(): com.nuvio.tv.livetv.player.LiveTvPlaybackController
+    fun liveTvPreferences(): com.nuvio.tv.livetv.data.LiveTvPreferences
 }
 
 /**
@@ -70,6 +74,24 @@ fun LiveTvLoadingHost(navController: NavController) {
         if (route.startsWith("player/") || route.startsWith("stream/")) entry.liveTvPlayback().releaseNow()
         // Heavy Live TV / On Demand background work waits while Nuvio's player is open.
         com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying.value = route.startsWith("player/")
+    }
+    // "Start in Full Screen" on: keep the automatic background work away while the last channel
+    // starts and plays full screen (otherwise the video stutters on slower boxes).
+    val autoPlayStart by remember(entry) {
+        entry.liveTvPreferences().settings.map { it.autoPlayLastChannel }.distinctUntilChanged()
+    }.collectAsState(false)
+    androidx.compose.runtime.LaunchedEffect(autoPlayStart) {
+        val hold = com.nuvio.tv.livetv.data.BackgroundWork.liveHold
+        if (!autoPlayStart) {
+            hold.value = false
+            return@LaunchedEffect
+        }
+        if (!com.nuvio.tv.livetv.data.BackgroundWork.launchHoldDone) {
+            com.nuvio.tv.livetv.data.BackgroundWork.launchHoldDone = true
+            hold.value = true
+            kotlinx.coroutines.withTimeoutOrNull(20_000L) { LiveTvFullscreen.active.first { it } }
+        }
+        LiveTvFullscreen.active.collect { hold.value = it }
     }
     val message = when {
         live.loading && !live.quiet -> live.message ?: "Updating Live TV…"

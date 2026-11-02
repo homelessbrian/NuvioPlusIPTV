@@ -19,5 +19,7 @@ data class GitHubAssetDto(
     val name: String,
     @Json(name = "browser_download_url") val browserDownloadUrl: String,
     val size: Long? = null,
-    @Json(name = "content_type") val contentType: String? = null
+    @Json(name = "content_type") val contentType: String? = null,
+    // GitHub's own SHA-256 of the uploaded file, as "sha256:<hex>" (missing on older uploads).
+    val digest: String? = null
 )

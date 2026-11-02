@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -302,6 +303,9 @@ fun LiveTvPlayerScreen(
     // The Calendar's bell for what's on (play bar and the full-screen menu).
     val liveBell = com.nuvio.tv.livetv.calendar.rememberLiveBell(nowProgram.takeIf { playback.catchupTitle == null }, current)
     val bellInBar = liveBell != null && BarPart.BELL !in BarPart.parse(settings.barHidden)
+    // Sports: the live game on this channel, if it can be pinned to the corner.
+    val pinGame = com.nuvio.tv.livetv.sports.rememberPinnableGame(current?.key).takeIf { playback.catchupTitle == null }
+    val pinList = com.nuvio.tv.livetv.sports.SportsLive.pins.collectAsState().value
     val poster by androidx.compose.runtime.produceState<String?>(initialValue = null, watchingTitle, current?.key) {
         value = null
         // In archive playback the guide entry isn't the live one, so no movie/series hint.
@@ -413,7 +417,7 @@ fun LiveTvPlayerScreen(
                 if (cf != null) {
                     val mode = if (archive) PanelMode.CATCHUP else if (shifting) PanelMode.SHIFT else PanelMode.LIVE
                     val paused = playback.userPaused
-                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar)
+                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null)
                     if (e.type == KeyEventType.KeyUp) return@onPreviewKeyEvent isOk || e.key == Key.Back
                     showBanner()
                     val buttons = list.filter { it != PanelControl.TIMELINE }
@@ -474,6 +478,10 @@ fun LiveTvPlayerScreen(
                                 PanelControl.SIZE -> openGear("size")
                                 PanelControl.SLEEP -> openGear("sleep")
                                 PanelControl.BELL -> liveBell?.toggle?.invoke()
+                                PanelControl.PIN -> pinGame?.let { g ->
+                                    val pinned = com.nuvio.tv.livetv.sports.SportsLive.togglePin(g.id)
+                                    com.nuvio.tv.livetv.record.LiveTvNotice.show(if (pinned) "Score pinned to the corner" else "Score unpinned")
+                                }
                                 PanelControl.MORE -> openGear()
                                 PanelControl.TIMELINE, null -> Unit
                             }
@@ -642,6 +650,12 @@ fun LiveTvPlayerScreen(
         }
         // The always-on corner clock, out of the way while the panel, channel list or a menu is
         // up (the panel shows the time itself).
+        // Pinned scoreboards share the corner rules: out of the way while those are up.
+        val pinsCovered = panelFull || listVisible || dialog != PlayerDialog.NONE
+        DisposableEffect(pinsCovered) {
+            com.nuvio.tv.livetv.sports.SportsLive.pinsHidden.value = pinsCovered
+            onDispose { com.nuvio.tv.livetv.sports.SportsLive.pinsHidden.value = false }
+        }
         OnScreenClock(
             settings = settings,
             visible = current != null && !(bannerVisible || panelFull || pausedNow) && !listVisible &&
@@ -869,7 +883,7 @@ fun LiveTvPlayerScreen(
                     showPosters = settings.showPosters,
                     timeline = timeline,
                     paused = paused,
-                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar),
+                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null),
                     focused = controlFocus,
                     captionsOn = captionsOn,
                     audioLabel = remember(playback.channelKey, bannerVisible) { viewModel.playback.audioLabel() },
@@ -903,7 +917,8 @@ fun LiveTvPlayerScreen(
                     } else null,
                     recentFocus = recentFocus,
                     hidden = BarPart.parse(settings.barHidden),
-                    bellOn = liveBell?.on == true
+                    bellOn = liveBell?.on == true,
+                    pinOn = pinGame != null && pinGame.id in pinList
                 )
             }
         }
@@ -1367,8 +1382,14 @@ private fun MatchFrameRate(
             "Match frame rate: this stream doesn't say its frame rate and it couldn't be measured yet, so the display wasn't switched"
         )
     }
-    // Rounded, so the measured rate wobbling (49.98, 50.02…) doesn't ask again and again.
-    val target = if (fps > 0f) kotlin.math.round(fps * 10f) / 10f else -1f
+    // Snapped to the nearest standard rate when close (a measured 59.93 is 59.94, not 60), else
+    // rounded, so the measured rate wobbling (49.98, 50.02…) doesn't ask again and again.
+    val target = if (fps > 0f) {
+        listOf(23.976f, 24f, 25f, 29.97f, 30f, 47.952f, 48f, 50f, 59.94f, 60f, 100f, 119.88f, 120f)
+            .minBy { kotlin.math.abs(it - fps) }
+            .takeIf { kotlin.math.abs(it - fps) <= 0.04f }
+            ?: (kotlin.math.round(fps * 10f) / 10f)
+    } else -1f
     LaunchedEffect(enabled, target, channelKey) {
         if (!enabled || target <= 0f) return@LaunchedEffect
         val fps = target

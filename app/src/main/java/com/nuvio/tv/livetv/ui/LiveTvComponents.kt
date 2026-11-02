@@ -874,11 +874,12 @@ internal fun Modifier.glassTile(
     fill: Color,
     edge: Color?,
     shape: androidx.compose.ui.graphics.Shape,
-    clipChildren: Boolean = false
+    clipChildren: Boolean = false,
+    edgeWidth: androidx.compose.ui.unit.Dp = 2.dp
 ): Modifier {
-    val painter = androidx.compose.runtime.remember(fill, edge, shape) {
+    val painter = androidx.compose.runtime.remember(fill, edge, shape, edgeWidth) {
         Modifier.drawWithCache {
-            val stroke = 2.dp.toPx()
+            val stroke = edgeWidth.toPx()
             val fillOutline = shape.createOutline(size, layoutDirection, this)
             val edgeOutline = if (edge != null) {
                 val inner = androidx.compose.ui.geometry.Size((size.width - stroke).coerceAtLeast(1f), (size.height - stroke).coerceAtLeast(1f))

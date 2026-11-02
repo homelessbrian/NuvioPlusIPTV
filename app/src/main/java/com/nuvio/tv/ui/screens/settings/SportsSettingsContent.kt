@@ -132,6 +132,12 @@ fun SportsSettingsContent(
                         { update { it.copy(scoreOnInfoBar = !it.scoreOnInfoBar) } }
                     )
                     SettingsToggleRow(
+                        "Pinned Scoreboards",
+                        "Pin up to 3 live games (from the info bar or a game's page) and their scores stay in the top-left corner while you watch. Off: the pin button is hidden",
+                        s.pinnedScores,
+                        { update { it.copy(pinnedScores = !it.pinnedScores) } }
+                    )
+                    SettingsToggleRow(
                         "Video Window in Sports",
                         "Games play in a window on the Sports page while you browse. Off: games open full screen, and the page uses the whole width",
                         s.videoWindow,

@@ -66,7 +66,8 @@ internal object SportsRows {
 
         // ---- Live & Upcoming: everything you follow, on now or in the next week
         val soon = known.filter { ev ->
-            isMine(ev) && (ev.state == GameState.LIVE ||
+            // A league on your top bar counts too: its live games belong up here, not only in its own row.
+            (isMine(ev) || ev.leagueId in follows.pins) && (ev.state == GameState.LIVE ||
                 (ev.state == GameState.PRE && ev.startMs in (now - 3 * HOUR)..(now + 8 * DAY)))
         }.sortedWith(compareBy<SportsEvent> { if (it.state == GameState.LIVE) 0 else 1 }.thenBy { it.startMs })
             .take(24)

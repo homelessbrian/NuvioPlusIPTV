@@ -21,6 +21,7 @@ import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.livetv.ui.MenuItem
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 /**
  * "Play" on a details page opened from On Demand plays the provider's copy straight away.
@@ -33,6 +34,12 @@ object OnDemandPlay {
     const val KEY = "livetv_on_demand_uid"
 
     data class Resolved(val url: String, val title: String, val poster: String?)
+
+    /** The "Play Straight from My Provider" setting. */
+    suspend fun playDirect(context: Context): Boolean = runCatching {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(context.applicationContext, OnDemandEntryPoint::class.java)
+            .liveTvPreferences().settings.first().onDemandPlayDirect
+    }.getOrDefault(false)
 
     /** Every version of the title this details page was opened for (best quality first). */
     suspend fun versions(context: Context, uid: String): List<OnDemandRepository.Version> {

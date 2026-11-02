@@ -522,8 +522,12 @@ class LiveTvPlaybackController @Inject constructor(
         frameDeltas[frameDeltaCount % frameDeltas.size] = d
         frameDeltaCount++
         if (frameDeltaCount >= frameDeltas.size && frameDeltaCount % 24 == 0) {
+            // The average of the gaps near the middle one: streams whose frame times are rounded
+            // to whole milliseconds (60 fps as 17, 17, 16 ms…) gave 17 ms, 58.8 fps, as the
+            // middle gap, which matched no refresh rate. Averaged, they come out at 59.94.
             val median = frameDeltas.sorted()[frameDeltas.size / 2]
-            measuredFps = 1_000_000f / median
+            val near = frameDeltas.filter { kotlin.math.abs(it - median) <= median / 4 }
+            measuredFps = 1_000_000f / near.average().toFloat()
         }
     }
 

@@ -202,6 +202,22 @@ fun SideMenuSettingsContent(initialFocusRequester: FocusRequester? = null) {
                     }
                 }
             }
+            item(key = "look") {
+                SettingsGroupCard(title = "How the Menu Looks") {
+                    SettingsToggleRow(
+                        title = "Line Above Live TV",
+                        subtitle = "The thin line between Nuvio's pages and the Live TV pages. Off: the pages sit a little closer together.",
+                        checked = s.sideMenuLine,
+                        onToggle = { update { it.copy(sideMenuLine = !it.sideMenuLine) } }
+                    )
+                    SettingsToggleRow(
+                        title = "Shrink the Menu to Fit",
+                        subtitle = "When there are more pages than fit on screen, the menu gets a little smaller so everything shows without scrolling. Off: the menu scrolls.",
+                        checked = s.sideMenuFit,
+                        onToggle = { update { it.copy(sideMenuFit = !it.sideMenuFit) } }
+                    )
+                }
+            }
             item(key = "reset") {
                 SettingsGroupCard {
                     SettingsActionRow(

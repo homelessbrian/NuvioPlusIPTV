@@ -3,13 +3,10 @@ package com.nuvio.tv.livetv.home
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
-import android.graphics.RadialGradient
 import android.graphics.RectF
-import android.graphics.Shader
 import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
@@ -93,13 +90,14 @@ internal sealed class CardSpec {
 /**
  * Draws the launcher row cards. Everything that matters is in the picture itself (the show, the
  * time, the logo, the teams), so every launcher shows the same thing whatever text it does or
- * doesn't show. No rounded corners or borders: launchers add their own, and some zoom or crop the
- * card too, so everything is centred and kept inside a safe margin (10% each side) where no
- * launcher's corners reach. Backgrounds are plain colour, drawn sharp at any size.
+ * doesn't show. No rounded corners or borders: launchers add their own (some with a very big
+ * radius) and some zoom or crop the card too, so everything is centred and kept inside a safe
+ * margin (12% each side) where no launcher's corners reach. Backgrounds are flat colour, drawn
+ * sharp at any size. Sizes are in [Frame.cq]: one hundredth of the card's width.
  */
 internal object LauncherCards {
     /** Goes up when the look changes, so every card is drawn again. */
-    const val VERSION = "c2"
+    const val VERSION = "c3"
 
     private val BOLD: Typeface = Typeface.create("sans-serif", Typeface.BOLD)
     private val MEDIUM: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
@@ -120,167 +118,235 @@ internal object LauncherCards {
         return bmp
     }
 
-    /** The card's size, its scale ([u]: one unit of a 225-pixel-high card) and its safe area. */
-    private class Frame(shape: CardShape, padY: Float) {
+    /** The card's size, its scale ([cq]: one hundredth of its width) and its safe area. */
+    private class Frame(shape: CardShape) {
         val w = shape.w.toFloat()
         val h = shape.h.toFloat()
-        val u = minOf(w, h) / 225f
-        val left = w * 0.10f
+        val cq = w / 100f
+        val left = w * 0.12f
         val right = w - left
-        val top = h * padY
+        val top = h * 0.12f
         val bottom = h - top
         val cx = w / 2f
         val width = right - left
+        val availH = bottom - top
         val tall = shape == CardShape.TALL
     }
 
     // ------------------------------------------------------------------ shows
 
-    /** Logo at the top, the show in the middle, tags and "until" at the bottom: all centred. */
+    /** Logo at the top, the show big in the middle, tags and "until" under it: all centred. */
     private fun drawShow(c: Canvas, shape: CardShape, s: CardSpec.Show, logo: LogoArt?) {
-        val f = Frame(shape, 0.11f)
-        val u = f.u
-        backdrop(c, f.w, f.h, logo?.tint ?: hueColor(s.channelName))
+        val f = Frame(shape)
+        val q = f.cq
+        c.drawColor(blend(logo?.tint ?: hueColor(s.channelName), 0.62f))
 
-        val mark = planLogo(logo, s.channelName, maxW = f.width * (if (f.tall) 0.8f else 0.5f), h = 34f * u)
-        mark.draw(c, f.cx - mark.w / 2f, f.top)
-        val markBottom = f.top + mark.h
-
-        // The bottom: tags and the time, side by side (one above the other on tall cards).
-        val tagH = 18f * u
-        val timePaint = textPaint(11.5f * u, 0xFFB8C2D0.toInt(), REGULAR)
+        val gap = 2.5f * q
+        val tagH = 7f * q
+        val timePaint = textPaint(5f * q, 0xFFD3DAE5.toInt(), REGULAR)
         val time = s.time?.takeIf { it.isNotBlank() }
-        var bottomTop = f.bottom
-        if (f.tall) {
-            var y = f.bottom
-            if (time != null) {
-                timePaint.textAlign = Paint.Align.CENTER
-                c.drawText(TextUtils.ellipsize(time, timePaint, f.width, TextUtils.TruncateAt.END).toString(), f.cx, y - timePaint.descent(), timePaint)
-                y -= timePaint.fontSpacing + 6f * u
+        val hasRow = time != null || s.tags.isNotEmpty()
+        val detailPaint = textPaint(5f * q, 0xFFD3DAE5.toInt(), MEDIUM).apply { textAlign = Paint.Align.CENTER }
+        val detail = fitParts(s.detail, detailPaint, f.width)
+        val maxLines = if (f.tall) 3 else 2
+        val k = if (f.tall) 1.25f else 1f
+
+        // The biggest title that fits whole, then the logo and detail line that go with it.
+        // (title size, keep the detail line, logo height), all in cq.
+        val tries = listOf(
+            Triple(10f, true, 13f), Triple(10f, false, 13f),
+            Triple(8.8f, true, 11f), Triple(8.8f, false, 11f),
+            Triple(7.6f, false, 10f), Triple(6.6f, false, 9f)
+        )
+        var title: StaticLayout? = null
+        var withDetail = false
+        var markH = 9f
+        for ((size, keep, mh) in tries) {
+            val l = layout(s.title, textPaint(size * q, Color.WHITE, BOLD), f.width.toInt(), maxLines)
+            val whole = l.lineCount <= maxLines && l.getEllipsisCount(l.lineCount - 1) == 0
+            val total = mh * k * q + gap + l.height +
+                (if (keep && detail != null) gap + detailPaint.fontSpacing else 0f) +
+                (if (hasRow) gap + tagH else 0f)
+            if (whole && total <= f.availH) {
+                title = l; withDetail = keep && detail != null; markH = mh
+                break
             }
-            if (s.tags.isNotEmpty()) {
-                drawTags(c, s.tags, f.cx - tagsWidth(s.tags, tagH) / 2f, y - tagH, tagH)
-                y -= tagH + 6f * u
-            }
-            bottomTop = y
-        } else if (time != null || s.tags.isNotEmpty()) {
-            val gap = if (time != null && s.tags.isNotEmpty()) 8f * u else 0f
-            val tw = tagsWidth(s.tags, tagH)
-            val shown = time?.let { TextUtils.ellipsize(it, timePaint, f.width - tw - gap, TextUtils.TruncateAt.END).toString() }
-            val total = tw + gap + (shown?.let { timePaint.measureText(it) } ?: 0f)
-            val x = f.cx - total / 2f
-            val top = f.bottom - tagH
-            drawTags(c, s.tags, x, top, tagH)
-            shown?.let { c.drawText(it, x + tw + gap, top + tagH / 2f - (timePaint.descent() + timePaint.ascent()) / 2f, timePaint) }
-            bottomTop = top
+        }
+        if (title == null) {
+            title = fitTitle(s.title, 6.6f * q, f.width.toInt(), maxLines)
+            withDetail = false
+            markH = 9f
         }
 
-        // The middle: title and detail, centred between the logo and the bottom.
-        val title = fitTitle(s.title, 19f * u, f.width.toInt(), if (f.tall) 3 else 2)
-        val detailPaint = textPaint(12f * u, 0xFFD3DAE5.toInt(), MEDIUM).apply { textAlign = Paint.Align.CENTER }
-        val detail = fitParts(s.detail, detailPaint, f.width)
-        val gap = 4f * u
-        val block = title.height + (if (detail != null) gap + detailPaint.fontSpacing else 0f)
-        val top = markBottom + ((bottomTop - markBottom) - block) / 2f
+        val mark = planLogo(logo, s.channelName, maxW = f.width * (if (f.tall) 0.9f else 0.6f), h = markH * k * q)
+        val block = mark.h + gap + title.height +
+            (if (withDetail) gap + detailPaint.fontSpacing else 0f) +
+            (if (hasRow) gap + tagH else 0f)
+        var y = f.top + (f.availH - block) / 2f
+
+        mark.draw(c, f.cx - mark.w / 2f, y)
+        y += mark.h + gap
         c.save()
-        c.translate(f.left, top)
+        c.translate(f.left, y)
         title.draw(c)
         c.restore()
-        detail?.let { c.drawText(it, f.cx, top + title.height + gap - detailPaint.ascent(), detailPaint) }
+        y += title.height
+        if (withDetail && detail != null) {
+            y += gap
+            c.drawText(detail, f.cx, y - detailPaint.ascent(), detailPaint)
+            y += detailPaint.fontSpacing
+        }
+        if (hasRow) {
+            y += gap
+            val tw = tagsWidth(s.tags, tagH)
+            val rowGap = if (time != null && s.tags.isNotEmpty()) 2f * q else 0f
+            val shown = time?.let { TextUtils.ellipsize(it, timePaint, f.width - tw - rowGap, TextUtils.TruncateAt.END).toString() }
+            val total = tw + rowGap + (shown?.let { timePaint.measureText(it) } ?: 0f)
+            val x = f.cx - total / 2f
+            drawTags(c, s.tags, x, y, tagH)
+            shown?.let { c.drawText(it, x + tw + rowGap, y + tagH / 2f - (timePaint.descent() + timePaint.ascent()) / 2f, timePaint) }
+        }
     }
 
     /** A channel with no listings: its logo big in the middle, its name underneath, tags below. */
     private fun drawChannel(c: Canvas, shape: CardShape, s: CardSpec.Channel, logo: LogoArt?) {
-        val f = Frame(shape, 0.12f)
-        val u = f.u
-        backdrop(c, f.w, f.h, logo?.tint ?: hueColor(s.channelName))
-        val tagH = 18f * u
-        val limit = if (s.tags.isNotEmpty()) f.bottom - tagH - 8f * u else f.bottom
-        val mark = planLogo(logo, s.channelName, maxW = f.width * 0.8f, h = 60f * u)
-        val namePaint = textPaint(13f * u, 0xFFC3CCD8.toInt(), MEDIUM).apply { textAlign = Paint.Align.CENTER }
-        val gap = 12f * u
-        val block = mark.h + gap + namePaint.fontSpacing
-        val top = f.top + ((limit - f.top) - block) / 2f
-        mark.draw(c, f.cx - mark.w / 2f, top)
+        val f = Frame(shape)
+        val q = f.cq
+        c.drawColor(blend(logo?.tint ?: hueColor(s.channelName), 0.62f))
+        val gap = 3f * q
+        val tagH = 7f * q
+        val namePaint = textPaint(6f * q, 0xFFC3CCD8.toInt(), MEDIUM).apply { textAlign = Paint.Align.CENTER }
+        val rest = namePaint.fontSpacing + gap + (if (s.tags.isNotEmpty()) gap + tagH else 0f)
+        val markH = minOf((if (f.tall) 34f else 26f) * q, f.availH - rest).coerceAtLeast(8f * q)
+        val mark = planLogo(logo, s.channelName, maxW = f.width * 0.75f, h = markH)
+        val block = mark.h + gap + namePaint.fontSpacing + (if (s.tags.isNotEmpty()) gap + tagH else 0f)
+        var y = f.top + (f.availH - block) / 2f
+        mark.draw(c, f.cx - mark.w / 2f, y)
+        y += mark.h + gap
         val name = TextUtils.ellipsize(s.channelName, namePaint, f.width, TextUtils.TruncateAt.END).toString()
-        c.drawText(name, f.cx, top + mark.h + gap - namePaint.ascent(), namePaint)
-        if (s.tags.isNotEmpty()) drawTags(c, s.tags, f.cx - tagsWidth(s.tags, tagH) / 2f, f.bottom - tagH, tagH)
+        c.drawText(name, f.cx, y - namePaint.ascent(), namePaint)
+        y += namePaint.fontSpacing
+        if (s.tags.isNotEmpty()) drawTags(c, s.tags, f.cx - tagsWidth(s.tags, tagH) / 2f, y + gap, tagH)
     }
 
     // ------------------------------------------------------------------ games
 
-    /** The two teams' colours side by side, LIVE and the channel on top, the badges with "vs". */
+    /**
+     * Two flat halves, one in a dark version of each team's colour; each team's badge and name in
+     * its half, "vs" in a dark box on the seam, the channel on top, LIVE and the league in a dark
+     * pill at the bottom. No score or clock (see [CardSpec.Game]).
+     */
     private fun drawGame(c: Canvas, shape: CardShape, s: CardSpec.Game, awayLogo: Bitmap?, homeLogo: Bitmap?) {
-        val f = Frame(shape, 0.10f)
-        val u = f.u
+        val f = Frame(shape)
+        val q = f.cq
         val w = f.w
         val h = f.h
         val a = teamColor(s.away)
         val b = teamColor(s.home)
         c.drawColor(BASE)
+        val fillA = Paint().apply { color = blend(a, 0.5f) }
+        val fillB = Paint().apply { color = blend(b, 0.5f) }
+        val seam = Paint().apply { color = 0xFF0B0D11.toInt() }
         if (f.tall) {
-            c.drawRect(0f, 0f, w, h / 2f, Paint().apply { isDither = true; shader = LinearGradient(0f, 0f, 0f, h / 2f, blend(a, 0.45f), blend(a, 0.60f), Shader.TileMode.CLAMP) })
-            c.drawRect(0f, h / 2f, w, h, Paint().apply { isDither = true; shader = LinearGradient(0f, h, 0f, h / 2f, blend(b, 0.45f), blend(b, 0.60f), Shader.TileMode.CLAMP) })
+            c.drawRect(0f, 0f, w, h / 2f, fillA)
+            c.drawRect(0f, h / 2f, w, h, fillB)
+            c.drawRect(0f, h / 2f - 0.3f * q, w, h / 2f + 0.3f * q, seam)
         } else {
-            c.drawRect(0f, 0f, w / 2f, h, Paint().apply { isDither = true; shader = LinearGradient(0f, 0f, w / 2f, 0f, blend(a, 0.45f), blend(a, 0.60f), Shader.TileMode.CLAMP) })
-            c.drawRect(w / 2f, 0f, w, h, Paint().apply { isDither = true; shader = LinearGradient(w, 0f, w / 2f, 0f, blend(b, 0.45f), blend(b, 0.60f), Shader.TileMode.CLAMP) })
+            c.drawRect(0f, 0f, w / 2f, h, fillA)
+            c.drawRect(w / 2f, 0f, w, h, fillB)
+            c.drawRect(w / 2f - 0.3f * q, 0f, w / 2f + 0.3f * q, h, seam)
         }
-        // A soft shade in the middle, so the badges and text stand out.
-        c.drawRect(0f, 0f, w, h, Paint().apply {
-            isDither = true
-            shader = RadialGradient(w / 2f, h / 2f, maxOf(w, h) * 0.45f, 0x8C080A0E.toInt(), 0x00080A0E, Shader.TileMode.CLAMP)
-        })
 
-        // Top: LIVE and the channel.
-        val tagH = 18f * u
-        val chPaint = textPaint(11.5f * u, 0xFFE8EDF5.toInt(), MEDIUM)
-        val tw = tagsWidth(s.tags, tagH)
-        val chGap = if (s.tags.isNotEmpty() && !s.channelName.isNullOrBlank()) 7f * u else 0f
-        val ch = s.channelName?.takeIf { it.isNotBlank() }?.let { TextUtils.ellipsize(it, chPaint, f.width - tw - chGap, TextUtils.TruncateAt.END).toString() }
-        val topW = tw + chGap + (ch?.let { chPaint.measureText(it) } ?: 0f)
-        val topX = f.cx - topW / 2f
-        drawTags(c, s.tags, topX, f.top, tagH)
-        ch?.let { c.drawText(it, topX + tw + chGap, f.top + tagH / 2f - (chPaint.descent() + chPaint.ascent()) / 2f, chPaint) }
-        val regionTop = f.top + tagH + 8f * u
+        // Top: the channel.
+        var regionTop = f.top
+        s.channelName?.takeIf { it.isNotBlank() }?.let { name ->
+            val (text, p) = fitLine(name, 4.4f * q, f.width, MEDIUM, 0xFFE8EDF5.toInt())
+            c.drawText(text, f.cx, f.top - p.ascent(), p)
+            regionTop = f.top + p.fontSpacing + 1f * q
+        }
 
-        // Bottom: the league and when it started.
-        val statusPaint = textPaint(11.5f * u, 0xFFD7DEE8.toInt(), MEDIUM).apply { textAlign = Paint.Align.CENTER }
+        // Bottom: LIVE and the league / start time, in a dark pill.
         var regionBottom = f.bottom
-        s.status?.takeIf { it.isNotBlank() }?.let {
-            c.drawText(TextUtils.ellipsize(it, statusPaint, f.width, TextUtils.TruncateAt.END).toString(), f.cx, f.bottom - statusPaint.descent(), statusPaint)
-            regionBottom = f.bottom - statusPaint.fontSpacing - 8f * u
+        val tagH = 6.4f * q
+        val pillH = tagH + 1.8f * q
+        val padX = 3f * q
+        val status = s.status?.takeIf { it.isNotBlank() }
+        if (status != null || s.tags.isNotEmpty()) {
+            val sp = textPaint(4.6f * q, 0xFFE3E8F0.toInt(), MEDIUM).apply { clearShadowLayer() }
+            val tw = tagsWidth(s.tags, tagH)
+            val pillGap = if (status != null && s.tags.isNotEmpty()) 2.2f * q else 0f
+            val shown = status?.let { TextUtils.ellipsize(it, sp, f.width - 2 * padX - tw - pillGap, TextUtils.TruncateAt.END).toString() }
+            val pillW = tw + pillGap + (shown?.let { sp.measureText(it) } ?: 0f) + 2 * padX
+            val left = f.cx - pillW / 2f
+            val top = f.bottom - pillH
+            c.drawRoundRect(RectF(left, top, left + pillW, f.bottom), pillH / 2f, pillH / 2f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xD10B0D11.toInt() })
+            drawTags(c, s.tags, left + padX, top + (pillH - tagH) / 2f, tagH)
+            shown?.let { c.drawText(it, left + padX + tw + pillGap, top + pillH / 2f - (sp.descent() + sp.ascent()) / 2f, sp) }
+            regionBottom = top - 1.2f * q
         }
 
-        val namePaint = textPaint(11.5f * u, 0xFFE3E8F0.toInt(), MEDIUM).apply { textAlign = Paint.Align.CENTER }
-        val vsPaint = textPaint(20f * u, 0xFFE8EDF5.toInt(), MEDIUM).apply { textAlign = Paint.Align.CENTER }
+        val nameSize = 5.2f * q
+        val nameLine = textPaint(nameSize, Color.WHITE, BOLD).fontSpacing
+        val nameAscent = textPaint(nameSize, Color.WHITE, BOLD).ascent()
+        val nameGap = 2.2f * q
+        val vsPaint = textPaint(7f * q, 0xFFE8EDF5.toInt(), BOLD).apply { textAlign = Paint.Align.CENTER; clearShadowLayer() }
+        val radiusCq = when (shape) {
+            CardShape.WIDE -> 8.5f
+            CardShape.SQUARE -> 11f
+            CardShape.TALL -> 13f
+        }
+        val r = radiusCq * q
+        val side = 2 * r + nameGap + nameLine
+
         if (f.tall) {
-            val r = 26f * u
-            val side = 2 * r + 5f * u + namePaint.fontSpacing
-            val vsH = vsPaint.fontSpacing + 20f * u
-            var y = regionTop + ((regionBottom - regionTop) - (side * 2 + vsH)) / 2f
-            fun team(t: CardSpec.Team, logo: Bitmap?, color: Int) {
-                badge(c, t, logo, color, f.cx, y + r, r)
-                c.drawText(TextUtils.ellipsize(t.name, namePaint, f.width, TextUtils.TruncateAt.END).toString(), f.cx, y + 2 * r + 5f * u - namePaint.ascent(), namePaint)
-                y += side
-            }
-            team(s.away, awayLogo, a)
-            c.drawText("vs", f.cx, y + vsH / 2f - (vsPaint.descent() + vsPaint.ascent()) / 2f, vsPaint)
-            y += vsH
-            team(s.home, homeLogo, b)
+            val vsH = vsPaint.fontSpacing + 1.2f * q
+            val topA = regionTop + ((h / 2f - vsH / 2f - regionTop) - side) / 2f
+            val belowSeam = h / 2f + vsH / 2f
+            val topB = belowSeam + ((regionBottom - belowSeam) - side) / 2f
+            badge(c, s.away, awayLogo, a, f.cx, topA + r, r)
+            drawName(c, s.away.name, f.cx, topA + 2 * r + nameGap - nameAscent, nameSize, f.width)
+            badge(c, s.home, homeLogo, b, f.cx, topB + r, r)
+            drawName(c, s.home.name, f.cx, topB + 2 * r + nameGap - nameAscent, nameSize, f.width)
+            vsBox(c, vsPaint, f.cx, h / 2f, q)
         } else {
-            val r = 29f * u
-            val off = w * (if (shape == CardShape.WIDE) 0.22f else 0.25f)
-            val nameMax = 2f * (off - f.left)
-            val block = 2 * r + 5f * u + namePaint.fontSpacing
-            val top = regionTop + ((regionBottom - regionTop) - block) / 2f
+            val off = w * 0.25f
+            val nameMax = w * 0.40f
+            val top = regionTop + ((regionBottom - regionTop) - side) / 2f
             val cy = top + r
             badge(c, s.away, awayLogo, a, f.cx - off, cy, r)
             badge(c, s.home, homeLogo, b, f.cx + off, cy, r)
-            val ny = top + 2 * r + 5f * u - namePaint.ascent()
-            c.drawText(TextUtils.ellipsize(s.away.name, namePaint, nameMax, TextUtils.TruncateAt.END).toString(), f.cx - off, ny, namePaint)
-            c.drawText(TextUtils.ellipsize(s.home.name, namePaint, nameMax, TextUtils.TruncateAt.END).toString(), f.cx + off, ny, namePaint)
-            c.drawText("vs", f.cx, cy - (vsPaint.descent() + vsPaint.ascent()) / 2f, vsPaint)
+            val baseline = top + 2 * r + nameGap - nameAscent
+            drawName(c, s.away.name, f.cx - off, baseline, nameSize, nameMax)
+            drawName(c, s.home.name, f.cx + off, baseline, nameSize, nameMax)
+            vsBox(c, vsPaint, f.cx, cy, q)
         }
+    }
+
+    /** "vs" in a dark rounded box, centred on ([cx], [cy]). */
+    private fun vsBox(c: Canvas, p: TextPaint, cx: Float, cy: Float, q: Float) {
+        val bw = p.measureText("vs") + 5f * q
+        val bh = p.fontSpacing + 1.2f * q
+        c.drawRoundRect(
+            RectF(cx - bw / 2f, cy - bh / 2f, cx + bw / 2f, cy + bh / 2f), 2.5f * q, 2.5f * q,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xE60B0D11.toInt() }
+        )
+        c.drawText("vs", cx, cy - (p.descent() + p.ascent()) / 2f, p)
+    }
+
+    private fun drawName(c: Canvas, name: String, cx: Float, baseline: Float, size: Float, maxW: Float) {
+        val (text, p) = fitLine(name, size, maxW, BOLD, 0xFFF1F4F9.toInt())
+        c.drawText(text, cx, baseline, p)
+    }
+
+    /** A centred line at [size], a little smaller (down to 70%) if that makes it fit, then cut with "…". */
+    private fun fitLine(text: String, size: Float, maxW: Float, face: Typeface, color: Int): Pair<String, TextPaint> {
+        var s = size
+        var p = textPaint(s, color, face).apply { textAlign = Paint.Align.CENTER }
+        while (s > size * 0.7f && p.measureText(text) > maxW) {
+            s *= 0.93f
+            p = textPaint(s, color, face).apply { textAlign = Paint.Align.CENTER }
+        }
+        return TextUtils.ellipsize(text, p, maxW, TextUtils.TruncateAt.END).toString() to p
     }
 
     private fun teamColor(t: CardSpec.Team): Int = t.color ?: hueColor(t.name)
@@ -306,21 +372,6 @@ internal object LauncherCards {
     }
 
     // ------------------------------------------------------------------ pieces
-
-    /** A plain backdrop in the logo's colour, brightest just above the middle, fading to dark at the edges. */
-    private fun backdrop(c: Canvas, w: Float, h: Float, tint: Int) {
-        c.drawColor(BASE)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            isDither = true
-            shader = RadialGradient(
-                w / 2f, h * 0.40f, maxOf(w, h) * 0.8f,
-                intArrayOf(blend(tint, 0.35f), blend(tint, 0.72f), BASE),
-                floatArrayOf(0f, 0.62f, 1f),
-                Shader.TileMode.CLAMP
-            )
-        }
-        c.drawRect(0f, 0f, w, h, p)
-    }
 
     /** A logo ready to place: its size, and how to draw it at a top-left corner. */
     private class LogoPlan(val w: Float, val h: Float, val draw: (Canvas, Float, Float) -> Unit)

@@ -37,6 +37,7 @@ object CrashCatcher {
     private const val TAG = "LiveTvCrashCatcher"
     private const val FILE_NAME = "last_crash.txt"
     private const val FREEZE_FILE = "pending_freeze.txt"
+    private const val BUSY_FILE = "busy_report.txt"
     private const val PREFS = "livetv_crash_catcher"
     private const val KEY_EXIT_SEEN = "exit_seen_at"
     private const val KEY_SELF_KILL = "self_kill_at"
@@ -48,6 +49,7 @@ object CrashCatcher {
 
     fun install(context: Context) {
         val app = context.applicationContext
+        appContext = app
         // Reports from last time (freeze, or Android closing the app) are put together off the
         // main thread and saved. Nothing pops up: the report waits in Settings › Live TV ›
         // Help › Crash report, for when someone is asked to send it.
@@ -56,6 +58,16 @@ object CrashCatcher {
                 val parts = mutableListOf<String>()
                 val frozen = File(app.filesDir, FREEZE_FILE)
                 if (frozen.exists()) {
+                    // A crash saved after the freeze began is what actually closed the app: keep
+                    // it on top. (This used to be overwritten by the freeze note, which hid the
+                    // real error.)
+                    val crash = File(app.filesDir, FILE_NAME)
+                    if (crash.exists() && crash.lastModified() >= frozen.lastModified() - 2_000) {
+                        runCatching { crash.readText() }.getOrNull()?.takeIf { it.isNotBlank() }?.let {
+                            parts += it.trimEnd()
+                            parts += "BEFORE THAT CRASH:"
+                        }
+                    }
                     parts += frozen.readText()
                     frozen.delete()
                 }
@@ -69,6 +81,7 @@ object CrashCatcher {
         }, "CrashCatcherStart").apply { isDaemon = true }.start()
 
         startFreezeWatchdog(app)
+        startBusyWatch(app)
 
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
@@ -132,8 +145,123 @@ object CrashCatcher {
         }
     }
 
-    fun lastReport(context: Context): String? =
-        runCatching { File(context.filesDir, FILE_NAME).takeIf { it.exists() }?.readText() }.getOrNull()
+    fun lastReport(context: Context): String? {
+        val crash = runCatching { File(context.filesDir, FILE_NAME).takeIf { it.exists() }?.readText() }.getOrNull()
+        val busy = runCatching { File(context.filesDir, BUSY_FILE).takeIf { it.exists() }?.readText() }.getOrNull()
+        return listOfNotNull(crash?.trimEnd()?.ifBlank { null }, busy?.trimEnd()?.ifBlank { null })
+            .joinToString("\n\n────────\n\n").ifBlank { null }
+    }
+
+    // ------------------------------------------------------------------ busy processor
+
+    /**
+     * Notices when the app keeps the processor busy while it's on screen (more than 60% of one
+     * core over half a minute) and writes down which of its threads use it and what they run.
+     * Checking costs almost nothing: two small reads every 30 seconds. At most 3 reports per
+     * app start, 5 minutes apart; the newest is shown under Crash report.
+     */
+    private fun startBusyWatch(app: Context) {
+        Thread({
+            val tick = runCatching { android.system.Os.sysconf(android.system.OsConstants._SC_CLK_TCK) }.getOrDefault(100L).coerceAtLeast(1L)
+            var lastCpu = processTicks()
+            var lastAt = SystemClock.elapsedRealtime()
+            var reports = 0
+            while (reports < 3) {
+                try { Thread.sleep(30_000) } catch (_: InterruptedException) { return@Thread }
+                val cpu = processTicks()
+                val at = SystemClock.elapsedRealtime()
+                val pct = if (cpu >= 0 && lastCpu >= 0) (cpu - lastCpu) * 100_000.0 / tick / (at - lastAt).coerceAtLeast(1L) else 0.0
+                lastCpu = cpu; lastAt = at
+                if (pct < 60.0 || !onScreen()) continue
+                val report = runCatching { busyReport(app, pct, tick) }.getOrNull() ?: continue
+                runCatching { File(app.filesDir, BUSY_FILE).writeText(report) }
+                Log.w(TAG, report)
+                reports++
+                try { Thread.sleep(5 * 60_000L) } catch (_: InterruptedException) { return@Thread }
+                lastCpu = processTicks(); lastAt = SystemClock.elapsedRealtime()
+            }
+        }, "BusyWatch").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }.start()
+    }
+
+    private fun onScreen(): Boolean = runCatching {
+        val info = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(info)
+        info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    }.getOrDefault(false)
+
+    /** The processor time a /proc stat line has used (user + system), in clock ticks; -1 if unreadable. */
+    private fun ticksOf(stat: String): Long {
+        val rest = stat.substringAfterLast(") ").trim().split(' ')
+        // After the name: state is field 3, utime 14 and stime 15 (so 11 and 12 here).
+        return (rest.getOrNull(11)?.toLongOrNull() ?: return -1L) + (rest.getOrNull(12)?.toLongOrNull() ?: return -1L)
+    }
+
+    private fun processTicks(): Long = runCatching { ticksOf(File("/proc/self/stat").readText()) }.getOrDefault(-1L)
+
+    /** Thread id -> (its name as Android keeps it, up to 15 letters; processor ticks). */
+    private fun threadTicks(): Map<Int, Pair<String, Long>> {
+        val out = HashMap<Int, Pair<String, Long>>()
+        File("/proc/self/task").listFiles()?.forEach { dir ->
+            val tid = dir.name.toIntOrNull() ?: return@forEach
+            runCatching {
+                val stat = File(dir, "stat").readText()
+                val name = stat.substringAfter('(').substringBeforeLast(')')
+                out[tid] = name to ticksOf(stat)
+            }
+        }
+        return out
+    }
+
+    private fun busyReport(app: Context, pct: Double, tick: Long): String {
+        // Five seconds of looking: each thread's processor time, and what the app's threads run
+        // (sampled 20 times).
+        val before = threadTicks()
+        val started = SystemClock.elapsedRealtime()
+        val ownLines = HashMap<String, HashMap<String, Int>>()
+        val mainThread = Looper.getMainLooper().thread
+        repeat(20) {
+            try { Thread.sleep(250) } catch (_: InterruptedException) { return@repeat }
+            runCatching {
+                Thread.getAllStackTraces().forEach { (t, stack) ->
+                    if (t.state != Thread.State.RUNNABLE) return@forEach
+                    val key = if (t === mainThread) "main" else t.name.take(15)
+                    val lines = ownLines.getOrPut(key) { HashMap() }
+                    stack.map { it.toString() }
+                        .filter { it.startsWith("com.nuvio.tv.") && !it.startsWith("com.nuvio.tv.livetv.crash.") }
+                        .distinct().take(6)
+                        .forEach { lines[it] = (lines[it] ?: 0) + 1 }
+                }
+            }
+        }
+        val after = threadTicks()
+        val ms = (SystemClock.elapsedRealtime() - started).coerceAtLeast(1L)
+        val pid = Process.myPid()
+        val busiest = after.mapNotNull { (tid, a) ->
+            val b = before[tid] ?: return@mapNotNull null
+            val used = (a.second - b.second) * 100_000.0 / tick / ms
+            Triple(if (tid == pid) "main" else a.first, used, tid)
+        }.filter { it.second >= 3.0 }.sortedByDescending { it.second }.take(8)
+        return buildString {
+            appendLine("Nuvio + IPTV ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · kit ${com.nuvio.tv.livetv.model.LiveTvLoadReport.KIT_STAMP}")
+            appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine(situation(app))
+            appendLine()
+            appendLine("APP KEPT THE PROCESSOR BUSY (${pct.toInt()}% of one core over the last 30 s, while on screen)")
+            appendLine("Busiest threads (% of one core over 5 s):")
+            if (busiest.isEmpty()) appendLine("    (none stood out)")
+            busiest.forEach { (name, used, _) -> appendLine("    ${used.toInt()}%  $name") }
+            busiest.map { it.first }.distinct().forEach { name ->
+                // Several threads can share a name (the pool threads): their samples go together.
+                val lines = ownLines.entries.filter { it.key == name || (name != "main" && it.key.startsWith(name)) }
+                    .flatMap { it.value.entries }
+                    .groupBy({ it.key }, { it.value }).mapValues { it.value.sum() }
+                if (lines.isEmpty()) return@forEach
+                appendLine()
+                appendLine("$name runs (app's own code, times seen in 20 looks):")
+                lines.entries.sortedByDescending { it.value }.take(12).forEach { (l, n) -> appendLine("    ${n}x  $l") }
+            }
+        }.trimEnd()
+    }
 
     /**
      * Why Android closed the app last time, when it wasn't a normal close or a crash this class
@@ -222,33 +350,87 @@ object CrashCatcher {
             var askedAt = 0L
             var written = false
             var lastLoop = SystemClock.uptimeMillis()
+            // While frozen, the main thread is looked at every half second. One look only shows
+            // a single moment (often deep inside a library); the app's own lines seen across all
+            // the looks show which part of the app is keeping it busy.
+            val ownLines = LinkedHashMap<String, Int>()
+            val samples = ArrayList<String>()
+            var looks = 0
+            var nextLookAt = 0L
+            var lastWriteAt = 0L
             while (true) {
-                try { Thread.sleep(1_000) } catch (_: InterruptedException) { return@Thread }
+                try { Thread.sleep(500) } catch (_: InterruptedException) { return@Thread }
                 val now = SystemClock.uptimeMillis()
                 // The whole app was paused (in the background, device asleep): start over.
                 if (now - lastLoop > 3_000) { answeredAt.set(now); askedAt = 0L }
                 lastLoop = now
                 if (askedAt == 0L || answeredAt.get() >= askedAt) {
                     if (written) { runCatching { File(app.filesDir, FREEZE_FILE).delete() }; written = false }
+                    ownLines.clear(); samples.clear(); looks = 0; nextLookAt = 0L; lastWriteAt = 0L
                     askedAt = now
                     main.post { answeredAt.set(SystemClock.uptimeMillis()) }
-                } else if (now - askedAt > 4_000 && !written) {
-                    written = true
-                    val mainThread = Looper.getMainLooper().thread
-                    val report = buildString {
-                        appendLine("Nuvio + IPTV ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · kit ${com.nuvio.tv.livetv.model.LiveTvLoadReport.KIT_STAMP}")
-                        appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
-                        appendLine()
-                        appendLine("APP FROZE (stopped responding for ${(now - askedAt) / 1000}s and was closed)")
-                        appendLine("Main thread was stuck at:")
-                        mainThread.stackTrace.take(40).forEach { appendLine("    at $it") }
+                } else if (now - askedAt > 1_500 && now >= nextLookAt && looks < 60) {
+                    // Looks start after 1.5 s (well before Android or the user gives up).
+                    nextLookAt = now + 500
+                    looks++
+                    val stack = runCatching { Looper.getMainLooper().thread.stackTrace }.getOrNull().orEmpty()
+                    stack.map { it.toString() }
+                        .filter { it.startsWith("com.nuvio.tv.") && !it.startsWith("com.nuvio.tv.livetv.crash.") }
+                        .distinct()
+                        .forEach { ownLines[it] = (ownLines[it] ?: 0) + 1 }
+                    // A few full looks, spread out, for reading by hand.
+                    if (looks == 1 || looks == 5 || looks == 10 || looks == 20) {
+                        samples += buildString {
+                            appendLine("Look $looks (${(now - askedAt) / 100 / 10.0}s into the freeze):")
+                            stack.take(45).forEach { appendLine("    at $it") }
+                        }.trimEnd()
                     }
-                    runCatching { File(app.filesDir, FREEZE_FILE).writeText(report) }
-                    Log.e(TAG, report)
+                    // Written down from 4 s on, then kept up to date every 2 s.
+                    if (now - askedAt > 4_000 && now - lastWriteAt >= 2_000) {
+                        written = true
+                        lastWriteAt = now
+                        val report = buildString {
+                            appendLine("Nuvio + IPTV ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · kit ${com.nuvio.tv.livetv.model.LiveTvLoadReport.KIT_STAMP}")
+                            appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
+                            appendLine(situation(app))
+                            appendLine()
+                            appendLine("APP FROZE (stopped responding for ${(now - askedAt) / 1000}s and was closed)")
+                            appendLine("The app's own code seen in $looks looks (most often first):")
+                            if (ownLines.isEmpty()) appendLine("    (none: only Android or library code)")
+                            ownLines.entries.sortedByDescending { it.value }.take(25)
+                                .forEach { (line, n) -> appendLine("    ${n}x  $line") }
+                            samples.forEach { appendLine(); appendLine(it) }
+                        }
+                        runCatching { File(app.filesDir, FREEZE_FILE).writeText(report) }
+                        Log.e(TAG, report)
+                    }
                 }
             }
         }, "FreezeWatchdog").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }.start()
     }
+
+    @Volatile private var appContext: Context? = null
+
+    /**
+     * One line on when it happened: how long after the app started, how long the box had been on
+     * (problems that a restart of the box clears), when the app was last updated, and memory.
+     */
+    private fun situation(context: Context?): String = runCatching {
+        val ctx = context ?: appContext
+        val sinceStart = (SystemClock.uptimeMillis() - Process.getStartUptimeMillis()) / 1000
+        val boxOn = SystemClock.elapsedRealtime() / 60_000
+        val rt = Runtime.getRuntime()
+        val usedMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
+        val maxMb = rt.maxMemory() / (1024 * 1024)
+        val updated = ctx?.let { c ->
+            runCatching {
+                val at = c.packageManager.getPackageInfo(c.packageName, 0).lastUpdateTime
+                val ago = (System.currentTimeMillis() - at) / 60_000
+                if (ago < 120) "${ago}m ago" else "${ago / 60}h ago"
+            }.getOrNull()
+        } ?: "?"
+        "App open ${sinceStart}s · box on ${boxOn / 1440}d ${boxOn / 60 % 24}h ${boxOn % 60}m · app updated $updated · memory ${usedMb}/${maxMb} MB"
+    }.getOrDefault("")
 
     private fun buildReport(thread: Thread, error: Throwable): String {
         // Put the root cause first: it's the most useful line when reading from a TV screen.
@@ -257,6 +439,7 @@ object CrashCatcher {
         return buildString {
             appendLine("Nuvio + IPTV ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · kit ${com.nuvio.tv.livetv.model.LiveTvLoadReport.KIT_STAMP}")
             appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine(situation(null))
             appendLine("Thread: ${thread.name}")
             appendLine()
             appendLine("ROOT CAUSE: $root")

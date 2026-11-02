@@ -82,26 +82,30 @@ internal fun liveActions(
 ): List<MenuAction> = buildList {
     val onNow = channels.firstOrNull { it == best && now in it.startMs until it.stopMs } ?: channels.firstOrNull { now in it.startMs until it.stopMs }
     val replay = channels.firstOrNull { it.catchup && it.startMs <= now }
+    // Already aired: nothing about this airing can be recorded or picked any more; only the
+    // show-wide things (every new episode, the show's channel) still mean something.
+    val over = e.airMs?.let { it + (e.runtimeMin ?: 30) * 60_000L <= now } ?: e.day.isBefore(java.time.LocalDate.now())
     if (onNow != null) add(MenuAction("Watch live on ${onNow.channelName}", if (channels.size > 1) "Or choose the channel below" else null, h.watch))
     if (replay != null) add(MenuAction("Watch from the start", "Through ${replay.channelName}'s catch-up", h.fromStart))
     if (st.recordedId != null && h.playRecording != null) add(MenuAction("Play the recording", null, h.playRecording))
     if (best != null && best.stopMs > now) {
         add(
             if (st.recording) MenuAction("Cancel the recording", null, h.record)
-            else MenuAction("Record this ${if (e.kind == CalendarKind.MOVIE) "movie" else "episode"}",
+            else MenuAction("Record this ${when (e.kind) { CalendarKind.MOVIE -> "movie"; CalendarKind.GAME -> "game"; else -> "episode" }}",
                 "On ${best.channelName} · ${whenLabel(best.startMs, now, use24h)}", h.record)
         )
     }
     if (e.kind == CalendarKind.EPISODE) {
         add(
             if (st.series) MenuAction("Stop recording new episodes", "Recordings already made are kept", h.series)
-            else MenuAction("Record every new episode", "Each new one, as it shows up in your guide (not repeats)", h.series)
+            else MenuAction("Record every new episode",
+                if (over) "From now on: each new one, as it shows up in your guide (not repeats)" else "Each new one, as it shows up in your guide (not repeats)", h.series)
         )
     }
     if (best != null && best.startMs > now) {
         add(if (st.reminder) MenuAction("Cancel the reminder", null, h.remind) else MenuAction("Remind me when it starts", "A message a minute before, with Watch", h.remind))
     }
-    if (e.kind != CalendarKind.GAME && (channels.isEmpty() || channels.any { it.stopMs > now })) {
+    if (!over && (e.kind != CalendarKind.GAME || channels.size > 1) && (channels.isEmpty() || channels.any { it.stopMs > now })) {
         add(
             MenuAction(
                 "Choose the channel",

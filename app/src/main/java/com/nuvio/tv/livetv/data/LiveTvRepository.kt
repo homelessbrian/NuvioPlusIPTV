@@ -535,9 +535,9 @@ class LiveTvRepository @Inject constructor(
         // Automatic checks wait while a movie or episode is playing in Nuvio's player (unless
         // an update you asked for is waiting behind this one).
         suspend fun outOfTheWay() {
-            if (!automatic || !BackgroundWork.nuvioPlaying.value || manualQueued.value) return
-            LIVE_REPORT.add("Update check waiting while Nuvio's player is open")
-            kotlinx.coroutines.flow.combine(BackgroundWork.nuvioPlaying, manualQueued) { playing, manual -> !playing || manual }
+            if (!automatic || !(BackgroundWork.nuvioPlaying.value || BackgroundWork.liveHold.value) || manualQueued.value) return
+            LIVE_REPORT.add("Update check waiting while a channel is playing full screen or Nuvio's player is open")
+            kotlinx.coroutines.flow.combine(BackgroundWork.nuvioPlaying, BackgroundWork.liveHold, manualQueued) { playing, hold, manual -> (!playing && !hold) || manual }
                 .first { it }
         }
 

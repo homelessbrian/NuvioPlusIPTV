@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.verticalScroll
+import com.nuvio.tv.livetv.ui.shrinkToFit
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -415,6 +416,9 @@ open class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        // Live TV fork: a fresh open of the app (not a rebuild of the same screen), so "Start in
+        // Full Screen" runs again even if Android kept the app running in the background.
+        if (savedInstanceState == null) com.nuvio.tv.livetv.ui.LiveTvAppOpens.count++
         // Live TV fork: start reading the saved channel list and guide as the app opens (before
         // any screen, even the profile picker), so Live TV is ready when you get to it.
         lifecycleScope.launch { runCatching { com.nuvio.tv.livetv.startup.LiveTvPreload.start(this@MainActivity) } }
@@ -1181,6 +1185,7 @@ open class MainActivity : ComponentActivity() {
                     // Live TV fork: the menu's order and the pages taken off it (Settings → Menu & Features).
                     val sideMenuOrder = liveTvSettingsNow.sideMenuOrder
                     val sideMenuHidden = liveTvSettingsNow.sideMenuHidden
+                    val sideMenuLine = liveTvSettingsNow.sideMenuLine
                     // (The Live TV sub-list is gone: every page is in the one menu again. These stay
                     // so the menus' wiring is unchanged; nothing opens a sub-list any more.)
                     var liveTvGroupOpen by remember { mutableStateOf(false) }
@@ -1227,7 +1232,8 @@ open class MainActivity : ComponentActivity() {
                         calendarInSidebar,
                         homeHidden,
                         sideMenuOrder,
-                        sideMenuHidden
+                        sideMenuHidden,
+                        sideMenuLine
                     ) {
                         val pages = com.nuvio.tv.livetv.calendar.SideMenuPages
                         val hiddenPages = pages.hidden(sideMenuHidden)
@@ -1251,7 +1257,7 @@ open class MainActivity : ComponentActivity() {
                             pages.order(sideMenuOrder).forEach { id ->
                                 val item = page(id) ?: return@forEach
                                 // The thin line goes above the first of Live TV's pages (not when it's first).
-                                val line = !lineDone && id in pages.LIVE_FAMILY && isNotEmpty()
+                                val line = sideMenuLine && !lineDone && id in pages.LIVE_FAMILY && isNotEmpty()
                                 if (id in pages.LIVE_FAMILY) lineDone = true
                                 add(if (line) item.copy(sectionStart = true) else item)
                             }
@@ -1325,7 +1331,10 @@ open class MainActivity : ComponentActivity() {
                             hasSelectedProfileThisSession = false
                         }
                         Box(modifier = Modifier.fillMaxSize()) {
-                            CompositionLocalProvider(LocalNavViewModelStoreOwner provides navViewModelStoreOwner) {
+                            CompositionLocalProvider(
+                                LocalNavViewModelStoreOwner provides navViewModelStoreOwner,
+                                com.nuvio.tv.livetv.ui.LocalSideMenuFit provides liveTvSettingsNow.sideMenuFit
+                            ) {
                                 if (modernSidebarEnabled) {
                                     ModernSidebarScaffold(
                                         longPressBackHeld = longPressBackHeld,
@@ -1884,17 +1893,31 @@ private fun LegacySidebarScaffold(
                             .fillMaxSize()
                             .padding(top = 92.dp, bottom = 8.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
+                        // Shrinks a little to fit when the pages don't (Settings → Menu & Features).
+                        val fitMenu = com.nuvio.tv.livetv.ui.LocalSideMenuFit.current
+                        androidx.compose.foundation.layout.BoxWithConstraints(
+                            Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
-                                .verticalScroll(androidx.compose.foundation.rememberScrollState())
-                                // Room for the highlighted item, which grows a little.
-                                .padding(vertical = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            horizontalAlignment = Alignment.Start
                         ) {
-                            drawerItems.filter { !it.pinnedBottom }.forEach { renderItem(it) }
+                            val room = maxHeight - 8.dp
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                                    // Room for the highlighted item, which grows a little.
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .shrinkToFit(fitMenu, room, 0f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalAlignment = Alignment.Start
+                                ) {
+                                    drawerItems.filter { !it.pinnedBottom }.forEach { renderItem(it) }
+                                }
+                            }
                         }
                         Column(
                             verticalArrangement = Arrangement.spacedBy(4.dp),

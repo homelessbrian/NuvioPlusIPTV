@@ -328,6 +328,10 @@ data class LiveTvSettings(
     val sideMenuHidden: String = "",
     /** Calendar in the side menu even before any show's bell is rung. */
     val calendarInMenu: Boolean = false,
+    /** Side menu: the thin line above the first Live TV page. */
+    val sideMenuLine: Boolean = true,
+    /** Side menu: draw everything a little smaller when the pages don't fit, instead of scrolling. */
+    val sideMenuFit: Boolean = true,
     /** Calendar: your shows' next episodes in Home's Upcoming row. */
     val calendarUpcomingRow: Boolean = true,
     /** Calendar: a "new episode" card in Continue Watching for shows you rang the bell on. */
@@ -352,6 +356,8 @@ data class LiveTvSettings(
     val onDemandStreamsPosition: String = "LAST",
     /** Auto-play may pick your provider's copy (only when its tab is first). */
     val onDemandAutoPlay: Boolean = false,
+    /** Play on a title opened from On Demand goes straight to your provider's copy (no source list). */
+    val onDemandPlayDirect: Boolean = false,
     /** The order of Nuvio's search results: "live", "ondemand" and "catalog", comma separated. */
     val searchOrder: String = "live,ondemand,catalog",
     /** OK on a channel in search plays it behind the results first (OK again: full screen). */
@@ -702,7 +708,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-10-31 17:25"
+    const val KIT_STAMP = "2026-11-02 02:15"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

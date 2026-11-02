@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -63,6 +64,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -257,8 +259,30 @@ fun CalendarScreen(
         CalTab.AIRING -> airingShown
         else -> emptyList()
     }
+    // Following: each followed show up top as its episode on now, else its next one, else the
+    // last one aired. With nothing at all, a plain card ("follow|…" key) with a line about it.
+    fun followEntry(f: CalendarFollow): CalendarEntry {
+        val ids = setOf(f.id, f.imdbId ?: f.id)
+        val mine = all.filter { it.contentId in ids || it.key == f.id }
+        mine.firstOrNull { whenOf(it) <= now && whenOf(it) + (it.runtimeMin ?: 30) * 60_000L > now }?.let { return it }
+        mine.firstOrNull { whenOf(it) > now }?.let { return it }
+        if (!f.isAiring) mine.lastOrNull { whenOf(it) <= now }?.let { return it }
+        val note = when {
+            f.isAiring -> "On ${f.channelName ?: "TV"} · ${dayWord(java.time.Instant.ofEpochMilli(f.startMs).atZone(ZoneId.systemDefault()).toLocalDate(), today)} ${formatClock(f.startMs, use24h)}"
+            f.type == "movie" -> "Waiting to come out"
+            else -> "Nothing announced yet"
+        }
+        return CalendarEntry(
+            key = "follow|" + f.id, kind = if (f.type == "movie") CalendarKind.MOVIE else CalendarKind.EPISODE,
+            contentId = f.imdbId ?: f.id, type = if (f.type == "movie") "movie" else "series", title = f.name,
+            poster = f.poster, background = f.background, day = today, note = note
+        )
+    }
+    fun isPlainFollow(e: CalendarEntry) = e.key.startsWith("follow|")
+    val followRows = if (tab == CalTab.FOLLOWING) follows.distinctBy { it.id }.map { it to followEntry(it) } else emptyList()
     // The entry shown big at the top: the one highlighted, else the next thing coming.
-    val hero = pool.firstOrNull { it.key == heroKey } ?: pool.firstOrNull()
+    val hero = if (tab == CalTab.FOLLOWING) (followRows.firstOrNull { "follow|" + it.first.id == heroKey } ?: followRows.firstOrNull())?.second
+        else pool.firstOrNull { it.key == heroKey } ?: pool.firstOrNull()
 
     fun channels(e: CalendarEntry) = viewModel.repo.channelsOf(e)
     fun isFollowed(e: CalendarEntry) = follows.any { it.id == e.contentId || it.imdbId == e.contentId || it.id == e.key }
@@ -357,6 +381,7 @@ fun CalendarScreen(
         val showHero = when (tab) {
             CalTab.UPCOMING, CalTab.RECENT -> !grid
             CalTab.AIRING -> true
+            CalTab.FOLLOWING -> follows.isNotEmpty()
             else -> false
         }
         if (showHero) HeroBackdrop(hero)
@@ -369,16 +394,7 @@ fun CalendarScreen(
                     st = st,
                     now = now,
                     use24h = use24h,
-                    channelCount = hero?.let { channels(it).size } ?: 0,
-                    canWait = hero?.let { viewModel.repo.canWaitForGuide(it) } == true,
-                    loading = (state.loading && state.entries.isEmpty()) || (tab == CalTab.AIRING && airing.loading && airing.entries.isEmpty()),
-                    onRecord = { hero?.let { act(it, record = true) } },
-                    onChoose = { record -> hero?.let { act(it, record = record, forceList = true) } },
-                    label = { viewModel.repo.channelLabel(it) },
-                    onWait = { hero?.let { viewModel.toggleWait(it, CalendarPlan.RECORD) } },
-                    onWatch = { hero?.let { act(it, record = false) } },
-                    onOpen = { hero?.let(::page) },
-                    onOptions = { hero?.let { options = it } }
+                    loading = (state.loading && state.entries.isEmpty()) || (tab == CalTab.AIRING && airing.loading && airing.entries.isEmpty())
                 )
             } else {
                 Spacer(Modifier.height(24.dp))
@@ -556,6 +572,8 @@ fun CalendarScreen(
                         else FollowingGrid(
                             follows = follows.distinctBy { it.id }, entries = all, now = now, use24h = use24h, firstFocus = firstItem, reset = resetKey,
                             seriesOn = { f -> viewModel.plans.value.any { it.kind == CalendarPlan.SERIES && (it.contentId == f.id || it.contentId == f.imdbId) } },
+                            statusOf = { f -> followEntry(f).takeIf { !isPlainFollow(it) }?.let { e -> viewModel.status(e) } },
+                            onFocus = { f -> heroKey = "follow|" + f.id },
                             onOpen = { f ->
                                 if (!f.isAiring) onOpenDetail(f.id, f.type, f.addonBaseUrl, null, null)
                                 else f.imdbId?.let { onOpenDetail(it, "movie", null, null, null) }
@@ -661,15 +679,17 @@ fun CalendarScreen(
                 title = e.title,
                 subtitle = entryLine(e, use24h),
                 status = viewModel.status(e),
-                actions = (if (e.kind == CalendarKind.GAME) emptyList() else liveList(e, close)) + extra,
+                actions = liveList(e, close) + extra,
                 onDismiss = close
             )
         }
         followOptions?.let { f ->
             val close = { followOptions = null }
+            val fe = followEntry(f).takeIf { !isPlainFollow(it) }
             CalendarMenu(
-                kicker = null, title = f.name, subtitle = null, status = null,
+                kicker = null, title = f.name, subtitle = fe?.let { entryLine(it, use24h) }, status = fe?.let { viewModel.status(it) },
                 actions = buildList {
+                    if (fe != null) addAll(liveList(fe, close))
                     if (!f.isAiring || f.imdbId != null) add(MenuAction("Open ${if (f.type == "series") "show" else "movie"} page") {
                         close()
                         if (f.isAiring) onOpenDetail(f.imdbId!!, "movie", null, null, null) else onOpenDetail(f.id, f.type, f.addonBaseUrl, null, null)
@@ -793,18 +813,7 @@ private fun Hero(
     st: CalendarLiveStatus,
     now: Long,
     use24h: Boolean,
-    channelCount: Int,
-    canWait: Boolean,
-    loading: Boolean,
-    onRecord: () -> Unit,
-    /** Hold OK on Record or Watch live: the channel list (true: to record). */
-    onChoose: (Boolean) -> Unit,
-    label: (CalendarGuideHit) -> String,
-    onWait: () -> Unit,
-    onWatch: () -> Unit,
-    onOpen: () -> Unit,
-    /** The menu OK-and-hold opens: Live TV options, bell, hide and the rest. */
-    onOptions: () -> Unit
+    loading: Boolean
 ) {
     Column(
         Modifier.fillMaxWidth().height(HERO_H.dp).padding(start = 64.dp, top = 26.dp, end = 40.dp),
@@ -818,7 +827,9 @@ private fun Hero(
         val today = LocalDate.now()
         val airMs = e.airMs
         val onNow = e.live || (airMs != null && now in airMs until airMs + (e.runtimeMin ?: 30) * 60_000L)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        // A followed show with nothing announced: its name and a line about it (no date, no tags).
+        val plain = e.key.startsWith("follow|")
+        if (!plain) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onNow) LiveTag("ON NOW", LIVE_RED, Color.White)
             e.tags.take(2).forEach { TagChip(it) }
             LiveTag(soonText(e, now, today).uppercase(), Color.White.copy(alpha = 0.16f), Color.White)
@@ -826,7 +837,7 @@ private fun Hero(
             LiveBadges(st)
         }
         LiveText(e.title.uppercase(), size = 28.sp, weight = FontWeight.ExtraBold, shadow = true, modifier = Modifier.width(560.dp))
-        val line = when (e.kind) {
+        val line = if (plain) e.note.orEmpty() else when (e.kind) {
             CalendarKind.GAME -> listOfNotNull(e.league, e.score).joinToString(" · ")
             CalendarKind.MOVIE -> e.note ?: if (CalendarTag.AT_HOME in e.tags) "Out to watch at home" else ""
             else -> listOfNotNull(
@@ -841,58 +852,14 @@ private fun Hero(
             e.streaming && e.kind == CalendarKind.EPISODE -> " · streaming"
             else -> ""
         }
-        LiveText(
+        if (!plain) LiveText(
             listOfNotNull(whenText, e.guide?.channelName ?: e.network, e.runtimeMin?.let { "$it min" }).joinToString(" · "),
             size = 13.sp, color = NuvioTheme.colors.TextSecondary, shadow = true
         )
         val about = e.description?.takeIf { !e.spoiler && it.isNotBlank() }
         if (about != null) LiveText(about, size = 13.sp, color = NuvioTheme.colors.TextSecondary, maxLines = 1, modifier = Modifier.width(560.dp))
         Spacer(Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            val g = e.guide
-            val more = if (channelCount > 1) " +${channelCount - 1}" else ""
-            // At most three: the one Live TV action that fits right now, the page, and the options.
-            when {
-                g != null && now in g.startMs until g.stopMs ->
-                    HeroButton("Watch live on ${label(g)}$more", dot = false, primary = true, onClick = onWatch, onLongClick = { onChoose(false) })
-                g != null && g.stopMs > now ->
-                    HeroButton(if (st.recording) "Recording · cancel" else "Record on ${label(g)}$more", dot = true, primary = true, onClick = onRecord, onLongClick = { onChoose(true) })
-                st.waitRecord -> HeroButton("Records when it's in your guide · cancel", dot = true, primary = true, onClick = onWait)
-                canWait -> HeroButton("Record when it's in my guide", dot = true, primary = true, onClick = onWait)
-            }
-            HeroButton(
-                when (e.kind) { CalendarKind.GAME -> "Open in Sports"; CalendarKind.MOVIE -> "Movie page"; else -> "Show page" },
-                dot = false, onClick = onOpen
-            )
-            // The last button: Right stays here (it used to drop down to the buttons under the hero).
-            HeroButton("Options", dot = false, onClick = onOptions, modifier = Modifier.focusProperties { right = FocusRequester.Cancel })
-        }
         Spacer(Modifier.height(4.dp))
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun HeroButton(text: String, dot: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, primary: Boolean = false, modifier: Modifier = Modifier) {
-    var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(50)
-    val colors = NuvioTheme.colors
-    Row(
-        modifier
-            .clip(shape)
-            .background(if (primary) colors.Secondary else if (focused) colors.FocusBackground else colors.BackgroundElevated.copy(alpha = 0.92f))
-            .border(1.dp, if (focused || primary) Color.Transparent else colors.Border, shape)
-            .focusRing(focused, shape)
-            .onFocusChanged { focused = it.isFocused }
-            .combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (dot) {
-            Box(Modifier.size(9.dp).clip(RoundedCornerShape(50)).background(LIVE_RED))
-            Spacer(Modifier.width(7.dp))
-        }
-        LiveText(text, size = 13.sp, weight = FontWeight.SemiBold, color = if (primary) colors.OnSecondary else colors.TextPrimary)
     }
 }
 
@@ -1096,9 +1063,10 @@ private fun seasonDrop(e: CalendarEntry): String? {
 // -------------------------------------------------------------------- games
 
 /**
- * A game: a dark card in the app's theme, each team's colour as a soft glow from its own edge and a
- * stripe along the bottom, both logos, and the score (or "vs") between them. The winner of a
- * finished game stays bright and the other team is dimmed.
+ * A game: the card split into two plain halves, each in a dark version of its own team's colour
+ * (the colours never blend), a stripe in the real colours along the bottom, both logos the same
+ * size, and the score (or "vs") in a small dark box in the middle that can't take room from the
+ * logos. The winner of a finished game stays bright and the other team is dimmed.
  *
  * [standalone]: nothing else on the card says when it starts or that it is live (the month's day
  * cells and the big picture behind the hero), so the middle says so itself.
@@ -1108,62 +1076,79 @@ private fun GameArt(e: CalendarEntry, big: Boolean, modifier: Modifier, standalo
     val a = e.teams.getOrNull(0)
     val b = e.teams.getOrNull(1)
     val theme = NuvioTheme.colors
-    val ca = a?.color?.let { Color(it).copy(alpha = 1f) } ?: theme.Secondary
-    val cb = b?.color?.let { Color(it).copy(alpha = 1f) } ?: theme.Secondary
+    val ink = Color(0xFF0B0C10)
+    val plain = Color(0xFF3A4150)
+    val ca = a?.color?.let { Color(it).copy(alpha = 1f) } ?: plain
+    val cb = b?.color?.let { Color(it).copy(alpha = 1f) } ?: plain
+    // A team colour dark enough to sit behind white text, in a big flat area.
+    fun band(c: Color): Color {
+        val l = c.luminance()
+        return androidx.compose.ui.graphics.lerp(c, ink, if (l > 0.5f) 0.62f else if (l > 0.25f) 0.48f else 0.36f)
+    }
     val sa = a?.score?.toIntOrNull()
     val sb = b?.score?.toIntOrNull()
     val hasScore = a?.score != null && b?.score != null
     val finished = hasScore && !e.live
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier.background(theme.BackgroundCard)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.background(ink)) {
         val compact = !big && maxHeight < 80.dp
-        val logo = when {
-            big -> 120.dp
-            else -> (maxHeight * 0.44f).coerceIn(26.dp, 56.dp)
+        val logo = if (big) 120.dp else (maxHeight * 0.40f).coerceIn(24.dp, 52.dp)
+        // Room kept clear on each logo's inner side for the box in the middle.
+        val inner = if (big) 70.dp else if (compact) 12.dp else 22.dp
+        val top = if (big || compact) 0.dp else 12.dp
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxHeight().background(band(ca)), contentAlignment = Alignment.Center) {
+                Box(Modifier.padding(end = inner, top = top)) {
+                    TeamMark(a, logo, big, compact, dim = finished && sa != null && sb != null && sa < sb)
+                }
+            }
+            Box(Modifier.weight(1f).fillMaxHeight().background(band(cb)), contentAlignment = Alignment.Center) {
+                Box(Modifier.padding(start = inner, top = top)) {
+                    TeamMark(b, logo, big, compact, dim = finished && sa != null && sb != null && sb < sa)
+                }
+            }
         }
-        // Each team's colour glows in from its own edge and fades out before the middle.
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    0f to ca.copy(alpha = 0.40f), 0.45f to ca.copy(alpha = 0f),
-                    0.55f to cb.copy(alpha = 0f), 1f to cb.copy(alpha = 0.40f)
-                )
-            )
-        )
         Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(if (big) 6.dp else 3.dp)) {
             Box(Modifier.weight(1f).fillMaxHeight().background(ca))
             Box(Modifier.weight(1f).fillMaxHeight().background(cb))
         }
-        Row(
-            Modifier.fillMaxSize().padding(
-                start = if (big) 48.dp else if (compact) 6.dp else 12.dp,
-                end = if (big) 48.dp else if (compact) 6.dp else 12.dp,
-                top = if (big) 0.dp else 16.dp, bottom = 3.dp
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        val boxShape = RoundedCornerShape(if (big) 12.dp else 8.dp)
+        Column(
+            Modifier
+                .align(Alignment.Center)
+                .offset(y = if (big || compact) 0.dp else 6.dp)
+                .clip(boxShape)
+                .background(ink.copy(alpha = 0.92f))
+                .border(1.dp, Color.White.copy(alpha = 0.16f), boxShape)
+                .padding(
+                    horizontal = if (big) 16.dp else if (compact) 4.dp else 8.dp,
+                    vertical = if (big) 8.dp else if (compact) 1.dp else 3.dp
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
-            TeamMark(a, logo, big, compact, dim = finished && sa != null && sb != null && sa < sb)
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                when {
-                    hasScore -> LiveText(
-                        "${a?.score} – ${b?.score}",
-                        size = if (big) 40.sp else if (compact) 13.sp else 22.sp, weight = FontWeight.ExtraBold,
-                        color = theme.TextPrimary, shadow = true
-                    )
-                    standalone -> LiveText(
-                        e.airMs?.let { formatClock(it, false) } ?: "vs",
-                        size = if (big) 34.sp else if (compact) 12.sp else 16.sp, weight = FontWeight.ExtraBold,
-                        color = theme.TextPrimary, shadow = true
-                    )
-                    else -> LiveText("vs", size = if (compact) 11.sp else 14.sp, weight = FontWeight.SemiBold, color = theme.TextSecondary)
+            when {
+                hasScore -> {
+                    val text = "${a?.score} – ${b?.score}"
+                    val base = if (big) 40f else if (compact) 13f else 19f
+                    // A long score (112 – 124) steps down instead of squeezing the logos.
+                    val factor = if (text.length >= 9) 0.78f else if (text.length >= 7) 0.9f else 1f
+                    LiveText(text, size = (base * factor).sp, weight = FontWeight.ExtraBold, color = theme.TextPrimary, maxLines = 1)
                 }
-                when {
-                    e.live && standalone -> LiveTag("LIVE", LIVE_RED, Color.White)
-                    finished && !compact -> LiveText("FINAL", size = if (big) 14.sp else 10.sp, weight = FontWeight.Bold, color = theme.TextSecondary)
-                    else -> Unit
-                }
+                standalone -> LiveText(
+                    e.airMs?.let { formatClock(it, false) } ?: "vs",
+                    size = if (big) 34.sp else if (compact) 12.sp else 16.sp, weight = FontWeight.ExtraBold,
+                    color = theme.TextPrimary, maxLines = 1
+                )
+                else -> LiveText("vs", size = if (compact) 11.sp else 14.sp, weight = FontWeight.SemiBold, color = theme.TextSecondary)
             }
-            TeamMark(b, logo, big, compact, dim = finished && sa != null && sb != null && sb < sa)
+            when {
+                e.live && standalone -> LiveTag("LIVE", LIVE_RED, Color.White)
+                finished && !compact -> LiveText("FINAL", size = if (big) 14.sp else 10.sp, weight = FontWeight.Bold, color = theme.TextSecondary)
+                // Before the game, on a card: where it's on, under the "vs".
+                !hasScore && !standalone && !compact ->
+                    (e.guide?.channelName ?: e.network)?.let { LiveText(it.take(12), size = 10.sp, weight = FontWeight.Medium, color = theme.TextSecondary, maxLines = 1) }
+                else -> Unit
+            }
         }
     }
 }
@@ -1704,6 +1689,9 @@ private fun FollowingGrid(
     firstFocus: FocusRequester,
     reset: Int,
     seriesOn: (CalendarFollow) -> Boolean,
+    /** The status of the show's episode up top (recording, reminder…); null when it has none. */
+    statusOf: (CalendarFollow) -> CalendarLiveStatus?,
+    onFocus: (CalendarFollow) -> Unit,
     onOpen: (CalendarFollow) -> Unit,
     onOptions: (CalendarFollow) -> Unit
 ) {
@@ -1730,9 +1718,9 @@ private fun FollowingGrid(
             }
             PosterCard(
                 poster = f.poster, title = f.name, caption = caption, corner = null, bell = true, tag = null,
-                st = if (seriesOn(f)) CalendarLiveStatus(series = true) else null,
+                st = (statusOf(f) ?: CalendarLiveStatus()).let { if (seriesOn(f)) it.copy(series = true) else it }.takeIf { it != CalendarLiveStatus() },
                 modifier = (if (i == 0) Modifier.focusRequester(firstFocus).homeMark() else Modifier).cardFocus("follow|" + f.id),
-                onFocus = {}, onClick = { onOpen(f) }, onLongClick = { onOptions(f) }
+                onFocus = { onFocus(f) }, onClick = { onOpen(f) }, onLongClick = { onOptions(f) }
             )
         }
     }

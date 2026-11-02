@@ -36,11 +36,21 @@ import javax.inject.Singleton
 /** Matches Nuvio's side-menu setting: classic drawer, modern floating panel, or modern with blur. */
 enum class LiveMenuStyle { CLASSIC, MODERN, MODERN_BLUR }
 
+/**
+ * Counts each time the app is opened (MainActivity created fresh). Android TV usually keeps the
+ * app running in the background after Back or Home, so "once per app launch" has to mean once
+ * per open, not once per process.
+ */
+object LiveTvAppOpens {
+    @Volatile var count = 0
+}
+
 /** In-memory session shared by the guide and the full-screen player (current group, etc). */
 @Singleton
 class LiveTvSession @Inject constructor() {
     val currentGroupId = MutableStateFlow<String?>(null)
-    var autoPlayedThisLaunch = false
+    /** The [LiveTvAppOpens.count] that "Start in Full Screen" last ran for. */
+    var autoPlayedForOpen = -1
     /** Set when full screen opens, so Back to the guide returns to the channel, not the groups. */
     var returningFromFullscreen = false
     /** Overlay mode off: Left in full screen returns to the guide with the groups open. */
@@ -346,10 +356,18 @@ class LiveTvViewModel @Inject constructor(
                     { g -> g.title.lowercase() }
                 )
             )
-            // Your order (Reorder groups), playlist order for anything not moved.
-            else -> regular.withIndex()
-                .sortedWith(compareBy<IndexedValue<ChannelGroup>>({ orderIndex[it.value.id] ?: Int.MAX_VALUE }, { it.index }))
-                .map { it.value }
+            // Your order (Reorder groups). A group you haven't placed yet (e.g. one just added in
+            // the playlist) goes right after the group above it in the playlist.
+            else -> if (orderIndex.isEmpty()) regular else {
+                val result = regular.filter { it.id in orderIndex }.sortedBy { orderIndex[it.id] }.toMutableList()
+                regular.forEachIndexed { i, g ->
+                    if (g.id !in orderIndex) {
+                        val above = if (i > 0) result.indexOfFirst { it.id == regular[i - 1].id } else -1
+                        result.add(above + 1, g)
+                    }
+                }
+                result
+            }
         }
         groups += orderedRegular
 
@@ -496,12 +514,19 @@ class LiveTvViewModel @Inject constructor(
             }
         }
         playback.play(channel)
-        // Remember the group you watched in, so Live TV reopens there.
-        val group = session.currentGroupId.value?.takeIf { it != ChannelGroup.SEARCH }
-            ?: uiState.value.selectedGroupId
+        // Remember the group you watched in, so Live TV reopens there (Favorites and your own
+        // groups included). Only a group you were really looking at is saved: starting straight
+        // in full screen, or playing from Sports / the Calendar / a launcher row, no longer
+        // replaces it with the channel's own group or the default one.
+        val shown = session.currentGroupId.value?.takeIf { it != ChannelGroup.SEARCH }
         viewModelScope.launch {
             prefs.recordWatched(channel.key, addToRecent = !isAdultChannel(channel))
-            prefs.setLastGroup(group)
+            val user = prefs.userState.first()
+            if (shown != null) {
+                if (channelInGroup(channel, shown, user)) prefs.setLastGroup(shown)
+            } else if (user.lastGroupId == null) {
+                prefs.setLastGroup(uiState.value.selectedGroupId)
+            }
         }
     }
 
@@ -1454,10 +1479,11 @@ class LiveTvViewModel @Inject constructor(
         return true
     }
 
-    /** The last watched channel, once per app launch, when "auto-play last channel" is on. */
+    /** The last watched channel, once each time the app is opened, when "Start in Full Screen" is on. */
     suspend fun autoPlayCandidate(): LiveChannel? {
-        if (session.autoPlayedThisLaunch) return null
-        session.autoPlayedThisLaunch = true
+        val open = LiveTvAppOpens.count
+        if (session.autoPlayedForOpen == open) return null
+        session.autoPlayedForOpen = open
         if (!prefs.currentSettings().autoPlayLastChannel) return null
         val key = prefs.userState.first().lastChannelKey ?: return null
         val channels = withTimeoutOrNull(15_000) {

@@ -96,10 +96,11 @@ class SportsRepository @Inject constructor(
 
     /** Every game and event on the page's days (yesterday to a week ahead). */
     val events: StateFlow<List<SportsEvent>> = combine(leagueData, weekData, fixtureData, guideData, tsdbData) { l, w, f, g, t ->
-        val guide = mergeWrestlingAirings(g.values.flatten())
+        val now = System.currentTimeMillis()
+        val guide = mergeWrestlingAirings(g.values.flatten()).map { timed(it, now) }
         val from = dayStart(-DAYS_BACK - 1)
         val to = dayStart(DAYS_AHEAD + 2)
-        val tsdbAll = t.values.flatMap { it.events }.filter { it.startMs in from until to }
+        val tsdbAll = t.values.flatMap { it.events }.filter { it.startMs in from until to }.map { timed(it, now) }
         // A league with TheSportsDB's schedule (WWE, MotoGP…) doesn't also take the older one.
         val tsdbLeagues = t.filterValues { it.events.isNotEmpty() }.keys
         val (tsdbNamed, tsdb) = tsdbAll.partition { it.home == null }
@@ -107,9 +108,27 @@ class SportsRepository @Inject constructor(
         // same event found in the guide: one of its league within 3 hours of its start (or, for
         // events with a date only, that day). Anything else in the guide doesn't hide it.
         val guideByLeague = guide.groupBy { it.leagueId }
-        val fixtures = (f.values.flatMap { it.events }.filter { it.leagueId !in tsdbLeagues } + tsdbNamed).filter { fx ->
+        // Fights: only a listing of the same fight (both fighters named) counts as the same event;
+        // the guide's general "Boxing" or another fight doesn't hide it. And when that listing has
+        // already ended (a preview or early replay) while the fight is still on, the schedule's
+        // entry is the one kept, so the fight shows as live with its own channels.
+        val replacedGuide = HashSet<String>()
+        val fixtures = (f.values.flatMap { it.events }.map { timed(it, now) }.filter { it.leagueId !in tsdbLeagues } + tsdbNamed).filter { fx ->
             val same = guideByLeague[fx.leagueId].orEmpty()
-            if (fx.hasTime) same.none { kotlin.math.abs(it.startMs - fx.startMs) <= 3 * HOUR || sameShowShifted(it, fx) }
+            if (fx.hasTime) {
+                val near = same.filter { kotlin.math.abs(it.startMs - fx.startMs) <= 3 * HOUR || sameShowShifted(it, fx) }
+                val sides = if (SportsCatalog.league(fx.leagueId)?.sport == Sport.FIGHTING) SportsCatalog.fightSides(fx.title) else null
+                if (sides == null) near.isEmpty()
+                else {
+                    val sameFight = near.filter { gEv ->
+                        val text = SportsCatalog.norm(gEv.title + " " + (gEv.subtitle ?: ""))
+                        sides.first.any { SportsCatalog.hasWord(text, it) } && sides.second.any { SportsCatalog.hasWord(text, it) }
+                    }
+                    val ended = sameFight.filter { it.state == GameState.POST && fx.state != GameState.POST }
+                    if (sameFight.isNotEmpty() && ended.size == sameFight.size) { ended.forEach { replacedGuide += it.id }; true }
+                    else sameFight.isEmpty()
+                }
+            }
             else same.none { dayOf(it.startMs) == dayOf(fx.startMs) }
         }
         val espn = l.values.flatMap { it.events } + w.values.flatMap { it.events }
@@ -129,8 +148,25 @@ class SportsRepository @Inject constructor(
                     listOfNotNull(r.away, r.home).any { sd -> SportsCatalog.norm(sd.team.name).trim().let { it.length >= 3 && t.contains(it) } }
             }
         }
-        (espn + (fixtures + guide).filterNot(::coveredByEspn) + tsdb).distinctBy { it.id }
+        (espn + (fixtures + guide.filterNot { it.id in replacedGuide }).filterNot(::coveredByEspn) + tsdb).distinctBy { it.id }
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * A scheduled or guide event's state from the clock: these were worked out once, when the
+     * file or guide was read (schedule files only every 12 hours), so a fight read in the morning
+     * never went live, and one read mid-card could stay live too long.
+     */
+    private fun timed(ev: SportsEvent, now: Long): SportsEvent {
+        // Only events without two teams (fights, races, shows): a team game's state comes from its feed.
+        if (ev.source == EventSource.ESPN || !ev.hasTime || ev.state == GameState.OFF || ev.home != null || ev.away != null) return ev
+        val end = ev.endMs ?: return ev
+        val state = when {
+            now >= end -> GameState.POST
+            now >= ev.startMs -> GameState.LIVE
+            else -> GameState.PRE
+        }
+        return if (state == ev.state) ev else ev.copy(state = state)
+    }
 
     /**
      * Everything we know, for My Teams: the page's days plus your teams' whole seasons and the
@@ -273,7 +309,7 @@ class SportsRepository @Inject constructor(
             liveRepo.ensureLoaded(updateCheckDelayMs = 20_000)
             kick.value++
             // Nothing matched yet (or not for a while): do it now, don't wait for the next round.
-            if (_matches.value.isEmpty() || System.currentTimeMillis() - lastMatchAt > 3 * MINUTE) matchKick.value++
+            if (_matches.value.isEmpty() || System.currentTimeMillis() - lastMatchAt > 15 * MINUTE) matchKick.value++
         }
     }
 
@@ -913,6 +949,8 @@ class SportsRepository @Inject constructor(
                 _matching.value = false
                 if (waited > 0) LiveTvLoadReport.add("Sports matching waited ${waited / 1000} s for the guide to finish loading")
             }
+            // "Start in Full Screen": not while the last channel is starting / playing full screen.
+            com.nuvio.tv.livetv.data.BackgroundWork.awaitLiveHold()
             lastRun = System.currentTimeMillis()
             val t0 = System.currentTimeMillis()
             runCatching { com.nuvio.tv.livetv.data.BackgroundWork.heavy { runMatch() } }.onFailure { Log.w(TAG, "Sports matching failed", it) }
@@ -1482,4 +1520,22 @@ object SportsLive {
     val cardByChannel = MutableStateFlow<Map<String, SportsEvent>>(emptyMap())
     val alerts = MutableStateFlow<SportsAlert?>(null)
     fun alert(a: SportsAlert) { alerts.value = a }
+
+    /** Games pinned to the corner (event ids, oldest first). Kept in memory only: a new start clears them. */
+    val pins = MutableStateFlow<List<String>>(emptyList())
+    /** The full-screen player sets this while its panel, channel list or a menu covers the corner. */
+    val pinsHidden = MutableStateFlow(false)
+    const val MAX_PINS = 3
+
+    /** Pins or unpins the game; true = it's pinned now. A fourth pin replaces the oldest. */
+    fun togglePin(id: String): Boolean {
+        val cur = pins.value
+        return if (id in cur) {
+            pins.value = cur - id
+            false
+        } else {
+            pins.value = (cur + id).takeLast(MAX_PINS)
+            true
+        }
+    }
 }

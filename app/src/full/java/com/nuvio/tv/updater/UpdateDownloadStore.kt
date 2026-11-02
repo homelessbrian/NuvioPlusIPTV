@@ -55,7 +55,7 @@ class UpdateDownloadStore @Inject constructor(
     ): Result<File> = downloadMutex.withLock {
         downloadedFileFor(update)?.let { return@withLock Result.success(it) }
         val destination = destinationFor(update)
-        apkDownloader.download(update.assetUrl, destination, onProgress)
+        apkDownloader.download(update.assetUrl, destination, update.assetSha256, onProgress)
             .onSuccess { file ->
                 updatesDir.listFiles()?.filter { it != file }?.forEach { it.delete() }
                 updatePreferences.setDownloadedUpdate(update.tag, file.absolutePath)

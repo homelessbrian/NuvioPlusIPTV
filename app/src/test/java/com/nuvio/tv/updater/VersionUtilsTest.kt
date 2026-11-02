@@ -39,4 +39,12 @@ class VersionUtilsTest {
     fun `current beta naming is recognized as prerelease`() {
         assertTrue(VersionUtils.isPrerelease("0.8.12-beta"))
     }
+
+    @Test
+    fun `test builds compare by build number, even when the Nuvio base changes`() {
+        assertTrue(VersionUtils.isRemoteNewer("1.1.0-test.441001+beta.9", "1.1.0-test.441000+beta.9"))
+        assertTrue(VersionUtils.isRemoteNewer("1.1.0-test.441001+beta.10", "1.1.0-test.441000+beta.9"))
+        assertFalse(VersionUtils.isRemoteNewer("1.1.0-test.441000+beta.10", "1.1.0-test.441001+beta.9"))
+        assertTrue(VersionUtils.isRemoteNewer("1.1.0-test.99999+beta.9", "1.1.0-test.9999+beta.9"))
+    }
 }

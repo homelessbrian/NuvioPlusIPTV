@@ -7,5 +7,7 @@ data class AppUpdate(
     val releaseUrl: String?,
     val assetName: String,
     val assetUrl: String,
-    val assetSizeBytes: Long?
+    val assetSizeBytes: Long?,
+    // Expected SHA-256 of the APK (lower-case hex), when the release says what it should be.
+    val assetSha256: String? = null
 )

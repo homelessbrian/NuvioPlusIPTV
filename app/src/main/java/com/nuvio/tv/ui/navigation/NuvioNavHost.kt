@@ -84,10 +84,14 @@ fun NuvioNavHost(
     }
     // Live TV fork: "Remind me" messages, shown on top of whatever screen you're on.
     com.nuvio.tv.livetv.reminders.LiveTvReminderHost(navController)
+    // Live TV fork: Nuvio account sync: starts when the app opens, and asks its one-time questions.
+    com.nuvio.tv.livetv.sync.CloudSyncHost()
     // Live TV fork: "Loading channels… / Importing movies…" pill while things download.
     com.nuvio.tv.livetv.ui.LiveTvLoadingHost(navController)
     // Live TV fork: Sports reminders and scoring alerts, on top of whatever screen you're on.
     com.nuvio.tv.livetv.sports.SportsHost(navController)
+    // Live TV fork: pinned game scoreboards in the corner while something plays.
+    com.nuvio.tv.livetv.sports.SportsPinsHost(navController)
 }
 
 @Composable
@@ -503,10 +507,13 @@ private fun PlaybackNavHost(
                           )
                       )
                   }
-                  // Play always shows every source (your addons, debrid and 📡 On Demand), wherever the
-                  // title was opened from: one unified list. (The direct-to-provider Play from On
-                  // Demand is retired; the provider's copy is in the list as 📡 On Demand.)
-                  if (onDemandUid == null || true) openStreams() else onDemandScope.launch {
+                  // Play shows every source (your addons, debrid and 📡 On Demand) unless "Play Straight
+                  // from My Provider" is on and the title was opened from On Demand.
+                  if (onDemandUid == null) openStreams() else onDemandScope.launch {
+                      if (!com.nuvio.tv.livetv.ondemand.OnDemandPlay.playDirect(context)) {
+                          openStreams()
+                          return@launch
+                      }
                       // Several copies (4K / HD, other providers): ask which one.
                       val versions = runCatching {
                           com.nuvio.tv.livetv.ondemand.OnDemandPlay.versions(context, onDemandUid)

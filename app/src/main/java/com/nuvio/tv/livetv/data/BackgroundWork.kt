@@ -51,9 +51,27 @@ object BackgroundWork {
         }.asCoroutineDispatcher()
     }
 
-    /** Waits while Nuvio's player is open. */
+    /**
+     * Only for people with "Start in Full Screen" on: true from the moment the app opens until
+     * the last channel is playing full screen (at most 20 s), and then for as long as Live TV
+     * stays full screen. Set from the app's navigation (LiveTvLoadingHost). The start-up work
+     * used to run right while the channel was starting, which made it choppy on slower boxes.
+     */
+    val liveHold = MutableStateFlow(false)
+
+    /** The 20 s hold at app start has been used up (it only happens once per app launch). */
+    @Volatile var launchHoldDone = false
+
+    /** Waits while Nuvio's player is open, or while the start-in-full-screen hold is on. */
     suspend fun awaitIdle() {
-        if (nuvioPlaying.value) nuvioPlaying.first { !it }
+        if (nuvioPlaying.value || liveHold.value) {
+            kotlinx.coroutines.flow.combine(nuvioPlaying, liveHold) { a, b -> !a && !b }.first { it }
+        }
+    }
+
+    /** Waits only for the start-in-full-screen hold (Nuvio's player doesn't hold this work back). */
+    suspend fun awaitLiveHold() {
+        if (liveHold.value) liveHold.first { !it }
     }
 
     /**

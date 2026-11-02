@@ -48,7 +48,9 @@ internal class CalendarSources(context: Context) {
         val imdb: String?,
         val airTime: String?,
         /** A wide picture of the show (TVmaze's background image). */
-        val backdrop: String? = null
+        val backdrop: String? = null,
+        /** The network's time zone ("America/New_York"); null when not known. */
+        val zone: String? = null
     )
 
     data class Season(val id: Int, val number: Int, val episodeOrder: Int?, val premiere: LocalDate?, val end: LocalDate?)
@@ -263,6 +265,7 @@ internal class CalendarSources(context: Context) {
                 ?.replace("http://", "https://"),
             imdb = o.optJSONObject("externals")?.optString("imdb")?.ifBlank { null },
             airTime = o.optJSONObject("schedule")?.optString("time")?.ifBlank { null },
+            zone = network?.optJSONObject("country")?.optString("timezone")?.ifBlank { null },
             backdrop = o.optJSONObject("_embedded")?.optJSONArray("images")?.let { arr ->
                 val bgs = (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.filter { it.optString("type") == "background" }
                 val best = bgs.firstOrNull { it.optBoolean("main") } ?: bgs.firstOrNull()
@@ -302,7 +305,7 @@ internal class CalendarSources(context: Context) {
         .put("show", JSONObject()
             .put("id", d.show.id).put("name", d.show.name).put("type", d.show.type).put("status", d.show.status)
             .put("network", d.show.network ?: "").put("streaming", d.show.streaming).put("image", d.show.image ?: "")
-            .put("imdb", d.show.imdb ?: "").put("time", d.show.airTime ?: "").put("bg", d.show.backdrop ?: ""))
+            .put("imdb", d.show.imdb ?: "").put("time", d.show.airTime ?: "").put("bg", d.show.backdrop ?: "").put("tz", d.show.zone ?: ""))
         .put("episodes", JSONArray(d.episodes.map { e ->
             JSONObject().put("s", e.season).put("e", e.number).put("name", e.name ?: "")
                 .put("ms", e.airMs ?: 0L).put("day", e.airDate?.toString() ?: "")
@@ -316,7 +319,8 @@ internal class CalendarSources(context: Context) {
             network = s.optString("network").ifBlank { null }, streaming = s.optBoolean("streaming"),
             image = s.optString("image").ifBlank { null }, imdb = s.optString("imdb").ifBlank { null },
             airTime = s.optString("time").ifBlank { null },
-            backdrop = s.optString("bg").ifBlank { null }
+            backdrop = s.optString("bg").ifBlank { null },
+            zone = s.optString("tz").ifBlank { null }
         )
         val arr = o.optJSONArray("episodes") ?: JSONArray()
         val eps = (0 until arr.length()).mapNotNull { i ->

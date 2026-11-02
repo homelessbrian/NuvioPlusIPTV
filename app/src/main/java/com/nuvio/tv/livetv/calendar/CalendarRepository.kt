@@ -379,7 +379,7 @@ class CalendarRepository @Inject constructor(
             if (same.size == 1) same[0] else same[0].copy(reasons = same.flatMap { it.reasons }.toSet())
         }
         val sorted = merged.sortedWith(compareBy<CalendarEntry> { it.day }.thenBy { it.airMs ?: Long.MAX_VALUE }.thenBy { it.title })
-        baseEntries = withGuide(sorted, s)
+        baseEntries = byTime(withGuide(sorted, s))
         _state.value = CalendarState(
             entries = withGames(baseEntries),
             loading = false,
@@ -529,7 +529,9 @@ class CalendarRepository @Inject constructor(
             if (total != null && last.number >= total && !(e.number == 1 && g.size == 1 && total > 1)) {
                 tags += if (ended && last.season == lastSeason) CalendarTag.SERIES_FINALE else CalendarTag.SEASON_FINALE
             }
-            val aired = (e.airMs ?: e.airDate!!.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()) <= now
+            // West Coast: the delayed airing's time (see CalendarAirTimes).
+            val local = CalendarAirTimes.local(e.airMs, d.show.zone, d.show.airTime, d.show.streaming)
+            val aired = (local ?: e.airDate!!.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()) <= now
             val pos = e.season to e.number
             val watched = seen != null && (pos in seen.watched || (seen.furthest != null && compare(pos, seen.furthest) < 0))
             val fresh = aired && !watched && !e.airDate!!.isBefore(LocalDate.now().minusDays(1))
@@ -551,8 +553,10 @@ class CalendarRepository @Inject constructor(
                 episodeTitle = if (g.size > 1) null else e.name,
                 episodeImage = e.image,
                 description = e.summary.takeIf { g.size == 1 },
-                airMs = e.airMs,
-                day = e.airDate!!,
+                airMs = local,
+                listedAirMs = e.airMs,
+                plainAirMs = local,
+                day = local?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() } ?: e.airDate!!,
                 network = d.show.network,
                 streaming = d.show.streaming || e.airMs == null,
                 tags = tags,
@@ -623,6 +627,7 @@ class CalendarRepository @Inject constructor(
                 .mapNotNull { (_, eps) ->
                     val (show, e) = eps.first()
                     val lastNumber = eps.maxOf { it.second.number }
+                    val local = CalendarAirTimes.local(e.airMs, show.zone, show.airTime, show.streaming)
                     val id = show.imdb ?: return@mapNotNull null
                     CalendarEntry(
                         key = "today|$id|${e.season}|${e.number}",
@@ -638,8 +643,10 @@ class CalendarRepository @Inject constructor(
                         episodeTitle = if (eps.size > 1) null else e.name,
                         episodeImage = e.image,
                         description = e.summary.takeIf { eps.size == 1 },
-                        airMs = e.airMs,
-                        day = e.airDate ?: day,
+                        airMs = local,
+                        listedAirMs = e.airMs,
+                        plainAirMs = local,
+                        day = local?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() } ?: e.airDate ?: day,
                         network = show.network,
                         streaming = show.streaming || e.airMs == null,
                         tags = buildList {
@@ -678,7 +685,7 @@ class CalendarRepository @Inject constructor(
                 val s = settings.value
                 val cur = _state.value
                 if (baseEntries.isNotEmpty()) {
-                    baseEntries = withGuide(baseEntries.map { if (it.kind == CalendarKind.EPISODE) it.copy(guide = null, guideOptions = emptyList()) else it }, s)
+                    baseEntries = byTime(withGuide(baseEntries.map { if (it.kind == CalendarKind.EPISODE) it.copy(guide = null, guideOptions = emptyList()) else it }, s))
                     _state.value = cur.copy(entries = withGames(baseEntries))
                 }
             }
@@ -871,11 +878,15 @@ class CalendarRepository @Inject constructor(
      */
     private suspend fun withGuide(entries: List<CalendarEntry>, s: LiveTvSettings): List<CalendarEntry> {
         val channels = liveRepo.channels.value
-        if (channels.isEmpty()) return entries
+        if (channels.isEmpty()) return entries.map { it.withGuideTime() }
         val now = System.currentTimeMillis()
-        val wanted = entries.filter { it.kind == CalendarKind.EPISODE && it.airMs != null && !it.streaming &&
-            it.airMs > now - 3 * CalendarSources.HOUR && it.airMs < now + 8 * CalendarSources.DAY }
-        if (wanted.isEmpty()) return entries
+        val wanted = entries.filter { e ->
+            val t = e.sourceAirMs
+            e.kind == CalendarKind.EPISODE && t != null && !e.streaming && t > now - 3 * CalendarSources.HOUR && t < now + 8 * CalendarSources.DAY
+        }
+        if (wanted.isEmpty()) return entries.map { it.withGuideTime() }
+        // Mountain / Pacific: the delayed West Coast airing is the usual one, not a "later" feed.
+        val west = CalendarAirTimes.westOfCentral()
         val shift = s.epgOffsetMinutes * 60_000L
         val byKey = channels.associateBy { it.key }
         val favorites = runCatching { prefs.userState.first().favorites.toSet() }.getOrDefault(emptySet())
@@ -887,7 +898,9 @@ class CalendarRepository @Inject constructor(
         // and most episodes found nothing.)
         for (e in wanted) {
             val word = searchWord(e.title).takeIf { it.length >= 3 }
-            val air = e.airMs!!
+            val air = e.sourceAirMs!!
+            // When it's expected here without the guide (West Coast: the delayed airing).
+            val expectedOff = (e.noGuideAirMs ?: air) - air
             val hits = if (word == null) emptyList() else runCatching {
                 guideDb.findByWords(
                     fromMs = air - 80 * 60_000L - shift,
@@ -934,7 +947,8 @@ class CalendarRepository @Inject constructor(
                     else -> null
                 }
                 if (sameEp == false) return@mapNotNull null
-                val later = off > 75 * 60_000L
+                // Later than expected here (West Coast boxes expect the delayed airing).
+                val later = off - (if (west) expectedOff else 0L) > 75 * 60_000L
                 val chName = LiveTvRepository.normalize(ch.name)
                 var score = 0
                 if (key == picked) score += 1_000
@@ -944,7 +958,8 @@ class CalendarRepository @Inject constructor(
                 if (key in favorites) score += 40
                 if (hd.containsMatchIn(ch.name)) score += 5
                 if (later) score -= 300
-                score -= (kotlin.math.abs(off) / 60_000L).toInt().coerceAtMost(75)
+                val gap = if (west) minOf(kotlin.math.abs(off), kotlin.math.abs(off - expectedOff)) else kotlin.math.abs(off)
+                score -= (gap / 60_000L).toInt().coerceAtMost(75)
                 score to CalendarGuideHit(
                     ch.key, ch.name, ch.logo, p.startMs, p.stopMs, p.title,
                     playlist = ch.sourceName, catchup = ch.catchup != null, later = later, favorite = key in favorites,
@@ -957,10 +972,15 @@ class CalendarRepository @Inject constructor(
                 val progs = runCatching { guideDb.channelRange(ch.key, air - 75 * 60_000L - shift, air + 200 * 60_000L - shift) }
                     .getOrDefault(emptyList())
                     .map { if (shift == 0L) it else it.copy(startMs = it.startMs + shift, stopMs = it.stopMs + shift) }
-                val p = progs.firstOrNull { it.startMs <= air + 10 * 60_000L && it.stopMs > air }
+                // The show itself at the first airing or the one expected here (a West Coast
+                // feed), else whatever's on at the first airing.
+                val expected = air + expectedOff
+                fun on(t: Long, pr: EpgProgram) = pr.startMs <= t + 10 * 60_000L && pr.stopMs > t
+                val p = progs.firstOrNull { sameShow(it.title, e.title) && (on(air, it) || on(expected, it)) }
+                    ?: progs.firstOrNull { on(air, it) }
                 CalendarGuideHit(
                     ch.key, ch.name, ch.logo,
-                    p?.startMs ?: air, p?.stopMs ?: (air + (e.runtimeMin ?: 60) * 60_000L), p?.title ?: e.title,
+                    p?.startMs ?: expected, p?.stopMs ?: (expected + (e.runtimeMin ?: 60) * 60_000L), p?.title ?: e.title,
                     playlist = ch.sourceName, catchup = ch.catchup != null, favorite = ch.key in favorites, mine = true,
                     group = ch.group.ifBlank { null }
                 )
@@ -968,11 +988,34 @@ class CalendarRepository @Inject constructor(
             val all = listOfNotNull(mine) + options.filter { it.channelKey != mine?.channelKey }
             if (all.isNotEmpty()) found[e.key] = all
         }
-        if (found.isEmpty()) return entries
         return entries.map { e ->
-            val options = found[e.key] ?: return@map e
-            e.copy(guide = options.first(), guideOptions = options)
+            val options = found[e.key] ?: return@map e.withGuideTime()
+            e.copy(guide = options.first(), guideOptions = options).withGuideTime()
         }
+    }
+
+    /**
+     * Shows the time it airs on the channel you'd use ([bestHit]: your saved channel, else the best
+     * match in your guide), so a West Coast box watching an East feed sees the East feed's time and
+     * one watching a local channel sees the local time. Not in the guide: TVmaze's time (adjusted
+     * for the West Coast, see [CalendarAirTimes]).
+     */
+    /** In time order again (a time from the guide can move an episode). */
+    private fun byTime(list: List<CalendarEntry>) =
+        list.sortedWith(compareBy<CalendarEntry> { it.day }.thenBy { it.airMs ?: Long.MAX_VALUE }.thenBy { it.title })
+
+    private fun CalendarEntry.withGuideTime(): CalendarEntry {
+        if (kind != CalendarKind.EPISODE || streaming) return this
+        val listed = sourceAirMs ?: return this
+        val plain = noGuideAirMs ?: listed
+        val shown = bestHit(this)?.startMs ?: plain
+        if (shown == airMs && listedAirMs == listed && plainAirMs == plain) return this
+        return copy(
+            airMs = shown,
+            listedAirMs = listed,
+            plainAirMs = plain,
+            day = Instant.ofEpochMilli(shown).atZone(ZoneId.systemDefault()).toLocalDate()
+        )
     }
 
     /** True when [entry] on that channel is set to record. */
@@ -1032,7 +1075,7 @@ class CalendarRepository @Inject constructor(
     /** A finished recording of [e] (by its name, at about the time it aired). */
     fun recordingOf(e: CalendarEntry): com.nuvio.tv.livetv.record.LiveTvRecording? {
         if (e.kind == CalendarKind.GAME) return null
-        val air = e.airMs ?: return null
+        val air = e.sourceAirMs ?: return null
         val name = guideName(e.title)
         return recorder.recordings.value.firstOrNull { r ->
             r.status == com.nuvio.tv.livetv.record.RecordingStatus.DONE && r.programStartMs > 0 &&
@@ -1095,7 +1138,7 @@ class CalendarRepository @Inject constructor(
             on = existing == null
             CalendarPlan.encode(
                 if (existing != null) list - existing
-                else list + CalendarPlan(key, kind, e.contentId, e.title, e.network, e.season, e.episode, e.airMs)
+                else list + CalendarPlan(key, kind, e.contentId, e.title, e.network, e.season, e.episode, e.sourceAirMs)
             )
         }
         if (on) ensureOnCalendar(e)

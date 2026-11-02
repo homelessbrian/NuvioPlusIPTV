@@ -175,6 +175,8 @@ data class SportsSettings(
     val region: String = "",
     val hideScores: Boolean = false,
     val scoreOnInfoBar: Boolean = true,
+    /** The pin button on Live TV's info bar and the pinned scoreboards in the corner. */
+    val pinnedScores: Boolean = true,
     val bestChannelFirst: Boolean = true,
     val remindMyTeams: Boolean = true,
     /** Minutes before the start (0 = at the start). */
@@ -208,6 +210,7 @@ data class SportsSettings(
         .put("region", region)
         .put("hideScores", hideScores)
         .put("scoreOnInfoBar", scoreOnInfoBar)
+        .put("pinnedScores", pinnedScores)
         .put("bestChannelFirst", bestChannelFirst)
         .put("remindMyTeams", remindMyTeams)
         .put("remindMinutes", remindMinutes)
@@ -236,6 +239,7 @@ data class SportsSettings(
                     region = o.optString("region", ""),
                     hideScores = o.optBoolean("hideScores", d.hideScores),
                     scoreOnInfoBar = o.optBoolean("scoreOnInfoBar", d.scoreOnInfoBar),
+                    pinnedScores = o.optBoolean("pinnedScores", d.pinnedScores),
                     bestChannelFirst = o.optBoolean("bestChannelFirst", d.bestChannelFirst),
                     remindMyTeams = o.optBoolean("remindMyTeams", d.remindMyTeams),
                     remindMinutes = o.optInt("remindMinutes", d.remindMinutes),

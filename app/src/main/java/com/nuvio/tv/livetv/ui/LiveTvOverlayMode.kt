@@ -155,14 +155,27 @@ private fun OverlayModeContent(
     // Opening: the cursor on the playing channel. Picking another group: its first channel
     // (it used to stay at the same position as in the last group, somewhere in the middle).
     var shownGroup by remember { mutableStateOf<String?>(null) }
+    // Set while opening switches to the playing channel's group: the cursor goes on that channel.
+    var landOnPlaying by remember { mutableStateOf(false) }
     LaunchedEffect(ui.selectedGroupId, channels.size) {
         val changed = shownGroup != null && shownGroup != ui.selectedGroupId
         shownGroup = ui.selectedGroupId
         val playing = channels.indexOfFirst { it.key == playback.channelKey }
         chIndex = when {
+            changed && landOnPlaying && playing >= 0 -> { landOnPlaying = false; playing }
             changed -> 0
             playing >= 0 -> playing
             else -> chIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+        }
+    }
+    // Opening: always on the group the playing channel was watched in, as the guide does when it
+    // goes back to what's playing (it used to open on whatever group was browsed last time).
+    LaunchedEffect(Unit) {
+        val playing = viewModel.channelByKey(playback.channelKey) ?: return@LaunchedEffect
+        val group = runCatching { viewModel.groupToShow(playing) }.getOrNull() ?: return@LaunchedEffect
+        if (group != viewModel.uiState.value.selectedGroupId) {
+            landOnPlaying = true
+            viewModel.selectGroup(group)
         }
     }
     LaunchedEffect(Unit) { delay(60); runCatching { focus.requestFocus() } }
@@ -251,10 +264,27 @@ private fun OverlayModeContent(
         }
     }
 
+    // Scrolling the group list moves only the highlight; the channel list switches to that group
+    // once the highlight rests (or straight away on Right / OK / Back). Switching on every step
+    // rebuilt the channel list over every channel and started loading its listings and pictures
+    // each time, so scrolling through the groups lagged and froze.
+    var pendingGroupId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pendingGroupId) {
+        val id = pendingGroupId ?: return@LaunchedEffect
+        delay(500)
+        if (id != viewModel.uiState.value.selectedGroupId) viewModel.selectGroup(id)
+        pendingGroupId = null
+    }
+    fun applyPendingGroup() {
+        val id = pendingGroupId ?: return
+        pendingGroupId = null
+        if (id != viewModel.uiState.value.selectedGroupId) viewModel.selectGroup(id)
+    }
+
     fun selectGroupAt(index: Int) {
         if (groups.isEmpty()) return
         groupIndex = index.coerceIn(0, groups.lastIndex)
-        viewModel.selectGroup(groups[groupIndex].id)
+        pendingGroupId = groups[groupIndex].id
     }
 
     /** Up / Down in the group list: onto the next group or playlist heading. */
@@ -306,7 +336,7 @@ private fun OverlayModeContent(
                         e.key == Key.DirectionDown -> moveGroup(1)
                         // OK on a playlist heading: fold or unfold it (the highlight stays on it).
                         isOk && headingAt != null -> headingAt?.let { viewModel.togglePlaylistCollapsed(it) }
-                        e.key == Key.DirectionRight || isOk || e.key == Key.Back -> { headingAt = null; level = OverlayLevel.CHANNELS }
+                        e.key == Key.DirectionRight || isOk || e.key == Key.Back -> { applyPendingGroup(); headingAt = null; level = OverlayLevel.CHANNELS }
                         e.key == Key.DirectionLeft -> Unit
                     }
                     OverlayLevel.SCHEDULE -> when {
@@ -468,7 +498,7 @@ private val PanelMid = Color(0x99141416)
  * a time, another group) lands it with a few rows above it.
  */
 @Composable
-private fun keepVisible(state: LazyListState, index: Int) {
+private fun keepVisible(state: LazyListState, index: Int, instant: Boolean = false) {
     // When the last move was a moment ago (holding the button, quick presses), the list moves
     // at once instead of sliding: a slide that's cut short by the next press never finished, so
     // the highlight could run off the bottom of the panel faster than the list followed.
@@ -476,7 +506,7 @@ private fun keepVisible(state: LazyListState, index: Int) {
     LaunchedEffect(index) {
         if (index < 0) return@LaunchedEffect
         val nowMs = android.os.SystemClock.uptimeMillis()
-        val quick = nowMs - lastMove[0] < 400
+        val quick = instant || nowMs - lastMove[0] < 400
         lastMove[0] = nowMs
         val info = state.layoutInfo
         val visible = info.visibleItemsInfo
@@ -630,7 +660,8 @@ private fun GroupsPanel(
     val itemIndex = if (headingAt != null) rows.indexOfFirst { it.group < 0 && it.source == headingAt }
     else rows.indexOfFirst { it.group == index }
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (itemIndex - 3).coerceAtLeast(0))
-    keepVisible(state, itemIndex)
+    // The group list moves a row at a time with no sliding, like the channels do when held.
+    keepVisible(state, itemIndex, instant = true)
     Column(modifier = Modifier.width(250.dp).fillMaxHeight().background(PanelDark).padding(top = 20.dp)) {
         LazyColumn(state = state, modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp)) {
             itemsIndexed(rows, key = { _, row -> if (row.group >= 0) groups[row.group].id else "header:${row.source}" }) { _, row ->

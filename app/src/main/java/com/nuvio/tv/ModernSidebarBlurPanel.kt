@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.fillMaxSize
+import com.nuvio.tv.livetv.ui.shrinkToFit
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -239,17 +241,31 @@ internal fun ModernSidebarBlurPanel(
                 }
             }
         }
-        Column(
-            modifier = Modifier
+        // Shrinks a little to fit when the pages don't (Settings → Menu & Features).
+        val fitMenu = com.nuvio.tv.livetv.ui.LocalSideMenuFit.current
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
-                // Room for the highlighted item, which grows a little.
-                .padding(vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            drawerItems.forEachIndexed { index, item -> if (!item.pinnedBottom) renderItem(index, item) }
+            val room = maxHeight - 8.dp
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    // Room for the highlighted item, which grows a little.
+                    .padding(vertical = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shrinkToFit(fitMenu, room, 0.5f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    drawerItems.forEachIndexed { index, item -> if (!item.pinnedBottom) renderItem(index, item) }
+                }
+            }
         }
         Column(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),

@@ -225,8 +225,12 @@ data class CalendarEntry(
     val lastEpisode: Int? = null,
     val episodeTitle: String? = null,
     val episodeImage: String? = null,
-    /** When it airs (null: only the day is known). */
+    /** When it airs for you (null: only the day is known): on your guide's channel when it's found there. */
     val airMs: Long? = null,
+    /** TV episodes: the time TVmaze gives (its first airing, usually the East Coast). */
+    val listedAirMs: Long? = null,
+    /** TV episodes: the time to show when it isn't in your guide (West Coast: the delayed airing). */
+    val plainAirMs: Long? = null,
     /** The day it airs in your time zone. */
     val day: LocalDate,
     /** The network or streaming service. */
@@ -330,4 +334,55 @@ object SideMenuPages {
 
     /** Live TV's own pages (a thin line goes above the first of them). */
     val LIVE_FAMILY = setOf(LIVE_TV, SPORTS, ON_DEMAND, RECORDINGS)
+}
+
+/** The time TVmaze gives for [this] (its first airing), used to find it in the guide. */
+val CalendarEntry.sourceAirMs: Long? get() = listedAirMs ?: airMs
+
+/** The time to show when [this] isn't in the guide. */
+val CalendarEntry.noGuideAirMs: Long? get() = plainAirMs ?: airMs
+
+/**
+ * US networks air prime time at the same clock time on the East and West Coasts (the West gets
+ * a delayed feed), but TVmaze gives the East Coast moment. On a box set to Pacific (or Alaska /
+ * Hawaii) time, a show listed for 8 pm Eastern is shown at 8 pm local; on Mountain time at 7 pm
+ * ("8/7c"). Central and Eastern are left as they are (8 pm Eastern is 7 pm Central).
+ */
+object CalendarAirTimes {
+    private val eastern: java.time.ZoneId = java.time.ZoneId.of("America/New_York")
+
+    /** Hours to take off the listed clock time on this box (0 = Pacific or further west), or null: no change. */
+    fun westShiftHours(): Int? {
+        val zone = java.time.ZoneId.systemDefault()
+        if (!zone.id.startsWith("America/") && !zone.id.startsWith("Pacific/Honolulu") && !zone.id.startsWith("US/")) return null
+        val std = zone.rules.getStandardOffset(java.time.Instant.now()).totalSeconds / 3600
+        return when {
+            std <= -8 -> 0
+            std == -7 -> 1
+            else -> null
+        }
+    }
+
+    /** True when the box is on Mountain, Pacific, Alaska or Hawaii time. */
+    fun westOfCentral(): Boolean = westShiftHours() != null
+
+    /**
+     * The time [listedMs] airs here: the same clock time (less [westShiftHours]) when the show is on
+     * an East Coast network ([networkZone], or, when that isn't known, a listed time that matches
+     * the schedule's [scheduleTime] in Eastern time). Otherwise [listedMs] as it is.
+     */
+    fun local(listedMs: Long?, networkZone: String?, scheduleTime: String?, streaming: Boolean): Long? {
+        if (listedMs == null || streaming) return listedMs
+        val shift = westShiftHours() ?: return listedMs
+        val east = java.time.Instant.ofEpochMilli(listedMs).atZone(eastern)
+        val isEast = if (networkZone != null) {
+            networkZone.startsWith("America/") && runCatching {
+                java.time.ZoneId.of(networkZone).rules.getOffset(east.toInstant()) == east.offset
+            }.getOrDefault(false)
+        } else {
+            scheduleTime != null && runCatching { java.time.LocalTime.parse(scheduleTime) == east.toLocalTime().withSecond(0).withNano(0) }.getOrDefault(false)
+        }
+        if (!isEast) return listedMs
+        return east.toLocalDateTime().minusHours(shift.toLong()).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+    }
 }

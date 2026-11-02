@@ -94,6 +94,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -235,6 +236,7 @@ fun LiveTvGuideScreen(
     }
     // The guide's width, measured once for every row (see ProgramArea).
     var gridWidthPx by remember { mutableIntStateOf(0) }
+    var gridHeightPx by remember { mutableIntStateOf(0) }
 
     /** The Record item for a show, or null when it can't be recorded (already over, no catch-up). */
     fun recordLabel(ch: LiveChannel, p: EpgProgram?): String? {
@@ -359,6 +361,7 @@ fun LiveTvGuideScreen(
     var menuTarget by remember { mutableStateOf<MenuTarget?>(null) }
     var guideGearOpen by remember { mutableStateOf(false) }
     val guideGearFocus = remember { FocusRequester() }
+    val groupSearchFocus = remember { FocusRequester() }
     /** Schedule a Recording (long-press menu): the channel it's for. */
     var manualRecordingFor by remember { mutableStateOf<LiveChannel?>(null) }
     var infoTarget by remember { mutableStateOf<MenuTarget?>(null) }
@@ -484,7 +487,12 @@ fun LiveTvGuideScreen(
             val idx = groupListIndex(
                 ui.groups, ui.selectedGroupId, settings.groupPlaylistHeadings, viewModel.collapsedPlaylists.value
             ).coerceAtLeast(0)
-            val visible = groupsListState.layoutInfo.visibleItemsInfo.map { it.index }
+            // Only a tile that is wholly on screen is left where it is: one that is partly cut off
+            // would be scrolled into view by a fraction of a row, out of line with the channels.
+            val gInfo = groupsListState.layoutInfo
+            val visible = gInfo.visibleItemsInfo
+                .filter { it.offset >= gInfo.viewportStartOffset && it.offset + it.size <= gInfo.viewportEndOffset }
+                .map { it.index }
             if (idx !in visible) runCatching { groupsListState.scrollToItem((idx - 3).coerceAtLeast(0)) }
             // Try a few times: the group's tile has to be on screen before it can take focus.
             for (attempt in 0 until 4) {
@@ -496,43 +504,9 @@ fun LiveTvGuideScreen(
         }
     }
 
-    // The group tiles line up with the channel rows: whenever either list stops moving, the
-    // group list is nudged (less than one row) to the same place within a row as the channels.
-    // Near the end of a long group list it used to stop wherever the list ran out, out of line.
-    val groupsUniform = !(settings.groupPlaylistHeadings && ui.groups.mapNotNull { it.sourceId }.distinct().size > 1)
-    val rowPitchPx = with(androidx.compose.ui.platform.LocalDensity.current) {
-        guideRowHeight(settings).toPx()
-    }
-    LaunchedEffect(groupsUniform, rowPitchPx) {
-        if (!groupsUniform || rowPitchPx <= 0f) return@LaunchedEffect
-        var lastAlignedChannelPos = Double.NaN
-        var lastAlignedGroupPos = Double.NaN
-        val pitch = rowPitchPx.toDouble()
-        androidx.compose.runtime.snapshotFlow {
-            val busy = groupsListState.isScrollInProgress || listState.isScrollInProgress
-            val g = groupsListState.firstVisibleItemIndex * pitch + groupsListState.firstVisibleItemScrollOffset
-            val c = listState.firstVisibleItemIndex * pitch + listState.firstVisibleItemScrollOffset
-            Triple(busy, g, c)
-        }.collect { (busy, g, c) ->
-            if (busy) return@collect
-            // One nudge per position of the channel list: if a nudge didn't quite land (rounding
-            // on some screens), it isn't repeated over and over.
-            if (c == lastAlignedChannelPos && kotlin.math.abs(g - lastAlignedGroupPos) < 3.0) return@collect
-            var delta = ((c - g) % pitch + pitch) % pitch
-            if (delta > pitch / 2) delta -= pitch
-            // At the top of the groups, the first group (Favorites) stays fully in view: lining
-            // up there pushed it half under the search button until you moved down a few times.
-            if (g + delta < pitch) {
-                if (g > 0.5 && groupsListState.firstVisibleItemIndex == 0) runCatching { groupsListState.scrollToItem(0) }
-                return@collect
-            }
-            if (kotlin.math.abs(delta) > 1.0) {
-                lastAlignedChannelPos = c
-                lastAlignedGroupPos = g + delta
-                runCatching { groupsListState.scrollBy(delta.toFloat()) }
-            }
-        }
-    }
+    // The group tiles line up with the channel rows because both lists only ever move a whole
+    // row at a time (the group list does it in `stepGroup`, like the channel list's `moveRow`).
+    // Nothing slides the group list into line afterwards any more: that slide was the jump.
 
     LaunchedEffect(windowStart < System.currentTimeMillis() - 6 * 3_600_000L, row / 6, channels.size) {
         if (windowStart >= System.currentTimeMillis() - 6 * 3_600_000L || channels.isEmpty()) return@LaunchedEffect
@@ -994,7 +968,13 @@ fun LiveTvGuideScreen(
                 onGlassBounds = { headerGlassBounds = it },
                 gearFocus = guideGearFocus,
                 onGear = { guideGearOpen = true },
-                onGearDown = { runCatching { gridFocus.requestFocus() } },
+                // Down from the ● / ⚙ in the info bar: to Search when the group list is showing,
+                // otherwise to the top channel.
+                onGearDown = {
+                    val toSearch = groupsOpen && ui.groups.any { it.id == ChannelGroup.SEARCH } &&
+                        runCatching { groupSearchFocus.requestFocus() }.isSuccess
+                    if (!toSearch) runCatching { gridFocus.requestFocus() }
+                },
                 onRecordings = onOpenRecordings,
                 playlistName = if (settings.showPlaylistInInfo) headerChannel?.sourceId?.let { playlistNames[it] } else null,
                 settings = settings,
@@ -1015,8 +995,27 @@ fun LiveTvGuideScreen(
                     .fillMaxWidth()
                     .padding(start = 56.dp)
             ) {
+                // As wide as the longest group name needs, up to the full width (190dp) and never
+                // below a small minimum. Based on every group, so it doesn't move while browsing.
+                val groupsFullWidth = 190.dp * guideScale(settings).coerceAtLeast(1f)
+                val groupsTextMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
+                val groupsDensity = androidx.compose.ui.platform.LocalDensity.current
+                val groupsFitWidth = remember(ui.groups, groupsFullWidth, settings.showGroupCounts, playlistNames) {
+                    val fontSize = (14f * guideScale(settings)).sp
+                    val longest = ui.groups.map { it.title }.plus("Search").maxOfOrNull { t ->
+                        groupsTextMeasurer.measure(
+                            text = t,
+                            style = androidx.compose.ui.text.TextStyle(fontSize = fontSize, fontWeight = FontWeight.SemiBold),
+                            maxLines = 1
+                        ).size.width
+                    } ?: 0
+                    // Left gap 12 + right gap 10 + the list's own right gap 8, room for a count or
+                    // icon (about 40), and a little slack.
+                    val extra = 12.dp + 10.dp + 8.dp + 40.dp + 8.dp
+                    with(groupsDensity) { longest.toDp() } + extra
+                }.coerceIn(minOf(130.dp, groupsFullWidth), groupsFullWidth)
                 val groupsWidth by androidx.compose.animation.core.animateDpAsState(
-                    targetValue = if (groupsOpen) 190.dp * guideScale(settings).coerceAtLeast(1f) else 0.dp,
+                    targetValue = if (groupsOpen) groupsFitWidth else 0.dp,
                     animationSpec = androidx.compose.animation.core.tween(220),
                     label = "groupsWidth"
                 )
@@ -1125,7 +1124,7 @@ fun LiveTvGuideScreen(
                         }
                     },
                     onGroupMenu = { g -> if (!g.special) groupMenu = g },
-                    onLongUpAtTop = { runCatching { guideGearFocus.requestFocus() } },
+                    searchFocusRequester = groupSearchFocus,
                     onRight = {
                         column = GuideColumn.CHANNEL
                         groupsOpen = false
@@ -1508,9 +1507,25 @@ fun LiveTvGuideScreen(
                                 action = null
                             )
                             else -> {
+                                val numberDigits = remember(channels) { channels.maxOfOrNull { it.number.toString().length }?.coerceAtLeast(1) ?: 1 }
+                                // The channel list can only ever rest on a whole row, like the group list:
+                                // the part of the screen that is left over after the last whole row
+                                // is added as empty space at the end, so at the bottom of a group the
+                                // list no longer stops part-way between rows (which put the channel
+                                // rows out of line with the group tiles).
+                                val gridDensity = androidx.compose.ui.platform.LocalDensity.current
+                                val endPadding = with(gridDensity) {
+                                    val pitch = rowHeight.toPx()
+                                    val left = if (pitch > 0f && gridHeightPx > 0) gridHeightPx % pitch else 0f
+                                    if (left < 1f || pitch - left < 1f) 0.dp else left.toDp()
+                                }
                                 LazyColumn(
                                     state = listState,
-                                    modifier = Modifier.fillMaxSize().onSizeChanged { if (it.width != gridWidthPx) gridWidthPx = it.width },
+                                    modifier = Modifier.fillMaxSize().onSizeChanged {
+                                        if (it.width != gridWidthPx) gridWidthPx = it.width
+                                        if (it.height != gridHeightPx) gridHeightPx = it.height
+                                    },
+                                    contentPadding = PaddingValues(bottom = endPadding),
                                     userScrollEnabled = false
                                 ) {
                                     itemsIndexed(channels, key = { _, c -> c.key }) { index, ch ->
@@ -1520,6 +1535,7 @@ fun LiveTvGuideScreen(
                                             settings = settings,
                                             rowHeight = rowHeight,
                                             channelColWidth = channelColWidth,
+                                            numberDigits = numberDigits,
                                             windowStart = windowStart,
                                             now = now,
                                             isFavorite = if (favoritesMode) ch.key in pendingFavorites else ch.key in user.favorites,
@@ -2502,6 +2518,8 @@ private fun GuideRow(
     settings: LiveTvSettings,
     rowHeight: Dp,
     channelColWidth: Dp,
+    /** Digits in the longest channel number in this list: the number column is just that wide. */
+    numberDigits: Int = 4,
     windowStart: Long,
     now: Long,
     isFavorite: Boolean,
@@ -2554,7 +2572,10 @@ private fun GuideRow(
                 .glassTile(
                     cell.background,
                     if (playingMark) NuvioTheme.colors.Error else if (cell.border == Color.Transparent) GuideGlassEdge else cell.border,
-                    cellShape
+                    cellShape,
+                    // Same as the group tiles: thin, and thicker only when highlighted (the red
+                    // playing outline stays thick so it can still be seen).
+                    edgeWidth = if (channelFocused || playingMark) 2.dp else 1.dp
                 )
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -2562,11 +2583,17 @@ private fun GuideRow(
             if (settings.showChannelNumbers) {
                 LiveText(
                     channel.number.toString(),
-                    modifier = Modifier.width(gdp(46f)),
+                    // Wide enough for this list's longest number, right-aligned so every number
+                    // sits the same short distance from the logo regardless of digit count
+                    // (previously left-aligned, which pushed short numbers like "7" away from
+                    // the logo by the width of the group's longest number, e.g. "1205").
+                    modifier = Modifier.width(gdp(9f * numberDigits + 4f)),
+                    align = TextAlign.End,
                     color = if (channelFocused) cell.text else NuvioTheme.colors.TextSecondary,
                     size = gsp(14f),
                     weight = FontWeight.Medium
                 )
+                Spacer(Modifier.width(6.dp))
             }
             if (settings.showChannelLogos) {
                 ChannelLogo(channel.logo, (rowHeight - 12.dp).coerceAtLeast(18.dp))
@@ -2948,8 +2975,8 @@ private fun GroupColumn(
     onSelect: (ChannelGroup) -> Unit,
     onGroupMenu: (ChannelGroup) -> Unit,
     onRight: () -> Unit,
-    /** Holding Up while on the first group: on to the ⚙ in the top bar. */
-    onLongUpAtTop: () -> Unit = {},
+    /** Lets the info bar's buttons send Down to the Search button. */
+    searchFocusRequester: FocusRequester? = null,
     playlistNames: Map<String, String> = emptyMap(),
     collapsed: Set<String> = emptySet(),
     onToggleCollapse: (String) -> Unit = {},
@@ -2976,7 +3003,69 @@ private fun GroupColumn(
     tileHeight: Dp = 32.dp
 ) {
     var focusedGroupId by remember { mutableStateOf<String?>(null) }
-    var focusedSince by remember { mutableStateOf(0L) }
+    // The row (group id, or "header:<playlist>") that has focus, and whether Search has it.
+    var focusedKey by remember { mutableStateOf<String?>(null) }
+    var searchFocused by remember { mutableStateOf(false) }
+    val stepping = remember { BooleanArray(1) }
+    val stepScope = rememberCoroutineScope()
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    // The rows of the list below, in order (what Up / Down step through).
+    val listed = groups.filter { it.id != ChannelGroup.SEARCH }
+    val sources = listed.mapNotNull { it.sourceId }.distinct()
+    val sectioned = showPlaylistHeadings && !reorderMode && hiddenPending == null && sources.size > 1
+    val rowKeys: List<String> = if (!sectioned) listed.map { it.id } else buildList {
+        listed.filter { it.sourceId == null }.forEach { add(it.id) }
+        sources.forEach { src ->
+            add("header:$src")
+            if (src !in collapsed) listed.filter { it.sourceId == src }.forEach { add(it.id) }
+        }
+    }
+    // One focus requester per row, so the row number below can put the highlight on any row.
+    val rowRequesters = remember { HashMap<String, FocusRequester>() }
+    fun requesterFor(key: String): FocusRequester = rowRequesters.getOrPut(key) { FocusRequester() }
+    /**
+     * Up / Down through the groups, exactly the way the channel list does it (`moveRow`): the
+     * list keeps its own row number, one press moves it one row, the list is moved by whole rows
+     * only when that row isn't wholly on screen (`ensureRowVisible`), and the highlight is then
+     * put on that row. At the end of the list it simply stops. Up from the first group goes to
+     * Search; a held Up stops on Search and goes no further until pressed again.
+     */
+    fun stepGroup(e: androidx.compose.ui.input.key.KeyEvent): Boolean {
+        val down = e.key == Key.DirectionDown
+        if (searchFocused) return if (down) false else e.nativeKeyEvent.repeatCount > 0
+        val at = focusedKey?.let { rowKeys.indexOf(it) } ?: -1
+        if (at < 0) return false
+        val to = at + if (down) 1 else -1
+        if (to < 0) return false // the first group: Up goes on to Search
+        if (to > rowKeys.lastIndex) return true // the end of the list
+        if (stepping[0]) return true
+        val dir = if (down) androidx.compose.ui.focus.FocusDirection.Down else androidx.compose.ui.focus.FocusDirection.Up
+        fun focusRow() {
+            if (runCatching { requesterFor(rowKeys[to]).requestFocus() }.isFailure) focusManager.moveFocus(dir)
+        }
+        val info = listState.layoutInfo
+        val full = info.visibleItemsInfo.filter { it.offset >= info.viewportStartOffset && it.offset + it.size <= info.viewportEndOffset }
+        val first = full.firstOrNull()?.index
+        val last = full.lastOrNull()?.index
+        // The row number moves at once, so a quick second press carries on from here.
+        focusedKey = rowKeys[to]
+        if (first != null && last != null && to in first..last) {
+            focusRow() // wholly on screen already: just the highlight moves, nothing scrolls
+            return true
+        }
+        stepping[0] = true
+        stepScope.launch {
+            try {
+                if (first == null || last == null || to < first) listState.scrollToItem(to)
+                else listState.scrollToItem((to - (last - first)).coerceAtLeast(0))
+                androidx.compose.runtime.withFrameNanos { }
+                focusRow()
+            } finally {
+                stepping[0] = false
+            }
+        }
+        return true
+    }
     // OK held down in Reorder groups (a tick, not a pick): its release is swallowed.
     var okHeld by remember { mutableStateOf(false) }
     Column(
@@ -2995,7 +3084,8 @@ private fun GroupColumn(
                         e.key == Key.DirectionLeft -> { onHideAllGroups(); true }
                         e.key == Key.DirectionRight -> { onShowAllGroups(); true }
                         e.key == Key.Back -> { onVisibilityDone(); true }
-                        else -> false // Up / Down move through the groups as usual
+                        e.key == Key.DirectionUp || e.key == Key.DirectionDown -> stepGroup(e)
+                        else -> false
                     }
                 }
                 if (reorderMode) {
@@ -3013,8 +3103,8 @@ private fun GroupColumn(
                         return@onPreviewKeyEvent true
                     }
                     if (e.type == KeyEventType.KeyDown) when (e.key) {
-                        Key.DirectionUp -> if (reorderingId != null) { onReorderMove(-1); return@onPreviewKeyEvent true } else return@onPreviewKeyEvent false
-                        Key.DirectionDown -> if (reorderingId != null) { onReorderMove(1); return@onPreviewKeyEvent true } else return@onPreviewKeyEvent false
+                        Key.DirectionUp -> if (reorderingId != null) { onReorderMove(-1); return@onPreviewKeyEvent true } else return@onPreviewKeyEvent stepGroup(e)
+                        Key.DirectionDown -> if (reorderingId != null) { onReorderMove(1); return@onPreviewKeyEvent true } else return@onPreviewKeyEvent stepGroup(e)
                         Key.DirectionLeft -> { onReorderEnds(true, focusedGroupId); return@onPreviewKeyEvent true }
                         Key.DirectionRight -> { onReorderEnds(false, focusedGroupId); return@onPreviewKeyEvent true }
                         Key.Back -> { onReorderDone(); return@onPreviewKeyEvent true }
@@ -3025,27 +3115,30 @@ private fun GroupColumn(
                 }
                 if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) {
                     onRight(); true
-                } else if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp && e.nativeKeyEvent.repeatCount >= 2 &&
-                    !reorderMode && hiddenPending == null &&
-                    focusedGroupId == groups.firstOrNull { it.id != ChannelGroup.SEARCH }?.id &&
-                    e.nativeKeyEvent.eventTime - focusedSince > 500
-                ) {
-                    onLongUpAtTop(); true
+                } else if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionUp || e.key == Key.DirectionDown)) {
+                    stepGroup(e)
                 } else false
             }
     ) {
         // Search sits above the groups (it opens Nuvio's search), in the row beside the timeline.
         groups.firstOrNull { it.id == ChannelGroup.SEARCH }?.let { searchGroup ->
             GroupSearchButton(
-                modifier = Modifier.padding(bottom = 4.dp),
+                modifier = Modifier.padding(bottom = 4.dp).then(if (searchFocusRequester != null) Modifier.focusRequester(searchFocusRequester) else Modifier),
+                onFocusChange = { searchFocused = it },
                 onClick = { onSelect(searchGroup) }
             )
         }
         // With more than one playlist, each playlist's groups sit under its own heading,
         // which folds away when selected. (Not while reordering: that's one plain list.)
-        val listed = groups.filter { it.id != ChannelGroup.SEARCH }
-        val sources = listed.mapNotNull { it.sourceId }.distinct()
-        val sectioned = showPlaylistHeadings && !reorderMode && hiddenPending == null && sources.size > 1
+        // The app's own scrolling for a highlighted item (it slides the list so the highlight
+        // sits part-way down the screen) is switched off here: it moved the group list by part
+        // of a row on every press, half-hiding tiles and putting them out of line with the
+        // channels. The list is moved only by `stepGroup` / the code above, in whole rows,
+        // exactly like the channel list.
+        @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides NoBringIntoView
+        ) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -3072,10 +3165,11 @@ private fun GroupColumn(
                         showCount = showCounts,
                         moving = moving,
                         visible = hiddenPending?.let { g.id !in it },
-                        modifier = if (requester) Modifier.focusRequester(focusRequester) else Modifier,
+                        modifier = Modifier.focusRequester(requesterFor(g.id))
+                            .then(if (requester) Modifier.focusRequester(focusRequester) else Modifier),
                         onFocused = {
-                            if (focusedGroupId != g.id) focusedSince = android.os.SystemClock.uptimeMillis()
                             focusedGroupId = g.id
+                            focusedKey = g.id
                             if (!reorderMode && hiddenPending == null) onFocusGroup(g)
                         },
                         onClick = { onSelect(g) },
@@ -3097,6 +3191,8 @@ private fun GroupColumn(
                             collapsed = isCollapsed,
                             // Folded, but its group is the one showing: keep a way back to it.
                             containsSelected = inSource.any { it.id == selectedId },
+                            onFocused = { focusedKey = "header:$src" },
+                            focusRequester = requesterFor("header:$src"),
                             onClick = { onToggleCollapse(src) }
                         )
                     }
@@ -3104,7 +3200,15 @@ private fun GroupColumn(
                 }
             }
         }
+        }
     }
+}
+
+/** Never scrolls a list to show the highlighted item; the list's own code does that, in whole rows. */
+@Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private object NoBringIntoView : androidx.compose.foundation.gestures.BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
 }
 
 /**
@@ -3133,6 +3237,8 @@ private fun PlaylistHeader(
     groupCount: Int,
     collapsed: Boolean,
     containsSelected: Boolean,
+    onFocused: () -> Unit = {},
+    focusRequester: FocusRequester? = null,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -3146,7 +3252,8 @@ private fun PlaylistHeader(
             .clip(shape)
             .background(colors.background)
             .border(2.dp, colors.border, shape)
-            .onFocusChanged { focused = it.isFocused }
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }
             .combinedClickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = null,
@@ -3174,7 +3281,7 @@ private fun PlaylistHeader(
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun GroupSearchButton(modifier: Modifier, onClick: () -> Unit) {
+private fun GroupSearchButton(modifier: Modifier, onFocusChange: (Boolean) -> Unit = {}, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(liveCorner())
     val colors = liveCellColors(focused = focused, idle = guideSurface(), idleText = NuvioTheme.colors.TextPrimary)
@@ -3185,7 +3292,7 @@ private fun GroupSearchButton(modifier: Modifier, onClick: () -> Unit) {
             .clip(shape)
             .background(colors.background)
             .border(if (focused) 2.dp else 1.dp, if (focused) colors.border else NuvioTheme.colors.Border, shape)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { focused = it.isFocused; onFocusChange(it.isFocused) }
             .combinedClickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = null,

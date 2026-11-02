@@ -1329,6 +1329,17 @@ private fun GamePage(
                     })
                 }
             }
+            // Pin the live score to the corner (up to three games; shows while something plays).
+            if (ev.state == GameState.LIVE && sides.size == 2 && showScore && settings.pinnedScores) {
+                val m = f()
+                item {
+                    val pinned = SportsLive.pins.collectAsStateWithLifecycle().value.contains(ev.id)
+                    SportsAction(if (pinned) "📌  Pinned" else "📌  Pin score", modifier = m, selected = pinned, onClick = {
+                        val now = SportsLive.togglePin(ev.id)
+                        LiveTvNotice.show(if (now) "Score pinned to the corner while you watch" else "Score unpinned")
+                    })
+                }
+            }
             sides.forEach { side ->
                 val m = f()
                 item {

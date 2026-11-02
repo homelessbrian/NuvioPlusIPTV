@@ -410,8 +410,8 @@ fun rememberLiveGameOn(channelKey: String?): SportsEvent? {
 }
 
 /**
- * A game as a poster, for the guide's poster space: the two teams on their colours, the score
- * between them (unless scores are hidden), the clock underneath. Sized to whatever poster box
+ * A game as a poster, for the guide's poster space: the two teams on flat halves of their colours,
+ * the score in a dark chip between them (unless scores are hidden), the clock under it. Sized to whatever poster box
  * it's in (the small info panel's too).
  */
 @Composable
@@ -426,32 +426,44 @@ fun SportsPosterCard(ev: SportsEvent, modifier: Modifier = Modifier) {
     if (sides.size != 2) return
     val top = bandColor(teamColor(sides[0].team))
     val bottom = bandColor(teamColor(sides[1].team))
-    androidx.compose.foundation.layout.BoxWithConstraints(
-        modifier.background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(top, lerpInk(top), lerpInk(bottom), bottom)))
-    ) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.background(SportsLook.Ink)) {
         val h = maxHeight
         val logo = h * 0.27f
         val tiny = h < 100.dp
+        // Two flat halves, one per team, with a thin dark seam; the score sits in a dark chip.
+        Column(Modifier.fillMaxSize()) {
+            androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth().background(top))
+            androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth().background(bottom))
+        }
+        androidx.compose.foundation.layout.Box(
+            Modifier.align(Alignment.Center).fillMaxWidth().height(2.dp).background(SportsLook.Ink)
+        )
         Column(
-            Modifier.fillMaxSize().padding(vertical = if (tiny) 4.dp else 6.dp),
+            Modifier.fillMaxSize().padding(vertical = if (tiny) 4.dp else 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceEvenly
         ) {
             TeamLogo(sides[0].team, logo)
             val score = if (!hideScores && ev.hasScore) "${sides[0].score} – ${sides[1].score}" else "vs"
-            LiveText(
-                score,
-                color = Color.White,
-                size = (h.value * (if (score == "vs") 0.10f else 0.13f)).sp,
-                weight = FontWeight.Black,
-                maxLines = 1
-            )
-            TeamLogo(sides[1].team, logo)
-            if (!tiny) ev.status?.takeIf { it.isNotBlank() }?.let {
-                LiveText(it, color = Color.White.copy(alpha = 0.9f), size = (h.value * 0.065f).coerceAtLeast(9f).sp, weight = FontWeight.Bold, maxLines = 1)
+            Column(
+                Modifier
+                    .background(SportsLook.Ink, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                    .padding(horizontal = if (tiny) 6.dp else 10.dp, vertical = if (tiny) 1.dp else 3.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                LiveText(
+                    score,
+                    color = Color.White,
+                    size = (h.value * (if (score == "vs") 0.10f else 0.13f)).sp,
+                    weight = FontWeight.Black,
+                    maxLines = 1
+                )
+                if (!tiny) ev.status?.takeIf { it.isNotBlank() }?.let {
+                    LiveText(it, color = Color.White.copy(alpha = 0.9f), size = (h.value * 0.065f).coerceAtLeast(9f).sp, weight = FontWeight.Bold, maxLines = 1)
+                }
             }
+            TeamLogo(sides[1].team, logo)
         }
     }
 }
 
-private fun lerpInk(c: Color): Color = androidx.compose.ui.graphics.lerp(c, SportsLook.Ink, 0.45f)
