@@ -307,14 +307,14 @@ private fun TableView(
     val firstReq = remember { FocusRequester() }
     // The row to open on: your team (or a marked one), else the top.
     val markKey = remember(groups, marked) {
-        groups.firstNotNullOfOrNull { g -> g.rows.firstOrNull { it.id in marked }?.let { g.name + "|" + it.id } }
+        groups.withIndex().firstNotNullOfOrNull { (gi, g) -> g.rows.firstOrNull { it.id in marked }?.let { "$gi|" + it.id } }
     }
     // Item keys in list order, to scroll to the marked row.
     val keys = remember(groups) {
         buildList {
-            groups.forEach { g ->
-                if (groups.size > 1 || table.hasDivisions) add("h|" + g.name)
-                g.rows.forEach { add(g.name + "|" + it.id) }
+            groups.forEachIndexed { gi, g ->
+                if (groups.size > 1 || table.hasDivisions) add("h|$gi")
+                g.rows.forEach { add("$gi|" + it.id) }
             }
         }
     }
@@ -369,14 +369,14 @@ private fun TableView(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             var first = true
-            groups.forEach { g ->
+            groups.forEachIndexed { gi, g ->
                 if (groups.size > 1 || table.hasDivisions) {
-                    item(key = "h|" + g.name) {
+                    item(key = "h|$gi") {
                         LiveText(Standings.shortGroupName(g.name).uppercase(), color = SportsLook.Dim, size = 10.sp, weight = FontWeight.Black, modifier = Modifier.padding(start = 6.dp, top = 8.dp, bottom = 2.dp))
                     }
                 }
                 g.rows.forEachIndexed { i, r ->
-                    val key = g.name + "|" + r.id
+                    val key = "$gi|" + r.id
                     val req = when {
                         key == markKey -> markReq
                         first -> firstReq
@@ -398,7 +398,7 @@ private fun TableView(
                         )
                     }
                     lines.firstOrNull { it.first == i + 1 && i + 1 < g.rows.size }?.let { (_, label) ->
-                        item(key = "line|" + g.name + "|" + i) { PlayoffLine(label) }
+                        item(key = "line|$gi|" + i) { PlayoffLine(label) }
                     }
                 }
             }
