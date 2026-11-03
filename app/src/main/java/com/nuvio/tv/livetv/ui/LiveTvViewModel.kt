@@ -288,10 +288,13 @@ class LiveTvViewModel @Inject constructor(
          */
         exactGroup: Boolean = false
     ): LiveTvUiState {
-        val shown = channels.filter { it.key !in user.hiddenChannels && it.groupId !in user.hiddenGroups }
+        // Channels you hid one by one stay out everywhere. Hiding a playlist group only hides that
+        // group: its channels still show in your own groups (customPool below).
+        val notHidden = channels.filter { it.key !in user.hiddenChannels }
+        val shown = notHidden.filter { it.groupId !in user.hiddenGroups }
         // Parental controls: channels in locked groups stay out of every list until unlocked.
         val lockedIds = HashSet<String>()
-        shown.distinctBy { it.groupId }.forEach { c ->
+        notHidden.distinctBy { it.groupId }.forEach { c ->
             if (com.nuvio.tv.livetv.parental.ParentalControls.isLocked(c.groupId, c.group, s, user.lockedGroups)) lockedIds += c.groupId
         }
         user.customGroups.forEach { g ->
@@ -299,6 +302,8 @@ class LiveTvViewModel @Inject constructor(
         }
         val visible = shown.filter { it.groupId !in lockedIds }
         val byKey = visible.associateBy { it.key }
+        // What your own groups can show: also channels whose playlist group is hidden.
+        val customPool = notHidden.filter { it.groupId !in lockedIds }.associateBy { it.key }
         val favorites = user.favorites.mapNotNull { byKey[it] }
         val recent = user.recent.mapNotNull { byKey[it] }
 
@@ -335,7 +340,7 @@ class LiveTvViewModel @Inject constructor(
         val regular = mutableListOf<ChannelGroup>()
         val custom = user.customGroups
             .filter { it.id !in user.hiddenGroups }
-            .map { g -> ChannelGroup(g.id, g.name, g.channelKeys.count { it in byKey }, locked = g.id in lockedIds) }
+            .map { g -> ChannelGroup(g.id, g.name, g.channelKeys.count { it in customPool }, locked = g.id in lockedIds) }
         regular += custom
         val playlistGroups = LinkedHashMap<String, Pair<String, Int>>()
         shown.forEach { c ->
@@ -397,7 +402,7 @@ class LiveTvViewModel @Inject constructor(
             }
             groupId in lockedIds -> emptyList()
             groupId.startsWith(ChannelGroup.CUSTOM_PREFIX) ->
-                sorted(user.customGroups.firstOrNull { it.id == groupId }?.channelKeys?.mapNotNull { byKey[it] }.orEmpty())
+                sorted(user.customGroups.firstOrNull { it.id == groupId }?.channelKeys?.mapNotNull { customPool[it] }.orEmpty())
             else -> ordered(groupId, groupChannels(groupId)).distinctBy { it.key }
         }
         // TiviMate's number override: 1, 2, 3… in the order the group shows them.
