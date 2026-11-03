@@ -28,6 +28,18 @@ class LiveTvChannelStore @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    // Set up before [displayChannels]: that list starts being worked out on another thread as
+    // soon as it is created, and used these while they were still unset (the app closed on
+    // opening, now and then: "Null reference used for synchronization").
+    @Volatile private var cleanedFor: Pair<List<LiveChannel>, String>? = null
+    @Volatile private var cleanedCache: Map<String, String> = emptyMap()
+    // Channel name editor results by original name, for the current list of terms.
+    private val memoLock = Any()
+    @Volatile private var memoFor: String? = null
+    private var memo: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
+    private val memoFile by lazy { java.io.File(java.io.File(context.filesDir, "livetv"), "name_editor_cache.txt") }
+    private var saveJob: kotlinx.coroutines.Job? = null
+
     /** Channels with the user's renames and renumbering applied. */
     val displayChannels: StateFlow<List<LiveChannel>> = combine(
         repository.channels, prefs.userState, prefs.settings, repository.epgLogos,
@@ -90,8 +102,6 @@ class LiveTvChannelStore @Inject constructor(
 
     // Channel name editor results, kept until the channel list or the terms change. Cleaning
     // tens of thousands of names took long enough that renames seemed to take 20-30 seconds.
-    @Volatile private var cleanedFor: Pair<List<LiveChannel>, String>? = null
-    @Volatile private var cleanedCache: Map<String, String> = emptyMap()
 
     private fun cleanedNames(channels: List<LiveChannel>, raw: String, terms: List<String>): Map<String, String> {
         if (terms.isEmpty()) return emptyMap()
@@ -122,12 +132,6 @@ class LiveTvChannelStore @Inject constructor(
         return out
     }
 
-    // Channel name editor results by original name, for the current list of terms.
-    private val memoLock = Any()
-    @Volatile private var memoFor: String? = null
-    private var memo: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
-    private val memoFile by lazy { java.io.File(java.io.File(context.filesDir, "livetv"), "name_editor_cache.txt") }
-    private var saveJob: kotlinx.coroutines.Job? = null
 
     // The cleaning rules are part of the header, so saved results from older rules are dropped.
     private fun memoHeader(raw: String) = "v3|" + raw.replace('\n', ' ')
