@@ -218,6 +218,12 @@ class LiveTvViewModel @Inject constructor(
                 prefs.updatePlaylists { l -> l.map { if (it.id == sourceId) it.copy(catchupNoHlsSince = now) else it } }
             }
         }
+        playback.onCatchupLinkWorked = { sourceId, form ->
+            // The "other clock" link can play (an earlier show) even when it's wrong: never put it first.
+            if ("+clock" !in form && catchupForms.put(sourceId, form) != form && form != "hls" && form != "ts") {
+                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up: this provider answers the \"$form\" kind of link; trying it first from now on")
+            }
+        }
         playback.onCatchupHlsWorks = { sourceId ->
             if ((playlistNoHls.value[sourceId] ?: 0L) > 0L) viewModelScope.launch {
                 com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up: HLS replays work on this provider again")
@@ -700,20 +706,39 @@ class LiveTvViewModel @Inject constructor(
                 now - (playlistNoHls.value[channel.sourceId] ?: 0L) > HLS_RETRY_MS,
             serverTimezone = zone
         ) ?: return false
-        playback.play(
-            channel, overrideUrl = url, catchupTitle = program.title,
-            fallbacks = CatchupUrlBuilder.alternatives(
+        // Xtream links only name whole minutes, so the replay begins up to a minute before the
+        // point asked for. The player skips that bit once the replay is in, and the seek bar goes
+        // by where the replay really begins (before, a 30 s skip could land 20 s further back
+        // while the bar said it had gone forward).
+        val correctionMs = (catchup.correctionHours * 3_600_000).toLong()
+        val lead = if (CatchupUrlBuilder.wholeMinutes(url)) Math.floorMod(start - shift + correctionMs, 60_000L) else 0L
+        val from = start - lead
+        // The kind of link that worked last time on this provider goes first, so a skip doesn't
+        // wait on links the provider never answers (each one that sends nothing costs 15 s).
+        val links = CatchupUrlBuilder.preferForm(
+            url,
+            CatchupUrlBuilder.alternatives(
                 url, zone,
-                showMinutes = (program.stopMs - start) / 60_000,
-                airedMinutes = if (now < program.stopMs) (now - start) / 60_000 else null
+                showMinutes = (program.stopMs - from) / 60_000,
+                airedMinutes = if (now < program.stopMs) (now - from) / 60_000 else null
             ),
-            catchupStartMs = start
+            catchupForms[channel.sourceId]
         )
-        _catchup.value = CatchupSession(channel, program, offsetMs.coerceAtLeast(0))
+        playback.play(
+            channel, overrideUrl = links.first(), catchupTitle = program.title,
+            fallbacks = links.drop(1),
+            catchupStartMs = start,
+            catchupLeadMs = lead,
+            catchupPrimaryUrl = url
+        )
+        _catchup.value = CatchupSession(channel, program, offsetMs.coerceAtLeast(0) - lead)
         // Load this channel's full schedule, so catch-up can follow on into later shows.
         repository.ensureChannelSchedule(channel.key)
         return true
     }
+
+    /** Playlist id -> the kind of catch-up link that last worked there (this session only). */
+    private val catchupForms = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** Playlist id -> when HLS catch-up last failed there (see [PlaylistSource.catchupNoHlsSince]). */
     private val playlistNoHls: StateFlow<Map<String, Long>> = prefs.playlists
@@ -781,7 +806,7 @@ class LiveTvViewModel @Inject constructor(
         // A replay that came as the live stream's rewind window: go by the stream's clock.
         playback.archiveOffsetMs(s.program.startMs)?.let { return it.coerceAtLeast(0) }
         val pos = playback.player?.currentPosition ?: 0L
-        return s.baseOffsetMs + pos.coerceAtLeast(0)
+        return (s.baseOffsetMs + pos.coerceAtLeast(0)).coerceAtLeast(0)
     }
 
     /**
@@ -793,6 +818,7 @@ class LiveTvViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         val latest = (minOf(s.program.stopMs, now - 15_000) - s.program.startMs).coerceAtLeast(0)
         val target = offsetMs.coerceIn(0, latest)
+        playback.cancelCatchupLead()
         if (playback.seekArchiveTo(s.program.startMs, target)) return
         val p = playback.player
         val inStream = target - s.baseOffsetMs

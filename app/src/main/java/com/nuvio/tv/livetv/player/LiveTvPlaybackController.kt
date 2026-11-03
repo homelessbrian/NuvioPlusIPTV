@@ -598,7 +598,11 @@ class LiveTvPlaybackController @Inject constructor(
         fallback: String? = null,
         fallbacks: List<String> = emptyList(),
         /** Catch-up: the real time the replay should start at (the show's start). */
-        catchupStartMs: Long? = null
+        catchupStartMs: Long? = null,
+        /** Catch-up: how far the replay begins before [catchupStartMs] (whole-minute links); skipped once it's in. */
+        catchupLeadMs: Long = 0L,
+        /** Catch-up: the link the app built first (the others are other kinds of the same request). */
+        catchupPrimaryUrl: String? = null
     ) {
         // Something chosen to play (back from the background through a launcher row, say):
         // that wins over picking up what was on before.
@@ -664,6 +668,11 @@ class LiveTvPlaybackController @Inject constructor(
             return
         }
         reconnectJob?.cancel()
+        leadSeekMs = if (catchupTitle != null) catchupLeadMs.coerceAtLeast(0) else 0L
+        leadSeekUntil = 0L
+        catchupPrimary = if (catchupTitle != null) (catchupPrimaryUrl ?: overrideUrl) else null
+        catchupAskedAt = android.os.SystemClock.elapsedRealtime()
+        catchupLinkReported = false
         stopReplayCache()
         currentChannel = channel
         LiveWatching.sourceId = channel.sourceId
@@ -875,6 +884,9 @@ class LiveTvPlaybackController @Inject constructor(
             )
             p.stop()
             if (fb != null) {
+                val wasHls = currentUrl?.substringBefore('?')?.let { it.contains("/timeshift/") && it.endsWith(".m3u8", true) } == true
+                val toTs = fb.substringBefore('?').let { it.contains("/timeshift/") && it.endsWith(".ts", true) }
+                hlsCatchupFailedOn = if (wasHls && toTs) ch.sourceId else null
                 currentUrl = fb
                 archiveStartPending = true
                 p.setMediaSource(buildMediaSource(fb, ch.headers, isLive = false))
@@ -1439,6 +1451,19 @@ class LiveTvPlaybackController @Inject constructor(
                 hlsCatchupFailedOn = null
                 onCatchupHlsUnsupported?.invoke(source)
             }
+            // Catch-up playing: remember which kind of link this provider answers, and say how
+            // long it took (Start-Up Report), once per replay.
+            if (_state.value.catchupTitle != null && !catchupLinkReported) {
+                catchupLinkReported = true
+                val playing = currentUrl
+                val primary = catchupPrimary
+                val secs = (android.os.SystemClock.elapsedRealtime() - catchupAskedAt) / 100 / 10.0
+                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up: picture after $secs s" + if (replayLocal) " (saved while it plays)" else "")
+                val source = currentChannel?.sourceId
+                if (playing != null && primary != null && source != null && com.nuvio.tv.livetv.data.CatchupUrlBuilder.wholeMinutes(primary)) {
+                    onCatchupLinkWorked?.invoke(source, com.nuvio.tv.livetv.data.CatchupUrlBuilder.linkForm(playing, primary))
+                }
+            }
             // HLS catch-up playing: this provider does offer it.
             val url = currentUrl?.substringBefore('?')
             if (_state.value.catchupTitle != null && url != null && url.contains("/timeshift/") && url.endsWith(".m3u8", true)) {
@@ -1458,6 +1483,12 @@ class LiveTvPlaybackController @Inject constructor(
                     }
                 }
             }
+            if (!archiveStartPending && leadSeekMs > 0 && !timeline.isEmpty) {
+                _player?.let { pl ->
+                    val w = timeline.getWindow(pl.currentMediaItemIndex.coerceIn(0, timeline.windowCount - 1), androidx.media3.common.Timeline.Window())
+                    if (!w.isPlaceholder) tryLeadSeek(pl, w)
+                }
+            }
             if (!archiveStartPending || timeline.isEmpty) return
             val p = _player ?: return
             val window = timeline.getWindow(p.currentMediaItemIndex.coerceIn(0, timeline.windowCount - 1), androidx.media3.common.Timeline.Window())
@@ -1468,7 +1499,7 @@ class LiveTvPlaybackController @Inject constructor(
             if (window.isPlaceholder) return
             archiveStartPending = false
             if (_state.value.catchupTitle == null) return
-            if (!(window.isDynamic || window.isLive())) return
+            if (!(window.isDynamic || window.isLive())) { tryLeadSeek(p, window); return }
             // A replay sent as a growing live stream: the player would start it at the live
             // edge. When the stream carries its own clock and reaches back before the show
             // (the provider sent its live stream with a long rewind window instead of just the
@@ -1479,11 +1510,14 @@ class LiveTvPlaybackController @Inject constructor(
                 val length = window.durationMs.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE
                 val target = (startWall - windowStart).coerceAtMost(length)
                 archiveWallMapped = true
+                // Positions go by the stream's clock here, which already lands on the exact time.
+                leadSeekMs = 0L
                 com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up came as the live stream with rewind; jumping back ${target / 60_000} min into it to the show's start")
                 p.seekTo(target)
             } else {
                 com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up came as a live stream; starting from the beginning")
                 p.seekTo(0L)
+                tryLeadSeek(p, window)
             }
         }
 
@@ -1640,6 +1674,44 @@ class LiveTvPlaybackController @Inject constructor(
                 "Catch-up failed on ${ch?.name} (${error.errorCodeName}); no other links left to try"
             )
             scheduleReconnect(describe(error), error)
+        }
+    }
+
+    /**
+     * Catch-up from a whole-minute link: how far into the replay the point asked for is (up to
+     * a minute). Skipped as soon as the replay has that much in; if it can't be (a stream with no
+     * length, or one that only grows as it plays), the replay simply plays from the minute and
+     * the seek bar already shows that time.
+     */
+    @Volatile private var leadSeekMs = 0L
+    /** When to stop waiting for room to skip [leadSeekMs] (0: the replay hasn't answered yet). */
+    @Volatile private var leadSeekUntil = 0L
+    /** The first link built for the catch-up playing (see [onCatchupLinkWorked]). */
+    @Volatile private var catchupPrimary: String? = null
+    @Volatile private var catchupAskedAt = 0L
+    @Volatile private var catchupLinkReported = false
+    /** Called with the playlist id and the kind of catch-up link that played there. */
+    var onCatchupLinkWorked: ((String, String) -> Unit)? = null
+
+    /** You skipped yourself: forget the automatic skip into the replay. */
+    fun cancelCatchupLead() {
+        leadSeekMs = 0L
+    }
+
+    private fun tryLeadSeek(p: ExoPlayer, w: androidx.media3.common.Timeline.Window) {
+        val lead = leadSeekMs
+        if (lead <= 0L) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (leadSeekUntil == 0L) leadSeekUntil = now + 6_000
+        val dur = w.durationMs
+        val room = w.isSeekable && dur != C.TIME_UNSET && (if (w.isDynamic) dur >= lead + 3_000 else dur > lead)
+        if (room) {
+            leadSeekMs = 0L
+            p.seekTo(lead)
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up: the provider started on the whole minute; skipped the first ${lead / 1000} s to the point asked for")
+        } else if (!w.isDynamic || now > leadSeekUntil) {
+            leadSeekMs = 0L
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up: playing from the whole minute (${lead / 1000} s early; this replay can't skip yet)")
         }
     }
 
