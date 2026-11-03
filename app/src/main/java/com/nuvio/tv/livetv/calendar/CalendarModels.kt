@@ -354,10 +354,15 @@ object CalendarAirTimes {
     /** Hours to take off the listed clock time on this box (0 = Pacific or further west), or null: no change. */
     fun westShiftHours(): Int? {
         val zone = java.time.ZoneId.systemDefault()
-        if (!zone.id.startsWith("America/") && !zone.id.startsWith("Pacific/Honolulu") && !zone.id.startsWith("US/")) return null
+        // Many boxes are set to a plain offset ("GMT-08:00") or an old name ("PST8PDT") instead of a city.
+        val id = zone.id
+        val american = id.startsWith("America/") || id.startsWith("US/") || id.startsWith("Canada/") ||
+            id.startsWith("Pacific/Honolulu") || id in setOf("PST8PDT", "MST7MDT", "MST", "PST", "HST", "SystemV/PST8", "SystemV/MST7") ||
+            zone is java.time.ZoneOffset || id.startsWith("GMT") || id.startsWith("UTC") || id.startsWith("Etc/GMT")
+        if (!american) return null
         val std = zone.rules.getStandardOffset(java.time.Instant.now()).totalSeconds / 3600
         return when {
-            std <= -8 -> 0
+            std in -11..-8 -> 0
             std == -7 -> 1
             else -> null
         }
