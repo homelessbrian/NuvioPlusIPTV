@@ -626,6 +626,24 @@ private fun SportsHub(
     }
     val columns = if (videoOn) 1 else 2
 
+    // All Events: a bar above the games says how many leagues show (and how many you've hidden);
+    // OK on it opens the list to turn leagues on and off.
+    var leaguesOpen by remember { mutableStateOf(false) }
+    var leaguesClosed by remember { mutableIntStateOf(0) }
+    val leaguesBarReq = remember { FocusRequester() }
+    val leaguesLine = remember(settings, follows) {
+        val mine = viewModel.repo.followedLeagueIds(follows)
+        val region = SportsCatalog.regionOf(settings)
+        val on = viewModel.repo.activeLeagues(settings, follows).size
+        val off = SportsCatalog.all.count { region in it.regions && !SportsCatalog.shown(it, settings) && it.id !in mine }
+        (if (on == 1) "Showing 1 league" else "Showing $on leagues") + (if (off > 0) "  ·  $off hidden" else "")
+    }
+    LaunchedEffect(leaguesClosed) {
+        if (leaguesClosed == 0) return@LaunchedEffect
+        delay(80)
+        runCatching { leaguesBarReq.requestFocus() }
+    }
+
     val firstContent = remember { FocusRequester() }
     val firstChip = remember { FocusRequester() }
     var focusedOnce by remember { mutableStateOf(false) }
@@ -748,7 +766,10 @@ private fun SportsHub(
             onShowAll = { onChip(CHIP_ALL) },
             onPick = onPick,
             onOpen = onOpen,
-            onQuickWatch = onQuickWatch
+            onQuickWatch = onQuickWatch,
+            leaguesLine = if (effectiveChip == CHIP_ALL && leagueView == null) leaguesLine else null,
+            leaguesBarReq = leaguesBarReq,
+            onChooseLeagues = { leaguesOpen = true }
         )
     }
 
@@ -890,6 +911,14 @@ private fun SportsHub(
         modifier = Modifier.align(Alignment.BottomStart).padding(start = 60.dp, bottom = 8.dp)
     )
     statusLine()
+    if (leaguesOpen) {
+        LeaguesPicker(
+            settings = settings,
+            followed = remember(follows) { viewModel.repo.followedLeagueIds(follows) },
+            onToggle = { l -> viewModel.repo.updateSettings { SportsCatalog.toggleShown(l, it) } },
+            onDismiss = { leaguesOpen = false; leaguesClosed++ }
+        )
+    }
     }
 }
 
@@ -916,7 +945,11 @@ private fun GameList(
     onShowAll: () -> Unit,
     onPick: () -> Unit,
     onOpen: (SportsEvent) -> Unit,
-    onQuickWatch: (SportsEvent) -> Unit
+    onQuickWatch: (SportsEvent) -> Unit,
+    /** All Events only: the "Choose Leagues" bar above the games (null: no bar). */
+    leaguesLine: String? = null,
+    leaguesBarReq: FocusRequester? = null,
+    onChooseLeagues: () -> Unit = {}
 ) {
     fun playing(ev: SportsEvent) = playingKey != null && matches[ev.id]?.any { it.channel.key == playingKey } == true
     LazyColumn(
@@ -928,6 +961,9 @@ private fun GameList(
         contentPadding = PaddingValues(start = 8.dp, end = 10.dp, top = 2.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        if (leaguesLine != null) item(key = "leagues_bar") {
+            LeaguesBar(leaguesLine, if (leaguesBarReq != null) Modifier.focusRequester(leaguesBarReq) else Modifier, onClick = onChooseLeagues)
+        }
         if (!hasChannels) item(key = "nochannels") {
             LiveText(
                 "Add a playlist in Live TV settings to watch games from here. Scores and times still show.",
@@ -1012,6 +1048,69 @@ private fun GameList(
             EmptyDay(chip = emptyChip, loading = false, anyToday = anyToday, followsEmpty = follows.isEmpty, onShowAll = onShowAll, onPick = onPick)
         }
     }
+}
+
+/** All Events: how many leagues show, and the way into the list that turns them on and off. */
+@Composable
+private fun LeaguesBar(line: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(SportsLook.SmallShape)
+            .background(if (focused) NuvioTheme.colors.FocusBackground.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f))
+            .border(if (focused) NuvioTheme.focusRing.border(2.dp) else androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), SportsLook.SmallShape)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LiveText(line, color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        LiveText("Choose Leagues  ›", color = Color.White, size = 13.sp, weight = FontWeight.Bold)
+    }
+}
+
+/**
+ * The leagues on All Events: OK turns one on or off. The ones on (and the ones you follow) are
+ * listed first, then every other league; the order is fixed while the list is open so a league
+ * doesn't jump away from the highlight when you press OK.
+ */
+@Composable
+private fun LeaguesPicker(settings: SportsSettings, followed: Set<String>, onToggle: (League) -> Unit, onDismiss: () -> Unit) {
+    val first = remember { FocusRequester() }
+    val (onNow, others) = remember { SportsCatalog.ordered(settings).partition { SportsCatalog.shown(it, settings) || it.id in followed } }
+    SportsDialog(onDismiss = onDismiss, width = 620.dp) {
+        LiveText("Leagues on All Events", size = 18.sp, weight = FontWeight.Bold)
+        LiveText("OK turns a league on or off. Leagues you follow always show.", color = SportsLook.Dim, size = 12.sp)
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(Modifier.heightIn(max = 400.dp).keepFocusWhileHeld(horizontal = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            fun rows(list: List<League>, firstRow: Boolean) {
+                itemsIndexed(list, key = { _, l -> l.id }) { i, l ->
+                    val mine = l.id in followed
+                    val on = mine || SportsCatalog.shown(l, settings)
+                    SportsMenuRow(
+                        label = (if (on) "✓   " else "      ") + "${l.sport.icon}  ${l.name}",
+                        detail = when {
+                            mine -> "Following"
+                            l.guideOnly -> "From your guide"
+                            else -> l.sport.label
+                        },
+                        modifier = if (firstRow && i == 0) Modifier.focusRequester(first) else Modifier,
+                        onClick = { if (!mine) onToggle(l) }
+                    )
+                }
+            }
+            if (onNow.isNotEmpty()) {
+                item(key = "h_on") { SectionHeader("ON ALL EVENTS", count = null) }
+                rows(onNow, firstRow = true)
+            }
+            if (others.isNotEmpty()) {
+                item(key = "h_more") { SectionHeader("MORE LEAGUES", count = null) }
+                rows(others, firstRow = onNow.isEmpty())
+            }
+        }
+    }
+    LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
 }
 
 /**

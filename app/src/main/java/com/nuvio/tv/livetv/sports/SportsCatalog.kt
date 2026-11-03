@@ -522,6 +522,23 @@ object SportsCatalog {
         }
     }
 
+    /**
+     * Turns a league on or off for All Events: in-region ones are taken off by id; ones from
+     * elsewhere are added with "+id" (see [shown]).
+     */
+    fun toggleShown(l: League, s: SportsSettings): SportsSettings {
+        val inRegion = regionOf(s) in l.regions
+        val set = s.hiddenLeagues.toMutableSet()
+        if (shown(l, s)) {
+            set.remove("+${l.id}")
+            if (inRegion) set.add(l.id)
+        } else {
+            set.remove(l.id)
+            if (!inRegion) set.add("+${l.id}")
+        }
+        return s.copy(hiddenLeagues = set)
+    }
+
     /** Leagues in the order the region cares about them. */
     fun ordered(s: SportsSettings): List<League> {
         val region = regionOf(s)

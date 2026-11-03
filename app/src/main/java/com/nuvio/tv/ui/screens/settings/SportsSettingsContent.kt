@@ -266,7 +266,7 @@ fun SportsSettingsContent(
             },
             onDismiss = close
         )
-        "leagues" -> LeaguesDialog(s, onToggle = { l -> update { cur -> toggleShown(l, cur) } }, onDismiss = close)
+        "leagues" -> LeaguesDialog(s, onToggle = { l -> update { cur -> SportsCatalog.toggleShown(l, cur) } }, onDismiss = close)
         "clear" -> {
             val first = remember { FocusRequester() }
             LiveDialog(onDismiss = close, width = 480.dp) {
@@ -282,21 +282,6 @@ fun SportsSettingsContent(
             LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
         }
     }
-}
-
-/** Shown leagues: in-region ones are taken off by id; ones from elsewhere are added with "+id". */
-private fun toggleShown(l: League, s: SportsSettings): SportsSettings {
-    val inRegion = SportsCatalog.regionOf(s) in l.regions
-    val shown = SportsCatalog.shown(l, s)
-    val set = s.hiddenLeagues.toMutableSet()
-    if (shown) {
-        set.remove("+${l.id}")
-        if (inRegion) set.add(l.id)
-    } else {
-        set.remove(l.id)
-        if (!inRegion) set.add("+${l.id}")
-    }
-    return s.copy(hiddenLeagues = set)
 }
 
 @Composable
