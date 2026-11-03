@@ -122,11 +122,12 @@ object OnDemandStreams {
         val sources = repo.sourcesFor(type, tmdbId, title, year?.take(4)?.toIntOrNull(), season, episode)
         return sources.map { s ->
             val t = s.tech
-            val quality = t?.quality
+            // The provider's file info when it sends it, otherwise the quality written in the title.
+            val quality = t?.quality ?: nameQuality(s.title)
             Stream(
                 name = listOfNotNull(GROUP_NAME, quality).joinToString("\n"),
                 title = s.label,
-                description = describe(s),
+                description = describe(s, quality),
                 url = s.url,
                 ytId = null,
                 infoHash = null,
@@ -142,12 +143,12 @@ object OnDemandStreams {
                     videoSize = t?.estimatedBytes,
                     // A release-style name, so Nuvio's own badge rules (4K, HEVC, HDR, 5.1…)
                     // recognise the stream the same way they do addon streams.
-                    filename = releaseName(s)
+                    filename = releaseName(s, quality)
                 ),
                 addonName = GROUP_NAME,
                 addonLogo = null,
                 quality = quality,
-                qualityValue = t?.height ?: -1
+                qualityValue = t?.height ?: when (quality) { "4K" -> 2160; "1080p" -> 1080; "720p" -> 720; "SD" -> 480; else -> -1 }
             )
         }
     }
@@ -158,7 +159,23 @@ object OnDemandStreams {
      *   💾 ~5.4 GB | 🗣 English | 📡 My provider
      *   🎞 4K · HEVC · Dolby Vision · 23.98 fps  🔊 E-AC3 5.1
      */
-    private fun describe(s: OnDemandRepository.OnDemandSource): String {
+    /** "4K", "1080p", "720p" or "SD" from a provider's title ("4K-D+ - …", "… FHD", "… 720p"). */
+    private fun nameQuality(name: String): String? {
+        val n = name.lowercase()
+        return when {
+            Regex("""\b(4k|uhd|2160p)\b""").containsMatchIn(n) -> "4K"
+            Regex("""\b(fhd|1080p)\b""").containsMatchIn(n) -> "1080p"
+            Regex("""\b(hd|720p)\b""").containsMatchIn(n) -> "720p"
+            Regex("""\b(sd|480p)\b""").containsMatchIn(n) -> "SD"
+            else -> null
+        }
+    }
+
+    /** "HEVC" when the title says so (used only when the provider sends no file info). */
+    private fun nameCodec(name: String): String? =
+        "HEVC".takeIf { Regex("""\b(hevc|x265|h265)\b""").containsMatchIn(name.lowercase()) }
+
+    private fun describe(s: OnDemandRepository.OnDemandSource, quality: String?): String {
         val t = s.tech
         val head = "🎬 " + s.title + (s.year?.let { " ($it)" } ?: "") + (s.episodeTag?.let { " · $it" } ?: "")
         val line2 = listOfNotNull(
@@ -167,8 +184,8 @@ object OnDemandStreams {
             "📡 ${s.providerName}"
         ).joinToString(" | ")
         val video = listOfNotNull(
-            t?.quality,
-            t?.videoCodec?.let { codecName(it) },
+            quality,
+            t?.videoCodec?.let { codecName(it) } ?: nameCodec(s.title),
             t?.hdr,
             t?.fps?.let { "%.2f fps".format(it).replace(".00", "") }
         ).joinToString(" · ")
@@ -182,16 +199,16 @@ object OnDemandStreams {
     }
 
     /** e.g. "Obsession.2025.2160p.HEVC.DV.EAC3.5.1.mkv" */
-    private fun releaseName(s: OnDemandRepository.OnDemandSource): String {
+    private fun releaseName(s: OnDemandRepository.OnDemandSource, quality: String?): String {
         val t = s.tech
-        val res = when (t?.quality) { "4K" -> "2160p"; "1080p" -> "1080p"; "720p" -> "720p"; "SD" -> "480p"; else -> null }
+        val res = when (quality) { "4K" -> "2160p"; "1080p" -> "1080p"; "720p" -> "720p"; "SD" -> "480p"; else -> null }
         val hdr = when (t?.hdr) { "Dolby Vision" -> "DV"; "HDR10" -> "HDR10"; "HLG" -> "HLG"; else -> null }
         return listOfNotNull(
             s.title.replace(Regex("""[^\p{L}\p{N}]+"""), ".").trim('.'),
             s.year?.toString(),
             s.episodeTag,
             res,
-            t?.videoCodec?.let { codecName(it) },
+            t?.videoCodec?.let { codecName(it) } ?: nameCodec(s.title),
             hdr,
             t?.audioCodec?.let { codecName(it) },
             t?.channels?.let { channelsName(it) }
