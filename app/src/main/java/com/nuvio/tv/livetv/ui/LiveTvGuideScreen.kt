@@ -1409,7 +1409,7 @@ fun LiveTvGuideScreen(
                                         if (!held && isAtNow()) {
                                             leftTapPending = true
                                         } else if (held && event.nativeKeyEvent.eventTime - lastHeldLeftAt < HELD_STEP_MS) {
-                                            // Holding Left: step back at a readable pace (about 3
+                                            // Holding Left: step back at a readable pace (about 6
                                             // shows a second), not every repeat the remote sends.
                                         } else {
                                             if (held) lastHeldLeftAt = event.nativeKeyEvent.eventTime
@@ -4309,7 +4309,7 @@ internal fun LiveTextField(
 }
 
 /** While Left is held in the guide, one step back through earlier shows per this many ms. */
-private const val HELD_STEP_MS = 320L
+private const val HELD_STEP_MS = 160L
 
 /** Asks the Live TV guide to go full screen (from the home row, reminders, search…). */
 object LiveTvFullscreen {
