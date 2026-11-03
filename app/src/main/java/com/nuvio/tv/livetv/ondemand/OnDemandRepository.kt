@@ -708,7 +708,9 @@ class OnDemandRepository @Inject constructor(
             !com.nuvio.tv.livetv.parental.ParentalControls.isLocked("vod:$uid", name, settings, user.lockedGroups)
         }
         val out = ArrayList<OnDemandSource>()
-        for (item in allowed.take(6)) {
+        // Best copies first: by the quality in the name here (so a 4K copy isn't cut by the limit),
+        // then by what the provider reports about each file below.
+        for (item in allowed.sortedByDescending { qualityRank(qualityOf(it.name).orEmpty()) }.take(6)) {
             val pl = playlist(item.playlistId) ?: continue
             val headers = if (pl.userAgent.isNotBlank()) mapOf("User-Agent" to pl.userAgent) else emptyMap()
             if (kind == VodKind.MOVIE) {
@@ -733,7 +735,17 @@ class OnDemandRepository @Inject constructor(
                 )
             }
         }
-        out
+        // Highest quality first (4K, 1080p, 720p, SD); copies with no hint keep their order, last.
+        out.sortedByDescending { sourceRank(it) }
+    }
+
+    /** 4 = 4K … 1 = SD, 0 = unknown: the file's own picture size when known, else its name. */
+    private fun sourceRank(s: OnDemandSource): Int = when (s.tech?.quality) {
+        "4K" -> 4
+        "1080p" -> 3
+        "720p" -> 2
+        "SD" -> 1
+        else -> qualityRank(qualityOf(s.title).orEmpty())
     }
 
     // ------------------------------------------------------------------ helpers
