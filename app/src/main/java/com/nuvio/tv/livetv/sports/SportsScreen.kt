@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
@@ -554,6 +555,8 @@ private fun SportsHub(
     }
     LaunchedEffect(day) { showPickedDay() }
     fun dayTabReq(offset: Int) = dayTabReqs.getOrPut(offset) { FocusRequester() }
+    // Day tabs that are on the row right now (a requester must be attached before focus goes to it).
+    val composedDays = remember { HashSet<Int>() }
     val effectiveChip = when {
         // League buttons and Live were folded into My Teams' rows and All Events: saved ones go home.
         pinnedChip != null || chip == CHIP_LIVE -> if (follows.isEmpty) CHIP_ALL else CHIP_MINE
@@ -677,7 +680,11 @@ private fun SportsHub(
             LazyRow(
                 dm
                     .onFocusChanged { if (!it.hasFocus) showPickedDay() }
-                    .keepFocusWhileHeld(vertical = false),
+                    .keepFocusWhileHeld(vertical = false)
+                    // Coming in from above or below lands on the day you're on, not whichever tab
+                    // happens to sit closest (that was two days ahead of Today).
+                    .focusProperties { enter = { if (day in composedDays) dayTabReq(day) else FocusRequester.Default } }
+                    .focusGroup(),
                 state = tabsState,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -690,6 +697,7 @@ private fun SportsHub(
                         1 -> "Tomorrow"
                         else -> dayFmt.format(Date(viewModel.repo.dayStart(offset) + 12 * 3_600_000L))
                     }
+                    DisposableEffect(offset) { composedDays += offset; onDispose { composedDays -= offset } }
                     DayTab(label, selected = day == offset, modifier = Modifier.focusRequester(dayTabReq(offset)), onClick = { onDay(offset); focusedOnce = true })
                 }
             }
