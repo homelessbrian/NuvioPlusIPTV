@@ -867,7 +867,7 @@ class LiveTvPlaybackController @Inject constructor(
         lastPosition = pos
         if (moving) {
             lastProgressAt = now
-            if (_state.value.catchupTitle != null) archiveStarted = true
+            if (_state.value.catchupTitle != null) { archiveStarted = true; catchupRestarts = 0 }
             return
         }
         if (now - lastProgressAt < STALL_MS || !autoReconnect) return
@@ -888,6 +888,8 @@ class LiveTvPlaybackController @Inject constructor(
                 val toTs = fb.substringBefore('?').let { it.contains("/timeshift/") && it.endsWith(".ts", true) }
                 hlsCatchupFailedOn = if (wasHls && toTs) ch.sourceId else null
                 currentUrl = fb
+                // A TS replay: saved while it plays, like one that started as TS.
+                if (saveFallback(ch, fb)) return
                 archiveStartPending = true
                 p.setMediaSource(buildMediaSource(fb, ch.headers, isLive = false))
                 p.prepare()
@@ -896,6 +898,24 @@ class LiveTvPlaybackController @Inject constructor(
                 scheduleReconnect("Catch-up didn't start: the provider sent nothing for this show")
             }
             return
+        }
+        // A replay played straight from the provider froze (often after a skip inside it, which
+        // some providers can't do): reloading the same link just froze again every 16 s. Ask the
+        // provider for the replay again from where it stopped; after 3 tries in a row, say so.
+        if (archive && !replayLocal && onCatchupStalled != null) {
+            if (catchupRestarts >= 3) {
+                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up on ${ch.name} kept freezing; stopped after 3 tries")
+                catchupRestarts = 0
+                p.stop()
+                _state.value = _state.value.copy(error = "The provider stopped sending this show. Try again, or skip to another point", isBuffering = false)
+                return
+            }
+            catchupRestarts++
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up on ${ch.name} froze; asking the provider again from this point (try $catchupRestarts)")
+            // Stopped first, so asking again for the same link (a freeze in the replay's first
+            // minute) really reloads it; the position is kept.
+            p.stop()
+            if (onCatchupStalled?.invoke() == true) return
         }
         Log.w(TAG, "Stream stalled on ${ch.name}; reloading")
         if (!archive && awaitingFrame) neverStartedCount++
@@ -1611,6 +1631,7 @@ class LiveTvPlaybackController @Inject constructor(
                 val toTs = fb.substringBefore('?').let { it.contains("/timeshift/") && it.endsWith(".ts", true) }
                 hlsCatchupFailedOn = if (wasHls && toTs) ch.sourceId else null
                 currentUrl = fb
+                if (_state.value.catchupTitle != null && saveFallback(ch, fb)) return
                 archiveStartPending = _state.value.catchupTitle != null
                 p.setMediaSource(buildMediaSource(fb, ch.headers, isLive = _state.value.catchupTitle == null))
                 p.prepare()
@@ -1692,6 +1713,24 @@ class LiveTvPlaybackController @Inject constructor(
     @Volatile private var catchupLinkReported = false
     /** Called with the playlist id and the kind of catch-up link that played there. */
     var onCatchupLinkWorked: ((String, String) -> Unit)? = null
+
+    /** Catch-up asked again in a row after freezing (see [checkStall]); back to 0 once it plays. */
+    @Volatile private var catchupRestarts = 0
+    /** A replay from the provider froze: ask for it again from where it stopped (true if done). */
+    var onCatchupStalled: (() -> Boolean)? = null
+
+    /**
+     * Skips can go inside the replay now playing: one saved on this TV, an HLS replay, or the
+     * live stream's rewind window. A TS replay straight from the provider can't: the player then
+     * asks the provider for part of the file, which many providers don't handle (it froze).
+     */
+    fun catchupSeekInStream(): Boolean =
+        replayLocal || archiveWallMapped || currentUrl?.substringBefore('?')?.contains("m3u8", ignoreCase = true) == true
+
+    /** A TS catch-up link tried after another failed: saved while it plays (false if it can't be). */
+    private fun saveFallback(ch: LiveChannel, url: String): Boolean =
+        catchupCache && ch.drm == null && !url.substringBefore('?').contains("m3u8", ignoreCase = true) &&
+            startReplayCache(ch, url)
 
     /** You skipped yourself: forget the automatic skip into the replay. */
     fun cancelCatchupLead() {

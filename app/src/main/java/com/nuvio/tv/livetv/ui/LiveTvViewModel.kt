@@ -218,6 +218,15 @@ class LiveTvViewModel @Inject constructor(
                 prefs.updatePlaylists { l -> l.map { if (it.id == sourceId) it.copy(catchupNoHlsSince = now) else it } }
             }
         }
+        playback.onCatchupStalled = {
+            val s = _catchup.value
+            val pos = catchupPositionMs()
+            if (s == null || pos == null) false else {
+                val absolute = s.program.startMs + pos
+                val at = programs.value[s.channel.key].orEmpty().firstOrNull { absolute >= it.startMs && absolute < it.stopMs } ?: s.program
+                playCatchup(s.channel, at, absolute - at.startMs)
+            }
+        }
         playback.onCatchupLinkWorked = { sourceId, form ->
             // The "other clock" link can play (an earlier show) even when it's wrong: never put it first.
             if ("+clock" !in form && catchupForms.put(sourceId, form) != form && form != "hls" && form != "ts") {
@@ -827,7 +836,7 @@ class LiveTvViewModel @Inject constructor(
         if (playback.seekArchiveTo(s.program.startMs, target)) return
         val p = playback.player
         val inStream = target - s.baseOffsetMs
-        if (p != null && p.isCurrentMediaItemSeekable && p.duration != androidx.media3.common.C.TIME_UNSET &&
+        if (p != null && playback.catchupSeekInStream() && p.isCurrentMediaItemSeekable && p.duration != androidx.media3.common.C.TIME_UNSET &&
             inStream >= 0 && inStream <= p.duration
         ) {
             p.seekTo(inStream)
