@@ -131,12 +131,27 @@ internal class SportsFeeds {
      * the shared job has reached that day and it isn't older than [maxAgeMs]. Null otherwise
      * (the day isn't in the file yet, or it's gone stale) — the caller's cue to ask ESPN itself.
      */
-    fun espnSharedDay(sharedRaw: String?, day: String, maxAgeMs: Long, now: Long): String? {
-        if (sharedRaw == null) return null
+    fun espnSharedDay(sharedRaw: String?, day: String, maxAgeMs: Long, now: Long): String? =
+        espnSharedDays(sharedRaw, listOf(day), maxAgeMs, now)[day]
+
+    /**
+     * Several days out of one shared-cache file, reading the file once. (A file holds about two
+     * weeks of a league's raw scoreboards, up to ~2 MB; reading it again for every day wanted
+     * made a lot of throwaway memory on every update, enough to fill a small box's memory.)
+     * [maxAgeMs] is per day, by its position in [days]; days missing or too old are left out.
+     */
+    fun espnSharedDays(sharedRaw: String?, days: List<String>, maxAgeMs: Long, now: Long, maxAgeFor: (Int) -> Long = { maxAgeMs }): Map<String, String> {
+        if (sharedRaw == null || days.isEmpty()) return emptyMap()
         return runCatching {
-            val d = JSONObject(sharedRaw).optJSONObject("days")?.optJSONObject(day) ?: return null
-            if (now - d.optLong("fetchedAt", 0L) > maxAgeMs) null else d.optString("raw").ifBlank { null }
-        }.getOrNull()
+            val all = JSONObject(sharedRaw).optJSONObject("days") ?: return emptyMap()
+            val out = HashMap<String, String>()
+            days.forEachIndexed { i, day ->
+                val d = all.optJSONObject(day) ?: return@forEachIndexed
+                if (now - d.optLong("fetchedAt", 0L) > maxAgeFor(i)) return@forEachIndexed
+                d.optString("raw").ifBlank { null }?.let { out[day] = it }
+            }
+            out
+        }.getOrDefault(emptyMap())
     }
 
     companion object {

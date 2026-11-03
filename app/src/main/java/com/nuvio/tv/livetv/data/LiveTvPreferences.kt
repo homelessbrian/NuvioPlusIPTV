@@ -27,6 +27,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -524,7 +525,9 @@ class LiveTvPreferences @Inject constructor(
             vodGroupNames = decodeStringMap(p[Keys.vodGroupNames]),
             vodSorts = decodeStringMap(p[Keys.vodSorts])
         )
-    }.distinctUntilChanged()
+    // Read off the main thread: this runs on every settings change, and on a slow box with
+    // memory nearly full it used to hold up the screen until Android closed the app.
+    }.flowOn(Dispatchers.Default).distinctUntilChanged()
 
     suspend fun currentPlaylists(): List<PlaylistSource> = playlists.first()
     suspend fun currentEpgSources(): List<EpgSource> = epgSources.first()

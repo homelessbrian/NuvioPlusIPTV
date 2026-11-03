@@ -320,7 +320,9 @@ class SportsRepository @Inject constructor(
         if (started) return
         started = true
         scope.launch {
-            loadCache()
+            // Reading the saved scores is a lot of work at start-up: low priority, so the screen
+            // and the video come first.
+            withContext(com.nuvio.tv.livetv.data.BackgroundWork.quiet) { runCatching { loadCache() } }
             runCatching { updateLoop() }.onFailure { Log.w(TAG, "Sports updates stopped", it) }
         }
         scope.launch { matchLoop() }
@@ -446,7 +448,8 @@ class SportsRepository @Inject constructor(
                 // Nobody's watching it and it isn't yours: a slow trickle through the shared
                 // cache keeps it from staying empty forever once someone does browse to it.
                 d == null -> age > 6 * HOUR
-                else -> age > 45 * MINUTE
+                // Small boxes: other leagues every 3 hours instead of every 45 minutes.
+                else -> age > (if (smallMemory) 3 * HOUR else 45 * MINUTE)
             }
         }
         if (due.isEmpty()) return
@@ -454,16 +457,25 @@ class SportsRepository @Inject constructor(
         try {
             val (from, to) = espnRange(now)
             val days = espnDays(now)
-            val gate = Semaphore(4)
+            val gate = Semaphore(if (smallMemory) 1 else 4)
             val failed = ArrayList<String>()
             val reasons = LinkedHashSet<String>()
             coroutineScopeFetch(due) { l ->
                 gate.withPermit {
                     val useDirect = isMine(l, f) || l.id in playingLeagues || (viewing && SportsCatalog.shown(l, s))
+                    if (!useDirect && memoryTight()) {
+                        // Memory nearly full: leagues nobody is looking at wait for a later round.
+                        val old = leagueData.value[l.id]
+                        leagueData.update { m -> m + (l.id to LeagueData(old?.events.orEmpty(), System.currentTimeMillis() - 30 * MINUTE, old?.error)) }
+                        noteSkipped()
+                        return@withPermit
+                    }
                     val r = runCatching { if (useDirect) fetchScoreboard(l, from, to, days) else fetchViaSharedCache(l, days, now) }
                     r.onSuccess { raws ->
-                        val parsed = raws.flatMap { raw -> runCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrElse { emptyList() } }
-                            .distinctBy { it.id }
+                        val parsed = withContext(if (useDirect) Dispatchers.IO else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+                            raws.flatMap { raw -> runCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrElse { emptyList() } }
+                                .distinctBy { it.id }
+                        }
                         val before = leagueData.value[l.id]?.events
                         leagueData.update { it + (l.id to LeagueData(parsed, System.currentTimeMillis(), null)) }
                         runCatching { File(dir, "sb_${safe(l.id)}.json").writeText("${System.currentTimeMillis()}\n" + raws.joinToString(RAW_SEP)) }
@@ -492,6 +504,33 @@ class SportsRepository @Inject constructor(
 
     private var lastFailLine: String? = null
 
+    /**
+     * Boxes that give the app 256 MB or less (Android 7 boxes such as the Formuler Z8): one
+     * league at a time, and leagues you don't follow or look at less often. Fetching and reading
+     * several leagues at once filled their memory and the app froze.
+     */
+    private val smallMemory: Boolean by lazy {
+        val max = Runtime.getRuntime().maxMemory()
+        max in 1 until Long.MAX_VALUE && max <= 300L * 1024 * 1024
+    }
+
+    /** Memory more than 70% used: leave leagues nobody is looking at for a later round. */
+    private fun memoryTight(): Boolean {
+        val rt = Runtime.getRuntime()
+        val max = rt.maxMemory().takeIf { it in 1 until Long.MAX_VALUE } ?: return false
+        return rt.totalMemory() - rt.freeMemory() > max * 0.70
+    }
+
+    @Volatile private var skipNotedAt = 0L
+
+    private fun noteSkipped() {
+        val now = System.currentTimeMillis()
+        if (now - skipNotedAt < HOUR) return
+        skipNotedAt = now
+        val rt = Runtime.getRuntime()
+        LiveTvLoadReport.add("Sports: memory nearly full (${(rt.totalMemory() - rt.freeMemory()) / 1048576} of ${rt.maxMemory() / 1048576} MB), other leagues' scores put off for now")
+    }
+
     // ------------------------------------------------------------------ the week ahead, seasons
 
     /** ESPN games from the day after tomorrow to a week ahead: a few times a day. */
@@ -514,10 +553,15 @@ class SportsRepository @Inject constructor(
         if (due.isEmpty()) return
         val fmt = SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = TimeZone.getTimeZone("America/New_York") }
         val singleDays = (2..DAYS_AHEAD).map { d -> fmt.format(java.util.Date(now + d * DAY)) }
-        val gate = Semaphore(3)
+        val gate = Semaphore(if (smallMemory) 1 else 3)
         coroutineScopeFetch(due) { l ->
             gate.withPermit {
                 val useDirect = isMine(l, f) || (viewing && SportsCatalog.shown(l, s))
+                if (!useDirect && memoryTight()) {
+                    weekData.update { m -> m + (l.id to LeagueData(m[l.id]?.events.orEmpty(), System.currentTimeMillis() - 4 * HOUR, m[l.id]?.error)) }
+                    noteSkipped()
+                    return@withPermit
+                }
                 // One request for the whole week; a feed that won't take a range of days: a day at a time.
                 // A day at a time (ESPN turns down a range of days).
                 val raws: List<String> = if (useDirect) singleDays.mapNotNull { d -> runCatching { feeds.scoreboardDayRaw(l, d) }.getOrNull() }
@@ -529,7 +573,9 @@ class SportsRepository @Inject constructor(
                     LiveTvLoadReport.add("Sports: couldn't get the week ahead for ${l.name}")
                     return@withPermit
                 }
-                val parsed = raws.flatMap { raw -> runCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrDefault(emptyList()) }.distinctBy { it.id }
+                val parsed = withContext(com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+                    raws.flatMap { raw -> runCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrDefault(emptyList()) }.distinctBy { it.id }
+                }
                 weekData.update { it + (l.id to LeagueData(parsed, at, null)) }
                 runCatching { File(dir, "wk_${safe(l.id)}.json").writeText("$at\n" + raws.joinToString(RAW_SEP)) }
             }
@@ -595,7 +641,7 @@ class SportsRepository @Inject constructor(
         val from = fmt.format(java.util.Date(now - DAYS_BACK * DAY))
         val to = fmt.format(java.util.Date(now - 2 * DAY))
         val singleDays = (2..DAYS_BACK).map { d -> fmt.format(java.util.Date(now - d * DAY)) }
-        val gate = Semaphore(3)
+        val gate = Semaphore(if (smallMemory) 1 else 3)
         coroutineScopeFetch(due) { l ->
             gate.withPermit {
                 val raws: List<String> = singleDays.mapNotNull { d -> runCatching { feeds.scoreboardDayRaw(l, d) }.getOrNull() }
@@ -767,13 +813,11 @@ class SportsRepository @Inject constructor(
      * ~150 leagues this covers, every few minutes.
      */
     private fun fetchViaSharedCache(l: League, days: List<String>, now: Long): List<String> {
-        val shared = feeds.espnSharedRaw(l.id)
-        val byDay = days.mapIndexed { i, d ->
-            // days = [yesterday, today, tomorrow]; today can go a little longer between shared
-            // refreshes than the app would ask for it itself, edge days much longer still.
-            val maxAge = if (i == 1) 20 * MINUTE else 90 * MINUTE
-            d to feeds.espnSharedDay(shared, d, maxAge, now)
-        }
+        // days = [yesterday, today, tomorrow]; today can go a little longer between shared
+        // refreshes than the app would ask for it itself, edge days much longer still.
+        // The file is read once for all three days.
+        val found = feeds.espnSharedDays(feeds.espnSharedRaw(l.id), days, 90 * MINUTE, now) { i -> if (i == 1) 20 * MINUTE else 90 * MINUTE }
+        val byDay = days.map { d -> d to found[d] }
         val have = byDay.mapNotNull { it.second }
         val missing = byDay.filter { it.second == null }.map { it.first }
         if (missing.isEmpty()) return have
@@ -791,8 +835,8 @@ class SportsRepository @Inject constructor(
      * day the cache hasn't reached yet, once this league's own week data has gone stale.
      */
     private fun fetchWeekViaSharedCache(l: League, singleDays: List<String>, now: Long): List<String> {
-        val shared = feeds.espnSharedRaw(l.id)
-        val byDay = singleDays.map { d -> d to feeds.espnSharedDay(shared, d, 6 * HOUR, now) }
+        val found = feeds.espnSharedDays(feeds.espnSharedRaw(l.id), singleDays, 6 * HOUR, now)
+        val byDay = singleDays.map { d -> d to found[d] }
         val have = byDay.mapNotNull { it.second }
         val missing = byDay.filter { it.second == null }.map { it.first }
         if (missing.isEmpty()) return have
