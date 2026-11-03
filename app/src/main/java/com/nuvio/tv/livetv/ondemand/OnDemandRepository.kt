@@ -147,7 +147,7 @@ class OnDemandRepository @Inject constructor(
         if (started) return
         started = true
         scope.launch {
-            kotlinx.coroutines.flow.combine(hasContent, prefs.settings) { has, s -> has && s.onDemandInStreams && s.onDemandInSidebar }
+            kotlinx.coroutines.flow.combine(hasContent, prefs.settings) { has, s -> has && s.onDemandInStreams && s.onDemandEnabled }
                 .collect { OnDemandStreams.offeredInStreams = it }
         }
         scope.launch {

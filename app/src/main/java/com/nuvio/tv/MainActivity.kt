@@ -1135,7 +1135,7 @@ open class MainActivity : ComponentActivity() {
                     // series are imported.
                     val onDemandHasContent = remember { onDemandRepository.also { it.start() }.hasContent }
                         .collectAsState().value
-                    val onDemandInSidebar = onDemandHasContent && liveTvSettingsNow.onDemandInSidebar
+                    val onDemandInSidebar = onDemandHasContent && liveTvSettingsNow.onDemandEnabled && liveTvSettingsNow.onDemandInSidebar
                     // Live TV fork: Recordings, in the menu once anything is recorded or set to record
                     // (switched off in Settings → Menu & Features it only leaves the menu: recording
                     // still works, and it's always in Live TV by the guide's ⚙).

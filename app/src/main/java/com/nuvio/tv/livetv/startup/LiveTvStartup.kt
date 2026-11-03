@@ -98,7 +98,7 @@ object StartPage {
         // Only pages that are switched on (Settings → Menu & Features); otherwise Home.
         return when (s.openOn) {
             "LIVE_TV" -> Screen.LiveTv.route.takeIf { s.showInSidebar }
-            "ON_DEMAND" -> Screen.OnDemand.route.takeIf { s.onDemandInSidebar }
+            "ON_DEMAND" -> Screen.OnDemand.route.takeIf { s.onDemandEnabled && s.onDemandInSidebar }
             "SPORTS" -> Screen.Sports.route.takeIf { sportsOn }
             "CALENDAR" -> Screen.Calendar.route.takeIf { com.nuvio.tv.livetv.calendar.SideMenuPages.CALENDAR !in off }
             "LIBRARY" -> Screen.Library.route.takeIf { com.nuvio.tv.livetv.calendar.SideMenuPages.LIBRARY !in off }

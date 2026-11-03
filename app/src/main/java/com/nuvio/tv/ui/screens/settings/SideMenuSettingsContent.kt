@@ -126,12 +126,20 @@ fun SideMenuSettingsContent(initialFocusRequester: FocusRequester? = null) {
         SideMenuPages.SPORTS -> PageRow("Sports", "The Sports page, game reminders and scores on the info bar", sportsSettings.showInSidebar) {
             sports.updateSettings { it.copy(showInSidebar = !it.showInSidebar) }
         }
-        SideMenuPages.ON_DEMAND -> PageRow(
-            "On Demand",
-            if (onDemandHas) "Your provider's movies and series: the page, in Search and in the stream list"
-            else "Your provider's movies and series. Shows up once they're imported (Settings → Live TV → On Demand)",
-            s.onDemandInSidebar
-        ) { update { it.copy(onDemandInSidebar = !it.onDemandInSidebar) } }
+        SideMenuPages.ON_DEMAND -> {
+            val mode = when { !s.onDemandEnabled -> "OFF"; s.onDemandInSidebar -> "ON"; else -> "NO_MENU" }
+            PageRow(
+                "On Demand",
+                when {
+                    mode == "OFF" -> "Off: no On Demand page, no On Demand in Search or in the stream list"
+                    mode == "NO_MENU" -> "Not in the menu. Your provider's movies and series still show in Search and in the stream list"
+                    onDemandHas -> "Your provider's movies and series: the page, in Search and in the stream list"
+                    else -> "Your provider's movies and series. Shows up once they're imported (Settings → Live TV → On Demand)"
+                },
+                mode != "OFF",
+                value = when (mode) { "OFF" -> "Off"; "NO_MENU" -> "Off the menu only"; else -> "On" }
+            ) { dialog = "on_demand" }
+        }
         SideMenuPages.RECORDINGS -> PageRow(
             "Recordings",
             if (s.recordingsInSidebar) "In the menu once anything is recorded or set to record. Always in Live TV too (● by the guide's ⚙)"
@@ -145,7 +153,7 @@ fun SideMenuSettingsContent(initialFocusRequester: FocusRequester? = null) {
         add("HOME" to "Home")
         if (s.showInSidebar) add("LIVE_TV" to "Live TV")
         if (sportsSettings.showInSidebar) add("SPORTS" to "Sports")
-        if (s.onDemandInSidebar && onDemandHas) add("ON_DEMAND" to "On Demand")
+        if (s.onDemandEnabled && s.onDemandInSidebar && onDemandHas) add("ON_DEMAND" to "On Demand")
         if (SideMenuPages.CALENDAR !in hidden) add("CALENDAR" to "Calendar")
         if (SideMenuPages.LIBRARY !in hidden) add("LIBRARY" to "Library")
         if (SideMenuPages.SEARCH !in hidden) add("SEARCH" to "Search")
@@ -257,6 +265,20 @@ fun SideMenuSettingsContent(initialFocusRequester: FocusRequester? = null) {
             ),
             selectedValue = discover,
             onOptionSelected = { v -> scope.launch { layout.setDiscoverLocation(v) }; dialog = null },
+            onDismiss = { dialog = null }
+        )
+        "on_demand" -> SettingsSingleChoiceDialog(
+            title = "On Demand",
+            options = listOf(
+                SettingsPickerOption("ON", "On", "In the menu, in Search and in the stream list"),
+                SettingsPickerOption("NO_MENU", "Off the menu only", "No page in the menu; still in Search and in the stream list"),
+                SettingsPickerOption("OFF", "Off", "Nowhere: no page, no Search results, not in the stream list")
+            ),
+            selectedValue = when { !s.onDemandEnabled -> "OFF"; s.onDemandInSidebar -> "ON"; else -> "NO_MENU" },
+            onOptionSelected = { v ->
+                update { it.copy(onDemandEnabled = v != "OFF", onDemandInSidebar = v == "ON") }
+                dialog = null
+            },
             onDismiss = { dialog = null }
         )
         "calendar" -> SettingsSingleChoiceDialog(

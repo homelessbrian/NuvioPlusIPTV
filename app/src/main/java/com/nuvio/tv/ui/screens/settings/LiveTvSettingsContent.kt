@@ -639,7 +639,11 @@ internal fun LiveTvSettingsContent(
                     summary = when {
                         onDemandStatus.loading -> onDemandStatus.message ?: "Importing movies and series…"
                         !onDemandHas -> "Nothing imported yet"
-                        else -> "Movies & series imported" + if (s.onDemandInSidebar) " · in the side menu" else ""
+                        else -> "Movies & series imported" + when {
+                            !s.onDemandEnabled -> " · switched off"
+                            s.onDemandInSidebar -> " · in the side menu"
+                            else -> ""
+                        }
                     },
                     icon = Icons.Default.Movie,
                     open = "on_demand" in open,
