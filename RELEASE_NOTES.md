@@ -1,68 +1,54 @@
-# Nuvio + IPTV 1.1.0-beta.9.1
-
-<!-- Version: the release workflow numbers it automatically. After the upstream merge the base is
-     Nuvio 1.1.0-beta.9, so the first release will be 1.1.0-beta.9.1 (check the workflow log).
-     Date: [RELEASE DATE] -->
+# Nuvio + IPTV 1.1.0-beta.9.3
 
 ## What's new
 
-Now based on Nuvio 1.1.0-beta.9.
-
-### Calendar
-- A new **Calendar** page in the side menu: new episodes of the shows you follow, when your movies come out in theaters and at home, and games for the teams you follow
-- **Works with Trakt and Simkl:** shows in your Trakt or Simkl library and shows you're watching are on your Calendar automatically, no setup needed (MDBList too)
-- **List**, **Week** or **Month** view. Pick the one it opens on in Settings
-- **Filters:** All, Shows, Movies, Sports and **On my TV**
-- **Airing today**, with a switch to leave out news and talk shows, and **Recently aired** with an **Unwatched only** switch
-- **Ring the bell** on a show's page, in Live TV or in Search to follow it
-- **Hide Spoilers:** episodes past the next one you'd watch don't show their titles or pictures
-- **On my TV:** episodes that are in your Live TV guide. Watch live, record it, record every new episode, or get a reminder, even before it shows up in your guide
-- **Your Country** sets which country's TV schedule Airing Today shows, and the movie release dates you see
-- **Choose the channel** for a show or a whole network once and it's remembered. Change or forget them in **Settings → Calendar → Saved Channels**
-- Hold OK on an episode on a show's page for **Record on…** and Live TV options
-- Home's **Upcoming** row shows your shows' episodes coming this week, and new episodes get a card in Continue Watching, with **Not today** to put it away until tomorrow
-
-### Menu & Features
-- New **Settings → Menu & Features:** turn pages on or off (Discover, Calendar, Live TV, Sports, On Demand, Recordings) and put the side menu in your order
-- Discover can be in the side menu or a tab inside Search
-- **Open the App On** now opens the app straight on the page you pick
-- The side-menu switches for Live TV, Sports, On Demand and Recordings, and Start page, have moved here
+### Nuvio Account Sync
+- **Your Live TV setup now follows your Nuvio account.** Sign in on a new TV and your playlists, guides, favorites and settings come back by themselves, and changes stay in sync between your TVs
+- Your saved setup is encrypted. Manage it in **Settings → Live TV → Nuvio Account Sync**: Sync Now, Restore Earlier Copy, Turn Off or Delete Saved Setup
+- **Import from Google Drive** moves your Drive backup over in one step
 
 ### Live TV
-- **Change Logo** in the channel menu: pick a logo from your playlists, your guides, logo libraries or TMDB, search for one, or send a logo link from your phone with a QR code. **Logo Sources** sets where it looks
-- **Pick favorites:** tick many channels in a group at once from the group menu or a channel's menu
-- **Reorder groups:** hold OK to select several groups and move them together. Left and Right send them to the top or bottom
-- The channel you're watching now has a red outline in the guide, and **Outline the Playing Channel** turns it off
-- A game that's on shows as a game card with the score in the guide's poster space
-- A **Recordings** button (●) next to the guide's ⚙, so Recordings is always one click away
-- **Buffer Size** setting: larger rides out a slow provider, smaller changes channels faster
-- **Series recordings** skip repeats of episodes you've already recorded, even ones you've deleted
-- Recordings show which playlist they use when you have more than one
-- Channel name cleanup also removes prefixes followed by just a space ("USA ESPN") when a playlist uses them on lots of channels. A channel called "USA Network" keeps its name
-- Opening the groups puts you on the channel you're watching, and a new group starts at its first channel
-
-### Home screen rows
-- New look for the launcher cards: centred, sharp logos, team colours for games
-- **Card Shape:** Wide, Tall or Square, to match your launcher's rows
+- Live TV opens on the last group you watched
+- New groups you add to a playlist show up next to their neighbours, not at the bottom
+- Guide channel numbers are right-aligned, and the number and group columns are only as wide as they need to be
+- In the full-screen overlay, scrolling the groups only moves the highlight, and it opens on the playing channel's group
+- **Start in Full Screen** works on every launch and starts smoothly
+- **Catch-up:** skips load faster and land where you aimed
+- **Match frame rate** now handles 59.94 Hz
+- New look for the game card in the guide: flat team-colour halves with the score in the middle
 
 ### Sports
-- **Many more leagues:** AHL, ECHL, PWHL, OHL, WHL, QMJHL and USHL hockey, Minor League Baseball, IPL, Big Bash, SA20, Major League Cricket and international cricket, college lacrosse, soccer, softball, volleyball and field hockey, the Little League World Series, the World Baseball Classic, Caribbean winter baseball, and many more football leagues and cups, especially in South and Central America
-- Scores, tables and game pages for the new hockey, baseball and cricket leagues
-- **Every channel showing a game,** not just the first few. HD, FHD and SD copies of a channel are combined into one row
-- **Channels from:** show only the channels from one region or language (UK, US, Ireland, Canada, Australia, English, or any language your channels use). The others are one click away. Game reminders and Watch now use them first too. Also in Settings → Sports
-- **Switch when a channel fails:** during a live game, if a channel won't start, drops or keeps freezing, the next channel showing the game takes over. It follows Live TV's **Switch to a Backup Channel** setting
-- Better at finding short channel names (FS1, TNT, TSN1), UK, Canadian and Australian sports channels, and regional sports networks
-- Every league gets its scores and schedules, not just your region's
-- **NFL and NBA** now show by default only in the US and Canada. Elsewhere, follow the league or a team in ✎ Follow Teams & Leagues
-- New leagues start switched on in their own region (for example the Central American Cup in the US and "Somewhere else")
+- New **League Networks** page: each league's own channel in one place (NFL RedZone, NBA TV, MLB Network, Golf Channel, Tennis Channel and more), with the option to pick a different channel by hand
+- Every Sports page has the same top bar, with the video window below it
+- Fights are matched by both fighters' names, boxing cards stay on longer, scheduled fights are no longer hidden, and the same event under different names shows once
+- My Sports **Live & Upcoming** includes the leagues on your top bar
 
-### Search and On Demand
-- One search for movies, shows, channels and On Demand
-- On Demand search is much quicker with big providers
-- Posters fill in several at a time, so rows load faster
+### Calendar
+- Game cards look like the Sports hub's, five across in Month view
+- **Following** tab with an info bar. Watch live, Record and Remind are in the hold-OK menu, for games too
+- Times use each network's own time zone
+- Each profile has its own followed and hidden shows
+
+### Menu & Features
+- **How the Menu Looks:** a line above Live TV, and **Shrink the Menu to Fit**
+- Pages are turned on or off per profile
+- On Demand can be **On**, **Off the menu only** or **Off**
+
+### On Demand
+- **Play Straight from My Provider:** Play skips the source list for titles opened from On Demand
+- Your provider's copies are listed best quality first, with quality tags
+
+### Updates
+- Updates are checked after downloading, so a damaged download is never installed
 
 ## Fixed
-- **Assign EPG** no longer freezes or closes the app with very big guides
-- **Match frame rate** switches more reliably: it uses the stream's real frame rate and pauses the picture while the TV switches
-- Closed captions are always offered in the player, even before the app has seen any
-- Search no longer says "no results" while On Demand is still looking
+- The app sometimes closing as it opened
+- Slowdowns, high processor use, and jerky video followed by the app closing on slower boxes. Finding channels for games is much faster and no longer runs while you watch full screen
+- **Guide groups:** no more jumpy or laggy scrolling, no tiles cut in half, and the groups line up with the channels
+- **Catch-up** no longer gets stuck reloading after a skip on some providers
+- Sports no longer shows "Finding channels…" on almost every visit
+- Wrong sport labels on some games, and Live / Final showing late
+- Hiding a playlist group no longer empties your own groups
+- A crash in Sports tables
+- The On Demand home screen, and skip controls on recordings that are still in progress
+- Fixes for pinned scoreboards and the info bar
