@@ -714,7 +714,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-03 16:10"
+    const val KIT_STAMP = "2026-11-03 18:40"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

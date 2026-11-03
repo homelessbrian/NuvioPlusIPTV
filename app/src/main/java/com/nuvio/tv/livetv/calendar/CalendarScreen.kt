@@ -101,6 +101,8 @@ private enum class CalKind { ALL, SHOWS, MOVIES, SPORTS, ON_TV }
 private enum class AirFilter { ALL, PRIME, STREAMING, FOLLOWING }
 
 private val CARD_W = 208.dp
+/** Holding Up/Down in the List view moves one row this often (ms). */
+private const val HELD_ROW_MS = 180L
 private const val HERO_H = 212
 
 /** Nuvio's card focus: the theme's focus ring, 2 dp, and a 1.02 scale (same as ContentCard). */
@@ -920,7 +922,37 @@ private fun DayRows(
         val (ri, _, _) = restoreAt ?: return@LaunchedEffect
         if (listState.layoutInfo.visibleItemsInfo.none { it.index == ri }) runCatching { listState.scrollToItem(ri) }
     }
-    LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 60.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // Holding Up/Down: one row at a steady pace (the remote repeats far faster than the rows can
+    // scroll and draw), and the big picture up top waits until the highlight rests.
+    var held by remember { mutableStateOf(false) }
+    var lastStep by remember { mutableStateOf(0L) }
+    var resting by remember { mutableStateOf<CalendarEntry?>(null) }
+    LaunchedEffect(resting, held) {
+        val e = resting ?: return@LaunchedEffect
+        if (!held) onFocus(e)
+    }
+    LazyColumn(
+        state = listState, contentPadding = PaddingValues(bottom = 60.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.onPreviewKeyEvent { k ->
+            val code = k.nativeKeyEvent.keyCode
+            // A fresh press of any key means nothing is held (the release may have gone elsewhere).
+            if (k.type == KeyEventType.KeyDown && k.nativeKeyEvent.repeatCount == 0) held = false
+            if (code != android.view.KeyEvent.KEYCODE_DPAD_DOWN && code != android.view.KeyEvent.KEYCODE_DPAD_UP) return@onPreviewKeyEvent false
+            when (k.type) {
+                KeyEventType.KeyUp -> { held = false; false }
+                KeyEventType.KeyDown -> {
+                    val t = android.os.SystemClock.uptimeMillis()
+                    if (k.nativeKeyEvent.repeatCount > 0) {
+                        held = true
+                        if (t - lastStep < HELD_ROW_MS) return@onPreviewKeyEvent true
+                    }
+                    lastStep = t
+                    false
+                }
+                else -> false
+            }
+        }
+    ) {
         itemsIndexed(rows, key = { _, r -> r.day.toString() + if (r.games) "g" else "s" }) { rowIndex, r ->
             Column {
                 Row(Modifier.padding(start = 64.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom) {
@@ -949,7 +981,7 @@ private fun DayRows(
                         WideCard(
                             e = e, use24h = use24h, now = now, st = status(e),
                             modifier = (if (rowIndex == 0 && i == 0) Modifier.focusRequester(firstFocus).homeMark() else Modifier).cardFocus(e.key),
-                            onFocus = { onFocus(e) }, onClick = { onOpen(e) }, onLongClick = { onOptions(e) }
+                            onFocus = { resting = e }, onClick = { onOpen(e) }, onLongClick = { onOptions(e) }
                         )
                     }
                 }
