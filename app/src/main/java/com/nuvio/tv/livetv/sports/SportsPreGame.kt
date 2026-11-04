@@ -100,7 +100,8 @@ internal fun countdownLabel(startMs: Long, now: Long): String {
 
 /** The right of the score strip before a game: the day, the time, how long until, the network, the last meeting. */
 @Composable
-internal fun PreGameTimeColumn(ev: SportsEvent, sides: List<Side>, x: GameExtras?, now: Long, use24h: Boolean, modifier: Modifier = Modifier) {
+/** [channel]: the channel of yours the game was found on, shown instead of the TV network when there is one. */
+internal fun PreGameTimeColumn(ev: SportsEvent, sides: List<Side>, x: GameExtras?, now: Long, use24h: Boolean, modifier: Modifier = Modifier, channel: String? = null) {
     Column(
         modifier
             .fillMaxHeight()
@@ -117,7 +118,7 @@ internal fun PreGameTimeColumn(ev: SportsEvent, sides: List<Side>, x: GameExtras
             LiveText(startLabel(ev, use24h), color = Color.White, size = 18.sp, weight = FontWeight.Black)
             ev.note?.let { LiveText(it, color = SportsLook.Dim, size = 11.sp, maxLines = 1) }
         }
-        ev.broadcasts.firstOrNull()?.let { b ->
+        (channel?.takeIf { it.isNotBlank() } ?: ev.broadcasts.firstOrNull())?.let { b ->
             Spacer(Modifier.height(5.dp))
             Box(Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.09f)).padding(horizontal = 9.dp, vertical = 2.dp)) {
                 LiveText(b, color = Color.White, size = 10.sp, weight = FontWeight.SemiBold, maxLines = 1)

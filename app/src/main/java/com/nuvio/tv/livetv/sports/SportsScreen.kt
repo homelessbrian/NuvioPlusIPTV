@@ -1190,7 +1190,9 @@ private fun ScoreboardStrip(
     preGame: Map<String, PreGameTeam>? = null,
     extras: GameExtras? = null,
     /** Where Down from the lower team goes (the game page's "Channels from" button), or null. */
-    downTo: FocusRequester? = null
+    downTo: FocusRequester? = null,
+    /** The channel of yours the game is on (shown under the start time before it begins), or null. */
+    channel: String? = null
 ) {
     val league = SportsCatalog.league(ev.leagueId)
     val sport = league?.sport ?: Sport.OTHER
@@ -1219,7 +1221,7 @@ private fun ScoreboardStrip(
                 EventBand(ev, league, sport, Modifier.fillMaxSize(), big = big)
             }
         }
-        if (pre) PreGameTimeColumn(ev, sides, extras, now, use24h, Modifier.width(if (wide) 210.dp else 150.dp))
+        if (pre) PreGameTimeColumn(ev, sides, extras, now, use24h, Modifier.width(if (wide) 210.dp else 150.dp), channel = channel)
         else StatusColumn(ev, playing = false, now = now, use24h = use24h, hideScores = hideScores, modifier = Modifier.width(if (big) 150.dp else 124.dp))
     }
     }
@@ -1370,6 +1372,7 @@ private fun GamePage(
         }
         ScoreboardStrip(ev, settings.hideScores, now, use24h, height = if (sides.size == 2) 124.dp else 100.dp, big = true, onTeam = { cardTeam = it.team },
             downTo = if (regionButton) regionFocus else null,
+            channel = shownRows.firstOrNull()?.firstOrNull()?.channel?.name,
             preGame = preGame, extras = extras.takeIf { !settings.hideScores })
     }
     if (pickRegion) {

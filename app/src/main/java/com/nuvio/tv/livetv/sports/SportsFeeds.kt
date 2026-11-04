@@ -640,13 +640,28 @@ internal class SportsFeeds {
             val clock = st?.optDouble("clock", Double.NaN) ?: Double.NaN
             val progress = if (state == GameState.LIVE) progressOf(league, period, clock, st?.str("displayClock")) else null
 
-            val broadcasts = LinkedHashSet<String>()
+            // Best first, since the first one is what a game card shows: national channels, then the
+            // home team's, then the away team's; team apps and websites after real TV channels.
+            val ranked = ArrayList<Pair<String, Int>>()
+            fun marketRank(m: String?) = when (m?.lowercase()) { "national" -> 0; "home" -> 1; "away" -> 2; else -> 3 }
             comp?.optJSONArray("broadcasts")?.let { a ->
-                for (b in 0 until a.length()) broadcasts += a.optJSONObject(b)?.optJSONArray("names").strings()
+                for (b in 0 until a.length()) {
+                    val o = a.optJSONObject(b) ?: continue
+                    val rank = marketRank(o.str("market"))
+                    o.optJSONArray("names").strings().forEach { ranked += it to rank }
+                }
             }
             comp?.optJSONArray("geoBroadcasts")?.let { a ->
-                for (b in 0 until a.length()) a.optJSONObject(b)?.optJSONObject("media")?.str("shortName")?.let { broadcasts += it }
+                for (b in 0 until a.length()) {
+                    val o = a.optJSONObject(b) ?: continue
+                    val rank = marketRank(o.optJSONObject("market")?.str("type"))
+                    o.optJSONObject("media")?.str("shortName")?.let { ranked += it to rank }
+                }
             }
+            fun isApp(n: String) = n.lowercase().let { it.endsWith(" app") || it.contains(".com") || it.contains("league pass") || it.endsWith("+") }
+            val broadcasts = LinkedHashSet<String>()
+            ranked.withIndex().sortedWith(compareBy({ it.value.second }, { if (isApp(it.value.first)) 1 else 0 }, { it.index }))
+                .forEach { broadcasts += it.value.first }
             val venue = comp?.optJSONObject("venue")?.str("fullName") ?: ev.optJSONObject("circuit")?.str("fullName")
             val week = ev.optJSONObject("week")?.optInt("number", 0)?.takeIf { it > 0 }?.let { "Week $it" }
             val headline = comp?.optJSONArray("notes")?.optJSONObject(0)?.str("headline")
