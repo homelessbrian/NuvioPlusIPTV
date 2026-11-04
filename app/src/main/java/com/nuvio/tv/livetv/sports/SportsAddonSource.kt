@@ -297,9 +297,25 @@ class SportsAddonSource @Inject constructor(
         )
 
         private val MONTHS = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
-        private val DAY_STAMP = Regex("(\\d{1,2})\\s+([A-Za-z]{3})[A-Za-z]*\\s+(\\d{4})\\D{1,6}(\\d{1,2}):(\\d{2})\\s*UTC", RegexOption.IGNORE_CASE)
+        private val DAY_STAMP = Regex(
+            "(\\d{1,2})\\s+([A-Za-z]{3})[A-Za-z]*\\s+(\\d{4})\\D{1,6}(\\d{1,2}):(\\d{2})\\s*" +
+                "((?:UTC|GMT)\\s?[+-]\\d{1,2}(?::?\\d{2})?|[A-Za-z]+/[A-Za-z_]+(?:/[A-Za-z_]+)?|[A-Z]{3,5})",
+            RegexOption.IGNORE_CASE
+        )
         private val ISO_STAMP = Regex("(\\d{4})-(\\d{2})-(\\d{2})[T ](\\d{2}):(\\d{2})")
         private val SIDE_SPLIT = Regex("\\s(?:vs|v|versus|at)\\s")
+        private val OFFSET_ZONE = Regex("(?:UTC|GMT)\\s?([+-])(\\d{1,2})(?::?(\\d{2}))?", RegexOption.IGNORE_CASE)
+
+        /** Zone names that mean one fixed offset (hours from UTC). Ambiguous ones (IST, CST in Asia…) aren't here. */
+        private val NAMED_ZONES = mapOf(
+            "UTC" to 0.0, "GMT" to 0.0, "Z" to 0.0, "UT" to 0.0, "WET" to 0.0,
+            "EST" to -5.0, "EDT" to -4.0, "CST" to -6.0, "CDT" to -5.0,
+            "MST" to -7.0, "MDT" to -6.0, "PST" to -8.0, "PDT" to -7.0,
+            "AKST" to -9.0, "AKDT" to -8.0, "HST" to -10.0,
+            "BST" to 1.0, "WEST" to 1.0, "CET" to 1.0, "CEST" to 2.0, "EET" to 2.0, "EEST" to 3.0, "MSK" to 3.0,
+            "AWST" to 8.0, "ACST" to 9.5, "ACDT" to 10.5, "AEST" to 10.0, "AEDT" to 11.0, "NZST" to 12.0, "NZDT" to 13.0,
+            "JST" to 9.0, "KST" to 9.0
+        )
 
         private fun utc(y: Int, mo: Int, d: Int, h: Int, mi: Int): Long {
             val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
@@ -308,12 +324,34 @@ class SportsAddonSource @Inject constructor(
             return c.timeInMillis
         }
 
-        /** The start time an addon writes into a game ("06 Nov 2026 · 01:15 UTC", or an ISO date), in UTC. */
+        /** A time written in a named zone ("UTC", "EST", "GMT+1", "America/New_York"), in UTC; null when the zone isn't one we can be sure of. */
+        internal fun zonedToUtc(y: Int, mo: Int, d: Int, h: Int, mi: Int, zone: String): Long? {
+            val z = zone.trim()
+            if (z.contains('/')) {
+                if (z !in TimeZone.getAvailableIDs()) return null
+                val c = Calendar.getInstance(TimeZone.getTimeZone(z))
+                c.clear()
+                c.set(y, mo, d, h, mi, 0)
+                return c.timeInMillis
+            }
+            OFFSET_ZONE.matchEntire(z)?.let { m ->
+                val sign = if (m.groupValues[1] == "-") -1 else 1
+                val mins = m.groupValues[2].toInt() * 60 + (m.groupValues[3].takeIf { it.isNotEmpty() }?.toInt() ?: 0)
+                return utc(y, mo, d, h, mi) - sign * mins * 60_000L
+            }
+            val hours = NAMED_ZONES[z.uppercase(Locale.ROOT)] ?: return null
+            return utc(y, mo, d, h, mi) - (hours * 3_600_000L).toLong()
+        }
+
+        /** The start time an addon writes into a game ("06 Nov 2026 · 01:15 UTC", in another zone, or an ISO date), in UTC. */
         internal fun parseTime(texts: List<String>): Long? {
             for (t in texts) {
                 DAY_STAMP.find(t)?.let { m ->
                     val mo = MONTHS.indexOf(m.groupValues[2].lowercase(Locale.ROOT))
-                    if (mo >= 0) return utc(m.groupValues[3].toInt(), mo, m.groupValues[1].toInt(), m.groupValues[4].toInt(), m.groupValues[5].toInt())
+                    if (mo >= 0) {
+                        zonedToUtc(m.groupValues[3].toInt(), mo, m.groupValues[1].toInt(), m.groupValues[4].toInt(), m.groupValues[5].toInt(), m.groupValues[6])
+                            ?.let { return it }
+                    }
                 }
                 ISO_STAMP.find(t)?.let { m ->
                     return utc(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt(), m.groupValues[4].toInt(), m.groupValues[5].toInt())
