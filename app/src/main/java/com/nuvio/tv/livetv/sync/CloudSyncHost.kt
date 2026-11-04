@@ -33,7 +33,7 @@ interface CloudSyncEntryPoint {
 }
 
 /**
- * Starts Nuvio account sync when the app opens (so it reacts to a sign-in right away, from any
+ * Starts Setup Sync when the app opens (so it reacts to a sign-in right away, from any
  * screen) and shows its two one-time questions on top of whatever screen you're on.
  * Lives next to the app's navigation.
  */
@@ -52,11 +52,11 @@ fun CloudSyncHost() {
 
     when (prompt) {
         CloudPrompt.BackUp -> LiveDialog(onDismiss = { sync.answerBackUp(false) }, width = 520.dp) {
-            LiveText("Nuvio account", color = NuvioTheme.colors.Secondary, size = 13.sp, weight = FontWeight.SemiBold)
-            LiveText("Keep your Live TV setup with your Nuvio account?", size = 22.sp, weight = FontWeight.Bold, maxLines = 3)
+            LiveText("Setup Sync", color = NuvioTheme.colors.Secondary, size = 13.sp, weight = FontWeight.SemiBold)
+            LiveText("Keep your Live TV setup on all your devices?", size = 22.sp, weight = FontWeight.Bold, maxLines = 3)
             Spacer(Modifier.height(6.dp))
             LiveText(
-                "Your playlists (including their logins), guides, favorites and Live TV settings are saved to your Nuvio account, so every TV you sign in on has the same setup. You can turn it off any time in Settings → Live TV.",
+                "Your playlists (including their logins), guides, favorites, Sports and Calendar choices and Live TV settings are saved, so every TV you sign in on has the same setup. A phone keeps its own look and layout. You can change what's included, or turn it off, any time in Settings → Live TV → Setup Sync.",
                 color = NuvioTheme.colors.TextSecondary, size = 14.sp, maxLines = 6
             )
             Spacer(Modifier.height(14.dp))
@@ -66,8 +66,8 @@ fun CloudSyncHost() {
             }
         }
         CloudPrompt.Choose -> LiveDialog(onDismiss = { sync.answerChoose(CloudChoice.Later) }, width = 520.dp) {
-            LiveText("Nuvio account", color = NuvioTheme.colors.Secondary, size = 13.sp, weight = FontWeight.SemiBold)
-            LiveText("This account already has a Live TV setup", size = 22.sp, weight = FontWeight.Bold, maxLines = 3)
+            LiveText("Setup Sync", color = NuvioTheme.colors.Secondary, size = 13.sp, weight = FontWeight.SemiBold)
+            LiveText("You have a saved Live TV setup", size = 22.sp, weight = FontWeight.Bold, maxLines = 3)
             Spacer(Modifier.height(6.dp))
             LiveText(
                 "This TV has its own setup too. Combine keeps the playlists and guides from both. Use the saved setup replaces what is on this TV.",
