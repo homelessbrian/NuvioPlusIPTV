@@ -161,11 +161,6 @@ fun SportsScreen(
     onOpenLive: () -> Unit,
     /** Back on a game opened from another page (the Calendar): that page's route. */
     onReturnTo: (route: String) -> Unit = {},
-    /**
-     * An add-on's listing for a game picked: its id, type, add-on address, name, poster, backdrop,
-     * and whether it can be watched now (live or over; otherwise its info page opens first).
-     */
-    onOpenAddon: (String, String, String, String, String?, String?, Boolean) -> Unit = { _, _, _, _, _, _, _ -> },
     viewModel: SportsViewModel = hiltViewModel()
 ) {
     val events by viewModel.events.collectAsStateWithLifecycle()
@@ -263,15 +258,6 @@ fun SportsScreen(
         SportsLaunch.openedFromSports(ev.id)
         if (viewModel.watchFromStart(ev, m)) onOpenLive()
         else LiveTvNotice.show("${m.channel.name} can't replay this from the start")
-    }
-    /** An add-on's stream for the game: the add-on's own page, and the window stops (one picture at a time). */
-    fun openAddon(ev: SportsEvent, h: SportsAddonSources.Hit) {
-        viewModel.stopPlaying()
-        onOpenAddon(
-            h.meta.id, h.meta.apiType, h.addon.baseUrl, h.meta.name,
-            h.meta.poster, h.meta.background ?: h.meta.landscapePoster,
-            ev.state != GameState.PRE
-        )
     }
     /** A channel picked on the game page: in the window (again: full screen), or full screen. */
     fun choose(ev: SportsEvent, m: ChannelMatch) {
@@ -376,7 +362,6 @@ fun SportsScreen(
                 viewModel = viewModel,
                 onChoose = { m -> choose(opened, m) },
                 onFromStart = { m -> fromStart(opened, m) },
-                onAddon = { h -> openAddon(opened, h) },
                 onFix = { fixFor = opened },
                 onTable = { tableReq = TableRequest(opened.leagueId, opened.sides.map { it.team.id }.toSet()) },
                 onOpenGame = { ev -> openId = ev.id },
@@ -1283,8 +1268,6 @@ private fun GamePage(
     viewModel: SportsViewModel,
     onChoose: (ChannelMatch) -> Unit,
     onFromStart: (ChannelMatch) -> Unit,
-    /** OK on an add-on's listing of this game. */
-    onAddon: (SportsAddonSources.Hit) -> Unit,
     onFix: () -> Unit,
     /** OK on the Table panel: the league's whole table. */
     onTable: () -> Unit,
@@ -1322,25 +1305,6 @@ private fun GamePage(
         )
     }
     val firstAction = remember(ev.id) { FocusRequester() }
-    // Add-ons you ticked (the Add-ons button): this game's live streams, replays and highlights.
-    // null while they're being asked.
-    val pickedAddons = settings.addonSources
-    val installedAddons by viewModel.sportsAddons.collectAsStateWithLifecycle()
-    var addonHits by remember(ev.id, pickedAddons) { mutableStateOf<List<SportsAddonSources.Hit>?>(null) }
-    LaunchedEffect(ev.id, pickedAddons, installedAddons.size) {
-        addonHits = if (pickedAddons.isEmpty()) emptyList() else viewModel.addonHits(ev, pickedAddons)
-    }
-    var pickAddons by remember(ev.id) { mutableStateOf(false) }
-    if (pickAddons) {
-        AddonSourcesDialog(
-            addons = installedAddons,
-            picked = pickedAddons,
-            onToggle = { k ->
-                viewModel.repo.updateSettings { it.copy(addonSources = if (k in it.addonSources) it.addonSources - k else it.addonSources + k) }
-            },
-            onDismiss = { pickAddons = false }
-        )
-    }
     val plays = rememberScoringPlays(ev, settings.hideScores, viewModel)
     LaunchedEffect(ev.id) {
         delay(120)
@@ -1460,18 +1424,6 @@ private fun GamePage(
         ) {
             var firstSet = false
             fun f(): Modifier = if (!firstSet) { firstSet = true; Modifier.focusRequester(firstAction) } else Modifier
-            // Add-ons that list this game (live, or replays and highlights): one button each.
-            val hits = addonHits.orEmpty()
-            hits.forEach { h ->
-                val m = f()
-                val several = hits.count { it.addon.id == h.addon.id } > 1
-                item(key = "addon|${h.addon.id}|${h.meta.id}") {
-                    SportsAction(
-                        "📡  " + h.addon.displayName + if (several) " · ${h.catalogName}" else "",
-                        modifier = m, onClick = { onAddon(h) }
-                    )
-                }
-            }
             val replay = matches.firstOrNull { it.catchup }
             if (replay != null && (ev.state == GameState.LIVE || ev.state == GameState.POST)) {
                 val m = f()
@@ -1531,17 +1483,6 @@ private fun GamePage(
             }
             val m = f()
             item { SportsAction(if (matches.isEmpty()) "Pick a channel" else "Fix channel", modifier = m, onClick = onFix) }
-            // Which add-ons are searched for games (only shown when you have add-ons installed).
-            if (installedAddons.isNotEmpty()) item {
-                SportsAction(
-                    "📡  Add-ons" + when {
-                        pickedAddons.isEmpty() || hits.isNotEmpty() -> ""
-                        addonHits == null -> " · checking…"
-                        else -> " · none for this game"
-                    },
-                    onClick = { pickAddons = true }
-                )
-            }
         }
     }
     val details: @Composable () -> Unit = {

@@ -205,9 +205,7 @@ data class SportsSettings(
     /** "Channels from" on the game page ("" = all; see [ChannelRegions]). */
     val channelRegion: String = "",
     /** League Networks: a network's id (see [LeagueNetworks]) -> the channel you picked for it. */
-    val leagueNetworkChannels: Map<String, String> = emptyMap(),
-    /** Add-ons (by manifest id, see [SportsAddonSources.key]) searched for a game's live streams and replays. */
-    val addonSources: Set<String> = emptySet()
+    val leagueNetworkChannels: Map<String, String> = emptyMap()
 ) {
     fun toJson(): String = JSONObject()
         .put("showInSidebar", showInSidebar)
@@ -231,7 +229,6 @@ data class SportsSettings(
         .put("preferredGroups", JSONArray(preferredGroups.toList()))
         .put("channelRegion", channelRegion)
         .put("leagueNetworkChannels", JSONObject(leagueNetworkChannels as Map<*, *>))
-        .put("addonSources", JSONArray(addonSources.toList()))
         .toString()
 
     companion object {
@@ -262,8 +259,7 @@ data class SportsSettings(
                     leagueChannels = o.optJSONObject("leagueChannels").stringMap(),
                     preferredGroups = o.optJSONArray("preferredGroups").strings().toSet(),
                     channelRegion = o.optString("channelRegion", ""),
-                    leagueNetworkChannels = o.optJSONObject("leagueNetworkChannels").stringMap(),
-                    addonSources = o.optJSONArray("addonSources").strings().toSet()
+                    leagueNetworkChannels = o.optJSONObject("leagueNetworkChannels").stringMap()
                 )
             }.getOrDefault(SportsSettings())
         }

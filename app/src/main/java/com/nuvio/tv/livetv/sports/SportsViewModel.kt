@@ -25,8 +25,7 @@ class SportsViewModel @Inject constructor(
     private val playback: LiveTvPlaybackController,
     private val livePrefs: LiveTvPreferences,
     liveRepo: LiveTvRepository,
-    private val recordings: com.nuvio.tv.livetv.record.LiveTvRecordingScheduler,
-    private val addonSources: SportsAddonSources
+    private val recordings: com.nuvio.tv.livetv.record.LiveTvRecordingScheduler
 ) : ViewModel() {
     val settings = repo.settings
     val follows = repo.follows
@@ -68,23 +67,6 @@ class SportsViewModel @Inject constructor(
             }
         }
     }
-
-    /** Installed add-ons that can be searched for games (the Add-ons pop-up on the game page). */
-    val sportsAddons: StateFlow<List<com.nuvio.tv.domain.model.Addon>> = addonSources.installed()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
-    /** This game's listings in the add-ons picked in [picked] (live streams, replays, highlights). */
-    suspend fun addonHits(ev: SportsEvent, picked: Set<String>): List<SportsAddonSources.Hit> =
-        try {
-            addonSources.find(ev, picked)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            emptyList()
-        }
-
-    /** Stops what's playing in the Sports window (an add-on's own player takes over). */
-    fun stopPlaying() { playback.stop() }
 
     /** Tunes Live TV to the channel (the screen then opens it full screen). */
     fun watch(m: ChannelMatch) {
