@@ -120,8 +120,18 @@ class SportsRepository @Inject constructor(
     /** Shows found in the guide, by day (the day's start). */
     private val guideData = MutableStateFlow<Map<Long, List<SportsEvent>>>(emptyMap())
 
+    /** TheSportsDB's TV listings (nuvio-data's sportsdb/tv.json): channels in many countries, for [events]. */
+    private val tvData = MutableStateFlow<List<TvListing>>(emptyList())
+    private val tvCache = SportsTvListings.Cache()
+    private val tvCountries = settings.map { SportsTvListings.countriesFor(it) }.distinctUntilChanged()
+
+    /** Every game and event on the page's days (yesterday to a week ahead), with your country's channels from the TV listings. */
+    val events: StateFlow<List<SportsEvent>> = combine(plainEvents(), tvData, tvCountries) { ev, tv, countries ->
+        runCatching { SportsTvListings.addChannels(ev, tv, countries, tvCache) }.getOrDefault(ev)
+    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
     /** Every game and event on the page's days (yesterday to a week ahead). */
-    val events: StateFlow<List<SportsEvent>> = combine(leagueData, weekData, fixtureData, guideData, tsdbData) { l, w, f, g, t ->
+    private fun plainEvents(): StateFlow<List<SportsEvent>> = combine(leagueData, weekData, fixtureData, guideData, tsdbData) { l, w, f, g, t ->
         val now = System.currentTimeMillis()
         val guide = mergeWrestlingAirings(g.values.flatten()).map { timed(it, now) }
         val from = dayStart(-DAYS_BACK - 1)
@@ -440,6 +450,7 @@ class SportsRepository @Inject constructor(
     private suspend fun updateLoop() {
         var lastKick = -1
         var lastFixtures = 0L
+        var lastTv = 0L
         while (true) {
             val active = foreground.value && (settings.value.showInSidebar || viewers.value > 0)
             if (active) runCatching { updateOnce(System.currentTimeMillis()) }.onFailure { Log.w(TAG, "Sports update failed", it) }
@@ -450,6 +461,10 @@ class SportsRepository @Inject constructor(
                 runCatching { updatePast(System.currentTimeMillis()) }.onFailure { Log.w(TAG, "Sports past days update failed", it) }
                 runCatching { updateTsdb(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Non-league update failed", it) }
                 runCatching { updateSchedules(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Team schedules update failed", it) }
+            }
+            if (active && System.currentTimeMillis() - lastTv > 4 * HOUR) {
+                lastTv = System.currentTimeMillis()
+                runCatching { updateTv() }
             }
             if (active && System.currentTimeMillis() - lastFixtures > 12 * HOUR) {
                 lastFixtures = System.currentTimeMillis()
@@ -900,6 +915,14 @@ class SportsRepository @Inject constructor(
         kotlinx.coroutines.coroutineScope { list.map { l -> async { block(l) } }.awaitAll() }
     }
 
+    /** TheSportsDB's TV listings (a few hundred games' channels in many countries); the last saved copy when the file can't be reached. */
+    private suspend fun updateTv() {
+        val file = File(dir, "tv.json")
+        val raw = runCatching { feeds.tvListingsRaw() }.onSuccess { runCatching { file.writeText(it) } }.getOrNull() ?: return
+        val list = runCatching { SportsTvListings.parse(raw) }.getOrDefault(emptyList())
+        if (list.isNotEmpty()) tvData.value = list
+    }
+
     private suspend fun updateFixtures() {
         // Every one of these, not just your region's: one request per slug regardless of how
         // many leagues or regions use it, so there's no traffic reason to hold any of them back.
@@ -1005,6 +1028,12 @@ class SportsRepository @Inject constructor(
             }
         }
         tsdbData.value = ts
+        runCatching {
+            File(dir, "tv.json").takeIf { it.exists() }?.readText()?.let { raw ->
+                val list = SportsTvListings.parse(raw)
+                if (list.isNotEmpty()) tvData.value = list
+            }
+        }
     }
 
     // ------------------------------------------------------------------ matching channels

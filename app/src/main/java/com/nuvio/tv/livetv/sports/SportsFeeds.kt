@@ -115,6 +115,9 @@ internal class SportsFeeds {
 
     @Volatile private var tsdbFolder = "sportsdb/"
 
+    /** Every game of the next week with its TV channels by country (TheSportsDB's TV listings, kept by the nuvio-data job). */
+    fun tvListingsRaw(): String = get(DATA_URL + "sportsdb/tv.json")
+
     /** A TheSportsDB game's goals, cards, stats and line-ups (the nuvio-data job writes them). */
     fun tsdbGameRaw(tsdbEventId: String): String = get(DATA_URL + "sportsdb/games/$tsdbEventId.json")
 
