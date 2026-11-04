@@ -1507,6 +1507,21 @@ private fun PlaybackNavHost(
             // Live TV fork: the Sports page (scores, schedules, which of your channels show each game).
             com.nuvio.tv.livetv.sports.SportsScreen(
                 onOpenLive = { com.nuvio.tv.livetv.sports.openLiveTvFullscreen(navController) },
+                // A game's listing in one of your add-ons: its streams (live or over), or its
+                // info page first when the game hasn't started.
+                onOpenAddon = { itemId, itemType, addonBaseUrl, title, poster, backdrop, watchNow ->
+                    navController.navigate(
+                        if (watchNow) Screen.Stream.createRoute(
+                            videoId = itemId,
+                            contentType = itemType,
+                            title = title,
+                            poster = poster,
+                            backdrop = backdrop,
+                            contentId = itemId,
+                            contentName = title
+                        ) else Screen.Detail.createRoute(itemId, itemType, addonBaseUrl)
+                    )
+                },
                 // Back on a game opened from another page: that page again, as it was (like
                 // picking it in the side menu).
                 onReturnTo = { route ->
