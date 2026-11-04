@@ -1188,7 +1188,9 @@ private fun ScoreboardStrip(
     onTeam: ((Side) -> Unit)? = null,
     /** Before the game (the game page): each team's place, form and chances, and the time column. */
     preGame: Map<String, PreGameTeam>? = null,
-    extras: GameExtras? = null
+    extras: GameExtras? = null,
+    /** Where Down from the lower team goes (the game page's "Channels from" button), or null. */
+    downTo: FocusRequester? = null
 ) {
     val league = SportsCatalog.league(ev.leagueId)
     val sport = league?.sport ?: Sport.OTHER
@@ -1205,7 +1207,9 @@ private fun ScoreboardStrip(
                 sides.forEach { s ->
                     TeamBand(
                         side = s, showScore = showScore, dim = showScore && !tied && s != lead, followed = false,
-                        modifier = Modifier.weight(1f).then(if (onTeam != null) Modifier.teamSelectable { onTeam(s) } else Modifier),
+                        modifier = Modifier.weight(1f)
+                            .then(if (downTo != null && s == sides.last()) Modifier.focusProperties { down = downTo } else Modifier)
+                            .then(if (onTeam != null) Modifier.teamSelectable { onTeam(s) } else Modifier),
                         logo = if (big) 44.dp else 30.dp, name = if (big) 19.sp else 13.sp, score = if (big) 34.sp else 22.sp,
                         extra = listOfNotNull(s.record, if (s.home) "Home" else "Away").joinToString(" · "),
                         trailing = preGame?.get(s.team.id)?.takeIf { pre }?.let { t -> @Composable { PreGameTeamStats(t, wide) } }
@@ -1333,15 +1337,6 @@ private fun GamePage(
     val preGame = if (ev.state == GameState.PRE && sides.size == 2 && !settings.hideScores)
         preGameTeams(ev, sides, tables[ev.leagueId], extras) else null
 
-    val top: @Composable () -> Unit = {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-            LiveText("‹  $backLabel", color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold)
-            Spacer(Modifier.width(10.dp))
-            LiveText(listOfNotNull(league?.name, ev.subtitle?.takeIf { sides.size == 2 }).joinToString(" · "), color = SportsLook.Dim, size = 12.sp)
-        }
-        ScoreboardStrip(ev, settings.hideScores, now, use24h, height = if (sides.size == 2) 124.dp else 100.dp, big = true, onTeam = { cardTeam = it.team },
-            preGame = preGame, extras = extras.takeIf { !settings.hideScores })
-    }
     // "Channels from": the chosen region's channels only, the rest a click away. Worked out from
     // this game's own dozen matches (no new guide search), so it's instant.
     val regionChoice = settings.channelRegion
@@ -1364,6 +1359,19 @@ private fun GamePage(
     }
     // Only worth a button when this game's channels come from more than one place (or a region is set).
     val regionButton = matches.isNotEmpty() && (regionChoice.isNotBlank() || regionCodes.toSet().size > 1)
+    // Up from the first channel and Down from the lower team go to it (it sits off to the right,
+    // so the TV would otherwise jump past it).
+    val regionFocus = remember(ev.id) { FocusRequester() }
+    val top: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+            LiveText("‹  $backLabel", color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold)
+            Spacer(Modifier.width(10.dp))
+            LiveText(listOfNotNull(league?.name, ev.subtitle?.takeIf { sides.size == 2 }).joinToString(" · "), color = SportsLook.Dim, size = 12.sp)
+        }
+        ScoreboardStrip(ev, settings.hideScores, now, use24h, height = if (sides.size == 2) 124.dp else 100.dp, big = true, onTeam = { cardTeam = it.team },
+            downTo = if (regionButton) regionFocus else null,
+            preGame = preGame, extras = extras.takeIf { !settings.hideScores })
+    }
     if (pickRegion) {
         RegionDialog(
             codes = regionCodes,
@@ -1375,7 +1383,10 @@ private fun GamePage(
     val channels: @Composable () -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically) {
             SectionHeader("WATCH ON YOUR CHANNELS", modifier = Modifier.weight(1f))
-            if (regionButton) RegionButton(regionChoice, Modifier.padding(top = 6.dp, end = 6.dp)) { pickRegion = true }
+            if (regionButton) RegionButton(
+                regionChoice,
+                Modifier.padding(top = 6.dp, end = 6.dp).focusRequester(regionFocus).focusProperties { down = first }
+            ) { pickRegion = true }
         }
         if (noneInRegion) LiveText(
             "None of your ${ChannelRegions.shortName(regionChoice)} channels list this game, so here are all of them.",
@@ -1398,7 +1409,7 @@ private fun GamePage(
                         eventStartMs = ev.startMs,
                         use24h = use24h,
                         copies = g.drop(1),
-                        modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
+                        modifier = if (i == 0) Modifier.focusRequester(first).then(if (regionButton) Modifier.focusProperties { up = regionFocus } else Modifier) else Modifier,
                         onClick = { onChoose(m) }
                     )
                 }
