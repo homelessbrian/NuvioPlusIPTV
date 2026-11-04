@@ -125,6 +125,17 @@ class SportsAddonSource @Inject constructor(
                     if (found.isNotEmpty()) break
                 }
             }
+            // A recaps list with no search (HighFly's "Sport Recaps"): look a few pages further back.
+            if (found.isEmpty() && !supportsSearch(c)) {
+                var skip = 0
+                var page = gamesOf(a, c, extra, VOD_TTL)
+                repeat(3) {
+                    if (found.isNotEmpty() || page.isEmpty()) return@repeat
+                    skip += page.size
+                    page = gamesOf(a, c, extra + ("skip" to skip.toString()), VOD_TTL)
+                    found = page.filter { gameScore(ev, it, true) > 0 }
+                }
+            }
             found.forEach { hits.putIfAbsent(it.id, it to kind) }
             if (hits.size >= 6) break
         }
