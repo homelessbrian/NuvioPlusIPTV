@@ -923,6 +923,32 @@ class SportsRepository @Inject constructor(
         if (list.isNotEmpty()) tvData.value = list
     }
 
+    private var playersIndex: List<SportsPlayers.Entry>? = null
+
+    /**
+     * [team]'s players, or null when we have none for it. The files change weekly, so a saved copy under
+     * a week old is used as it is; an older one only when the file can't be reached.
+     */
+    suspend fun teamPlayers(team: TeamInfo): Roster? = withContext(Dispatchers.IO) {
+        runCatching {
+            fun cached(f: File): String? = f.takeIf { it.exists() }?.let { runCatching { it.readText() }.getOrNull() }
+            fun fresh(f: File) = f.exists() && System.currentTimeMillis() - f.lastModified() < 7L * 24 * 3600 * 1000
+            val iFile = File(dir, "players_index.json")
+            val index = playersIndex ?: run {
+                val raw = (if (fresh(iFile)) cached(iFile) else null)
+                    ?: runCatching { feeds.playersIndexRaw() }.onSuccess { runCatching { iFile.writeText(it) } }.getOrNull()
+                    ?: cached(iFile)
+                SportsPlayers.parseIndex(raw ?: return@runCatching null)
+            }.also { playersIndex = it }
+            val entry = SportsPlayers.find(team, index) ?: return@runCatching null
+            val tFile = File(dir, "pl_${entry.id}.json")
+            val raw = (if (fresh(tFile)) cached(tFile) else null)
+                ?: runCatching { feeds.playersRaw(entry.id) }.onSuccess { runCatching { tFile.writeText(it) } }.getOrNull()
+                ?: cached(tFile) ?: return@runCatching null
+            SportsPlayers.parseRoster(raw).takeIf { it.players.isNotEmpty() }
+        }.getOrNull()
+    }
+
     private suspend fun updateFixtures() {
         // Every one of these, not just your region's: one request per slug regardless of how
         // many leagues or regions use it, so there's no traffic reason to hold any of them back.

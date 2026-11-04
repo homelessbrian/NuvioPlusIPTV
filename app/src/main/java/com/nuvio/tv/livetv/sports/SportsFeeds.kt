@@ -119,6 +119,12 @@ internal class SportsFeeds {
     fun tvListingsRaw(): String = get(DATA_URL + "sportsdb/tv.json")
 
     /** A TheSportsDB game's goals, cards, stats and line-ups (the nuvio-data job writes them). */
+    /** The list of teams that have players (kept by the nuvio-data job). */
+    fun playersIndexRaw(): String = get(DATA_URL + "sportsdb/players/index.json")
+
+    /** One team's players, by TheSportsDB's team id. */
+    fun playersRaw(teamId: String): String = get(DATA_URL + "sportsdb/players/$teamId.json")
+
     fun tsdbGameRaw(tsdbEventId: String): String = get(DATA_URL + "sportsdb/games/$tsdbEventId.json")
 
     // ------------------------------------------------------------------ the shared ESPN schedule cache
