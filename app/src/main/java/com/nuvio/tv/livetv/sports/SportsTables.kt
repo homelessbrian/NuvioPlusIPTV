@@ -672,7 +672,14 @@ internal fun TeamCard(
     LaunchedEffect(allGames, playersView, picked, games != null) { delay(120); runCatching { first.requestFocus() } }
 
     SportsDialog(
-        onDismiss = onDismiss,
+        // Back steps out of the players one level at a time: profile -> list -> the team card.
+        onDismiss = {
+            when {
+                picked != null -> picked = null
+                playersView -> playersView = false
+                else -> onDismiss()
+            }
+        },
         width = 560.dp,
         header = {
             val c = bandColor(teamColor(team))
