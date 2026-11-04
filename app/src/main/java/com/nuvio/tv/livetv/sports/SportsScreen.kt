@@ -361,6 +361,7 @@ fun SportsScreen(
                 videoSlot = videoSlot,
                 viewModel = viewModel,
                 onChoose = { m -> choose(opened, m) },
+                onPlayReplay = { m -> SportsLaunch.openedFromSports(opened.id); viewModel.watch(m); onOpenLive() },
                 onFromStart = { m -> fromStart(opened, m) },
                 onFix = { fixFor = opened },
                 onTable = { tableReq = TableRequest(opened.leagueId, opened.sides.map { it.team.id }.toSet()) },
@@ -1267,6 +1268,8 @@ private fun GamePage(
     videoSlot: @Composable (Modifier) -> Unit,
     viewModel: SportsViewModel,
     onChoose: (ChannelMatch) -> Unit,
+    /** A replay or highlights video from a sports addon (finished games). */
+    onPlayReplay: (ChannelMatch) -> Unit,
     onFromStart: (ChannelMatch) -> Unit,
     onFix: () -> Unit,
     /** OK on the Table panel: the league's whole table. */
@@ -1295,16 +1298,24 @@ private fun GamePage(
     val sides = ev.ordered(sport)
     val showScore = ev.hasScore && !settings.hideScores
     val first = remember(ev.id) { FocusRequester() }
+    // Recording works from your own playlists' channels, not from an addon's streams.
+    val ownChannels = remember(matches) { matches.filter { it.channel.sourceId != SportsAddonSource.SOURCE_ID } }
     var askRecord by remember(ev.id) { mutableStateOf(false) }
     if (askRecord) {
         val pad by viewModel.recordPadding.collectAsStateWithLifecycle()
         RecordDialog(
-            ev = ev, matches = matches, padding = pad, use24h = use24h, hideScores = settings.hideScores,
+            ev = ev, matches = ownChannels, padding = pad, use24h = use24h, hideScores = settings.hideScores,
             onRecord = { m, minutes -> askRecord = false; LiveTvNotice.show(viewModel.record(ev, m, minutes)) },
             onDismiss = { askRecord = false }
         )
     }
     val firstAction = remember(ev.id) { FocusRequester() }
+    // Your sports addons (HighFly, StremVerse…): streams for this game, or replays once it's over.
+    DisposableEffect(ev.id) {
+        viewModel.repo.openGame(ev)
+        onDispose { viewModel.repo.closeGame(ev.id) }
+    }
+    val replays = viewModel.repo.vodMatches.collectAsStateWithLifecycle().value[ev.id].orEmpty()
     val plays = rememberScoringPlays(ev, settings.hideScores, viewModel)
     LaunchedEffect(ev.id) {
         delay(120)
@@ -1338,7 +1349,7 @@ private fun GamePage(
     var pickRegion by remember(ev.id) { mutableStateOf(false) }
     var otherRegions by remember(ev.id, regionChoice) { mutableStateOf(false) }
     val inRegion = if (regionChoice.isBlank()) matches else matches.filterIndexed { i, m ->
-        m.score >= 150 || (videoOn && playingKey == m.channel.key) || ChannelRegions.includes(regionCodes[i], regionChoice)
+        m.score >= 150 || m.channel.sourceId == SportsAddonSource.SOURCE_ID || (videoOn && playingKey == m.channel.key) || ChannelRegions.includes(regionCodes[i], regionChoice)
     }
     // None of them from that region: show them all (with a line saying so) rather than nothing.
     val noneInRegion = regionChoice.isNotBlank() && matches.isNotEmpty() && inRegion.isEmpty()
@@ -1415,6 +1426,19 @@ private fun GamePage(
                 color = SportsLook.Dim, size = 12.sp, maxLines = 3
             )
         }
+        if (ev.state == GameState.POST && replays.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            SectionHeader("REPLAYS & HIGHLIGHTS")
+            LazyColumn(
+                Modifier.heightIn(max = 126.dp).keepFocusWhileHeld(horizontal = false),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+            ) {
+                itemsIndexed(replays, key = { _, m -> m.channel.key }) { _, m ->
+                    ChannelLine(m.channel, m.how, onClick = { onPlayReplay(m) })
+                }
+            }
+        }
         Spacer(Modifier.height(10.dp))
         // One line (short labels; any that don't fit scroll into view as the highlight moves).
         LazyRow(
@@ -1450,7 +1474,7 @@ private fun GamePage(
                 }
             }
             // Record: pick the channel and how long.
-            if (ev.hasTime && (ev.state == GameState.PRE || ev.state == GameState.LIVE) && matches.isNotEmpty()) {
+            if (ev.hasTime && (ev.state == GameState.PRE || ev.state == GameState.LIVE) && ownChannels.isNotEmpty()) {
                 val m = f()
                 item {
                     val rec = isRecording(ev)
