@@ -553,6 +553,18 @@ class OnDemandRepository @Inject constructor(
 
     private suspend fun playlist(id: String): PlaylistSource? = prefs.playlists.first().firstOrNull { it.id == id }
 
+    /**
+     * Adult titles (by their own name or their category's name). These only ever play straight
+     * from your provider, so they never land in Continue watching, the library or your watched list.
+     */
+    suspend fun isAdult(item: VodItem): Boolean {
+        if (com.nuvio.tv.livetv.parental.ParentalControls.isAdult(item.name)) return true
+        val cat = withContext(Dispatchers.IO) {
+            runCatching { db.categoryNames(item.playlistId, item.kind)[item.categoryId] }.getOrNull()
+        }
+        return cat != null && com.nuvio.tv.livetv.parental.ParentalControls.isAdult(cat)
+    }
+
     /** A title by its uid ("movie:<playlist>:<id>"). */
     suspend fun itemByUid(uid: String): VodItem? = withContext(Dispatchers.IO) {
         val parts = uid.split(':', limit = 3)

@@ -347,6 +347,8 @@ class OnDemandViewModel @Inject constructor(
     }
 
     suspend fun targetFor(item: VodItem): OnDemandTarget {
+        // Adult titles never open Nuvio's details page (which would put them in Continue watching).
+        if (repository.isAdult(item)) return OnDemandTarget.Provider(item)
         val type = if (item.kind == VodKind.SERIES) "series" else "movie"
         // The catalog search and the TMDB id lookup run at the same time, and neither may hold
         // the screen up for long: past a few seconds we open with whatever we have.
