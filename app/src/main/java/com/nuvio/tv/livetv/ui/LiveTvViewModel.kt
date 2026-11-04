@@ -519,6 +519,29 @@ class LiveTvViewModel @Inject constructor(
         return true
     }
 
+    /**
+     * The bar's backup button: [ch] first, then every other channel with the same name (quality and
+     * backup notes ignored, see [backupName]), other playlists first. Hidden channels and groups are
+     * included; locked groups and other local stations ("FOX (WNYW)" vs "FOX (KTTV)") are not.
+     * Empty when there are no others.
+     */
+    fun backupsFor(ch: LiveChannel): List<LiveChannel> {
+        val index = backupIndex ?: return emptyList()
+        val name = backupName(ch.name)
+        if (name.length < 2) return emptyList()
+        val s = settings.value
+        val locked = userState.value.lockedGroups
+        val note = stationNote(ch.name)
+        val others = index[name].orEmpty().asSequence()
+            .filter { it.key != ch.key }
+            .filter { c -> val b = stationNote(c.name); note == null || b == null || note == b }
+            .filter { !com.nuvio.tv.livetv.parental.ParentalControls.isLocked(it.groupId, it.group, s, locked) }
+            .distinctBy { it.key }
+            .sortedBy { if (it.sourceId != ch.sourceId) 0 else 1 }
+            .toList()
+        return if (others.isEmpty()) emptyList() else listOf(ch) + others
+    }
+
     fun preview(channel: LiveChannel) {
         if (!switchingToBackup) backupTried.clear()
         _catchup.value = null
@@ -1570,6 +1593,19 @@ private val BACKUP_PREFIX = Regex("""^\s*[a-z]{2,4}\s*[:|]\s*""")
 private val BACKUP_PREFIX_DASH = Regex("""^\s*[a-z]{2,3}\s+-\s+""")
 private val BACKUP_BRACKETS = Regex("""[\[(][^\])]*[\])]""")
 private val BACKUP_NOISE = Regex("""\b(hd|fhd|uhd|sd|4k|8k|hevc|h\.?26[45]|1080[pi]?|720p?|2160p?|\d{2}\s?fps|backup|bkp|bk|alt|alternate|raw|ᴴᴰ)\b""")
+
+/** The quality written in a channel's name ("4K", "FHD", "HD", "SD"), or null. */
+internal fun backupQuality(name: String): String? {
+    val n = name.lowercase()
+    fun has(re: String) = Regex(re).containsMatchIn(n)
+    return when {
+        has("""\b(4k|uhd|2160p?)\b""") -> "4K"
+        has("""\b(fhd|1080[pi]?)\b""") -> "FHD"
+        has("""\b(hd|720p?)\b""") || n.contains("ᴴᴰ") -> "HD"
+        has("""\bsd\b""") -> "SD"
+        else -> null
+    }
+}
 
 internal fun backupName(name: String): String {
     var s = name.lowercase()

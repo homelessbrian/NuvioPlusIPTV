@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FilterNone
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Pause
@@ -66,7 +67,7 @@ internal enum class PanelMode { LIVE, CATCHUP, SHIFT }
  * the timeline, back 30, play/pause, forward 30 and the gear; the rest are kept for the keys
  * that still name them, and live in the gear panel.
  */
-internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, PIN, BELL, MORE }
+internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, PIN, BELL, BACKUPS, MORE }
 
 /** Timeline: everything in wall-clock milliseconds. */
 internal data class PanelTimeline(
@@ -113,7 +114,7 @@ internal object BarPart {
 }
 
 /** Which controls the bar offers: back 30 / forward 30 only where you can skip, and the gear. */
-internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, bell: Boolean = false, pin: Boolean = false): List<PanelControl> = buildList {
+internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, bell: Boolean = false, pin: Boolean = false, backups: Boolean = false): List<PanelControl> = buildList {
     val transport = mode != PanelMode.LIVE || paused
     // The timeline itself can be grabbed (Up from the buttons) and moved with ◀ / ▶.
     if (transport && canSkip) add(PanelControl.TIMELINE)
@@ -124,6 +125,8 @@ internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, b
     if (pin) add(PanelControl.PIN)
     // The Calendar's bell, beside the gear.
     if (bell) add(PanelControl.BELL)
+    // Other copies of this channel (same name, any quality or playlist), right before the gear.
+    if (backups) add(PanelControl.BACKUPS)
     add(PanelControl.MORE)
 }
 
@@ -338,6 +341,10 @@ internal fun LiveTvPlayerPanel(
                                         if (bellOn) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
                                         focused = focused == PanelControl.BELL && recentFocus == null, big = false
                                     )
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                if (PanelControl.BACKUPS in controls) {
+                                    RoundButton(Icons.Default.FilterNone, focused = focused == PanelControl.BACKUPS && recentFocus == null, big = false)
                                     Spacer(Modifier.width(8.dp))
                                 }
                                 RoundButton(Icons.Default.Settings, focused = focused == PanelControl.MORE && recentFocus == null, big = false)

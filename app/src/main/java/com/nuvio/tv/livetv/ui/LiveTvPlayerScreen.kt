@@ -68,7 +68,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private enum class PlayerDialog { NONE, OPTIONS, AUDIO, SUBTITLES, SCREEN_SIZE, STREAM_INFO, SLEEP }
+private enum class PlayerDialog { NONE, OPTIONS, AUDIO, SUBTITLES, SCREEN_SIZE, STREAM_INFO, SLEEP, BACKUPS }
 
 /** The picture size saved in settings, as one of Nuvio's own player modes. */
 internal fun aspectModeOf(name: String): com.nuvio.tv.ui.screens.player.AspectMode =
@@ -306,6 +306,10 @@ fun LiveTvPlayerScreen(
     // Sports: the live game on this channel, if it can be pinned to the corner.
     val pinGame = com.nuvio.tv.livetv.sports.rememberPinnableGame(current?.key).takeIf { playback.catchupTitle == null }
     val pinList = com.nuvio.tv.livetv.sports.SportsLive.pins.collectAsState().value
+    // Other copies of this channel for the bar's backup button (live only; hidden channels included).
+    val backups = remember(current?.key, panelFull, playback.catchupTitle) {
+        current?.takeIf { playback.catchupTitle == null }?.let { viewModel.backupsFor(it) }.orEmpty()
+    }
     val poster by androidx.compose.runtime.produceState<String?>(initialValue = null, watchingTitle, current?.key) {
         value = null
         // In archive playback the guide entry isn't the live one, so no movie/series hint.
@@ -417,7 +421,7 @@ fun LiveTvPlayerScreen(
                 if (cf != null) {
                     val mode = if (archive) PanelMode.CATCHUP else if (shifting) PanelMode.SHIFT else PanelMode.LIVE
                     val paused = playback.userPaused
-                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null)
+                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty())
                     if (e.type == KeyEventType.KeyUp) return@onPreviewKeyEvent isOk || e.key == Key.Back
                     showBanner()
                     val buttons = list.filter { it != PanelControl.TIMELINE }
@@ -482,6 +486,7 @@ fun LiveTvPlayerScreen(
                                     val pinned = com.nuvio.tv.livetv.sports.SportsLive.togglePin(g.id)
                                     com.nuvio.tv.livetv.record.LiveTvNotice.show(if (pinned) "Score pinned to the corner" else "Score unpinned")
                                 }
+                                PanelControl.BACKUPS -> dialog = PlayerDialog.BACKUPS
                                 PanelControl.MORE -> openGear()
                                 PanelControl.TIMELINE, null -> Unit
                             }
@@ -883,7 +888,7 @@ fun LiveTvPlayerScreen(
                     showPosters = settings.showPosters,
                     timeline = timeline,
                     paused = paused,
-                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null),
+                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty()),
                     focused = controlFocus,
                     captionsOn = captionsOn,
                     audioLabel = remember(playback.channelKey, bannerVisible) { viewModel.playback.audioLabel() },
@@ -1121,6 +1126,21 @@ fun LiveTvPlayerScreen(
             },
             onDismiss = { dialog = PlayerDialog.NONE }
         )
+        PlayerDialog.BACKUPS -> if (backups.isEmpty()) dialog = PlayerDialog.NONE else BackupChannelsDialog(
+            channels = backups,
+            playingKey = playback.channelKey,
+            nowTitle = { key -> viewModel.currentProgram(key)?.title },
+            onPick = { ch ->
+                dialog = PlayerDialog.NONE
+                if (ch.key != playback.channelKey) {
+                    closeFull()
+                    viewModel.preview(ch)
+                    showBanner()
+                }
+                scope.launch { delay(60); runCatching { rootFocus.requestFocus() } }
+            },
+            onDismiss = { dialog = PlayerDialog.NONE; scope.launch { delay(60); runCatching { rootFocus.requestFocus() } } }
+        )
         PlayerDialog.SCREEN_SIZE -> ScreenSizeDialog(
             selected = aspectModeOf(settings.aspectMode),
             label = { context.getString(it.labelResId) },
@@ -1199,6 +1219,59 @@ private fun TrackDialog(
                         ) { f ->
                             LiveText((if (o.selected) "✓  " else "") + o.label, color = focusedTextColor(f))
                         }
+                    }
+                }
+            }
+        }
+    }
+    LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
+}
+
+/**
+ * The bar's backup button: this channel's other copies (same name, any quality, any playlist,
+ * hidden ones too). The one playing is marked; OK on another switches to it.
+ */
+@Composable
+private fun BackupChannelsDialog(
+    channels: List<LiveChannel>,
+    playingKey: String?,
+    nowTitle: (String) -> String?,
+    onPick: (LiveChannel) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val first = remember { FocusRequester() }
+    val colors = NuvioTheme.colors
+    val focusKey = channels.firstOrNull { it.key != playingKey }?.key ?: channels.first().key
+    LiveDialog(onDismiss = onDismiss, width = 480.dp) {
+        LiveText("Backup channels", size = 20.sp, weight = FontWeight.Bold)
+        LiveText("Other copies of ${channels.first().name} · OK switches", size = 12.sp, color = colors.TextSecondary)
+        Spacer(Modifier.height(12.dp))
+        androidx.compose.foundation.lazy.LazyColumn(
+            Modifier.fillMaxWidth().heightIn(max = 420.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            items(channels.size, key = { channels[it].key }) { i ->
+                val ch = channels[i]
+                val playing = ch.key == playingKey
+                LiveFocusRow(
+                    modifier = Modifier.fillMaxWidth().then(if (ch.key == focusKey) Modifier.focusRequester(first) else Modifier),
+                    selected = playing,
+                    onClick = { onPick(ch) }
+                ) { f ->
+                    Column(Modifier.fillMaxWidth()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            LiveText(ch.name, color = focusedTextColor(f), weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                            backupQuality(ch.name)?.let { q ->
+                                Spacer(Modifier.width(8.dp))
+                                LiveText(q, size = 10.sp, weight = FontWeight.Bold, color = focusedTextColor(f))
+                            }
+                            if (playing) {
+                                Spacer(Modifier.width(8.dp))
+                                LiveText("Watching", size = 11.sp, color = focusedTextColor(f))
+                            }
+                        }
+                        LiveText(listOf(ch.sourceName, ch.group).filter { it.isNotBlank() }.joinToString(" · "), size = 11.sp, color = focusedTextColor(f), maxLines = 1)
+                        nowTitle(ch.key)?.let { LiveText("Now: $it", size = 11.sp, color = focusedTextColor(f), maxLines = 1) }
                     }
                 }
             }
