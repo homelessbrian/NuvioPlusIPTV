@@ -234,7 +234,8 @@ class LiveTvRecorder @Inject constructor(
         val dir = File(start.dir)
         var rec = start
         var problem: String? = null
-        val isHls = url.lowercase().substringBefore('?').endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true)
+        val isHls = url.lowercase().substringBefore('?').endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true) ||
+            com.nuvio.tv.livetv.model.PlaylistSource.asksForHls(url)
         try {
             if (isHls) {
                 problem = recordHls(rec, url, headers, dir, finite, { dropped(it) }) { d, size -> rec = progress(rec, d, size) }

@@ -1674,14 +1674,16 @@ internal fun LiveTvSettingsContent(
                     viewModel.setPlaylistLogoSource(d.source.id, if (d.source.logoSource == "epg") "playlist" else "epg")
                     close()
                 },
-                // Xtream: which stream format to ask for. Auto follows what the account allows.
-                *(if (d.source.isXtream) arrayOf<Pair<String, () -> Unit>>(
-                    "Stream format: " + when (d.source.streamFormat) { "ts" -> "TS"; "m3u8" -> "HLS (m3u8)"; else -> "Auto" } to {
-                        val next = when (d.source.streamFormat) { "auto" -> "ts"; "ts" -> "m3u8"; else -> "auto" }
-                        viewModel.savePlaylist(d.source.copy(streamFormat = next))
-                        close()
-                    }
-                ) else emptyArray()),
+                // Which stream format to ask for. Xtream: Auto follows what the account allows.
+                // M3U links: Auto keeps the playlist's own links; TS / HLS switch links that can
+                // be switched (Xtream-style links, Dispatcharr).
+                "Stream format: " + when (d.source.streamFormat) {
+                    "ts" -> "TS"; "m3u8" -> "HLS (m3u8)"; else -> if (d.source.isXtream) "Auto" else "As in playlist"
+                } to {
+                    val next = when (d.source.streamFormat) { "auto" -> "ts"; "ts" -> "m3u8"; else -> "auto" }
+                    viewModel.savePlaylist(d.source.copy(streamFormat = next))
+                    close()
+                },
                 "Move up" to { viewModel.movePlaylist(d.source.id, -1); close() },
                 "Move down" to { viewModel.movePlaylist(d.source.id, 1); close() }
             ),

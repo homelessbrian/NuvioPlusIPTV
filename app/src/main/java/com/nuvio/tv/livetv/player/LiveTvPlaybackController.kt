@@ -2025,7 +2025,8 @@ class LiveTvPlaybackController @Inject constructor(
         val lower = url.lowercase().substringBefore('?')
         when {
             forcedMime != null -> builder.setMimeType(forcedMime)
-            lower.endsWith(".m3u8") || lower.contains("/hls/") || lower.contains("m3u8") -> builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+            lower.endsWith(".m3u8") || lower.contains("/hls/") || lower.contains("m3u8") ||
+                com.nuvio.tv.livetv.model.PlaylistSource.asksForHls(url) -> builder.setMimeType(MimeTypes.APPLICATION_M3U8)
             lower.endsWith(".mpd") -> builder.setMimeType(MimeTypes.APPLICATION_MPD)
             lower.endsWith(".ts") -> builder.setMimeType(MimeTypes.VIDEO_MP2T)
         }

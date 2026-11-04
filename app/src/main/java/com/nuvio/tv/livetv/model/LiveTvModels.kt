@@ -22,7 +22,11 @@ data class PlaylistSource(
     val importVod: Boolean = true,
     /** Xtream: import the live TV channels (off = On Demand only). */
     val importLive: Boolean = true,
-    /** Xtream live stream format: "auto" (what the provider allows), "ts" or "m3u8". */
+    /**
+     * Live stream format: "auto", "ts" or "m3u8". Xtream: "auto" follows what the account allows.
+     * M3U links: "auto" keeps the playlist's own links; "ts"/"m3u8" switches links that can be
+     * switched (Xtream-style ".../123.ts" links, and Dispatcharr's own stream links).
+     */
     val streamFormat: String = "auto",
     /** Xtream: the server's time zone (from its account info), used for catch-up times. */
     val serverTimezone: String = "",
@@ -48,6 +52,15 @@ data class PlaylistSource(
         return "${xtreamBase()}/get.php?username=${enc(xtreamUsername)}&password=${enc(xtreamPassword)}&type=m3u_plus&output=ts"
     }
 
+    /** A channel link from this M3U playlist in the chosen stream format (unchanged on Auto). */
+    fun m3uStreamLink(link: String): String {
+        if (isXtream) return link
+        return when (streamFormat) {
+            "ts", "m3u8" -> streamLinkAs(link, streamFormat)
+            else -> link
+        }
+    }
+
     fun xtreamEpgUrl(): String? {
         if (!isXtream) return null
         return "${xtreamBase()}/xmltv.php?username=${enc(xtreamUsername)}&password=${enc(xtreamPassword)}"
@@ -70,6 +83,35 @@ data class PlaylistSource(
         fun tidyLink(raw: String): String = raw
             .replace(Regex("[\\u2010-\\u2015\\u2212\\uFE58\\uFE63\\uFF0D]"), "-")
             .replace(Regex("[\\u200B-\\u200D\\u2060\\uFEFF\\u00A0\\s]"), "")
+
+        private val XTREAM_LIVE_LINK = Regex("""/(?:live/)?[^/]+/[^/]+/\d+\.(ts|m3u8)$""", RegexOption.IGNORE_CASE)
+        private val DISPATCHARR_LINK = Regex("""/proxy/ts/stream/[^/]+/?$""", RegexOption.IGNORE_CASE)
+
+        /**
+         * A live link switched to TS ("ts") or HLS ("m3u8"). Dispatcharr links (and any link that
+         * already says output_format=...) get output_format=mpegts / hls; Xtream-style links get
+         * the matching ending. Anything else is left as it is.
+         */
+        fun streamLinkAs(link: String, format: String): String {
+            val hls = format == "m3u8"
+            val base = link.substringBefore('?')
+            val query = link.substringAfter('?', "")
+            val params = query.split('&').filter { it.isNotEmpty() }
+            val hasFormat = params.any { it.substringBefore('=').equals("output_format", true) }
+            if (hasFormat || DISPATCHARR_LINK.containsMatchIn(base)) {
+                val kept = params.filterNot { it.substringBefore('=').equals("output_format", true) }
+                return base + "?" + (kept + "output_format=${if (hls) "hls" else "mpegts"}").joinToString("&")
+            }
+            val m = XTREAM_LIVE_LINK.find(base) ?: return link
+            val ext = m.groups[1]!!
+            return base.replaceRange(ext.range, if (hls) "m3u8" else "ts") + link.substring(base.length)
+        }
+
+        /** A link that asks a server for HLS through a setting rather than its ending. */
+        fun asksForHls(link: String): Boolean {
+            val q = link.substringAfter('?', "").lowercase()
+            return q.split('&').any { it == "output_format=hls" || it == "output_format=m3u8" }
+        }
 
         fun cleanXtreamServer(raw: String): String {
             // Whatever dash-like character the keyboard typed (some show as blank on screen)
@@ -714,7 +756,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-03 19:25"
+    const val KIT_STAMP = "2026-11-04 17:55"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String
