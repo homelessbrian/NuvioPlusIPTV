@@ -250,14 +250,6 @@ internal fun LiveTvPlayerPanel(
 
                 // ---- middle: channel line, title, description, the controls and progress
                 Column(Modifier.weight(1f)) {
-                    if (browsing) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            LiveTag("BROWSING", accent, colors.OnSecondary)
-                            Spacer(Modifier.width(10.dp))
-                            LiveText("OK to watch  ·  ▲ ▼ more channels  ·  Back to stay", size = 11.sp, color = colors.TextSecondary)
-                        }
-                        Spacer(Modifier.height(6.dp))
-                    }
                     if (showChannel || showTags) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (showChannel) {
