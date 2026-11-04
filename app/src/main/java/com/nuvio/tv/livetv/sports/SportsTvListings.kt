@@ -43,6 +43,8 @@ internal object SportsTvListings {
     private const val NEAR_MS = 3 * HOUR
     /** The most channels added to one game. */
     private const val MAX_ADDED = 6
+    /** How the US is written in [countriesFor]'s set. */
+    private val US_NAMES: Set<String> by lazy { namesOf(listOf("US")) }
 
     fun parse(raw: String): List<TvListing> {
         val arr = JSONObject(raw).optJSONArray("events") ?: return emptyList()
@@ -267,21 +269,34 @@ internal object SportsTvListings {
         return events.map { ev ->
             if (!ev.hasTime) return@map ev
             val key = ev.id + "|" + ev.startMs
-            val extra = cache.extras.getOrPut(key) {
+            fun norm(n: String) = n.lowercase(Locale.ROOT).filter { c -> c.isLetterOrDigit() }
+            // Your countries' channels for this game, as TheSportsDB lists them.
+            val mine = cache.extras.getOrPut(key) {
                 val l = listingFor(ev, nearTo(ev)) ?: return@getOrPut emptyList()
-                val have = ev.broadcasts.map { it.lowercase(Locale.ROOT).filter { c -> c.isLetterOrDigit() } }.toMutableSet()
+                val seen = HashSet<String>()
                 val out = ArrayList<String>()
                 for ((country, names) in l.channels) {
                     if (country !in countries) continue
                     for (raw in names) {
                         val name = cleanChannel(raw, country)
                         if (name.length < 2) continue
-                        if (have.add(name.lowercase(Locale.ROOT).filter { c -> c.isLetterOrDigit() }) && out.size < MAX_ADDED) out += name
+                        if (seen.add(norm(name)) && out.size < MAX_ADDED) out += name
                     }
                 }
                 out
             }
-            if (extra.isEmpty()) ev else ev.copy(broadcasts = ev.broadcasts + extra)
+            if (mine.isEmpty()) return@map ev
+            if (countries.any { it in US_NAMES }) {
+                // US: the schedule's own channels (national, then home team's) stay first; anything new goes after.
+                val have = ev.broadcasts.mapTo(HashSet()) { norm(it) }
+                val extra = mine.filter { have.add(norm(it)) }
+                if (extra.isEmpty()) ev else ev.copy(broadcasts = ev.broadcasts + extra)
+            } else {
+                // Elsewhere the schedule's channels are American: your own country's go first, so the
+                // game card shows where you'd watch it.
+                val first = mine.mapTo(HashSet()) { norm(it) }
+                ev.copy(broadcasts = mine + ev.broadcasts.filter { norm(it) !in first })
+            }
         }
     }
 }
