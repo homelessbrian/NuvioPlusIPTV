@@ -1669,7 +1669,7 @@ private fun FixChannelDialog(ev: SportsEvent, matches: List<ChannelMatch>, hideS
         val teams = ev.ordered(league?.sport ?: Sport.OTHER).map { it.team }
         if (networks.isEmpty() && teams.isEmpty() && league?.kind != LeagueKind.EVENT) {
             LaunchedEffect(pick.key) {
-                viewModel.repo.pickChannel(ev, pick.key, forNetworks = false)
+                viewModel.repo.pickChannel(ev, pick.key)
                 LiveTvNotice.show("Saved: ${ev.title} on ${pick.name}")
                 onDismiss()
             }
@@ -1686,9 +1686,9 @@ private fun FixChannelDialog(ev: SportsEvent, matches: List<ChannelMatch>, hideS
             Spacer(Modifier.height(10.dp))
             var firstUsed = false
             fun firstMod(): Modifier = if (!firstUsed) { firstUsed = true; Modifier.focusRequester(first) } else Modifier
-            networks.firstOrNull()?.let { n ->
+            networks.distinctBy { SportsMatcher.networkKey(it) }.take(6).forEach { n ->
                 SportsMenuRow("Yes, every $n game", firstMod()) {
-                    viewModel.repo.pickChannel(ev, pick.key, forNetworks = true)
+                    viewModel.repo.pickChannel(ev, pick.key, forNetwork = n)
                     LiveTvNotice.show("Saved: $n games use ${pick.name}")
                     onDismiss()
                 }
@@ -1696,20 +1696,20 @@ private fun FixChannelDialog(ev: SportsEvent, matches: List<ChannelMatch>, hideS
             // A race series, a golf tour, a fight promotion: every event of it on this channel.
             if (league?.kind == LeagueKind.EVENT) {
                 SportsMenuRow("Yes, every ${league.name} event", firstMod()) {
-                    viewModel.repo.pickChannel(ev, pick.key, forNetworks = false, forLeague = true)
+                    viewModel.repo.pickChannel(ev, pick.key, forLeague = true)
                     LiveTvNotice.show("Saved: ${league.name} events use ${pick.name}")
                     onDismiss()
                 }
             }
             teams.forEach { t ->
                 SportsMenuRow("Yes, every ${t.name} game", firstMod()) {
-                    viewModel.repo.pickChannel(ev, pick.key, forNetworks = false, forTeam = t)
+                    viewModel.repo.pickChannel(ev, pick.key, forTeam = t)
                     LiveTvNotice.show("Saved: ${t.name} games use ${pick.name}")
                     onDismiss()
                 }
             }
             SportsMenuRow("Just this game", firstMod()) {
-                viewModel.repo.pickChannel(ev, pick.key, forNetworks = false)
+                viewModel.repo.pickChannel(ev, pick.key)
                 LiveTvNotice.show("Saved: ${ev.title} on ${pick.name}")
                 onDismiss()
             }

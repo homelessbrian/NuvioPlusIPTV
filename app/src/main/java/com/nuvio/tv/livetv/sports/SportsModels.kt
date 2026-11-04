@@ -381,3 +381,28 @@ internal fun JSONArray?.strings(): List<String> =
 
 internal fun JSONObject?.stringMap(): Map<String, String> =
     if (this == null) emptyMap() else keys().asSequence().associateWith { optString(it) }
+
+/** One of your saved channel links (Settings → Sports → Your Channel Links). */
+data class ChannelLink(
+    val kind: Kind,
+    /** The saved key: network name, "family|team id", league id or game id. */
+    val key: String,
+    val label: String,
+    /** null: that channel isn't in your playlists any more. */
+    val channelName: String?
+) {
+    enum class Kind(val heading: String) { NETWORK("Networks"), TEAM("Teams"), LEAGUE("Leagues and events"), GAME("Single games") }
+
+    companion object {
+        private val WORDS = setOf("plus", "one", "two", "news", "golf", "the", "and", "of", "sport", "sports", "main", "max", "box", "arena", "now", "play", "live")
+
+        /** A network as saved (lowercase) back into a readable name: "espn plus" -> "ESPN Plus". */
+        fun networkLabel(n: String): String = n.split(' ').filter { it.isNotBlank() }.joinToString(" ") { w ->
+            when {
+                w.any { it.isDigit() } && w.length <= 4 -> w.uppercase()
+                w.length <= 4 && w !in WORDS -> w.uppercase()
+                else -> w.replaceFirstChar { it.uppercase() }
+            }
+        }
+    }
+}

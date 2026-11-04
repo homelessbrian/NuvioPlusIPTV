@@ -1600,14 +1600,14 @@ class SportsRepository @Inject constructor(
     fun dropReminder(eventId: String) = updateFollows { f -> f.copy(reminders = f.reminders.filterNot { it.eventId == eventId }) }
 
     /**
-     * "This is the right channel" for [ev]. With [forNetworks], also for every game the same
-     * network has from now on (FOX on your FOX 4K channel, say).
+     * "This is the right channel" for [ev]. With [forNetwork] (one of its networks), also for
+     * every game that network has from now on (FOX on your FOX 4K channel, say).
      */
-    fun pickChannel(ev: SportsEvent, channelKey: String, forNetworks: Boolean, forTeam: TeamInfo? = null, forLeague: Boolean = false) = updateSettings { s ->
+    fun pickChannel(ev: SportsEvent, channelKey: String, forNetwork: String? = null, forTeam: TeamInfo? = null, forLeague: Boolean = false) = updateSettings { s ->
         val keep = s.eventChannels.filterValues { v -> (v.substringAfterLast('|').toLongOrNull() ?: 0L) > System.currentTimeMillis() - 3 * DAY }
         s.copy(
             eventChannels = keep + (ev.id to "$channelKey|${ev.startMs}"),
-            networkChannels = if (forNetworks) s.networkChannels + ev.broadcasts.associate { SportsMatcher.networkKey(it) to channelKey } else s.networkChannels,
+            networkChannels = if (forNetwork != null) s.networkChannels + (SportsMatcher.networkKey(forNetwork) to channelKey) else s.networkChannels,
             teamChannels = if (forTeam != null) s.teamChannels + (teamChannelKey(ev.leagueId, forTeam.id) to channelKey) else s.teamChannels,
             leagueChannels = if (forLeague) s.leagueChannels + (ev.leagueId to channelKey) else s.leagueChannels,
             blocked = s.blocked - "${ev.id}|$channelKey"
@@ -1636,6 +1636,49 @@ class SportsRepository @Inject constructor(
         _matches.value[ev.id]?.let { l -> _matches.value = _matches.value + (ev.id to l.filter { it.channel.key != channelKey }) }
         pickPending = true
         matchKick.value++
+    }
+
+    /** Your channel links: forget one (games of it go back to finding their channel by themselves). */
+    fun removeLink(link: ChannelLink) = updateSettings { s ->
+        when (link.kind) {
+            ChannelLink.Kind.NETWORK -> s.copy(networkChannels = s.networkChannels - link.key)
+            ChannelLink.Kind.TEAM -> s.copy(teamChannels = s.teamChannels - link.key)
+            ChannelLink.Kind.LEAGUE -> s.copy(leagueChannels = s.leagueChannels - link.key)
+            ChannelLink.Kind.GAME -> s.copy(eventChannels = s.eventChannels - link.key)
+        }
+    }.also {
+        _matches.value[link.key]?.let { l ->
+            if (link.kind == ChannelLink.Kind.GAME) _matches.value = _matches.value + (link.key to l.filter { it.score < 150 })
+        }
+        pickPending = true
+        matchKick.value++
+    }
+
+    /**
+     * Every channel link you saved, with names to show: networks, teams, leagues and single games
+     * (games already over are left out). [channelName] is null for a channel no longer in your playlists.
+     */
+    fun channelLinks(): List<ChannelLink> {
+        val s = settings.value
+        val channels = channelStore.displayChannels.value.associateBy({ it.key }, { it.name })
+        val games = known.value.associateBy { it.id }
+        val teams = HashMap<String, String>()
+        follows.value.teams.forEach { teams[teamChannelKey(it.leagueId, it.teamId)] = it.name }
+        known.value.forEach { ev -> ev.sides.forEach { side -> teams.putIfAbsent(teamChannelKey(ev.leagueId, side.team.id), side.team.name) } }
+        val now = System.currentTimeMillis()
+        val out = ArrayList<ChannelLink>()
+        s.networkChannels.forEach { (n, key) -> out += ChannelLink(ChannelLink.Kind.NETWORK, n, ChannelLink.networkLabel(n), channels[key]) }
+        s.teamChannels.forEach { (t, key) -> out += ChannelLink(ChannelLink.Kind.TEAM, t, teams[t] ?: "A team (id ${t.substringAfter('|')})", channels[key]) }
+        s.leagueChannels.forEach { (l, key) -> out += ChannelLink(ChannelLink.Kind.LEAGUE, l, SportsCatalog.league(l)?.name ?: l, channels[key]) }
+        s.eventChannels.forEach { (id, v) ->
+            val start = v.substringAfterLast('|').toLongOrNull() ?: 0L
+            if (start > now - 6 * HOUR) {
+                val ev = games[id]
+                val day = java.text.SimpleDateFormat("EEE d MMM", java.util.Locale.getDefault()).format(java.util.Date(start))
+                out += ChannelLink(ChannelLink.Kind.GAME, id, (ev?.title ?: "A game") + ", " + day, channels[v.substringBeforeLast('|')])
+            }
+        }
+        return out.sortedWith(compareBy<ChannelLink> { it.kind.ordinal }.thenBy { it.label.lowercase() })
     }
 
     fun clearFixes() = updateSettings { it.copy(networkChannels = emptyMap(), eventChannels = emptyMap(), blocked = emptySet(), teamChannels = emptyMap(), leagueChannels = emptyMap()) }

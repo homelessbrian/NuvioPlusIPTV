@@ -174,10 +174,22 @@ internal class SportsMatcher(private val db: EpgDatabase) {
             }
         }
 
+        // Games whose channel you already linked (this game, its team, its league or one of its
+        // networks, on a channel still in your playlists) skip the guide search below: it's the
+        // slow part on low-end boxes, and your link decides the channel anyway. Channel names and
+        // networks are still checked for them (cheap), so other channels showing it still turn up.
+        val linked = teamEvents.filter { ev ->
+            val st = input.settings
+            fun inList(k: String?) = k != null && k in byKey
+            inList(st.eventChannels[ev.id]?.substringBeforeLast('|')) || inList(st.leagueChannels[ev.leagueId]) ||
+                (st.teamChannels.isNotEmpty() && ev.sides.any { inList(st.teamChannels[teamChannelKey(ev.leagueId, it.team.id)]) }) ||
+                (st.networkChannels.isNotEmpty() && ev.broadcasts.any { inList(st.networkChannels[networkKey(it)]) })
+        }.mapTo(HashSet()) { it.id }
+
         // ---- 1. The guide, a half-hour slot at a time.
         // The guide is read once for all the slots (it used to be searched again for every slot,
         // which on a slower box took minutes); each show is checked against every slot's words as it goes by.
-        val guideSlots = teamEvents.groupBy { it.startMs / (30 * MINUTE) }.values.mapNotNull { slot ->
+        val guideSlots = teamEvents.filter { it.id !in linked }.groupBy { it.startMs / (30 * MINUTE) }.values.mapNotNull { slot ->
             val slotStart = slot.minOf { it.startMs }
             val slotEnd = slot.maxOf { it.startMs }
             val words = slot.flatMap { ev -> terms[ev.id]?.sqlWords.orEmpty() }.map { it.trim() }.filter { it.length >= 3 }.toSet()
@@ -378,7 +390,7 @@ internal class SportsMatcher(private val db: EpgDatabase) {
         }
         val tEnd = System.currentTimeMillis()
         val summary = "Sports: ${wanted.size} games and events in the next day or so · channels found for ${out.size} " +
-            "(guide $byGuide, channel names $byName, networks $byNetwork) · ${input.channels.size} channels searched in " +
+            "(guide $byGuide, channel names $byName, networks $byNetwork, ${linked.size} linked games skipped the guide) · ${input.channels.size} channels searched in " +
             "${(tEnd - tStart) / 1000} s (guide ${(tGuide - tStart) / 1000}, names ${(tNames - tGuide) / 1000}, networks ${(tEnd - tNames) / 1000})" +
             (if (multi.isNotEmpty()) " · multi-day: $multi" else "")
         return Result(out, summary)
