@@ -144,6 +144,25 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
                     }
                 }
             }
+            item(key = "import") {
+                SettingsGroupCard(title = stringResource(VpnR.string.vpn_import_title)) {
+                    SettingsActionRow(
+                        title = stringResource(VpnR.string.vpn_wireguard_title),
+                        subtitle = stringResource(VpnR.string.vpn_wireguard_detail),
+                        leadingIcon = Icons.Default.Add,
+                        onClick = { choose(openVpn = false) },
+                        enabled = !busy
+                    )
+                    SettingsActionRow(
+                        title = stringResource(VpnR.string.vpn_openvpn_title),
+                        subtitle = stringResource(VpnR.string.vpn_openvpn_detail),
+                        leadingIcon = Icons.Default.Add,
+                        onClick = { choose(openVpn = true) },
+                        enabled = !busy
+                    )
+                    SettingsNote(text = stringResource(VpnR.string.vpn_connection_limits))
+                }
+            }
             item(key = "protection") {
                 SettingsGroupCard(title = stringResource(VpnR.string.vpn_scope_title)) {
                     SettingsActionRow(
@@ -166,25 +185,6 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
                         onClick = { dialog = VpnDialog.Apply },
                         enabled = !busy
                     )
-                }
-            }
-            item(key = "import") {
-                SettingsGroupCard(title = stringResource(VpnR.string.vpn_import_title)) {
-                    SettingsActionRow(
-                        title = stringResource(VpnR.string.vpn_wireguard_title),
-                        subtitle = stringResource(VpnR.string.vpn_wireguard_detail),
-                        leadingIcon = Icons.Default.Add,
-                        onClick = { choose(openVpn = false) },
-                        enabled = !busy
-                    )
-                    SettingsActionRow(
-                        title = stringResource(VpnR.string.vpn_openvpn_title),
-                        subtitle = stringResource(VpnR.string.vpn_openvpn_detail),
-                        leadingIcon = Icons.Default.Add,
-                        onClick = { choose(openVpn = true) },
-                        enabled = !busy
-                    )
-                    SettingsNote(text = stringResource(VpnR.string.vpn_connection_limits))
                 }
             }
             item(key = "profiles") {
