@@ -591,10 +591,10 @@ class LiveTvDriveSync @Inject constructor(
 
     private fun baseFile() = java.io.File(context.filesDir, "livetv_drive_base.json")
 
-    private fun readBase(): JSONObject? = runCatching { JSONObject(baseFile().readText()) }.getOrNull()
+    private fun readBase(): JSONObject? = runCatching { JSONObject(com.nuvio.vpn.android.VpnBackup.openCache(baseFile().readText())) }.getOrNull()
 
     private fun writeBase(data: JSONObject) {
-        runCatching { baseFile().writeText(data.toString()) }
+        runCatching { baseFile().writeText(com.nuvio.vpn.android.VpnBackup.sealCache(data.toString())) }
     }
 
     // ------------------------------------------------------------------ Google plumbing

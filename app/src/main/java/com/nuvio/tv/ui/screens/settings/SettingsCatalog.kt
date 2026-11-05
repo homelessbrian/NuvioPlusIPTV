@@ -22,6 +22,7 @@ internal enum class SettingsCategory(val group: SettingsRailGroup) {
     CALENDAR(SettingsRailGroup.WATCH), // Live TV fork
     INTEGRATION(SettingsRailGroup.SERVICES),
     TRACKING(SettingsRailGroup.SERVICES),
+    VPN(SettingsRailGroup.SYSTEM),
     ADVANCED(SettingsRailGroup.SYSTEM),
     ABOUT(SettingsRailGroup.SYSTEM),
     DEBUG(SettingsRailGroup.SYSTEM),

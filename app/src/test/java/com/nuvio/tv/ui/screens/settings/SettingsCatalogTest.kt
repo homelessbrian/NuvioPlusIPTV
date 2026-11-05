@@ -21,10 +21,15 @@ class SettingsCatalogTest {
                 SettingsCategory.PROFILES,
                 SettingsCategory.APPEARANCE,
                 SettingsCategory.LAYOUT,
+                SettingsCategory.SIDE_MENU,
                 SettingsCategory.CONTENT_DISCOVERY,
                 SettingsCategory.PLAYBACK,
+                SettingsCategory.LIVE_TV,
+                SettingsCategory.SPORTS,
+                SettingsCategory.CALENDAR,
                 SettingsCategory.INTEGRATION,
                 SettingsCategory.TRACKING,
+                SettingsCategory.VPN,
                 SettingsCategory.ADVANCED,
                 SettingsCategory.ABOUT,
                 SettingsCategory.DEBUG
@@ -92,7 +97,7 @@ class SettingsCatalogTest {
                 SettingsCategory.APPEARANCE,
                 SettingsCategory.CONTENT_DISCOVERY,
                 SettingsCategory.INTEGRATION,
-                SettingsCategory.ADVANCED
+                SettingsCategory.VPN
             ),
             dividerBefore
         )
