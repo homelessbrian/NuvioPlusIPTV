@@ -209,6 +209,13 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
             item(key = "profiles") {
                 SettingsGroupCard(title = stringResource(VpnR.string.vpn_saved_profiles_title)) {
                     val profiles = current?.profiles.orEmpty()
+                    // The result of what was just done here (login saved, profile chosen or removed) shows where it happened.
+                    current?.notice?.let { savedNotice ->
+                        SettingsNote(
+                            text = savedNotice,
+                            tone = if (current.noticeIsError) SettingsNoteTone.Danger else SettingsNoteTone.Info
+                        )
+                    }
                     if (current?.loaded == true && profiles.isEmpty()) {
                         SettingsNote(
                             text = stringResource(VpnR.string.vpn_profiles_empty) + " " +
@@ -220,7 +227,12 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
                             title = profile.name,
                             subtitle = if (profile.readable) {
                                 val kind = stringResource(VpnR.string.vpn_profiles_pending, profile.kind)
-                                if (profile.selected) kind + " · " + stringResource(VpnR.string.vpn_profiles_selected) else kind
+                                val login = when (profile.login) {
+                                    VpnSettingsController.LOGIN_SAVED -> " · Login saved"
+                                    VpnSettingsController.LOGIN_REQUIRED -> " · Login needed"
+                                    else -> ""
+                                }
+                                if (profile.selected) kind + " · " + stringResource(VpnR.string.vpn_profiles_selected) + login else kind + login
                             } else {
                                 null
                             },
