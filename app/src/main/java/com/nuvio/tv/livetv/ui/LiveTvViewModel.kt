@@ -322,13 +322,30 @@ class LiveTvViewModel @Inject constructor(
             ChannelSort.NAME -> list.sortedBy { it.name.lowercase() }
         }
 
-        /** Your order from "Reorder channels" wins; channels you haven't placed follow as sorted. */
+        /**
+         * Your order from "Reorder channels" wins. A channel you haven't placed (one that was
+         * hidden when you reordered, or a new one) goes right after the channel above it in the
+         * normal order, not at the bottom of the group.
+         */
         fun ordered(groupId: String, list: List<LiveChannel>): List<LiveChannel> {
             val order = user.channelOrder[groupId] ?: return sorted(list)
             val byKeyHere = list.associateBy { it.key }
-            val placed = order.mapNotNull { byKeyHere[it] }
+            val placed = order.mapNotNull { byKeyHere[it] }.distinctBy { it.key }
             val placedKeys = placed.mapTo(HashSet()) { it.key }
-            return placed + sorted(list.filter { it.key !in placedKeys })
+            if (placedKeys.size == list.size) return placed
+            // Each unplaced channel waits behind the nearest placed channel above it.
+            val behind = HashMap<String?, MutableList<LiveChannel>>()
+            var above: String? = null
+            for (c in sorted(list)) {
+                if (c.key in placedKeys) above = c.key else behind.getOrPut(above) { ArrayList() } += c
+            }
+            val out = ArrayList<LiveChannel>(list.size)
+            behind[null]?.let { out += it }
+            for (p in placed) {
+                out += p
+                behind[p.key]?.let { out += it }
+            }
+            return out
         }
 
         /** A playlist group's own channels plus channels copied into it. */
