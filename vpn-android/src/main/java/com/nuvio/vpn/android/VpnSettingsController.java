@@ -298,7 +298,7 @@ public final class VpnSettingsController {
         if (e instanceof LinkageError) return text(R.string.vpn_import_reason_engine);
         if (e instanceof java.security.GeneralSecurityException) return text(R.string.vpn_import_reason_storage);
         String message = e.getMessage();
-        if (e instanceof IOException && message != null && message.length() <= 120) return message;
+        if (e instanceof IOException && message != null && message.length() <= 200) return message;
         return text(R.string.vpn_import_reason_other);
     }
 
