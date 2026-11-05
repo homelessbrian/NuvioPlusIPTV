@@ -25,11 +25,12 @@ class SettingsCatalogTest {
                 SettingsCategory.CONTENT_DISCOVERY,
                 SettingsCategory.PLAYBACK,
                 SettingsCategory.LIVE_TV,
+                SettingsCategory.ON_DEMAND,
                 SettingsCategory.SPORTS,
                 SettingsCategory.CALENDAR,
+                SettingsCategory.VPN,
                 SettingsCategory.INTEGRATION,
                 SettingsCategory.TRACKING,
-                SettingsCategory.VPN,
                 SettingsCategory.ADVANCED,
                 SettingsCategory.ABOUT,
                 SettingsCategory.DEBUG
@@ -96,8 +97,9 @@ class SettingsCatalogTest {
             listOf(
                 SettingsCategory.APPEARANCE,
                 SettingsCategory.CONTENT_DISCOVERY,
+                SettingsCategory.LIVE_TV,
                 SettingsCategory.INTEGRATION,
-                SettingsCategory.VPN
+                SettingsCategory.ADVANCED
             ),
             dividerBefore
         )

@@ -83,7 +83,7 @@ private const val LIVE_TV_SUBTITLE = "Playlists, TV guide and channel options"
 
 /**
  * Live TV settings are one place in Settings with a row of tabs across the top of it (Setup,
- * Guide, Playback, On Demand, Integration): [HUB] is that tabbed page. [ALL] is the old single
+ * Guide, Playback, Integration): [HUB] is that tabbed page. [ALL] is the old single
  * long list, kept for the guide's long-press menu. The others are the tabs themselves.
  */
 internal enum class LiveTvPage(val title: String, val subtitle: String, val tab: String = "") {
@@ -92,11 +92,11 @@ internal enum class LiveTvPage(val title: String, val subtitle: String, val tab:
     MAIN("Live TV", "Your playlists, guides, channels, groups and parental controls", "Setup"),
     GUIDE("Live TV", "How the guide looks and behaves while you're browsing", "Guide"),
     PLAYBACK("Live TV", "Picture, sound, pausing and recording", "Playback"),
-    ON_DEMAND("Live TV", "Movies and shows from your provider", "On Demand"),
+    ON_DEMAND("On Demand", "Movies and shows from your provider", "On Demand"),
     INTEGRATION("Live TV", "How Live TV shows up in the rest of Nuvio", "Integration")
 }
 
-private val LIVE_TABS = listOf(LiveTvPage.MAIN, LiveTvPage.GUIDE, LiveTvPage.PLAYBACK, LiveTvPage.ON_DEMAND, LiveTvPage.INTEGRATION)
+private val LIVE_TABS = listOf(LiveTvPage.MAIN, LiveTvPage.GUIDE, LiveTvPage.PLAYBACK, LiveTvPage.INTEGRATION)
 
 /** The row of tabs across the top of Live TV settings; moving onto one shows it. */
 @Composable
