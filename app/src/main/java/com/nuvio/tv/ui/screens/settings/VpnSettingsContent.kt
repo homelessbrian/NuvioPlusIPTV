@@ -106,6 +106,8 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
     val current = state
     val busy = current?.busy == true
     val mode = current?.mode ?: VpnSettingsController.MODE_OFF
+    // The status row only takes focus while there is a connection to turn off; otherwise the first import row is the top.
+    val statusFocusable = connection?.canTurnOff == true && !busy
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -117,19 +119,9 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
         )
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(bottom = 18.dp),
+            contentPadding = PaddingValues(bottom = 56.dp),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
-            val notice = current?.notice
-            if (notice != null) item(key = "notice") {
-                SettingsNote(
-                    text = notice,
-                    tone = if (current?.noticeIsError == true) SettingsNoteTone.Danger else SettingsNoteTone.Info
-                )
-            }
-            if (pickerMissing) item(key = "no_picker") {
-                SettingsNote(text = stringResource(VpnR.string.vpn_profiles_no_picker), tone = SettingsNoteTone.Danger)
-            }
             connection?.let { live ->
                 item(key = "status") {
                     SettingsGroupCard {
@@ -139,7 +131,8 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
                             value = if (live.canTurnOff) stringResource(VpnR.string.vpn_turn_off) else null,
                             leadingIcon = Icons.Default.Shield,
                             onClick = { controller.turnOff() },
-                            enabled = live.canTurnOff && !busy
+                            enabled = live.canTurnOff && !busy,
+                            modifier = if (statusFocusable && initialFocusRequester != null) Modifier.focusRequester(initialFocusRequester) else Modifier
                         )
                     }
                 }
@@ -151,7 +144,8 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
                         subtitle = stringResource(VpnR.string.vpn_wireguard_detail),
                         leadingIcon = Icons.Default.Add,
                         onClick = { choose(openVpn = false) },
-                        enabled = !busy
+                        enabled = !busy,
+                        modifier = if (!statusFocusable && initialFocusRequester != null) Modifier.focusRequester(initialFocusRequester) else Modifier
                     )
                     SettingsActionRow(
                         title = stringResource(VpnR.string.vpn_openvpn_title),
@@ -160,6 +154,17 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
                         onClick = { choose(openVpn = true) },
                         enabled = !busy
                     )
+                    // Import results and errors show right under the buttons that caused them.
+                    val notice = current?.notice
+                    if (notice != null) {
+                        SettingsNote(
+                            text = notice,
+                            tone = if (current?.noticeIsError == true) SettingsNoteTone.Danger else SettingsNoteTone.Info
+                        )
+                    }
+                    if (pickerMissing) {
+                        SettingsNote(text = stringResource(VpnR.string.vpn_profiles_no_picker), tone = SettingsNoteTone.Danger)
+                    }
                     SettingsNote(text = stringResource(VpnR.string.vpn_connection_limits))
                 }
             }
@@ -171,8 +176,7 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
                         value = stringResource(modeTitle(mode)),
                         leadingIcon = Icons.Default.Tune,
                         onClick = { dialog = VpnDialog.Mode },
-                        enabled = !busy,
-                        modifier = if (initialFocusRequester != null) Modifier.focusRequester(initialFocusRequester) else Modifier
+                        enabled = !busy
                     )
                     SettingsActionRow(
                         title = stringResource(VpnR.string.vpn_apply_title),
