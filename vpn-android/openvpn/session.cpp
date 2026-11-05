@@ -161,6 +161,7 @@ bool load(JNIEnv *env, jbyteArray data, jboolean noCert, jboolean aesCbc, core::
     cfg.content += "\nremote-cert-tls server\n";
     cfg.disableClientCert = noCert;
     cfg.enableNonPreferredDCAlgorithms = aesCbc;
+    cfg.compressionMode = "asym"; // accept the server's compression setting but never compress what we send
     cfg.connTimeout = 25;
     cfg.clockTickMS = 500;
     cfg.tunPersist = false;
