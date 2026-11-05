@@ -268,8 +268,10 @@ public final class VpnConnectionService extends android.net.VpnService {
                 return;
             }
             if (!engine.isUp()) {
-                noteFailure(engine.authRejected() ? "The VPN server rejected the login."
-                        : "The VPN connection dropped or the server stopped answering.");
+                String detail = engine.lastDetail();
+                noteFailure((engine.authRejected() ? "The VPN server rejected the login."
+                        : "The VPN connection dropped or the server stopped answering.")
+                        + (detail == null ? "" : " (" + detail + ")"));
                 current = new Snapshot(Phase.ERROR, 0, 0, null, engine.authRejected());
                 updateNotification();
                 return;

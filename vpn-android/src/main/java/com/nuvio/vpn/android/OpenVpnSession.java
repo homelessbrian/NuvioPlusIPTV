@@ -97,6 +97,12 @@ final class OpenVpnSession implements TunnelEngine {
         return handle != 0 && statsNative(handle)[2] >= 0;
     }
     @Override public boolean authRejected() { return handle != 0 && statsNative(handle)[2] == -2; }
+    @Override public String lastDetail() {
+        long current = handle;
+        if (current == 0) return null;
+        try { String text = detailNative(current); return text == null || text.isEmpty() ? null : text; }
+        catch (RuntimeException | UnsatisfiedLinkError ignored) { return null; }
+    }
     @Override public TunnelTraffic statistics() {
         long[] values = statsNative(handle);
         return new TunnelTraffic(values[0], values[1], values[2] > 0, values[2]);
@@ -111,5 +117,6 @@ final class OpenVpnSession implements TunnelEngine {
     private static native int evaluateNative(byte[] profile, boolean noCert, boolean aesCbc);
     private native long startNative(byte[] profile, boolean noCert, boolean aesCbc);
     private static native long[] statsNative(long handle);
+    private static native String detailNative(long handle);
     private static native void stopNative(long handle);
 }
