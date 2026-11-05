@@ -28,6 +28,12 @@ public final class VpnPlaybackProtection {
         if (sink == null) return;
         try { sink.accept("VPN: " + line); } catch (RuntimeException ignored) { }
     }
+    /** Keeps the real reason a preparation step failed (shown to the person, and written to the report). */
+    private static IOException prepareFailure(Throwable failure, String generic) {
+        String message = failure instanceof IOException ? failure.getMessage() : null;
+        report("prepare failed: " + failure.getClass().getSimpleName() + (message == null ? "" : " - " + message));
+        return new IOException(message != null && !message.isEmpty() ? message : generic);
+    }
     /** The generic message plus, when the connection noted one, the actual reason. */
     static String withReason(String base) {
         String reason = VpnConnectionService.failureReason();
@@ -173,7 +179,7 @@ public final class VpnPlaybackProtection {
                 VpnPreferences settings = settings();
                 if (!settings.getMode().isPlaybackScoped()) { result.complete(null); return; }
                 proxyReady(new ProxyRequest(app, settings.getSelectedProfileId(), settings.getMode(), result));
-            } catch (Exception failure) { result.completeExceptionally(new IOException("HTTP playback protection could not be prepared.")); }
+            } catch (Exception failure) { result.completeExceptionally(prepareFailure(failure, "HTTP playback protection could not be prepared.")); }
         });
         return result;
     }
@@ -232,7 +238,7 @@ public final class VpnPlaybackProtection {
                 VpnConnectionService.disconnect(request.app);
             }
             worker.schedule(() -> proxyReady(request), 250, TimeUnit.MILLISECONDS);
-        } catch (Exception failure) { request.result.completeExceptionally(new IOException("HTTP playback protection could not be prepared.")); }
+        } catch (Exception failure) { request.result.completeExceptionally(prepareFailure(failure, "HTTP playback protection could not be prepared.")); }
     }
 
     private static final class ProxyRequest {
@@ -300,7 +306,7 @@ public final class VpnPlaybackProtection {
                     if (error == null) result.complete(null); else result.completeExceptionally(error);
                 });
             } catch (Exception | LinkageError failure) {
-                result.completeExceptionally(new IOException("VPN protection could not be prepared. Check your selected profile and scope."));
+                result.completeExceptionally(prepareFailure(failure, "VPN protection could not be prepared. Check your selected profile and scope."));
             }
         });
         return result;
