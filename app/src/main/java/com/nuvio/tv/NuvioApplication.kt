@@ -84,6 +84,9 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         SentryInitializer.start(this, sentrySettingsDataStore)
         PluginRuntimeHooks.onApplicationCreate(this)
+        // Live TV fork: VPN progress lines go into the start-up report.
+        com.nuvio.vpn.android.VpnPlaybackProtection.diagnostics =
+            java.util.function.Consumer { line -> com.nuvio.tv.livetv.model.LiveTvLoadReport.add(line) }
         androidTvChannelSyncService.start()
         serverUserStateProjection.start()
         // Load locale synchronously so it's available before Activity.attachBaseContext.
