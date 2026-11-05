@@ -1902,12 +1902,12 @@ class LiveTvPlaybackController @Inject constructor(
     private fun buildMediaSource(url: String, headers: Map<String, String>, isLive: Boolean): androidx.media3.exoplayer.source.MediaSource {
         // Protected (DRM) streams, e.g. MPEG-DASH with a ClearKey or Widevine license.
         currentChannel?.drm?.let { drm -> buildDrmMediaSource(url, headers, isLive, drm)?.let { return it } }
-        val http = DefaultHttpDataSource.Factory()
+        val http = com.nuvio.tv.core.vpn.protectHttpFactory(DefaultHttpDataSource.Factory()
             .setUserAgent(headers["User-Agent"] ?: LiveTvRepository.DEFAULT_UA)
             .setDefaultRequestProperties(headers.filterKeys { it != "User-Agent" })
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(20_000)
+            .setReadTimeoutMs(20_000), headers, headers["User-Agent"] ?: LiveTvRepository.DEFAULT_UA)
         val item = buildMediaItem(url, isLive)
         // Closed captions: TV channels usually carry them inside the video (CEA-608/708) without
         // announcing them, so the player never offered them and Subtitles only showed "Off".
@@ -1946,12 +1946,12 @@ class LiveTvPlaybackController @Inject constructor(
         isLive: Boolean,
         drm: com.nuvio.tv.livetv.model.DrmInfo
     ): androidx.media3.exoplayer.source.MediaSource? = runCatching {
-        val http = DefaultHttpDataSource.Factory()
+        val http = com.nuvio.tv.core.vpn.protectHttpFactory(DefaultHttpDataSource.Factory()
             .setUserAgent(headers["User-Agent"] ?: LiveTvRepository.DEFAULT_UA)
             .setDefaultRequestProperties(headers.filterKeys { it != "User-Agent" })
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(20_000)
+            .setReadTimeoutMs(20_000), headers, headers["User-Agent"] ?: LiveTvRepository.DEFAULT_UA)
         val itemBuilder = buildMediaItem(url, isLive).buildUpon()
         if (drm.manifestType == "mpd" || url.lowercase().contains(".mpd")) itemBuilder.setMimeType(MimeTypes.APPLICATION_MPD)
         if (drm.manifestType == "hls") itemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
@@ -2077,6 +2077,28 @@ class LiveTvPlaybackController @Inject constructor(
         LiveWatching.sourceId = null
         currentUrl = null
         _state.value = LivePlaybackState()
+    }
+
+    init {
+        // This controller is application-scoped. Reopen active playback after a scope change
+        // so a DefaultHttpDataSource opened before protection was enabled cannot keep reading.
+        com.nuvio.vpn.android.VpnPlaybackProtection.observeSettings {
+            scope.launch {
+                val channel = currentChannel ?: return@launch
+                val url = currentUrl ?: return@launch
+                val active = _player ?: return@launch
+                val resume = active.playWhenReady
+                val position = active.currentPosition
+                val live = _state.value.catchupTitle == null
+                stopReplayCache()
+                stopShift()
+                active.stop()
+                active.setMediaSource(buildMediaSource(url, channel.headers, live))
+                active.prepare()
+                if (!live && position > 0) active.seekTo(position)
+                active.playWhenReady = resume
+            }
+        }
     }
 
     companion object {

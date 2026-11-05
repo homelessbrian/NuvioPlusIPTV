@@ -14,7 +14,7 @@ object LiveHttp {
         var current = url
         var hops = 0
         while (true) {
-            val c = URL(current).openConnection() as HttpURLConnection
+            val c = com.nuvio.vpn.android.VpnHttpClient.openConnection(URL(current))
             c.connectTimeout = 15_000
             c.readTimeout = readTimeoutMs
             c.instanceFollowRedirects = false
@@ -26,7 +26,7 @@ object LiveHttp {
             if (code in setOf(301, 302, 303, 307, 308) && hops < 8) {
                 val location = c.getHeaderField("Location")
                 c.disconnect()
-                if (location.isNullOrBlank()) return URL(current).openConnection() as HttpURLConnection
+                if (location.isNullOrBlank()) return com.nuvio.vpn.android.VpnHttpClient.openConnection(URL(current))
                 current = runCatching { URL(URL(current), location).toString() }.getOrDefault(location)
                 hops++
                 continue

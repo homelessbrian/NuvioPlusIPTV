@@ -48,6 +48,20 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         initialized = true
     }
 
+    private var vpnProxy: String? = null
+    private var originalHttpProxy: String? = null
+    fun applyVpnProxy(address: String?) {
+        ensureInitialized()
+        if (vpnProxy == null && address != null) originalHttpProxy = mpv.getPropertyString("options/http-proxy") ?: ""
+        if (vpnProxy != address) {
+            val expected = address ?: originalHttpProxy.orEmpty()
+            mpv.setPropertyString("options/http-proxy", expected)
+            check(mpv.getPropertyString("options/http-proxy").orEmpty() == expected) { "Playback VPN proxy could not be applied." }
+            vpnProxy = address
+            lastMediaRequestKey = null
+        }
+    }
+
     fun setMedia(url: String, headers: Map<String, String>, startPositionMs: Long = 0L) {
         ensureInitialized()
         val requestKey = buildMediaRequestKey(url = url, headers = headers) +
@@ -731,6 +745,8 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         runCatching { destroy() }
             .onFailure { Log.w(TAG, "Failed to destroy libmpv view cleanly: ${it.message}") }
         initialized = false
+        vpnProxy = null
+        originalHttpProxy = null
         hasQueuedInitialMedia = false
         lastMediaRequestKey = null
         pendingInitialMediaUrl = null
