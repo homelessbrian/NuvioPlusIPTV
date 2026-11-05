@@ -1609,6 +1609,8 @@ private const val HLS_RETRY_MS = 7L * 24 * 3_600_000L
 private val BACKUP_PREFIX = Regex("""^\s*[a-z]{2,4}\s*[:|]\s*""")
 private val BACKUP_PREFIX_DASH = Regex("""^\s*[a-z]{2,3}\s+-\s+""")
 private val BACKUP_BRACKETS = Regex("""[\[(][^\])]*[\])]""")
+// Sound layout written in the name ("5.1", "7.1", "2.0"): left in, it would read as part of the name.
+private val BACKUP_AUDIO = Regex("""(?<![\d.])[257]\.[01](?![\d.])""")
 private val BACKUP_NOISE = Regex("""\b(hd|fhd|uhd|sd|4k|8k|hevc|h\.?26[45]|1080[pi]?|720p?|2160p?|\d{2}\s?fps|backup|bkp|bk|alt|alternate|raw|ᴴᴰ)\b""")
 
 /** The quality written in a channel's name ("4K", "FHD", "HD", "SD"), or null. */
@@ -1629,6 +1631,7 @@ internal fun backupName(name: String): String {
     s = s.replace(BACKUP_PREFIX, "")
     s = s.replace(BACKUP_PREFIX_DASH, "")
     s = s.replace(BACKUP_BRACKETS, " ")
+    s = s.replace(BACKUP_AUDIO, " ")
     s = s.replace(BACKUP_NOISE, " ")
     return s.filter { it.isLetterOrDigit() || it == ' ' }.split(' ').filter { it.isNotBlank() }.joinToString(" ")
 }
