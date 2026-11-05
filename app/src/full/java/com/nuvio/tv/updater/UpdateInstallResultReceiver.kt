@@ -30,6 +30,7 @@ class UpdateInstallResultReceiver : BroadcastReceiver() {
         when (status) {
             PackageInstaller.STATUS_SUCCESS -> Unit
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                if (!background) UpdateInstallTracker.installing()
                 if (background) {
                     runCatching { context.packageManager.packageInstaller.abandonSession(sessionId) }
                 } else {
@@ -38,18 +39,29 @@ class UpdateInstallResultReceiver : BroadcastReceiver() {
                     }
                 }
             }
+            // The person said no on the confirmation screen: back to the Install button, no second prompt.
+            PackageInstaller.STATUS_FAILURE_ABORTED -> if (!background) UpdateInstallTracker.idle()
             else -> retryAfterFailure(context, apkFile, background, withDexMetadata)
         }
     }
 
     private fun retryAfterFailure(context: Context, apkFile: File?, background: Boolean, withDexMetadata: Boolean) {
-        if (apkFile == null || !apkFile.exists()) return
+        if (apkFile == null || !apkFile.exists()) {
+            if (!background) UpdateInstallTracker.idle()
+            return
+        }
         runCatching {
             when {
                 withDexMetadata -> ApkInstaller.install(context, apkFile, background, withDexMetadata = false)
-                !background -> ApkInstaller.launchSystemInstaller(context, apkFile)
+                !background -> {
+                    ApkInstaller.launchSystemInstaller(context, apkFile)
+                    UpdateInstallTracker.idle()
+                }
             }
-        }.onFailure { Log.w(TAG, "Update install retry failed", it) }
+        }.onFailure {
+            Log.w(TAG, "Update install retry failed", it)
+            if (!background) UpdateInstallTracker.idle()
+        }
     }
 
     private fun confirmationIntent(intent: Intent): Intent? =

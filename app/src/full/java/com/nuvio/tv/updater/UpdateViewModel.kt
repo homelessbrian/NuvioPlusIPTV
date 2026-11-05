@@ -17,12 +17,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val TAG = "UpdateInstall"
+private const val INSTALL_TIMEOUT_MS = 3 * 60 * 1000L
 
 data class UpdateUiState(
     val isChecking: Boolean = false,
@@ -31,6 +34,8 @@ data class UpdateUiState(
     val isDownloading: Boolean = false,
     val downloadProgress: Float? = null,
     val downloadedApkPath: String? = null,
+    /** Set from the moment Install is tapped until Android finishes, fails or is cancelled. */
+    val installPhase: InstallPhase = InstallPhase.IDLE,
     val showBanner: Boolean = false,
     val showUnknownSourcesDialog: Boolean = false,
     val errorMessage: String? = null,
@@ -57,6 +62,16 @@ class UpdateViewModel @Inject constructor(
     private var updateCheckJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            UpdateInstallTracker.phase.collectLatest { phase ->
+                _uiState.update { it.copy(installPhase = phase) }
+                // Never leave the banner stuck if Android doesn't report back.
+                if (phase != InstallPhase.IDLE) {
+                    delay(INSTALL_TIMEOUT_MS)
+                    if (UpdateInstallTracker.phase.value == phase) UpdateInstallTracker.idle()
+                }
+            }
+        }
         viewModelScope.launch {
             val enabled = updatePreferences.updateBannerEnabled.first()
             val channel = updatePreferences.getOrInitializeUpdateChannel()
@@ -249,8 +264,10 @@ class UpdateViewModel @Inject constructor(
 
     fun downloadUpdate() {
         val update = _uiState.value.update ?: return
+        if (_uiState.value.isDownloading) return
 
         viewModelScope.launch {
+            var lastReportedPercent: Int? = -1
             _uiState.update {
                 it.copy(
                     isDownloading = true,
@@ -266,7 +283,13 @@ class UpdateViewModel @Inject constructor(
                     } else {
                         null
                     }
-                    _uiState.update { it.copy(downloadProgress = progress) }
+                    // Update only when the whole percent changes: this runs for every few KB downloaded, and
+                    // each update redraws the screen.
+                    val percent = progress?.let { (it * 100).toInt() }
+                    if (percent != lastReportedPercent) {
+                        lastReportedPercent = percent
+                        _uiState.update { it.copy(downloadProgress = progress) }
+                    }
                 }
             }
 
@@ -314,12 +337,15 @@ class UpdateViewModel @Inject constructor(
             return
         }
 
-        _uiState.update { it.copy(showUnknownSourcesDialog = false) }
+        // Getting the file ready takes several seconds; until Android answers, extra taps do nothing.
+        if (!UpdateInstallTracker.tryStart()) return
+        _uiState.update { it.copy(showUnknownSourcesDialog = false, showBanner = true) }
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { ApkInstaller.install(context, apkFile, background = false) }
                 .onFailure {
                     Log.w(TAG, "Session install failed, falling back to the system installer", it)
-                    ApkInstaller.launchSystemInstaller(context, apkFile)
+                    runCatching { ApkInstaller.launchSystemInstaller(context, apkFile) }
+                    UpdateInstallTracker.idle()
                 }
         }
     }

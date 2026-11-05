@@ -62,6 +62,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.theme.ThemeColors
 import com.nuvio.tv.ui.theme.accentBrush
+import com.nuvio.tv.updater.InstallPhase
 import com.nuvio.tv.updater.UpdateUiState
 import com.nuvio.tv.updater.model.AppUpdate
 
@@ -97,6 +98,8 @@ internal fun UpdateBanner(
     val subtitle = when {
         isInstalledUpdate -> stringResource(R.string.update_installed_automatically)
         state.errorMessage != null -> state.errorMessage
+        state.installPhase == InstallPhase.PREPARING -> "Preparing the install…"
+        state.installPhase == InstallPhase.INSTALLING -> "Installing the update. Nuvio closes when it's done, then open it again."
         state.isDownloading && state.downloadProgress != null -> stringResource(
             R.string.update_downloading_progress,
             (state.downloadProgress * 100).toInt().coerceIn(0, 100)
@@ -202,12 +205,13 @@ internal fun UpdateBanner(
                 Button(
                     onClick = {
                         when {
-                            state.isDownloading -> Unit
+                            state.isDownloading || state.installPhase != InstallPhase.IDLE -> Unit
                             state.downloadedApkPath != null -> onInstall()
                             else -> onDownload()
                         }
                     },
                     enabled = state.isDownloading ||
+                        state.installPhase != InstallPhase.IDLE ||
                         state.downloadedApkPath != null ||
                         state.isUpdateAvailable,
                     colors = ButtonDefaults.colors(
@@ -222,6 +226,7 @@ internal fun UpdateBanner(
                     Text(
                         text = when {
                             state.isDownloading -> stringResource(R.string.update_downloading_ellipsis)
+                            state.installPhase != InstallPhase.IDLE -> "Installing…"
                             state.downloadedApkPath != null -> stringResource(R.string.update_install)
                             state.errorMessage != null -> stringResource(R.string.action_retry)
                             else -> stringResource(R.string.update_download)
@@ -231,7 +236,7 @@ internal fun UpdateBanner(
                 }
             }
 
-            if (!state.isDownloading) {
+            if (!state.isDownloading && state.installPhase == InstallPhase.IDLE) {
                 if (isInstalledUpdate) {
                     AutoDismissCloseButton(
                         paused = autoDismissPaused || bannerHasFocus,
