@@ -19,6 +19,13 @@ import javax.inject.Singleton
 class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     SQLiteOpenHelper(context, "livetv_guide.db", null, 3) {
 
+    /**
+     * Goes up whenever listings are written or removed: things worked out from the guide (Sports'
+     * channel search) can tell they still hold without reading it again.
+     */
+    @Volatile var changes: Long = 1L
+        private set
+
     init {
         // Readers don't wait for writers: the guide stays readable (scrolling, catch-up) while a
         // guide update is being stored, instead of stalling until it finishes.
@@ -63,45 +70,50 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         /** What the guide was built from, in parts (see LiveTvRepository.guideParts). */
         parts: String? = null
     ) {
-        val db = writableDatabase
-        db.beginTransaction()
+        changes++
         try {
-            db.execSQL("DROP INDEX IF EXISTS programs_ch_start")
-            db.execSQL("DROP INDEX IF EXISTS programs_stop")
-            db.execSQL("DROP INDEX IF EXISTS programs_start")
-            db.delete("programs", null, null)
-            db.delete("auto", null, null)
-            val stmt = db.compileStatement(
-                "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
-            )
-            programs.forEach { (ch, list) ->
-                list.forEach { p ->
-                    stmt.clearBindings()
-                    stmt.bindString(1, ch)
-                    stmt.bindLong(2, p.startMs)
-                    stmt.bindLong(3, p.stopMs)
-                    stmt.bindString(4, p.title)
-                    p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
-                    p.category?.let { stmt.bindString(6, it) } ?: stmt.bindNull(6)
-                    p.episode?.let { stmt.bindString(7, it) } ?: stmt.bindNull(7)
-                    p.icon?.let { stmt.bindString(8, it) } ?: stmt.bindNull(8)
-                    p.year?.let { stmt.bindLong(9, it.toLong()) } ?: stmt.bindNull(9)
-                    if (p.people.isEmpty()) stmt.bindNull(10) else stmt.bindString(10, p.people.joinToString("\u001F"))
-                    stmt.executeInsert()
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                db.execSQL("DROP INDEX IF EXISTS programs_ch_start")
+                db.execSQL("DROP INDEX IF EXISTS programs_stop")
+                db.execSQL("DROP INDEX IF EXISTS programs_start")
+                db.delete("programs", null, null)
+                db.delete("auto", null, null)
+                val stmt = db.compileStatement(
+                    "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
+                )
+                programs.forEach { (ch, list) ->
+                    list.forEach { p ->
+                        stmt.clearBindings()
+                        stmt.bindString(1, ch)
+                        stmt.bindLong(2, p.startMs)
+                        stmt.bindLong(3, p.stopMs)
+                        stmt.bindString(4, p.title)
+                        p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
+                        p.category?.let { stmt.bindString(6, it) } ?: stmt.bindNull(6)
+                        p.episode?.let { stmt.bindString(7, it) } ?: stmt.bindNull(7)
+                        p.icon?.let { stmt.bindString(8, it) } ?: stmt.bindNull(8)
+                        p.year?.let { stmt.bindLong(9, it.toLong()) } ?: stmt.bindNull(9)
+                        if (p.people.isEmpty()) stmt.bindNull(10) else stmt.bindString(10, p.people.joinToString("\u001F"))
+                        stmt.executeInsert()
+                    }
                 }
+                auto.forEach { (ch, a) ->
+                    db.insertWithOnConflict("auto", null, ContentValues().apply {
+                        put("ch", ch); put("source", a.sourceId); put("xmltv", a.xmltvId)
+                    }, SQLiteDatabase.CONFLICT_REPLACE)
+                }
+                db.execSQL("CREATE INDEX IF NOT EXISTS programs_ch_start ON programs(ch, start)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS programs_stop ON programs(stop)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS programs_start ON programs(start)")
+                putFingerprint(db, fingerprint, parts)
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
             }
-            auto.forEach { (ch, a) ->
-                db.insertWithOnConflict("auto", null, ContentValues().apply {
-                    put("ch", ch); put("source", a.sourceId); put("xmltv", a.xmltvId)
-                }, SQLiteDatabase.CONFLICT_REPLACE)
-            }
-            db.execSQL("CREATE INDEX IF NOT EXISTS programs_ch_start ON programs(ch, start)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS programs_stop ON programs(stop)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS programs_start ON programs(start)")
-            putFingerprint(db, fingerprint, parts)
-            db.setTransactionSuccessful()
         } finally {
-            db.endTransaction()
+            changes++
         }
     }
 
@@ -117,41 +129,46 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         auto: Map<String, EpgAssignment> = emptyMap(),
         parts: String? = null
     ) {
-        val db = writableDatabase
-        db.beginTransaction()
+        changes++
         try {
-            channels.forEach { ch ->
-                db.delete("programs", "ch = ?", arrayOf(ch))
-                db.delete("auto", "ch = ?", arrayOf(ch))
-            }
-            val stmt = db.compileStatement(
-                "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
-            )
-            programs.forEach { (ch, list) ->
-                list.forEach { p ->
-                    stmt.clearBindings()
-                    stmt.bindString(1, ch)
-                    stmt.bindLong(2, p.startMs)
-                    stmt.bindLong(3, p.stopMs)
-                    stmt.bindString(4, p.title)
-                    p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
-                    p.category?.let { stmt.bindString(6, it) } ?: stmt.bindNull(6)
-                    p.episode?.let { stmt.bindString(7, it) } ?: stmt.bindNull(7)
-                    p.icon?.let { stmt.bindString(8, it) } ?: stmt.bindNull(8)
-                    p.year?.let { stmt.bindLong(9, it.toLong()) } ?: stmt.bindNull(9)
-                    if (p.people.isEmpty()) stmt.bindNull(10) else stmt.bindString(10, p.people.joinToString("\u001F"))
-                    stmt.executeInsert()
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                channels.forEach { ch ->
+                    db.delete("programs", "ch = ?", arrayOf(ch))
+                    db.delete("auto", "ch = ?", arrayOf(ch))
                 }
+                val stmt = db.compileStatement(
+                    "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
+                )
+                programs.forEach { (ch, list) ->
+                    list.forEach { p ->
+                        stmt.clearBindings()
+                        stmt.bindString(1, ch)
+                        stmt.bindLong(2, p.startMs)
+                        stmt.bindLong(3, p.stopMs)
+                        stmt.bindString(4, p.title)
+                        p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
+                        p.category?.let { stmt.bindString(6, it) } ?: stmt.bindNull(6)
+                        p.episode?.let { stmt.bindString(7, it) } ?: stmt.bindNull(7)
+                        p.icon?.let { stmt.bindString(8, it) } ?: stmt.bindNull(8)
+                        p.year?.let { stmt.bindLong(9, it.toLong()) } ?: stmt.bindNull(9)
+                        if (p.people.isEmpty()) stmt.bindNull(10) else stmt.bindString(10, p.people.joinToString("\u001F"))
+                        stmt.executeInsert()
+                    }
+                }
+                auto.forEach { (ch, a) ->
+                    db.insertWithOnConflict("auto", null, ContentValues().apply {
+                        put("ch", ch); put("source", a.sourceId); put("xmltv", a.xmltvId)
+                    }, SQLiteDatabase.CONFLICT_REPLACE)
+                }
+                putFingerprint(db, fingerprint, parts)
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
             }
-            auto.forEach { (ch, a) ->
-                db.insertWithOnConflict("auto", null, ContentValues().apply {
-                    put("ch", ch); put("source", a.sourceId); put("xmltv", a.xmltvId)
-                }, SQLiteDatabase.CONFLICT_REPLACE)
-            }
-            putFingerprint(db, fingerprint, parts)
-            db.setTransactionSuccessful()
         } finally {
-            db.endTransaction()
+            changes++
         }
     }
 
@@ -184,23 +201,28 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         fingerprint: String,
         parts: String
     ) {
-        val db = writableDatabase
-        db.beginTransaction()
+        changes++
         try {
-            playlistIds.forEach { id ->
-                val prefix = "$id|"
-                val args = arrayOf(prefix.length.toString(), prefix)
-                db.delete("programs", "substr(ch, 1, ?) = ?", args)
-                db.delete("auto", "substr(ch, 1, ?) = ?", args)
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                playlistIds.forEach { id ->
+                    val prefix = "$id|"
+                    val args = arrayOf(prefix.length.toString(), prefix)
+                    db.delete("programs", "substr(ch, 1, ?) = ?", args)
+                    db.delete("auto", "substr(ch, 1, ?) = ?", args)
+                }
+                channels.forEach { ch ->
+                    db.delete("programs", "ch = ?", arrayOf(ch))
+                    db.delete("auto", "ch = ?", arrayOf(ch))
+                }
+                putFingerprint(db, fingerprint, parts)
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
             }
-            channels.forEach { ch ->
-                db.delete("programs", "ch = ?", arrayOf(ch))
-                db.delete("auto", "ch = ?", arrayOf(ch))
-            }
-            putFingerprint(db, fingerprint, parts)
-            db.setTransactionSuccessful()
         } finally {
-            db.endTransaction()
+            changes++
         }
     }
 
@@ -353,36 +375,46 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
      * stored for that channel in that span.
      */
     fun putChannelRange(ch: String, fromMs: Long, toMs: Long, programs: List<EpgProgram>) {
-        val db = writableDatabase
-        db.beginTransaction()
+        changes++
         try {
-            db.delete("programs", "ch = ? AND start >= ? AND start < ?", arrayOf(ch, fromMs.toString(), toMs.toString()))
-            val stmt = db.compileStatement(
-                "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
-            )
-            programs.forEach { p ->
-                stmt.clearBindings()
-                stmt.bindString(1, ch); stmt.bindLong(2, p.startMs); stmt.bindLong(3, p.stopMs); stmt.bindString(4, p.title)
-                p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
-                stmt.bindNull(6); stmt.bindNull(7); stmt.bindNull(8); stmt.bindNull(9); stmt.bindNull(10)
-                stmt.executeInsert()
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                db.delete("programs", "ch = ? AND start >= ? AND start < ?", arrayOf(ch, fromMs.toString(), toMs.toString()))
+                val stmt = db.compileStatement(
+                    "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
+                )
+                programs.forEach { p ->
+                    stmt.clearBindings()
+                    stmt.bindString(1, ch); stmt.bindLong(2, p.startMs); stmt.bindLong(3, p.stopMs); stmt.bindString(4, p.title)
+                    p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
+                    stmt.bindNull(6); stmt.bindNull(7); stmt.bindNull(8); stmt.bindNull(9); stmt.bindNull(10)
+                    stmt.executeInsert()
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
             }
-            db.setTransactionSuccessful()
         } finally {
-            db.endTransaction()
+            changes++
         }
     }
 
     /** Drops these channels' listings (channels hidden in every profile). */
     fun deleteChannels(channels: Collection<String>) {
-        if (channels.isEmpty()) return
-        val db = writableDatabase
-        db.beginTransaction()
+        changes++
         try {
-            channels.forEach { ch -> db.delete("programs", "ch = ?", arrayOf(ch)) }
-            db.setTransactionSuccessful()
+            if (channels.isEmpty()) return
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                channels.forEach { ch -> db.delete("programs", "ch = ?", arrayOf(ch)) }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
         } finally {
-            db.endTransaction()
+            changes++
         }
     }
 
@@ -609,56 +641,61 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         fromMs: Long,
         toMs: Long
     ) {
-        val db = writableDatabase
-        db.beginTransaction()
+        changes++
         try {
-            db.execSQL("DROP INDEX IF EXISTS programs_ch_start")
-            db.execSQL("DROP INDEX IF EXISTS programs_stop")
-            db.execSQL("DROP INDEX IF EXISTS programs_start")
-            db.delete("programs", null, null)
-            db.delete("auto", null, null)
-            db.execSQL("DROP TABLE IF EXISTS temp.choice")
-            db.execSQL("CREATE TEMP TABLE choice (src TEXT NOT NULL, xid TEXT NOT NULL, ch TEXT NOT NULL, PRIMARY KEY (src, xid, ch))")
-            val ins = db.compileStatement("INSERT OR IGNORE INTO temp.choice (src, xid, ch) VALUES (?,?,?)")
-            choice.forEach { (ch, a) ->
-                ins.clearBindings(); ins.bindString(1, a.sourceId); ins.bindString(2, a.xmltvId); ins.bindString(3, ch)
-                ins.executeInsert()
-            }
-            db.execSQL(
-                "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) " +
-                    "SELECT c.ch, s.start, s.stop, s.title, s.descr, s.cat, s.ep, s.icon, s.year, s.people " +
-                    "FROM stage s JOIN temp.choice c ON c.src = s.src AND c.xid = s.xid WHERE s.stop > ? AND s.start < ?",
-                arrayOf<Any>(fromMs, toMs)
-            )
-            db.execSQL("DROP TABLE IF EXISTS temp.choice")
-            val stmt = db.compileStatement(
-                "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
-            )
-            extra.forEach { (ch, list) ->
-                list.forEach { p ->
-                    stmt.clearBindings()
-                    stmt.bindString(1, ch); stmt.bindLong(2, p.startMs); stmt.bindLong(3, p.stopMs); stmt.bindString(4, p.title)
-                    p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
-                    p.category?.let { stmt.bindString(6, it) } ?: stmt.bindNull(6)
-                    p.episode?.let { stmt.bindString(7, it) } ?: stmt.bindNull(7)
-                    p.icon?.let { stmt.bindString(8, it) } ?: stmt.bindNull(8)
-                    p.year?.let { stmt.bindLong(9, it.toLong()) } ?: stmt.bindNull(9)
-                    if (p.people.isEmpty()) stmt.bindNull(10) else stmt.bindString(10, p.people.joinToString("\u001F"))
-                    stmt.executeInsert()
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                db.execSQL("DROP INDEX IF EXISTS programs_ch_start")
+                db.execSQL("DROP INDEX IF EXISTS programs_stop")
+                db.execSQL("DROP INDEX IF EXISTS programs_start")
+                db.delete("programs", null, null)
+                db.delete("auto", null, null)
+                db.execSQL("DROP TABLE IF EXISTS temp.choice")
+                db.execSQL("CREATE TEMP TABLE choice (src TEXT NOT NULL, xid TEXT NOT NULL, ch TEXT NOT NULL, PRIMARY KEY (src, xid, ch))")
+                val ins = db.compileStatement("INSERT OR IGNORE INTO temp.choice (src, xid, ch) VALUES (?,?,?)")
+                choice.forEach { (ch, a) ->
+                    ins.clearBindings(); ins.bindString(1, a.sourceId); ins.bindString(2, a.xmltvId); ins.bindString(3, ch)
+                    ins.executeInsert()
                 }
+                db.execSQL(
+                    "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) " +
+                        "SELECT c.ch, s.start, s.stop, s.title, s.descr, s.cat, s.ep, s.icon, s.year, s.people " +
+                        "FROM stage s JOIN temp.choice c ON c.src = s.src AND c.xid = s.xid WHERE s.stop > ? AND s.start < ?",
+                    arrayOf<Any>(fromMs, toMs)
+                )
+                db.execSQL("DROP TABLE IF EXISTS temp.choice")
+                val stmt = db.compileStatement(
+                    "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
+                )
+                extra.forEach { (ch, list) ->
+                    list.forEach { p ->
+                        stmt.clearBindings()
+                        stmt.bindString(1, ch); stmt.bindLong(2, p.startMs); stmt.bindLong(3, p.stopMs); stmt.bindString(4, p.title)
+                        p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
+                        p.category?.let { stmt.bindString(6, it) } ?: stmt.bindNull(6)
+                        p.episode?.let { stmt.bindString(7, it) } ?: stmt.bindNull(7)
+                        p.icon?.let { stmt.bindString(8, it) } ?: stmt.bindNull(8)
+                        p.year?.let { stmt.bindLong(9, it.toLong()) } ?: stmt.bindNull(9)
+                        if (p.people.isEmpty()) stmt.bindNull(10) else stmt.bindString(10, p.people.joinToString("\u001F"))
+                        stmt.executeInsert()
+                    }
+                }
+                auto.forEach { (ch, a) ->
+                    db.insertWithOnConflict("auto", null, ContentValues().apply {
+                        put("ch", ch); put("source", a.sourceId); put("xmltv", a.xmltvId)
+                    }, SQLiteDatabase.CONFLICT_REPLACE)
+                }
+                db.execSQL("CREATE INDEX IF NOT EXISTS programs_ch_start ON programs(ch, start)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS programs_stop ON programs(stop)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS programs_start ON programs(start)")
+                putFingerprint(db, fingerprint, parts)
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
             }
-            auto.forEach { (ch, a) ->
-                db.insertWithOnConflict("auto", null, ContentValues().apply {
-                    put("ch", ch); put("source", a.sourceId); put("xmltv", a.xmltvId)
-                }, SQLiteDatabase.CONFLICT_REPLACE)
-            }
-            db.execSQL("CREATE INDEX IF NOT EXISTS programs_ch_start ON programs(ch, start)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS programs_stop ON programs(stop)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS programs_start ON programs(start)")
-            putFingerprint(db, fingerprint, parts)
-            db.setTransactionSuccessful()
         } finally {
-            db.endTransaction()
+            changes++
         }
     }
 
@@ -666,11 +703,16 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     fun compact(): Long = SqliteCompact.compactIfWasteful(writableDatabase, "guide")
 
     fun clear() {
-        val db = writableDatabase
-        db.delete("programs", null, null)
-        db.delete("auto", null, null)
-        db.delete("meta", null, null)
-        runCatching { db.delete("stage", null, null); db.delete("stage_meta", null, null); db.delete("stage_channels", null, null); db.delete("stage_info", null, null) }
+        changes++
+        try {
+            val db = writableDatabase
+            db.delete("programs", null, null)
+            db.delete("auto", null, null)
+            db.delete("meta", null, null)
+            runCatching { db.delete("stage", null, null); db.delete("stage_meta", null, null); db.delete("stage_channels", null, null); db.delete("stage_info", null, null) }
+        } finally {
+            changes++
+        }
     }
 }
 

@@ -158,7 +158,7 @@ class LiveTvRepository @Inject constructor(
     }
 
     // Automatic updates run at low priority, so the screen and video stay smooth meanwhile.
-    private suspend fun refreshStale() = withContext(BackgroundWork.quiet) { refreshInternal(forcePlaylists = false, forceEpg = false) }
+    private suspend fun refreshStale() = withContext(BackgroundWork.quietUpdate) { refreshInternal(forcePlaylists = false, forceEpg = false) }
 
     // ---------------------------------------------------------------- sources CRUD
 
@@ -770,7 +770,7 @@ class LiveTvRepository @Inject constructor(
         }
     }
 
-    private suspend fun saveChannels() = withContext(Dispatchers.IO) {
+    private suspend fun saveChannels() = withContext(BackgroundWork.cpu()) {
         val fingerprint = channelsFingerprint()
         runCatching {
             val list = _channels.value
@@ -1633,7 +1633,7 @@ class LiveTvRepository @Inject constructor(
 
     private val embeddedEpgUrls = HashMap<String, List<String>>()
 
-    private suspend fun buildChannels() = withContext(Dispatchers.IO) {
+    private suspend fun buildChannels() = withContext(BackgroundWork.cpu()) {
         val playlists = prefs.currentPlaylists().filter { it.liveEnabled }
         val multi = playlists.size > 1
         val out = ArrayList<LiveChannel>()
@@ -1693,7 +1693,7 @@ class LiveTvRepository @Inject constructor(
         LIVE_REPORT.add("Guide matched and stored: ${_programs.value.size} channels in ${System.currentTimeMillis() - t0} ms")
     }
 
-    private suspend fun buildProgramsInner(settings: LiveTvSettings, targets: List<EpgTarget>) = withContext(Dispatchers.IO) {
+    private suspend fun buildProgramsInner(settings: LiveTvSettings, targets: List<EpgTarget>) = withContext(BackgroundWork.cpu()) {
         val all = _channels.value
         if (all.isEmpty()) {
             _programs.value = emptyMap()

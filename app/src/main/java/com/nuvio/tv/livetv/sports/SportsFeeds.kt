@@ -163,6 +163,63 @@ internal class SportsFeeds {
         }.getOrDefault(emptyMap())
     }
 
+    /** What [espnSharedRead] found: the days' scoreboards, or [unchanged] when it's the same as last time. */
+    class SharedDays(val raws: Map<String, String>, val unchanged: Boolean)
+
+    /** The last full read of a league's shared file, per window ("day" / "week"). */
+    private class SharedMemo(val etag: String, val stamps: Map<String, Long>, val days: List<String>)
+    private val sharedMemo = java.util.concurrent.ConcurrentHashMap<String, SharedMemo>()
+
+    /**
+     * Like [espnSharedDays], but asks GitHub first whether the file has changed since this window
+     * last read it. Most rounds it hasn't (the shared job runs far less often than the app looks),
+     * and then nothing is downloaded or read at all: [SharedDays.unchanged] is true as long as
+     * the same [days] are wanted and all of them are still fresh enough. Otherwise the file is read
+     * as before. Null when the file can't be had.
+     */
+    fun espnSharedRead(leagueId: String, window: String, days: List<String>, now: Long, maxAgeFor: (Int) -> Long): SharedDays? {
+        val key = "$window|$leagueId"
+        val memo = sharedMemo[key]
+        val url = DATA_URL + "espn/" + safeFileId(leagueId) + ".json"
+        if (memo != null && memo.days == days &&
+            days.withIndex().all { (i, d) -> memo.stamps[d]?.let { now - it <= maxAgeFor(i) } == true }
+        ) {
+            val notModified = runCatching {
+                val req = Request.Builder().url(url)
+                    .header("Accept", "application/json")
+                    .header("If-None-Match", memo.etag)
+                    .build()
+                http.newCall(req).execute().use { r -> r.code == 304 }
+            }.getOrDefault(false)
+            if (notModified) return SharedDays(emptyMap(), unchanged = true)
+        }
+        return runCatching {
+            val req = Request.Builder().url(url).header("Accept", "application/json").build()
+            http.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@runCatching null
+                val body = r.body?.string() ?: return@runCatching null
+                val all = runCatching { JSONObject(body).optJSONObject("days") }.getOrNull()
+                if (all == null) { sharedMemo.remove(key); return@runCatching SharedDays(emptyMap(), false) }
+                val stamps = HashMap<String, Long>()
+                all.keys().forEach { d -> all.optJSONObject(d)?.let { stamps[d] = it.optLong("fetchedAt", 0L) } }
+                val out = HashMap<String, String>()
+                days.forEachIndexed { i, day ->
+                    val d = all.optJSONObject(day) ?: return@forEachIndexed
+                    if (now - d.optLong("fetchedAt", 0L) > maxAgeFor(i)) return@forEachIndexed
+                    d.optString("raw").ifBlank { null }?.let { out[day] = it }
+                }
+                val etag = r.header("ETag")
+                // Only remembered when every day wanted was there: otherwise next time reads it again.
+                if (etag != null && out.size == days.size) sharedMemo[key] = SharedMemo(etag, stamps, days)
+                else sharedMemo.remove(key)
+                SharedDays(out, false)
+            }
+        }.getOrNull()
+    }
+
+    /** Forget what [espnSharedRead] remembered for this league, so the next read is a full one. */
+    fun forgetShared(leagueId: String, window: String) { sharedMemo.remove("$window|$leagueId") }
+
     companion object {
         private const val ESPN = "https://site.api.espn.com/apis/site/v2/sports/"
         const val DATA_URL = "https://raw.githubusercontent.com/homelessbrian/nuvio-data/main/"
