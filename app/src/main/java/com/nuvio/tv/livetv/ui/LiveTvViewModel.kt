@@ -113,9 +113,19 @@ class LiveTvViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, LiveMenuStyle.CLASSIC)
 
+    /** True once the side-menu look has really been read (until then [menuStyle] is only a placeholder). */
+    val menuStyleLoaded: StateFlow<Boolean> = combine(
+        layoutPrefs.modernSidebarEnabled,
+        layoutPrefs.modernSidebarBlurEnabled
+    ) { _, _ -> true }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+
+    private val settingsPlaceholder = LiveTvSettings()
     val settings: StateFlow<LiveTvSettings> = prefs.settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, LiveTvSettings())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, settingsPlaceholder)
+
+    /** False until the saved settings have really been read (before that, [settings] is only the defaults). */
+    fun isSettingsLoaded(s: LiveTvSettings): Boolean = s !== settingsPlaceholder
 
     val userState: StateFlow<LiveUserState> = prefs.userState
         .stateIn(viewModelScope, SharingStarted.Eagerly, LiveUserState())

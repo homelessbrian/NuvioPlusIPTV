@@ -179,6 +179,35 @@ private fun nextMidnight(ms: Long): Long = java.util.Calendar.getInstance().appl
 fun LiveTvGuideScreen(
     onOpenFullscreen: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenRecordings: () -> Unit = {},
+    onFindInNuvio: () -> Unit = {},
+    onOpenNuvioSearch: () -> Unit = onFindInNuvio,
+    onReturnToSports: () -> Unit = {},
+    viewModel: LiveTvViewModel = hiltViewModel()
+) {
+    // Hold the first draw until the saved settings and menu look are read. Before that the guide
+    // only has the built-in defaults, and it drew one frame of the old look, then redrew.
+    val loadedSettings by viewModel.settings.collectAsStateWithLifecycle()
+    val menuLoaded by viewModel.menuStyleLoaded.collectAsStateWithLifecycle()
+    if (!viewModel.isSettingsLoaded(loadedSettings) || !menuLoaded) {
+        Box(Modifier.fillMaxSize().background(NuvioTheme.colors.Background))
+        return
+    }
+    LiveTvGuideScreenBody(
+        onOpenFullscreen = onOpenFullscreen,
+        onOpenSettings = onOpenSettings,
+        onOpenRecordings = onOpenRecordings,
+        onFindInNuvio = onFindInNuvio,
+        onOpenNuvioSearch = onOpenNuvioSearch,
+        onReturnToSports = onReturnToSports,
+        viewModel = viewModel
+    )
+}
+
+@Composable
+private fun LiveTvGuideScreenBody(
+    onOpenFullscreen: () -> Unit,
+    onOpenSettings: () -> Unit,
     /** Opens Recordings (the ● button beside the ⚙). */
     onOpenRecordings: () -> Unit = {},
     onFindInNuvio: () -> Unit = {},
