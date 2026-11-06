@@ -595,11 +595,19 @@ private fun SportsHub(
                 (!filterToChannels || ev.state == GameState.POST || isMine(ev, follows) || matches[ev.id]?.isNotEmpty() == true)
         }
     }
-    val shown = remember(dayEvents, effectiveChip, follows) {
+    // All Events only: narrow the day to one sport (the sport row under the days).
+    var allSportPick by rememberSaveable { mutableStateOf<String?>(null) }
+    val allSports = remember(dayEvents, settings) {
+        val order = SportsCatalog.sportsOrder(settings)
+        dayEvents.mapNotNull { SportsCatalog.league(it.leagueId)?.sport }.distinct()
+            .sortedBy { order.indexOf(it).let { i -> if (i < 0) 99 else i } }
+    }
+    val allSport = allSportPick?.takeIf { p -> allSports.any { it.name == p } }
+    val shown = remember(dayEvents, effectiveChip, follows, allSport) {
         when (effectiveChip) {
             CHIP_MINE -> dayEvents.filter { isMine(it, follows) }
             CHIP_LIVE -> dayEvents.filter { it.state == GameState.LIVE }
-            CHIP_ALL -> dayEvents
+            CHIP_ALL -> if (allSport == null) dayEvents else dayEvents.filter { SportsCatalog.league(it.leagueId)?.sport?.name == allSport }
             else -> if (effectiveChip.startsWith(CHIP_LEAGUE)) dayEvents
             else dayEvents.filter { SportsCatalog.league(it.leagueId)?.sport?.name == effectiveChip }
         }
@@ -718,6 +726,21 @@ private fun SportsHub(
                     }
                     DisposableEffect(offset) { composedDays += offset; onDispose { composedDays -= offset } }
                     DayTab(label, selected = day == offset, modifier = Modifier.focusRequester(dayTabReq(offset)), onClick = { onDay(offset); focusedOnce = true })
+                }
+            }
+        }
+    }
+    val sportBar: @Composable () -> Unit = {
+        if (effectiveChip == CHIP_ALL && leagueView == null && allSports.size > 1) {
+            LazyRow(
+                Modifier.fillMaxWidth().keepFocusWhileHeld(vertical = false),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                item(key = "sport_all") { FilterIcon("▦", "All", allSport == null, withLabel = true) { allSportPick = null; contentJump++ } }
+                items(allSports, key = { "sport_" + it.name }) { sp ->
+                    FilterIcon(sp.icon, sp.label, allSport == sp.name, withLabel = true) { allSportPick = sp.name; contentJump++ }
                 }
             }
         }
@@ -884,6 +907,7 @@ private fun SportsHub(
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.width(LIST_WIDTH).fillMaxHeight()) {
                     dayBar(Modifier.fillMaxWidth())
+                    sportBar()
                     list(Modifier.weight(1f))
                 }
                 Spacer(Modifier.width(18.dp))
@@ -902,6 +926,7 @@ private fun SportsHub(
                 filters(Modifier.weight(1f))
             }
             dayBar(Modifier.fillMaxWidth())
+            sportBar()
             Spacer(Modifier.height(4.dp))
             list(Modifier.weight(1f))
         }
