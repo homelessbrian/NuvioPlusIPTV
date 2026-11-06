@@ -31,6 +31,7 @@ import com.nuvio.tv.data.local.ImagePerformancePreferences
 import com.nuvio.tv.data.local.SentrySettingsDataStore
 import com.nuvio.tv.data.mediaserver.ServerUserStateProjection
 import com.nuvio.tv.data.simkl.SimklAnimeIdPreferenceHolder
+import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import dagger.hilt.android.HiltAndroidApp
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -80,10 +81,16 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         }
     }
 
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun onCreate() {
+        // Before super.onCreate(): Hilt creates injected services there, and the budget is read once.
+        MemoryBudget.init(this)
         super.onCreate()
         SentryInitializer.start(this, sentrySettingsDataStore)
         PluginRuntimeHooks.onApplicationCreate(this)
+        // Live TV fork: VPN progress lines go into the start-up report.
+        com.nuvio.vpn.android.VpnPlaybackProtection.diagnostics =
+            java.util.function.Consumer { line -> com.nuvio.tv.livetv.model.LiveTvLoadReport.add(line) }
         androidTvChannelSyncService.start()
         serverUserStateProjection.start()
         // Load locale synchronously so it's available before Activity.attachBaseContext.
@@ -93,6 +100,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         LocaleCache.localeTag = tag ?: ""
     }
 
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun newImageLoader(context: android.content.Context): ImageLoader {
         val imageOkHttpClient by lazy {
             val imageDispatcher = okhttp3.Dispatcher().apply {
@@ -158,9 +166,17 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                     totalRamMb <= 3072 -> 0.20
                     else -> 0.25
                 }
-                MemoryCache.Builder()
-                    .maxSizePercent(context, cachePercent)
-                    .build()
+                // maxSizePercent takes the share of largeMemoryClass under largeHeap (512 MB on
+                // 1 GB TVs, ~77 MB of bitmaps), so when MemoryBudget sizes from a smaller heap on
+                // such a TV the cache takes its share from that heap too.
+                val budgetHeapBytes = MemoryBudget.heapMb * 1024L * 1024L
+                val builder = MemoryCache.Builder()
+                if (budgetHeapBytes < Runtime.getRuntime().maxMemory()) {
+                    builder.maxSizeBytes((budgetHeapBytes * cachePercent).toLong())
+                } else {
+                    builder.maxSizePercent(context, cachePercent)
+                }
+                builder.build()
             }
             .diskCache {
                 DiskCache.Builder()

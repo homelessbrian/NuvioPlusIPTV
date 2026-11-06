@@ -44,7 +44,7 @@ internal object AutoSyncSubtitleHttp {
             }
         }
 
-        val call = PlayerPlaybackNetworking.playbackHttpClient.newCall(requestBuilder.build())
+        val call = com.nuvio.vpn.android.VpnHttpClient.wrap(PlayerPlaybackNetworking.playbackHttpClient).newCall(requestBuilder.build())
 
         return suspendCancellableCoroutine { continuation ->
             continuation.invokeOnCancellation {

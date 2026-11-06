@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.livetv.record.LiveTvNotice
+import com.nuvio.tv.livetv.sports.ChannelLink
 import com.nuvio.tv.livetv.sports.ChannelRegions
 import com.nuvio.tv.livetv.sports.League
 import com.nuvio.tv.livetv.sports.SportsCatalog
@@ -65,7 +66,8 @@ fun SportsSettingsContent(
     fun update(t: (SportsSettings) -> SportsSettings) = viewModel.repo.updateSettings(t)
     val region = SportsCatalog.regionOf(s)
     val shownCount = SportsCatalog.leagues.count { SportsCatalog.shown(it, s) }
-    val fixes = s.networkChannels.size + s.eventChannels.size + s.blocked.size
+    val links = s.networkChannels.size + s.teamChannels.size + s.leagueChannels.size + s.eventChannels.size
+    val fixes = links + s.blocked.size
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -211,10 +213,17 @@ fun SportsSettingsContent(
                         onClick = { dialog = "groups" }
                     )
                     SettingsActionRow(
-                        title = "Forget My Channel Fixes",
-                        subtitle = "Channels you picked (or took off) with Fix Channel, including the ones used for whole networks",
-                        value = if (fixes == 0) "None" else fixes.toString(),
+                        title = "Your Channel Links",
+                        subtitle = "Channels you picked with Fix Channel for a network, a team, a league or one game. See them, or remove one",
+                        value = if (links == 0) "None" else links.toString(),
                         leadingIcon = Icons.Default.LiveTv,
+                        onClick = { dialog = "links" }
+                    )
+                    SettingsActionRow(
+                        title = "Forget My Channel Fixes",
+                        subtitle = "All channels you picked (or took off) with Fix Channel, including the ones used for whole networks",
+                        value = if (fixes == 0) "None" else fixes.toString(),
+                        leadingIcon = Icons.Default.Refresh,
                         enabled = fixes > 0,
                         onClick = { dialog = "clear" }
                     )
@@ -266,7 +275,8 @@ fun SportsSettingsContent(
             },
             onDismiss = close
         )
-        "leagues" -> LeaguesDialog(s, onToggle = { l -> update { cur -> toggleShown(l, cur) } }, onDismiss = close)
+        "leagues" -> LeaguesDialog(s, onToggle = { l -> update { cur -> SportsCatalog.toggleShown(l, cur) } }, onDismiss = close)
+        "links" -> LinksDialog(s, viewModel, onForgetAll = { dialog = "clear" }, onDismiss = close)
         "clear" -> {
             val first = remember { FocusRequester() }
             LiveDialog(onDismiss = close, width = 480.dp) {
@@ -282,21 +292,6 @@ fun SportsSettingsContent(
             LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
         }
     }
-}
-
-/** Shown leagues: in-region ones are taken off by id; ones from elsewhere are added with "+id". */
-private fun toggleShown(l: League, s: SportsSettings): SportsSettings {
-    val inRegion = SportsCatalog.regionOf(s) in l.regions
-    val shown = SportsCatalog.shown(l, s)
-    val set = s.hiddenLeagues.toMutableSet()
-    if (shown) {
-        set.remove("+${l.id}")
-        if (inRegion) set.add(l.id)
-    } else {
-        set.remove(l.id)
-        if (!inRegion) set.add("+${l.id}")
-    }
-    return s.copy(hiddenLeagues = set)
 }
 
 @Composable
@@ -368,4 +363,63 @@ private fun GroupsDialog(viewModel: SportsViewModel, chosen: Set<String>, onTogg
         }
     }
     LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
+}
+
+/** Your channel links, by kind; OK removes one. */
+@Composable
+private fun LinksDialog(s: SportsSettings, viewModel: SportsViewModel, onForgetAll: () -> Unit, onDismiss: () -> Unit) {
+    val links = remember(s.networkChannels, s.teamChannels, s.leagueChannels, s.eventChannels) { viewModel.repo.channelLinks() }
+    val requesters = remember(links) { links.map { FocusRequester() } }
+    val forgetAll = remember { FocusRequester() }
+    // Where focus goes after a removal (the row that took its place), or -1 on opening.
+    var focusAt by remember { mutableStateOf(-1) }
+    LiveDialog(onDismiss = onDismiss, width = 620.dp) {
+        LiveText("Your channel links", size = 20.sp, weight = FontWeight.Bold)
+        LiveText(
+            "OK removes a link. Its games go back to finding their channel by themselves.",
+            color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 2
+        )
+        Spacer(Modifier.height(10.dp))
+        if (links.isEmpty()) LiveText(
+            "No links yet. On a game, hold OK → Fix Channel, pick the right channel, then choose a network or a team to keep using it.",
+            color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 3
+        )
+        LazyColumn(Modifier.heightIn(max = 420.dp)) {
+            links.forEachIndexed { i, l ->
+                if (i == 0 || links[i - 1].kind != l.kind) item(key = "h:" + l.kind.name) {
+                    LiveText(
+                        l.kind.heading.uppercase(), color = NuvioTheme.colors.TextSecondary, size = 11.sp, weight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = if (i == 0) 0.dp else 10.dp, bottom = 4.dp)
+                    )
+                }
+                item(key = l.kind.name + ":" + l.key) {
+                    LiveFocusRow(
+                        modifier = Modifier.focusRequester(requesters[i]).fillMaxWidth(),
+                        onClick = {
+                            viewModel.repo.removeLink(l)
+                            LiveTvNotice.show("Removed: ${l.label}")
+                            focusAt = i
+                        }
+                    ) { focused ->
+                        LiveText(l.label, color = focusedTextColor(focused), size = 15.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                        LiveText(
+                            l.channelName ?: "Channel no longer in your playlists",
+                            color = if (focused) focusedTextColor(true) else NuvioTheme.colors.TextSecondary, size = 12.sp, maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        MenuItem("Forget All Channel Fixes", Modifier.focusRequester(forgetAll)) { onForgetAll() }
+    }
+    LaunchedEffect(links) {
+        delay(80)
+        val target = when {
+            links.isEmpty() -> forgetAll
+            focusAt < 0 -> requesters.first()
+            else -> requesters[focusAt.coerceAtMost(links.size - 1)]
+        }
+        runCatching { target.requestFocus() }
+    }
 }

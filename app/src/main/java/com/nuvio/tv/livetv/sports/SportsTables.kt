@@ -36,6 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -644,10 +647,14 @@ internal fun TeamCard(
     val matches by viewModel.matches.collectAsStateWithLifecycle()
     var games by remember(team.key) { mutableStateOf<List<SportsEvent>?>(null) }
     var allGames by remember(team.key) { mutableStateOf(false) }
+    var roster by remember(team.key) { mutableStateOf<Roster?>(null) }
+    var playersView by remember(team.key) { mutableStateOf(false) }
+    var picked by remember(team.key) { mutableStateOf<Player?>(null) }
     val tables by viewModel.repo.standings.collectAsStateWithLifecycle()
     LaunchedEffect(team.key) {
         games = runCatching { viewModel.repo.teamGames(team) }.getOrDefault(emptyList())
     }
+    LaunchedEffect(team.key) { roster = viewModel.repo.teamPlayers(team) }
     // From a game page: its league's table (for where it stands), when there is one.
     LaunchedEffect(team.leagueId, row) {
         if (row == null && table == null) runCatching { viewModel.repo.standings(team.leagueId) }
@@ -662,10 +669,17 @@ internal fun TeamCard(
     val following = follows.followsTeam(team.leagueId, team.id)
     val first = remember { FocusRequester() }
     // On the first button once the games are in (Watch now or Remind me), and back from All their games.
-    LaunchedEffect(allGames, games != null) { delay(120); runCatching { first.requestFocus() } }
+    LaunchedEffect(allGames, playersView, picked, games != null) { delay(120); runCatching { first.requestFocus() } }
 
     SportsDialog(
-        onDismiss = onDismiss,
+        // Back steps out of the players one level at a time: profile -> list -> the team card.
+        onDismiss = {
+            when {
+                picked != null -> picked = null
+                playersView -> playersView = false
+                else -> onDismiss()
+            }
+        },
         width = 560.dp,
         header = {
             val c = bandColor(teamColor(team))
@@ -688,6 +702,23 @@ internal fun TeamCard(
             }
         }
     ) {
+        if (playersView && roster != null) {
+            val who = picked
+            if (who != null) {
+                PlayerProfile(who, team)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SportsAction("‹  Back", modifier = Modifier.focusRequester(first), onClick = { picked = null })
+                }
+            } else {
+                PlayerList(roster!!, first, onPick = { picked = it })
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SportsAction("‹  Back", onClick = { playersView = false })
+                }
+            }
+            return@SportsDialog
+        }
         if (allGames) {
             AllGames(team, list, hide, now, use24h, first, onOpen)
             Spacer(Modifier.height(10.dp))
@@ -735,6 +766,7 @@ internal fun TeamCard(
             }
             SportsAction(if (following) "★  Following" else "☆  Follow", modifier = f(), selected = following, onClick = { viewModel.repo.toggleTeam(team) })
             if (list.isNotEmpty()) SportsAction("All their games", modifier = f(), onClick = { allGames = true })
+            if (roster != null) SportsAction("Players", modifier = f(), onClick = { playersView = true })
             (live ?: next)?.let { ev -> SportsAction("Game info", modifier = f(), onClick = { onOpen(ev) }) }
         }
     }
@@ -819,6 +851,59 @@ private fun resultOf(us: Side?, them: Side?): Char? {
     val a = us?.score?.toDoubleOrNull() ?: return null
     val b = them?.score?.toDoubleOrNull() ?: return null
     return if (a > b) 'W' else if (a < b) 'L' else 'D'
+}
+
+/** The team's players by position; OK opens a player's profile. */
+@Composable
+private fun PlayerList(roster: Roster, first: FocusRequester, onPick: (Player) -> Unit) {
+    val groups = remember(roster) { SportsPlayers.grouped(roster.players) }
+    val firstId = remember(roster) { groups.firstOrNull()?.second?.firstOrNull()?.let { it.id + it.name } }
+    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp).keepFocusWhileHeld(horizontal = false), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        groups.forEach { (pos, list) ->
+            item(key = "h:$pos") { CardHeading(pos.uppercase()) }
+            items(list.size, key = { "p:" + pos + list[it].id + list[it].name }) { i ->
+                val p = list[i]
+                var focused by remember { mutableStateOf(false) }
+                Row(
+                    (if (p.id + p.name == firstId) Modifier.focusRequester(first) else Modifier)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (focused) NuvioTheme.colors.FocusBackground.copy(alpha = 0.25f) else Color.Transparent)
+                        .border(if (focused) NuvioTheme.focusRing.border(2.dp) else androidx.compose.foundation.BorderStroke(0.dp, Color.Transparent), RoundedCornerShape(8.dp))
+                        .onFocusChanged { focused = it.isFocused }
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(p) }
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LiveText(p.number.orEmpty(), color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Black, modifier = Modifier.width(32.dp))
+                    LiveText(p.name, size = 13.sp, weight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                    p.country?.let { LiveText(it, color = SportsLook.Dim, size = 10.sp) }
+                }
+            }
+        }
+    }
+}
+
+/** A player's photo (initials when there isn't one), the facts we have and a short bio. */
+@Composable
+private fun PlayerProfile(p: Player, team: TeamInfo) {
+    val c = bandColor(teamColor(team))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(92.dp).clip(CircleShape).background(c), contentAlignment = Alignment.Center) {
+            LiveText(p.initials(), size = 28.sp, weight = FontWeight.Black)
+            p.smallPhoto()?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(92.dp)) }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            LiveText((p.number?.let { "$it  " }.orEmpty()) + p.name, size = 20.sp, weight = FontWeight.Black)
+            LiveText(listOfNotNull(p.position, team.fullName.ifBlank { team.name }).joinToString(" · "), color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold)
+            val facts = listOfNotNull(
+                p.country, p.age()?.let { "Age $it" }, p.height?.let { "Height $it" }, p.weight?.let { "Weight $it" }, p.side
+            )
+            if (facts.isNotEmpty()) LiveText(facts.joinToString(" · "), color = Color(0xFFC9CCD6), size = 11.sp, maxLines = 2)
+        }
+    }
+    p.bio?.let { LiveText(it, color = Color(0xFFC9CCD6), size = 12.sp, maxLines = 7, modifier = Modifier.padding(top = 10.dp)) }
 }
 
 /** All of the team's games we know of: results, then what's to come. OK opens a game's page. */

@@ -958,7 +958,11 @@ class CalendarRepository @Inject constructor(
                 if (key in favorites) score += 40
                 if (hd.containsMatchIn(ch.name)) score += 5
                 if (later) score -= 300
-                val gap = if (west) minOf(kotlin.math.abs(off), kotlin.math.abs(off - expectedOff)) else kotlin.math.abs(off)
+                // West Coast box: an East feed (hours before the airing expected here) is kept as a
+                // choice, but the local airing comes first, so the Calendar shows the local time.
+                val eastFeed = west && expectedOff > 0 && off < expectedOff - 75 * 60_000L
+                if (eastFeed) score -= 300
+                val gap = if (west) kotlin.math.abs(off - expectedOff) else kotlin.math.abs(off)
                 score -= (gap / 60_000L).toInt().coerceAtMost(75)
                 score to CalendarGuideHit(
                     ch.key, ch.name, ch.logo, p.startMs, p.stopMs, p.title,

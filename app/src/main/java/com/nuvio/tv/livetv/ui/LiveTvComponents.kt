@@ -363,6 +363,8 @@ internal fun LiveFocusRow(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
+    horizontalPadding: Dp = 14.dp,
+    verticalPadding: Dp = 10.dp,
     content: @Composable RowScope.(focused: Boolean) -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -383,7 +385,7 @@ internal fun LiveFocusRow(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -542,13 +544,21 @@ internal fun LiveTag(text: String, background: Color, color: Color, modifier: Mo
 internal fun LiveDialog(
     onDismiss: () -> Unit,
     width: Dp = 520.dp,
+    /**
+     * A flyout instead of a centered panel: opens just above this spot (a button's bounds in the window),
+     * with its left edge on the button's left edge. [minWidth], [corner] and [pad] size the smaller panel.
+     */
+    anchor: androidx.compose.ui.geometry.Rect? = null,
+    minWidth: Dp = 320.dp,
+    corner: Dp = 20.dp,
+    pad: Dp = 20.dp,
     content: @Composable () -> Unit
 ) {
     // A dialog opened by a long press appears while OK is still held. Swallow the rest of that
     // press (its repeats and its release) so it can't click the first menu item and close the menu.
     var sawKeyDown by remember { mutableStateOf(false) }
     val openedAt = remember { android.os.SystemClock.uptimeMillis() }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    val body: @Composable () -> Unit = {
         Column(
             modifier = Modifier
                 .onPreviewKeyEvent { e ->
@@ -571,14 +581,39 @@ internal fun LiveDialog(
                         else -> false
                     }
                 }
-                .widthIn(min = 320.dp, max = width)
+                .widthIn(min = minWidth, max = width)
                 .heightIn(max = 620.dp)
                 // The same dark glass as the play bar and the ⚙ panels.
-                .glass(glassColor("darker"), RoundedCornerShape(20.dp))
-                .padding(20.dp)
+                .glass(glassColor("darker"), RoundedCornerShape(corner))
+                .padding(pad)
         ) {
             content()
         }
+    }
+    if (anchor == null) {
+        Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) { body() }
+    } else {
+        val gap = with(androidx.compose.ui.platform.LocalDensity.current) { 8.dp.roundToPx() }
+        androidx.compose.ui.window.Popup(
+            popupPositionProvider = remember(anchor, gap) { AboveAnchor(anchor, gap) },
+            onDismissRequest = onDismiss,
+            properties = androidx.compose.ui.window.PopupProperties(focusable = true)
+        ) { body() }
+    }
+}
+
+/** Puts a popup's bottom-left corner just above [anchor] (bounds in the window), kept on screen. */
+private class AboveAnchor(private val anchor: androidx.compose.ui.geometry.Rect, private val gapPx: Int) :
+    androidx.compose.ui.window.PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: androidx.compose.ui.unit.IntRect,
+        windowSize: androidx.compose.ui.unit.IntSize,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        popupContentSize: androidx.compose.ui.unit.IntSize
+    ): androidx.compose.ui.unit.IntOffset {
+        val x = anchor.left.toInt().coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
+        val y = (anchor.top.toInt() - gapPx - popupContentSize.height).coerceAtLeast(0)
+        return androidx.compose.ui.unit.IntOffset(x, y)
     }
 }
 

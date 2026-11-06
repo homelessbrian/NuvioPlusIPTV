@@ -83,7 +83,7 @@ private const val LIVE_TV_SUBTITLE = "Playlists, TV guide and channel options"
 
 /**
  * Live TV settings are one place in Settings with a row of tabs across the top of it (Setup,
- * Guide, Playback, On Demand, Integration): [HUB] is that tabbed page. [ALL] is the old single
+ * Guide, Playback, Integration): [HUB] is that tabbed page. [ALL] is the old single
  * long list, kept for the guide's long-press menu. The others are the tabs themselves.
  */
 internal enum class LiveTvPage(val title: String, val subtitle: String, val tab: String = "") {
@@ -92,11 +92,11 @@ internal enum class LiveTvPage(val title: String, val subtitle: String, val tab:
     MAIN("Live TV", "Your playlists, guides, channels, groups and parental controls", "Setup"),
     GUIDE("Live TV", "How the guide looks and behaves while you're browsing", "Guide"),
     PLAYBACK("Live TV", "Picture, sound, pausing and recording", "Playback"),
-    ON_DEMAND("Live TV", "Movies and shows from your provider", "On Demand"),
+    ON_DEMAND("On Demand", "Movies and shows from your provider", "On Demand"),
     INTEGRATION("Live TV", "How Live TV shows up in the rest of Nuvio", "Integration")
 }
 
-private val LIVE_TABS = listOf(LiveTvPage.MAIN, LiveTvPage.GUIDE, LiveTvPage.PLAYBACK, LiveTvPage.ON_DEMAND, LiveTvPage.INTEGRATION)
+private val LIVE_TABS = listOf(LiveTvPage.MAIN, LiveTvPage.GUIDE, LiveTvPage.PLAYBACK, LiveTvPage.INTEGRATION)
 
 /** The row of tabs across the top of Live TV settings; moving onto one shows it. */
 @Composable
@@ -286,6 +286,7 @@ internal fun LiveTvSettingsContent(
     var dialog by remember { mutableStateOf<LiveDialog?>(null) }
     val drive by viewModel.driveSync.state.collectAsStateWithLifecycle()
     val cloud by viewModel.cloudSync.state.collectAsStateWithLifecycle()
+    val syncParts by viewModel.cloudSync.enabledParts.collectAsStateWithLifecycle()
     val developerToolsOn by com.nuvio.tv.livetv.model.DeveloperTools.enabled.collectAsStateWithLifecycle()
     val onDemandHas by viewModel.onDemand.hasContent.collectAsStateWithLifecycle()
     val onDemandStatus by viewModel.onDemand.status.collectAsStateWithLifecycle()
@@ -347,11 +348,13 @@ internal fun LiveTvSettingsContent(
             contentPadding = PaddingValues(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
-            // ------------------------------------------------------------ Nuvio account sync
+            // ------------------------------------------------------------ Setup Sync
             if (show(LiveTvPage.MAIN) && cloud.available) item(key = "cloud") {
                 CloudSyncCard(
                     modifier = if (firstRequester != null) Modifier.focusRequester(firstRequester) else Modifier,
                     state = cloud,
+                    enabledParts = syncParts,
+                    onTogglePart = { viewModel.cloudSync.setPart(it, it !in syncParts) },
                     expanded = "cloud" in open,
                     onToggleExpanded = { toggle("cloud") },
                     onTurnOn = { viewModel.cloudSync.turnOn() },
@@ -359,8 +362,8 @@ internal fun LiveTvSettingsContent(
                     onImportDrive = {
                         confirm(
                             "Import from Google Drive?",
-                            if (drive.connected) "Your Google Drive backup is combined with this TV's setup and saved to your Nuvio account. Nothing is deleted from your Google Drive."
-                            else "You sign in to Google with a code on your phone. Your Google Drive backup is then combined with this TV's setup and saved to your Nuvio account. Nothing is deleted from your Google Drive, and this TV doesn't stay connected to it.",
+                            if (drive.connected) "Your Google Drive backup is combined with this TV's setup and saved. Nothing is deleted from your Google Drive."
+                            else "You sign in to Google with a code on your phone. Your Google Drive backup is then combined with this TV's setup and saved. Nothing is deleted from your Google Drive, and this TV doesn't stay connected to it.",
                             "Import"
                         ) { viewModel.cloudSync.importFromDrive() }
                     },
@@ -368,7 +371,7 @@ internal fun LiveTvSettingsContent(
                     onRestorePrevious = {
                         confirm(
                             "Restore the earlier copy?",
-                            "This TV's setup is replaced with the copy your Nuvio account had before the last save.",
+                            "This TV's setup is replaced with the copy saved before the last save.",
                             "Restore"
                         ) { viewModel.cloudSync.restorePrevious() }
                     },
@@ -376,7 +379,7 @@ internal fun LiveTvSettingsContent(
                     onDelete = {
                         confirm(
                             "Delete the saved setup?",
-                            "The copy in your Nuvio account is deleted and this TV stops syncing. This TV keeps its own setup.",
+                            "The saved copy is deleted and this TV stops syncing. This TV keeps its own setup.",
                             "Delete"
                         ) { viewModel.cloudSync.deleteCloudCopy() }
                     }
@@ -1674,14 +1677,16 @@ internal fun LiveTvSettingsContent(
                     viewModel.setPlaylistLogoSource(d.source.id, if (d.source.logoSource == "epg") "playlist" else "epg")
                     close()
                 },
-                // Xtream: which stream format to ask for. Auto follows what the account allows.
-                *(if (d.source.isXtream) arrayOf<Pair<String, () -> Unit>>(
-                    "Stream format: " + when (d.source.streamFormat) { "ts" -> "TS"; "m3u8" -> "HLS (m3u8)"; else -> "Auto" } to {
-                        val next = when (d.source.streamFormat) { "auto" -> "ts"; "ts" -> "m3u8"; else -> "auto" }
-                        viewModel.savePlaylist(d.source.copy(streamFormat = next))
-                        close()
-                    }
-                ) else emptyArray()),
+                // Which stream format to ask for. Xtream: Auto follows what the account allows.
+                // M3U links: Auto keeps the playlist's own links; TS / HLS switch links that can
+                // be switched (Xtream-style links, Dispatcharr).
+                "Stream format: " + when (d.source.streamFormat) {
+                    "ts" -> "TS"; "m3u8" -> "HLS (m3u8)"; else -> if (d.source.isXtream) "Auto" else "As in playlist"
+                } to {
+                    val next = when (d.source.streamFormat) { "auto" -> "ts"; "ts" -> "m3u8"; else -> "auto" }
+                    viewModel.savePlaylist(d.source.copy(streamFormat = next))
+                    close()
+                },
                 "Move up" to { viewModel.movePlaylist(d.source.id, -1); close() },
                 "Move down" to { viewModel.movePlaylist(d.source.id, 1); close() }
             ),
@@ -2131,6 +2136,8 @@ private fun DriveSyncCard(
 private fun CloudSyncCard(
     modifier: Modifier = Modifier,
     state: com.nuvio.tv.livetv.sync.CloudSyncState,
+    enabledParts: Set<com.nuvio.tv.livetv.sync.SyncPart>,
+    onTogglePart: (com.nuvio.tv.livetv.sync.SyncPart) -> Unit,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     onTurnOn: () -> Unit,
@@ -2149,7 +2156,7 @@ private fun CloudSyncCard(
         else -> "On"
     }
     LiveSection(
-        title = "Nuvio Account Sync",
+        title = "Setup Sync",
         summary = status,
         icon = Icons.Default.Cloud,
         open = expanded,
@@ -2165,20 +2172,29 @@ private fun CloudSyncCard(
                 )
                 !state.enabled -> {
                     Text(
-                        text = "Your playlists (including their logins), guides, favorites, hidden channels and Live TV settings are saved to your Nuvio account and kept the same on every TV you sign in on.",
+                        text = "Your playlists (including their logins), guides, favorites, Sports and Calendar choices and Live TV settings are saved and kept the same on every device you sign in on. Once it's on, you choose what's included.",
                         style = MaterialTheme.typography.bodySmall,
                         color = NuvioTheme.colors.TextSecondary
                     )
-                    SettingsActionRow("Turn On", "Save this TV's setup to your Nuvio account and keep every TV the same", onClick = onTurnOn)
-                    if (driveAvailable) SettingsActionRow("Import from Google Drive", "Bring your Google Drive backup over to this TV and your Nuvio account", onClick = onImportDrive)
+                    SettingsActionRow("Turn On", "Save this TV's setup and keep every device the same", onClick = onTurnOn)
+                    if (driveAvailable) SettingsActionRow("Import from Google Drive", "Bring your Google Drive backup over to this TV and save it", onClick = onImportDrive)
                 }
                 else -> {
-                    SettingsActionRow("Account", "The Nuvio account your Live TV setup is saved to", state.email ?: "Signed in", onClick = {})
+                    Text(
+                        text = "Keeps your playlists and settings the same on every device you sign in on.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioTheme.colors.TextSecondary
+                    )
+                    SettingsActionRow("Account", "The Nuvio sign-in this setup follows", state.email ?: "Signed in", onClick = {})
+                    SubHeading("What to sync")
+                    com.nuvio.tv.livetv.sync.SyncPart.values().forEach { part ->
+                        SettingsToggleRow(part.label, part.description, part in enabledParts, { onTogglePart(part) })
+                    }
                     SettingsActionRow("Sync Now", "Changes also sync by themselves a few seconds after you make them", onClick = onSyncNow)
                     SettingsActionRow("Restore Earlier Copy", "Go back to the copy saved before the last one", onClick = onRestorePrevious)
-                    if (driveAvailable) SettingsActionRow("Import from Google Drive", "Bring your Google Drive backup over to this TV and your Nuvio account", onClick = onImportDrive)
-                    SettingsActionRow("Turn Off", "Stop syncing on this TV (the saved copy stays in your account)", onClick = onTurnOff)
-                    SettingsActionRow("Delete Saved Setup", "Remove the copy from your account and stop syncing", onClick = onDelete)
+                    if (driveAvailable) SettingsActionRow("Import from Google Drive", "Bring your Google Drive backup over to this TV and save it", onClick = onImportDrive)
+                    SettingsActionRow("Turn Off Setup Sync", "Stop syncing on this TV (the saved copy stays saved)", onClick = onTurnOff)
+                    SettingsActionRow("Delete Saved Setup", "Remove the saved copy and stop syncing", onClick = onDelete)
                 }
             }
             state.message?.let {

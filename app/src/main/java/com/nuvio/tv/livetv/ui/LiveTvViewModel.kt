@@ -322,13 +322,30 @@ class LiveTvViewModel @Inject constructor(
             ChannelSort.NAME -> list.sortedBy { it.name.lowercase() }
         }
 
-        /** Your order from "Reorder channels" wins; channels you haven't placed follow as sorted. */
+        /**
+         * Your order from "Reorder channels" wins. A channel you haven't placed (one that was
+         * hidden when you reordered, or a new one) goes right after the channel above it in the
+         * normal order, not at the bottom of the group.
+         */
         fun ordered(groupId: String, list: List<LiveChannel>): List<LiveChannel> {
             val order = user.channelOrder[groupId] ?: return sorted(list)
             val byKeyHere = list.associateBy { it.key }
-            val placed = order.mapNotNull { byKeyHere[it] }
+            val placed = order.mapNotNull { byKeyHere[it] }.distinctBy { it.key }
             val placedKeys = placed.mapTo(HashSet()) { it.key }
-            return placed + sorted(list.filter { it.key !in placedKeys })
+            if (placedKeys.size == list.size) return placed
+            // Each unplaced channel waits behind the nearest placed channel above it.
+            val behind = HashMap<String?, MutableList<LiveChannel>>()
+            var above: String? = null
+            for (c in sorted(list)) {
+                if (c.key in placedKeys) above = c.key else behind.getOrPut(above) { ArrayList() } += c
+            }
+            val out = ArrayList<LiveChannel>(list.size)
+            behind[null]?.let { out += it }
+            for (p in placed) {
+                out += p
+                behind[p.key]?.let { out += it }
+            }
+            return out
         }
 
         /** A playlist group's own channels plus channels copied into it. */
@@ -517,6 +534,29 @@ class LiveTvViewModel @Inject constructor(
         switchingToBackup = true
         try { preview(pick) } finally { switchingToBackup = false }
         return true
+    }
+
+    /**
+     * The bar's backup button: [ch] first, then every other channel with the same name (quality and
+     * backup notes ignored, see [backupName]), other playlists first. Hidden channels and groups are
+     * included; locked groups and other local stations ("FOX (WNYW)" vs "FOX (KTTV)") are not.
+     * Empty when there are no others.
+     */
+    fun backupsFor(ch: LiveChannel): List<LiveChannel> {
+        val index = backupIndex ?: return emptyList()
+        val name = backupName(ch.name)
+        if (name.length < 2) return emptyList()
+        val s = settings.value
+        val locked = userState.value.lockedGroups
+        val note = stationNote(ch.name)
+        val others = index[name].orEmpty().asSequence()
+            .filter { it.key != ch.key }
+            .filter { c -> val b = stationNote(c.name); note == null || b == null || note == b }
+            .filter { !com.nuvio.tv.livetv.parental.ParentalControls.isLocked(it.groupId, it.group, s, locked) }
+            .distinctBy { it.key }
+            .sortedBy { if (it.sourceId != ch.sourceId) 0 else 1 }
+            .toList()
+        return if (others.isEmpty()) emptyList() else listOf(ch) + others
     }
 
     fun preview(channel: LiveChannel) {
@@ -1569,13 +1609,29 @@ private const val HLS_RETRY_MS = 7L * 24 * 3_600_000L
 private val BACKUP_PREFIX = Regex("""^\s*[a-z]{2,4}\s*[:|]\s*""")
 private val BACKUP_PREFIX_DASH = Regex("""^\s*[a-z]{2,3}\s+-\s+""")
 private val BACKUP_BRACKETS = Regex("""[\[(][^\])]*[\])]""")
+// Sound layout written in the name ("5.1", "7.1", "2.0"): left in, it would read as part of the name.
+private val BACKUP_AUDIO = Regex("""(?<![\d.])[257]\.[01](?![\d.])""")
 private val BACKUP_NOISE = Regex("""\b(hd|fhd|uhd|sd|4k|8k|hevc|h\.?26[45]|1080[pi]?|720p?|2160p?|\d{2}\s?fps|backup|bkp|bk|alt|alternate|raw|ᴴᴰ)\b""")
+
+/** The quality written in a channel's name ("4K", "FHD", "HD", "SD"), or null. */
+internal fun backupQuality(name: String): String? {
+    val n = name.lowercase()
+    fun has(re: String) = Regex(re).containsMatchIn(n)
+    return when {
+        has("""\b(4k|uhd|2160p?)\b""") -> "4K"
+        has("""\b(fhd|1080[pi]?)\b""") -> "FHD"
+        has("""\b(hd|720p?)\b""") || n.contains("ᴴᴰ") -> "HD"
+        has("""\bsd\b""") -> "SD"
+        else -> null
+    }
+}
 
 internal fun backupName(name: String): String {
     var s = name.lowercase()
     s = s.replace(BACKUP_PREFIX, "")
     s = s.replace(BACKUP_PREFIX_DASH, "")
     s = s.replace(BACKUP_BRACKETS, " ")
+    s = s.replace(BACKUP_AUDIO, " ")
     s = s.replace(BACKUP_NOISE, " ")
     return s.filter { it.isLetterOrDigit() || it == ' ' }.split(' ').filter { it.isNotBlank() }.joinToString(" ")
 }

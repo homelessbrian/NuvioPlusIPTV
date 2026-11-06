@@ -92,7 +92,7 @@ internal object PlayerPlaybackNetworking {
                     chain.proceed(request)
                 } catch (e: SSLException) {
                     // Fallback to trust-all client if standard system SSL fails (e.g. self-signed local server)
-                    trustAllPlaybackHttpClient.newCall(request).execute()
+                    com.nuvio.vpn.android.VpnHttpClient.wrap(trustAllPlaybackHttpClient).newCall(request).execute()
                 }
             }
             .build()
@@ -139,7 +139,7 @@ internal object PlayerPlaybackNetworking {
             }
         }.toMap()
         val client = createHttpClient(requestHeaders, useLongReadTimeout)
-        val httpFactory = OkHttpDataSource.Factory(client).apply {
+        val httpFactory = OkHttpDataSource.Factory(com.nuvio.vpn.android.VpnHttpClient.wrap(client)).apply {
             setDefaultRequestProperties(requestHeaders)
             if (requestHeaders.none { it.key.equals("User-Agent", ignoreCase = true) }) {
                 setUserAgent(PlayerMediaSourceFactory.DEFAULT_USER_AGENT)
@@ -164,7 +164,7 @@ internal object PlayerPlaybackNetworking {
         readTimeoutMs: Int,
         range: String? = null
     ): HttpURLConnection {
-        return (URL(url).openConnection() as HttpURLConnection).apply {
+        return com.nuvio.vpn.android.VpnHttpClient.openConnection(URL(url)).apply {
             instanceFollowRedirects = true
             connectTimeout = connectTimeoutMs
             readTimeout = readTimeoutMs

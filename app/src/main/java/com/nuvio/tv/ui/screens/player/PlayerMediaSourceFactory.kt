@@ -224,7 +224,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         parallelStartupPrefetchUnlocked.set(!useChunkSessionSource)
         val networkProgressiveFactory: DataSource.Factory = if (useChunkSessionSource) {
             val sessionConnections = parallelConnectionCount
-            val okHttpFactory = OkHttpDataSource.Factory(playbackHttpClient).apply {
+            val okHttpFactory = OkHttpDataSource.Factory(com.nuvio.vpn.android.VpnHttpClient.wrap(playbackHttpClient)).apply {
                 setDefaultRequestProperties(sanitizedHeaders)
                 if (sanitizedHeaders.none { it.key.equals("User-Agent", ignoreCase = true) }) {
                     setUserAgent(DEFAULT_USER_AGENT)
@@ -936,7 +936,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                         requestBuilder.header("User-Agent", DEFAULT_USER_AGENT)
                     }
 
-                    PlayerPlaybackNetworking.playbackHttpClient.newCall(requestBuilder.build()).execute().use { response ->
+                    com.nuvio.vpn.android.VpnHttpClient.wrap(PlayerPlaybackNetworking.playbackHttpClient).newCall(requestBuilder.build()).execute().use { response ->
                         if (!response.isSuccessful && response.code !in 200..308) {
                             return@use null
                         }

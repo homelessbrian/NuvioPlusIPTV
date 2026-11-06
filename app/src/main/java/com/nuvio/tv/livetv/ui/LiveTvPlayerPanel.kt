@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FilterNone
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Pause
@@ -36,6 +37,14 @@ import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,7 +69,7 @@ internal enum class PanelMode { LIVE, CATCHUP, SHIFT }
  * the timeline, back 30, play/pause, forward 30 and the gear; the rest are kept for the keys
  * that still name them, and live in the gear panel.
  */
-internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, PIN, BELL, MORE }
+internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, PIN, BELL, BACKUPS, MORE }
 
 /** Timeline: everything in wall-clock milliseconds. */
 internal data class PanelTimeline(
@@ -107,7 +116,7 @@ internal object BarPart {
 }
 
 /** Which controls the bar offers: back 30 / forward 30 only where you can skip, and the gear. */
-internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, bell: Boolean = false, pin: Boolean = false): List<PanelControl> = buildList {
+internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, bell: Boolean = false, pin: Boolean = false, backups: Boolean = false): List<PanelControl> = buildList {
     val transport = mode != PanelMode.LIVE || paused
     // The timeline itself can be grabbed (Up from the buttons) and moved with ◀ / ▶.
     if (transport && canSkip) add(PanelControl.TIMELINE)
@@ -118,6 +127,8 @@ internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, b
     if (pin) add(PanelControl.PIN)
     // The Calendar's bell, beside the gear.
     if (bell) add(PanelControl.BELL)
+    // Other copies of this channel (same name, any quality or playlist), right before the gear.
+    if (backups) add(PanelControl.BACKUPS)
     add(PanelControl.MORE)
 }
 
@@ -198,7 +209,9 @@ internal fun LiveTvPlayerPanel(
     /** The Calendar's bell is on for what's playing. */
     bellOn: Boolean = false,
     /** The game on this channel is pinned to the corner (the pin button shows filled). */
-    pinOn: Boolean = false
+    pinOn: Boolean = false,
+    /** Where the backup button is on screen (bounds in the window), so its list can open right above it. */
+    onBackupsBounds: (androidx.compose.ui.geometry.Rect) -> Unit = {}
 ) {
     val colors = NuvioTheme.colors
     val accent = colors.Secondary
@@ -226,18 +239,23 @@ internal fun LiveTvPlayerPanel(
                 // framed card instead of a wider gap on one axis than the other.
                 .padding(14.dp)
         ) {
+            val density = LocalDensity.current
+            var middleHeight by remember { mutableStateOf(0.dp) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // ---- left: the poster, or the channel's logo on a tile
                 if (showPoster) {
                     val shape = RoundedCornerShape(10.dp)
+                    // As tall as the middle column, so the gap above and below it matches the one
+                    // on its left (never smaller than before), and 2:3 like a poster.
+                    val posterHeight = maxOf(76.dp, middleHeight)
                     Box(
-                        Modifier.width(52.dp).height(76.dp).clip(shape)
+                        Modifier.width(posterHeight * (52f / 76f)).height(posterHeight).clip(shape)
                             .background(colors.BackgroundCard.copy(alpha = 0.85f))
                             .border(1.dp, Color.White.copy(alpha = 0.12f), shape),
                         contentAlignment = Alignment.Center
                     ) {
                         if (!poster.isNullOrBlank()) LivePosterImage(poster, Modifier.fillMaxSize())
-                        else ChannelLogo(channel.logo, 30.dp)
+                        else ChannelLogo(channel.logo, maxOf(30.dp, posterHeight * 0.4f))
                     }
                     Spacer(Modifier.width(14.dp))
                 } else if (showChannel && !channel.logo.isNullOrBlank()) {
@@ -249,15 +267,7 @@ internal fun LiveTvPlayerPanel(
                 }
 
                 // ---- middle: channel line, title, description, the controls and progress
-                Column(Modifier.weight(1f)) {
-                    if (browsing) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            LiveTag("BROWSING", accent, colors.OnSecondary)
-                            Spacer(Modifier.width(10.dp))
-                            LiveText("OK to watch  ·  ▲ ▼ more channels  ·  Back to stay", size = 11.sp, color = colors.TextSecondary)
-                        }
-                        Spacer(Modifier.height(6.dp))
-                    }
+                Column(Modifier.weight(1f).onSizeChanged { middleHeight = with(density) { it.height.toDp() } }) {
                     if (showChannel || showTags) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (showChannel) {
@@ -335,6 +345,12 @@ internal fun LiveTvPlayerPanel(
                                         if (bellOn) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
                                         focused = focused == PanelControl.BELL && recentFocus == null, big = false
                                     )
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                if (PanelControl.BACKUPS in controls) {
+                                    Box(Modifier.onGloballyPositioned { onBackupsBounds(it.boundsInWindow()) }) {
+                                        RoundButton(Icons.Default.FilterNone, focused = focused == PanelControl.BACKUPS && recentFocus == null, big = false)
+                                    }
                                     Spacer(Modifier.width(8.dp))
                                 }
                                 RoundButton(Icons.Default.Settings, focused = focused == PanelControl.MORE && recentFocus == null, big = false)
