@@ -25,13 +25,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          # Only these modules are tested; leave unrelated player gitlinks unpopulated.
-          sparse-checkout: |
-            vpn-core
-            vpn-android
+      - name: Check out the VPN modules
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The host tree contains an orphan player gitlink. Avoid checkout action's
+          # recursive submodule auth cleanup; keep credentials scoped to each command.
+          git init --quiet .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c credential.helper='!gh auth git-credential' fetch --depth=1 --filter=blob:none origin "$GITHUB_SHA"
+          git sparse-checkout set --cone vpn-core vpn-android
+          git -c credential.helper='!gh auth git-credential' checkout --detach FETCH_HEAD
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
