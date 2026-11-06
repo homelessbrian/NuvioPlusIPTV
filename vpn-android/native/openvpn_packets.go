@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"golang.zx2c4.com/wireguard/tun"
-	"golang.zx2c4.com/wireguard/tun/netstack"
+	"nuvio-vpn-http/internal/netstack"
 )
 
 // The OpenVPN core treats one end of a datagram socketpair as its TUN fd.

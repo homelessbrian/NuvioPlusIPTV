@@ -19,7 +19,7 @@ import (
 
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
-	"golang.zx2c4.com/wireguard/tun/netstack"
+	"nuvio-vpn-http/internal/netstack"
 )
 
 // This backend has no Android TUN interface or OS routes. Only authenticated local
@@ -129,7 +129,7 @@ func (t *httpTunnel) configure(input tunnelInput) error {
 }
 
 func privateTransport(dial func(context.Context, string, string) (net.Conn, error)) *http.Transport {
-	return &http.Transport{Proxy: nil, DialContext: dial, DisableCompression: true,
+	return &http.Transport{Proxy: nil, DialContext: tunnelDial(dial, 15*time.Second, 250*time.Millisecond), DisableCompression: true,
 		TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 20 * time.Second,
 		MaxIdleConns: 64, MaxIdleConnsPerHost: 32, IdleConnTimeout: 60 * time.Second}
 }

@@ -86,6 +86,17 @@ public final class VpnCoreChecks {
         rejects(express + "ca secrets.txt\n", ProfileImport.Protocol.OPENVPN);
         rejects("remote vpn.example 1194\n<ca>\ntls-client\npull\n</ca>\n",
                 ProfileImport.Protocol.OPENVPN);
+        for (String profile : new String[] {OVPN + "fragment 1300\n", express + "--fragment 1300\n"}) {
+            try (ProfileImport.Candidate candidate = read(profile, ProfileImport.Protocol.OPENVPN)) {
+                throw new AssertionError("Unsupported OpenVPN fragmentation accepted.");
+            } catch (IOException expected) {
+                check(expected.getMessage().contains("fragmentation"));
+                check(expected.getMessage().contains("server"));
+            }
+        }
+        // Certificate contents are not OpenVPN directives.
+        read(OVPN.replace("certificate-placeholder", "fragment 1300"), ProfileImport.Protocol.OPENVPN).close();
+        checks++;
         try (ProfileImport.Candidate candidate = read(WG, ProfileImport.Protocol.WIREGUARD)) {
             check(candidate.getProtocol() == ProfileImport.Protocol.WIREGUARD);
             check(!candidate.toString().contains("secret-key"));
@@ -126,7 +137,12 @@ public final class VpnCoreChecks {
             rejects(OVPN + option + " secrets.txt\n", ProfileImport.Protocol.OPENVPN);
         }
         rejects(OVPN + "<key>\nunclosed\n", ProfileImport.Protocol.OPENVPN);
-        rejects(OVPN + "<connection>\nremote another.example\n</connection>", ProfileImport.Protocol.OPENVPN);
+        check(rejects(OVPN + "<connection>\nremote another.example\n</connection>", ProfileImport.Protocol.OPENVPN)
+                .getMessage().contains("single-server"));
+        check(rejects(OVPN + "crl-verify revocations.pem\n", ProfileImport.Protocol.OPENVPN)
+                .getMessage().contains("without disabling certificate revocation checks"));
+        check(rejects(OVPN + "<crl-verify>\nrevocations-placeholder\n</crl-verify>\n", ProfileImport.Protocol.OPENVPN)
+                .getMessage().contains("without disabling certificate revocation checks"));
         try {
             ProfileImport.read(new ByteArrayInputStream(new byte[] {(byte) 0xc3, (byte) 0x28}),
                     ProfileImport.Protocol.OPENVPN);
@@ -270,11 +286,12 @@ public final class VpnCoreChecks {
         } catch (GeneralSecurityException | IOException expected) { checks++; }
     }
 
-    private static void rejects(String text, ProfileImport.Protocol protocol) throws Exception {
+    private static IOException rejects(String text, ProfileImport.Protocol protocol) throws Exception {
         try (ProfileImport.Candidate candidate = read(text, protocol)) {
             throw new AssertionError("Unsupported configuration accepted: " + candidate.getProtocol());
         } catch (IOException expected) {
             check(!expected.getMessage().contains("secret-key"));
+            return expected;
         }
     }
 

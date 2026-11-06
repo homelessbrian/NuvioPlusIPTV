@@ -70,8 +70,9 @@ val vpnNativeTasks = listOf(
         val selectedModules = vpnGoModules
         workingDir(layout.projectDirectory.dir("native"))
         inputs.files(fileTree("native") {
-            include("*.go", "*.c", "go.mod", "go.sum")
-            exclude("*_test.go")
+            include("**/*.go", "**/*.c", "**/*.h", "go.mod", "go.sum",
+                "internal/**/LICENSE", "internal/**/README.md")
+            exclude("**/*_test.go")
         })
         inputs.property("goToolchain", "go1.27.3")
         inputs.property("ndkVersion", "29.0.14206865")

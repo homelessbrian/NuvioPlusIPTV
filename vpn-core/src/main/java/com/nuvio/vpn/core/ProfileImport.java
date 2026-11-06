@@ -82,7 +82,16 @@ public final class ProfileImport {
             if (line.startsWith("<") && line.endsWith(">")) {
                 String tag = line.substring(1, line.length() - 1).toLowerCase(Locale.ROOT);
                 if (!tag.matches("ca|cert|key|tls-auth|tls-crypt|tls-crypt-v2|auth-user-pass|pkcs12|extra-certs|dh")) {
-                    throw new IOException("Unsupported OpenVPN block <" + safeName(tag) + ">.");
+                    if (tag.equals("crl-verify")) {
+                        throw new IOException("Inline OpenVPN certificate revocation lists (crl-verify) are not supported by this importer. "
+                                + "Use a compatible provider profile or the provider's app without disabling certificate revocation checks.");
+                    }
+                    if (tag.equals("connection")) {
+                        throw new IOException("OpenVPN connection blocks are not supported by this importer. "
+                                + "Ask your provider for a self-contained single-server profile, or use the provider's app.");
+                    }
+                    throw new IOException("OpenVPN block <" + safeName(tag)
+                            + "> is not supported. Use a compatible self-contained provider profile or the provider's app.");
                 }
                 inlineBlock = tag;
                 continue;
@@ -95,6 +104,10 @@ public final class ProfileImport {
             if (option.equals("tls-client")) tlsClientSeen = true;
             if (option.equals("pull")) pullSeen = true;
             if (option.equals("remote") && !value.isEmpty()) remoteSeen = true;
+            if (option.equals("fragment")) {
+                throw new IOException("OpenVPN fragmentation (fragment) is not supported by the OpenVPN 3 engine. "
+                        + "Use a provider profile and server that do not require fragmentation.");
+            }
             // Imported files may not execute code, include files, or expose management sockets.
             if (option.matches("up|down|route-up|route-pre-down|ipchange|plugin|script-security|config|cd|chroot|daemon|log|log-append|writepid|status|auth-user-pass-verify|client-connect|client-disconnect|learn-address|tls-verify|iproute|tls-crypt-v2-verify|engine|providers")
                     || option.startsWith("management")
@@ -103,7 +116,12 @@ public final class ProfileImport {
             }
             if (option.matches("ca|cert|key|tls-auth|tls-crypt|tls-crypt-v2|pkcs12|extra-certs|dh|crl-verify|askpass|auth-user-pass")
                     && !value.isEmpty() && !value.equals("[inline]")) {
-                throw new IOException("Option \"" + safeName(option) + "\" points to a separate file. Put it inline in the profile instead.");
+                if (option.equals("crl-verify")) {
+                    throw new IOException("This OpenVPN profile requires a separate certificate revocation list (crl-verify). "
+                            + "Use a compatible self-contained provider profile or the provider's app without disabling certificate revocation checks.");
+                }
+                throw new IOException("Option \"" + safeName(option) + "\" points to a separate file. "
+                        + "Download a self-contained Android/OpenVPN Connect profile from your provider.");
             }
         }
         if (protocol == Protocol.WIREGUARD && !(interfaceSeen && peerSeen)) {

@@ -1,0 +1,45 @@
+name: VPN compatibility
+
+on:
+  pull_request:
+    paths:
+      - "vpn-core/**"
+      - "vpn-android/**"
+      - ".github/workflows/vpn-compatibility.yml"
+  push:
+    paths:
+      - "vpn-core/**"
+      - "vpn-android/**"
+      - ".github/workflows/vpn-compatibility.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vpn-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.3"
+          cache-dependency-path: vpn-android/native/go.sum
+      - name: Check profile import with the pinned WireGuard parser
+        run: bash vpn-android/ci/check-profiles.sh
+      - name: Check the native tunnel and private IP stack
+        working-directory: vpn-android/native
+        env:
+          GOTOOLCHAIN: go1.27.3
+        run: go test -race -count=1 -timeout 60s ./...

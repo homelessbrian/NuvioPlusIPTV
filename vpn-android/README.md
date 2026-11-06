@@ -11,6 +11,10 @@ TV and Mobile open the same settings page from **Settings > VPN profiles**. Matc
 
 Import a WireGuard configuration or a self-contained OpenVPN TUN profile. OpenVPN supports UDP and TCP, inline CA and certificate material, and service credentials. Importing a profile with a bare `auth-user-pass` directive prompts for credentials. Use **OpenVPN service credentials** to update a previously imported profile. Desktop scripts, external credential files, interactive authentication challenges and external PKI are outside the supported profile format.
 
+WireGuard profiles require interface addresses, DNS servers and one peer with an endpoint. Each DNS server must use an IP family present in the interface addresses. Include a default route for every IP family configured in the interface or peer routes. A provider export with only IPv4 interface addresses and DNS can use `0.0.0.0/0`; a dual-stack export also needs `::/0`. An IPv4-only export can retain `::/0` as a blocking route. DNS search domains require Full app mode.
+
+OpenVPN's `client` directive and its equivalent `tls-client` plus `pull` form are both accepted. OpenVPN 3 does not support the `fragment` option. Use a provider export without client-side fragmentation, or choose another compatible protocol. Do not remove `fragment` from a profile when the server requires it.
+
 **Apply VPN settings to** defaults to **All profiles**. The selected VPN and protection mode apply to current and future Nuvio profiles. **Only this profile** starts a separate choice for the active Nuvio profile. Switching back to **All profiles** uses the current shared settings again. Setup Sync restores both the shared choice and individual overrides.
 
 Profiles are encrypted with the device’s Android Keystore. HomelessBrian’s Setup Sync carries a portable `vpn_profiles_v1` entry with the configurations, selected profile and scope. Exported backups contain private VPN configuration, including saved OpenVPN service credentials. The destination validates and re-encrypts the profiles with its own key. Older backups without a VPN entry preserve the local setup.
@@ -20,6 +24,17 @@ Profiles are encrypted with the device’s Android Keystore. HomelessBrian’s S
 Keep `vpn-core` and `vpn-android` source in sync across the two repositories. The Java core owns route selection, profile preflight, encryption envelopes and versioned settings. Android owns the Keystore, playback gate, settings UI, private playback proxy and app-scoped VPN service. Host adapters connect these to the players and Setup Sync.
 
 Use JDK 21, Go 1.27.3, NDK 29.0.14206865 and SDK CMake 3.22.1. `NUVIO_GO` selects a non-default Go executable. The Go module pins WireGuard and its private IP stack. CMake builds OpenVPN 3 Core 3.11.8 with pinned mbed TLS, Asio and LZ4 sources. Dependency notices ship in the APK. Build the standalone module and its host sequentially within each checkout.
+
+`native/internal/netstack` contains the local copy of the pinned WireGuard IP stack, its license and the changes needed by the playback tunnel. Native build inputs include its nested Go sources so an incremental build cannot reuse a binary from before a stack fix.
+
+The **VPN compatibility** workflow runs on changes to either VPN module in both repositories. It uses no app secrets. Run the same host checks with JDK 21, Go 1.27.3, Bash, curl, unzip and sha256sum:
+
+```sh
+bash vpn-android/ci/check-profiles.sh
+(cd vpn-android/native && go test -race -count=1 -timeout 60s ./...)
+```
+
+The profile check compiles the production core and `WireGuardProfiles` with the exact Android WireGuard AAR, verified by SHA-256, and runs the shared regression checks. It creates temporary, fail-fast Context/storage placeholders and selects the library's pre-29 numeric-address fallback for the host JVM. It does not exercise Android storage, the Android 29+ numeric-address API, a VPN service or a paid provider connection. The native tests cover the private stack and tunnel with local fixtures; emulator and provider playback checks are still needed.
 
 ```sh
 ./gradlew -p vpn-android :lintDebug :testDebugUnitTest :vpn-core:check :checkHttpTunnel
