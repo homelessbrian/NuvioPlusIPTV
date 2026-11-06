@@ -61,8 +61,9 @@ final class AndroidVpnSettings {
 JAVA
 
 mapfile -d '' -t core_sources < <(find "$repo_root/vpn-core/src/main/java" -name '*.java' -print0)
+mapfile -d '' -t core_test_sources < <(find "$repo_root/vpn-core/src/test/java" -name '*.java' -print0)
 "$javac_cmd" --release 8 -d "$work_dir/classes" "${core_sources[@]}" \
-    "$repo_root/vpn-core/src/test/java/com/nuvio/vpn/core/VpnCoreChecks.java"
+    "${core_test_sources[@]}"
 "$java_cmd" -cp "$work_dir/classes" com.nuvio.vpn.core.VpnCoreChecks
 
 mapfile -d '' -t host_sources < <(find "$work_dir/src" -name '*.java' -print0)

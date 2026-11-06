@@ -19,7 +19,7 @@
     <string name="vpn_wireguard_title">WireGuard</string>
     <string name="vpn_wireguard_detail">Import a .conf file</string>
     <string name="vpn_openvpn_title">OpenVPN</string>
-    <string name="vpn_openvpn_detail">Import an .ovpn file</string>
+    <string name="vpn_openvpn_detail">Import an .ovpn file or certificate ZIP bundle</string>
     <string name="vpn_saved_profiles_title">Saved profiles</string>
     <string name="vpn_profiles_empty_detail">Import a configuration to get started.</string>
     <string name="vpn_scope_off_detail">Keep VPN protection off</string>
@@ -28,7 +28,7 @@
     <string name="vpn_profiles_storage_notice">Configurations are encrypted on this device and included when Setup Sync is enabled. Android system backup stays excluded. Your original import file is unchanged.</string>
     <string name="vpn_profiles_importing">Importing configuration…</string>
     <string name="vpn_profiles_imported">Configuration imported.</string>
-    <string name="vpn_profiles_import_failed">Could not import this configuration. Use a self-contained OpenVPN or WireGuard text file, up to 1 MiB, without desktop scripts or external certificate files.</string>
+    <string name="vpn_profiles_import_failed">Could not import this configuration. Use a self-contained OpenVPN or WireGuard text file, or a ZIP with one .ovpn and its certificate/key files, up to 1 MiB. Desktop scripts and files outside the ZIP are not supported.</string>
     <string name="vpn_profiles_import_reason">Reason: %1$s</string>
     <string name="vpn_import_reason_engine">The VPN engine could not be loaded on this device.</string>
     <string name="vpn_import_reason_storage">The profile could not be stored securely on this device.</string>

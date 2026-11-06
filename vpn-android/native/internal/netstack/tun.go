@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -768,70 +769,115 @@ func (tnet *Net) tryOneName(ctx context.Context, name string, qtype dnsmessage.T
 		Class: dnsmessage.ClassINET,
 	}
 
+	type result struct {
+		p      dnsmessage.Parser
+		server string
+		err    error
+	}
 	for i := 0; i < 2; i++ {
-		for _, server := range tnet.dnsServers {
-			if err := ctx.Err(); err != nil {
-				return dnsmessage.Parser{}, server.String(), &net.DNSError{
-					UnwrapErr: err, Err: err.Error(), Name: name, Server: server.String(),
-					IsTimeout: errors.Is(err, context.DeadlineExceeded),
+		// Prefer the first configured DNS server, but let the others answer if
+		// it silently drops packets. Every exchange stays inside this netstack.
+		attemptCtx, cancel := context.WithCancel(ctx)
+		results := make(chan result, len(tnet.dnsServers))
+		var exchanges sync.WaitGroup
+		next, active := 0, 0
+		startNext := func() {
+			server := tnet.dnsServers[next]
+			next++
+			active++
+			exchanges.Add(1)
+			go func() {
+				defer exchanges.Done()
+				p, err := tnet.tryOneServer(attemptCtx, server, q)
+				results <- result{p, server.String(), err}
+			}()
+		}
+		timer := time.NewTimer(250 * time.Millisecond)
+		var fallback <-chan time.Time
+		armFallback := func() {
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
 				}
 			}
-			p, h, err := tnet.exchange(ctx, server, q, time.Second*5)
-			if err != nil {
-				dnsErr := &net.DNSError{
-					Err:    err.Error(),
-					Name:   name,
-					Server: server.String(),
-				}
-				if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
-					dnsErr.IsTimeout = true
-				}
-				if _, ok := err.(*net.OpError); ok {
-					dnsErr.IsTemporary = true
-				}
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					dnsErr.UnwrapErr = err
-				}
-				if ctx.Err() != nil {
-					return dnsmessage.Parser{}, server.String(), dnsErr
-				}
-				lastErr = dnsErr
-				continue
-			}
-
-			if err := checkHeader(&p, h); err != nil {
-				dnsErr := &net.DNSError{
-					Err:    err.Error(),
-					Name:   name,
-					Server: server.String(),
-				}
-				if err == errServerTemporarilyMisbehaving {
-					dnsErr.IsTemporary = true
-				}
-				if err == errNoSuchHost {
-					dnsErr.IsNotFound = true
-					return p, server.String(), dnsErr
-				}
-				lastErr = dnsErr
-				continue
-			}
-
-			err = skipToAnswer(&p, qtype)
-			if err == nil {
-				return p, server.String(), nil
-			}
-			lastErr = &net.DNSError{
-				Err:    err.Error(),
-				Name:   name,
-				Server: server.String(),
-			}
-			if err == errNoSuchHost {
-				lastErr.(*net.DNSError).IsNotFound = true
-				return p, server.String(), lastErr
+			fallback = nil
+			if next < len(tnet.dnsServers) {
+				timer.Reset(250 * time.Millisecond)
+				fallback = timer.C
 			}
 		}
+		finish := func() {
+			timer.Stop()
+			cancel()
+			// exchange closes its socket on cancellation; wait for that cleanup
+			// before returning or starting the next retry round.
+			exchanges.Wait()
+		}
+		if next < len(tnet.dnsServers) {
+			startNext()
+		}
+		armFallback()
+		for active > 0 {
+			select {
+			case <-ctx.Done():
+				finish()
+				err := ctx.Err()
+				return dnsmessage.Parser{}, "", &net.DNSError{
+					UnwrapErr: err, Err: err.Error(), Name: name,
+					IsTimeout: errors.Is(err, context.DeadlineExceeded),
+				}
+			case answer := <-results:
+				active--
+				var dnsErr *net.DNSError
+				if answer.err == nil || errors.As(answer.err, &dnsErr) && dnsErr.IsNotFound {
+					// A valid negative answer is final, just as it was when DNS
+					// servers were tried sequentially. Do not bypass NXDOMAIN.
+					finish()
+					return answer.p, answer.server, answer.err
+				}
+				lastErr = answer.err
+				if next < len(tnet.dnsServers) {
+					// A failed server need not consume the fallback delay.
+					startNext()
+					armFallback()
+				}
+			case <-fallback:
+				startNext()
+				armFallback()
+			}
+		}
+		finish()
 	}
 	return dnsmessage.Parser{}, "", lastErr
+}
+
+func (tnet *Net) tryOneServer(ctx context.Context, server netip.Addr, q dnsmessage.Question) (dnsmessage.Parser, error) {
+	p, h, err := tnet.exchange(ctx, server, q, 5*time.Second)
+	if err != nil {
+		dnsErr := &net.DNSError{Err: err.Error(), Name: q.Name.String(), Server: server.String()}
+		if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
+			dnsErr.IsTimeout = true
+		}
+		if _, ok := err.(*net.OpError); ok {
+			dnsErr.IsTemporary = true
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			dnsErr.UnwrapErr = err
+		}
+		return dnsmessage.Parser{}, dnsErr
+	}
+	if err = checkHeader(&p, h); err == nil {
+		err = skipToAnswer(&p, q.Type)
+	}
+	if err == nil {
+		return p, nil
+	}
+	return p, &net.DNSError{
+		Err: err.Error(), Name: q.Name.String(), Server: server.String(),
+		IsTemporary: err == errServerTemporarilyMisbehaving,
+		IsNotFound:  err == errNoSuchHost,
+	}
 }
 
 func (tnet *Net) LookupContextHost(ctx context.Context, host string) ([]string, error) {

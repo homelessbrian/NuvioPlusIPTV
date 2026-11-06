@@ -24,6 +24,7 @@ import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import com.nuvio.vpn.core.ProfileImport;
+import com.nuvio.vpn.core.OpenVpnDocument;
 import com.nuvio.vpn.core.ProfileEnvelope;
 import com.nuvio.vpn.core.ProtectionMode;
 import com.nuvio.vpn.core.VpnPreferences;
@@ -260,7 +261,7 @@ public final class VpnProfilesActivity extends Activity {
             String needsCredentials = null;
             try (InputStream input = getContentResolver().openInputStream(uri)) {
                 if (input == null) throw new IOException("Configuration is unavailable.");
-                try (ProfileImport.Candidate candidate = ProfileImport.read(input, protocol)) {
+                try (ProfileImport.Candidate candidate = OpenVpnDocument.read(input, protocol)) {
                     if (protocol == ProfileImport.Protocol.WIREGUARD) WireGuardProfiles.parse(candidate);
                     String id = java.util.UUID.randomUUID().toString();
                     if (protocol == ProfileImport.Protocol.OPENVPN && OpenVpnSession.evaluate(candidate.copyContents()) == 2)
@@ -335,7 +336,7 @@ public final class VpnProfilesActivity extends Activity {
             if (cursor != null && cursor.moveToFirst()) name = cursor.getString(0);
         } catch (Exception ignored) { /* Display names are optional/untrusted metadata. */ }
         if (name != null) {
-            name = name.replaceFirst("(?i)\\.(ovpn|conf)$", "")
+            name = name.replaceFirst("(?i)\\.(ovpn|conf|zip)$", "")
                     .replaceAll("[^\\p{L}\\p{N} ._()-]", "_").trim();
             if (name.length() > 60) name = name.substring(0, 60);
         }

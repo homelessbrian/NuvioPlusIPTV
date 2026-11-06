@@ -5,11 +5,16 @@ import static org.junit.Assert.*;
 import android.content.Context;
 import android.os.Build;
 import com.nuvio.vpn.core.ProtectionMode;
+import com.nuvio.vpn.core.ProfileEnvelope;
+import com.nuvio.vpn.core.ProfileImport;
 import com.nuvio.vpn.core.VpnPreferences;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.Before;
 import org.junit.Assume;
 import org.junit.Test;
@@ -37,6 +42,30 @@ public final class VpnAndroidTest {
 
     @Test public void realWireGuardParserAndHostScope() throws Exception {
         WireGuardProfileChecks.main(new String[0]);
+    }
+
+    @Test public void credentialUpdatesPreserveRevocationAndConnectionBlocks() throws Exception {
+        String connection = "<connection>\nremote vpn.example 1194 udp\n</connection>\n";
+        String revocation = "<crl-verify>\nsynthetic-crl-placeholder\n</crl-verify>\n";
+        String profile = "client\n" + connection + "auth-user-pass\n"
+                + "<ca>\nsynthetic-ca-placeholder\n</ca>\n" + revocation;
+        SecretKeySpec key = new SecretKeySpec(new byte[32], "AES");
+        byte[] sealed;
+        try (ProfileImport.Candidate candidate = ProfileImport.read(new ByteArrayInputStream(
+                profile.getBytes(StandardCharsets.UTF_8)), ProfileImport.Protocol.OPENVPN)) {
+            sealed = ProfileEnvelope.seal(ID, "Synthetic bundle", candidate, key);
+        }
+        try (ProfileEnvelope.Opened opened = ProfileEnvelope.open(ID, sealed, key);
+             ProfileImport.Candidate updated = OpenVpnCredentials.replace(opened, "service-user", "<password>")) {
+            char[] contents = updated.copyContents();
+            try {
+                String text = new String(contents);
+                assertTrue(text.contains(connection));
+                assertTrue(text.contains(revocation));
+                assertTrue(text.contains("<auth-user-pass>\nservice-user\n<password>\n</auth-user-pass>"));
+                assertEquals(OpenVpnCredentials.Login.SAVED, OpenVpnCredentials.inspect(updated.copyContents()));
+            } finally { Arrays.fill(contents, '\0'); }
+        } finally { Arrays.fill(sealed, (byte) 0); }
     }
 
     @Test public void migratesScopeAndRetainsSelectionAcrossReopen() throws Exception {
