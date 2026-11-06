@@ -1,0 +1,60 @@
+name: VPN compatibility
+
+on:
+  pull_request:
+    paths:
+      - "vpn-core/**"
+      - "vpn-android/**"
+      - ".github/workflows/vpn-compatibility.yml"
+  push:
+    paths:
+      - "vpn-core/**"
+      - "vpn-android/**"
+      - ".github/workflows/vpn-compatibility.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vpn-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the VPN modules
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The host tree contains an orphan player gitlink. Avoid checkout action's
+          # recursive submodule auth cleanup; keep credentials scoped to each command.
+          git init --quiet .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c credential.helper='!gh auth git-credential' fetch --depth=1 --filter=blob:none origin "$GITHUB_SHA"
+          git sparse-checkout set --cone vpn-core vpn-android
+          git -c credential.helper='!gh auth git-credential' checkout --detach FETCH_HEAD
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.3"
+          cache-dependency-path: vpn-android/native/go.sum
+      - name: Cache the pinned WireGuard parser
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/nuvio-vpn-dependencies
+          key: vpn-wireguard-${{ runner.os }}-${{ hashFiles('vpn-android/ci/check-profiles.sh') }}
+      - name: Check profile import with the pinned WireGuard parser
+        env:
+          NUVIO_VPN_CACHE_DIR: ${{ runner.temp }}/nuvio-vpn-dependencies
+        run: bash vpn-android/ci/check-profiles.sh
+      - name: Check the native tunnel and private IP stack
+        working-directory: vpn-android/native
+        env:
+          GOTOOLCHAIN: go1.27.3
+        run: go test -race -count=1 -timeout 60s ./...

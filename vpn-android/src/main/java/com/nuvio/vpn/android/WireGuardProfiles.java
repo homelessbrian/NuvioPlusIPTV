@@ -40,16 +40,16 @@ public final class WireGuardProfiles {
             if (opened.getProtocol() != ProfileImport.Protocol.WIREGUARD) {
                 throw new IOException("A WireGuard configuration is required.");
             }
-            return forAppWide(parseContents(opened.copyContents()), app.getPackageName());
+            Config config = parseContents(opened.copyContents());
+            validateForScope(config, scope);
+            return forAppWide(config, app.getPackageName());
         }
     }
 
     private static Config parseContents(char[] text) throws IOException {
         try (BufferedReader reader = new BufferedReader(new CharArrayReader(text))) {
             Config config = Config.parse(reader);
-            if (config.getInterface().getAddresses().isEmpty() || config.getPeers().isEmpty()) {
-                throw new IOException("WireGuard interface addresses and peers are required.");
-            }
+            validate(config);
             return config;
         } catch (BadConfigException | IllegalArgumentException e) {
             // WireGuard parser diagnostics can contain the rejected private key or other input.
@@ -57,18 +57,16 @@ public final class WireGuardProfiles {
         } finally { Arrays.fill(text, '\0'); }
     }
 
-    /**
-     * Discard imported application filters and constrain the interface to this host app.
-     * The real backend must additionally enforce full routing and validate handshakes.
-     */
-    public static Config forAppWide(Config config, String hostPackage) throws IOException {
-        if (hostPackage == null || !hostPackage.matches("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")) {
-            throw new IOException("A host application package is required.");
+    /** Common requirements for every supported mode, checked before import and again before use. */
+    private static void validate(Config config) throws IOException {
+        if (config == null || config.getInterface().getAddresses().isEmpty()) {
+            throw new IOException("WireGuard profiles require an interface Address.");
         }
-        if (config == null || config.getInterface().getAddresses().isEmpty()
-                || config.getPeers().size() != 1 || !config.getPeers().get(0).getEndpoint().isPresent()
-                || config.getInterface().getDnsServers().isEmpty()) {
-            throw new IOException("Entire app mode requires interface addresses, DNS, and one remote VPN peer.");
+        if (config.getPeers().size() != 1 || !config.getPeers().get(0).getEndpoint().isPresent()) {
+            throw new IOException("WireGuard profiles require exactly one remote VPN peer with an Endpoint.");
+        }
+        if (config.getInterface().getDnsServers().isEmpty()) {
+            throw new IOException("WireGuard profiles require at least one DNS server IP address.");
         }
         // GoBackend's default-route/single-peer path leaves unconfigured address families blocked.
         // Reject partial routes for a family the configuration enables, which could otherwise bypass.
@@ -80,7 +78,10 @@ public final class WireGuardProfiles {
             if (network.getAddress() instanceof Inet6Address) configuredV6 = true; else configuredV4 = true;
         }
         for (InetAddress address : config.getInterface().getDnsServers()) {
-            if (address instanceof Inet6Address) configuredV6 = true; else configuredV4 = true;
+            if (address instanceof Inet6Address ? !configuredV6 : !configuredV4) {
+                throw new IOException("WireGuard DNS servers must use an IP family configured in Address. "
+                        + "Use matching DNS servers or add the required interface address.");
+            }
         }
         for (Peer peer : config.getPeers()) for (InetNetwork network : peer.getAllowedIps()) {
             if (network.getAddress() instanceof Inet6Address) {
@@ -92,8 +93,28 @@ public final class WireGuardProfiles {
             }
         }
         if ((!defaultV4 && !defaultV6) || (configuredV4 && !defaultV4) || (configuredV6 && !defaultV6)) {
-            throw new IOException("Entire app mode requires default routes for each configured IP family.");
+            throw new IOException("WireGuard profiles require default AllowedIPs routes for every configured IP family "
+                    + "(0.0.0.0/0 for IPv4 and ::/0 for IPv6).");
         }
+    }
+
+    static void validateForScope(Config config, ProtectionMode scope) throws IOException {
+        validate(config);
+        if (scope != null && scope.isPlaybackScoped() && !config.getInterface().getDnsSearchDomains().isEmpty()) {
+            throw new IOException("Streams-only modes do not support DNS search domains. "
+                    + "Use Full app mode or a profile with DNS server IP addresses only.");
+        }
+    }
+
+    /**
+     * Discard imported application filters and constrain the interface to this host app.
+     * The real backend must additionally enforce full routing and validate handshakes.
+     */
+    public static Config forAppWide(Config config, String hostPackage) throws IOException {
+        if (hostPackage == null || !hostPackage.matches("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")) {
+            throw new IOException("A host application package is required.");
+        }
+        validate(config);
         Interface original = config.getInterface();
         Interface.Builder builder = new Interface.Builder().addAddresses(original.getAddresses())
                 .addDnsServers(original.getDnsServers()).addDnsSearchDomains(original.getDnsSearchDomains())
