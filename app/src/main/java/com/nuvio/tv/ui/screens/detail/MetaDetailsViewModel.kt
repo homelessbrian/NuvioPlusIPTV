@@ -77,6 +77,16 @@ import javax.inject.Inject
 
 private const val TAG = "MetaDetailsViewModel"
 
+/**
+ * Whether pressing Back on the full-screen trailer should hand playback back to the
+ * detail page as a background trailer instead of stopping it.
+ */
+internal fun shouldContinueTrailerInBackgroundOnBack(
+    isTrailerPlaying: Boolean,
+    autoplayEnabled: Boolean,
+    playInBackground: Boolean
+): Boolean = isTrailerPlaying && autoplayEnabled && playInBackground
+
 @HiltViewModel
 class MetaDetailsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -362,6 +372,7 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnPlayButtonFocused -> handlePlayButtonFocused()
             MetaDetailsEvent.OnTrailerButtonClick -> handleTrailerButtonClick()
             MetaDetailsEvent.OnTrailerEnded -> handleTrailerEnded()
+            MetaDetailsEvent.OnTrailerBackPress -> handleTrailerBackPress()
             is MetaDetailsEvent.OnSharedTrailerSelected -> handleSharedTrailerSelected(event.trailer)
             MetaDetailsEvent.OnDismissSharedTrailer -> dismissSharedTrailerOverlay()
             MetaDetailsEvent.OnRetrySharedTrailer -> retrySharedTrailer()
@@ -2188,16 +2199,8 @@ class MetaDetailsViewModel @Inject constructor(
         return meta.videos.firstOrNull { it.id == defaultVideoId && it.available != false }
     }
 
-    private fun shouldResumeProgress(progress: WatchProgress): Boolean {
-        if (progress.isCompleted()) return false
-        if (progress.progressPercentage >= 0.02f) return true
-
-        val hasStartedPlayback = progress.position > 0L ||
-            progress.progressPercent?.let { it > 0f } == true
-        return hasStartedPlayback &&
-            progress.source != WatchProgress.SOURCE_TRAKT_HISTORY &&
-            progress.source != WatchProgress.SOURCE_TRAKT_SHOW_PROGRESS
-    }
+    // Same rule the player uses to resume, so Resume never restarts from 0
+    private fun shouldResumeProgress(progress: WatchProgress): Boolean = progress.isInProgress()
 
     private fun toggleLibrary() {
         if (
@@ -2990,6 +2993,28 @@ class MetaDetailsViewModel @Inject constructor(
             isPlaying = false,
             showControls = false,
             hideLogo = false
+        )
+    }
+
+    private fun handleTrailerBackPress() {
+        val continueInBackground = shouldContinueTrailerInBackgroundOnBack(
+            isTrailerPlaying = _uiState.value.isTrailerPlaying,
+            autoplayEnabled = trailerAutoplayEnabled,
+            playInBackground = trailerPlayInBackground
+        )
+        if (!continueInBackground) {
+            handleTrailerEnded()
+            return
+        }
+        // Hand the running trailer back to the detail page without restarting it.
+        trailerHasPlayed = true
+        isPlayButtonFocused = false
+        idleTimerJob?.cancel()
+        setTrailerPlaybackState(
+            isPlaying = false,
+            showControls = false,
+            hideLogo = false,
+            isBackgroundPlaying = true
         )
     }
 

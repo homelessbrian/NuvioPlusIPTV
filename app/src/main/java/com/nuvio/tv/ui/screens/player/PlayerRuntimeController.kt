@@ -313,6 +313,7 @@ class PlayerRuntimeController(
             currentStreamInfoHash = navigationArgs.infoHash,
             currentStreamFileIdx = navigationArgs.fileIdx,
             currentStreamAddonName = navigationArgs.addonName,
+            currentStreamDescription = navigationArgs.streamDescription,
             releaseYear = year,
             contentType = contentType,
             backdrop = backdrop,
@@ -525,6 +526,7 @@ class PlayerRuntimeController(
     internal var userPausedManually = false
 
     internal var isInBackground: Boolean = false
+    internal var releaseDecoderOnBackground: Boolean = false
     internal var pendingBackgroundCrashRecovery: Boolean = false
     internal var backgroundCrashSavedPositionMs: Long = 0L
 
@@ -581,6 +583,7 @@ class PlayerRuntimeController(
     internal var mpvHardwareDecodeModeSetting: MpvHardwareDecodeMode = MpvHardwareDecodeMode.AUTO_SAFE
     internal var mpvPreferredAudioLanguages: List<String> = emptyList()
     internal var currentStreamBingeGroup: String? = navigationArgs.bingeGroup
+    internal var recordedPluginPlayIdentity: String? = null
     // Per-device delay + current stream's behaviorHints.audioDelayMs + the user's tweak on that stream.
     internal var audioDelayParts: AudioDelayParts = AudioDelayParts().withStream(navigationArgs.audioDelayMs ?: 0, navigationArgs.audioDelayLanguage)
     internal var hasAppliedRememberedAudioSelection: Boolean = false
@@ -609,6 +612,7 @@ class PlayerRuntimeController(
     internal var lastNextEpisodeEvaluationUptimeMs: Long = 0L
     internal var bufferLogJob: Job? = null
     internal val gainAudioProcessor = GainAudioProcessor()
+    internal val nightModeAudioProcessor = NightModeAudioProcessor()
     internal var loudnessEnhancer: LoudnessEnhancer? = null
     internal var trackSelector: DefaultTrackSelector? = null
     internal var currentMediaSession: MediaSession? = null
@@ -685,6 +689,7 @@ class PlayerRuntimeController(
     internal var errorRetryJob: Job? = null
     internal var stableProgressResetJob: Job? = null
     @Volatile internal var currentPlayerSettingsForReport: PlayerSettings = PlayerSettings()
+    @Volatile internal var hasObservedPlayerSettings: Boolean = false
 
     internal val dv7ToHevcForcedStreamUrls: MutableSet<String> = mutableSetOf()
     // Streams where manual Convert-to-DV8.1 mode 2 failed to play, so the next
@@ -784,6 +789,7 @@ class PlayerRuntimeController(
         observeDeviceLocalAspectMode()
         observeDeviceLocalTransparentLetterbox()
         observeDeviceLocalTunneledSurfaceFill()
+        observeDeviceLocalReleaseDecoderOnBackground()
         observePlayerStatsHud()
         observeStreamDelayTrackSelection()
     }
