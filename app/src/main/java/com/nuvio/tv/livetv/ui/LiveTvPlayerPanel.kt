@@ -41,6 +41,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
@@ -207,7 +209,9 @@ internal fun LiveTvPlayerPanel(
     /** The Calendar's bell is on for what's playing. */
     bellOn: Boolean = false,
     /** The game on this channel is pinned to the corner (the pin button shows filled). */
-    pinOn: Boolean = false
+    pinOn: Boolean = false,
+    /** Where the backup button is on screen (bounds in the window), so its list can open right above it. */
+    onBackupsBounds: (androidx.compose.ui.geometry.Rect) -> Unit = {}
 ) {
     val colors = NuvioTheme.colors
     val accent = colors.Secondary
@@ -344,7 +348,9 @@ internal fun LiveTvPlayerPanel(
                                     Spacer(Modifier.width(8.dp))
                                 }
                                 if (PanelControl.BACKUPS in controls) {
-                                    RoundButton(Icons.Default.FilterNone, focused = focused == PanelControl.BACKUPS && recentFocus == null, big = false)
+                                    Box(Modifier.onGloballyPositioned { onBackupsBounds(it.boundsInWindow()) }) {
+                                        RoundButton(Icons.Default.FilterNone, focused = focused == PanelControl.BACKUPS && recentFocus == null, big = false)
+                                    }
                                     Spacer(Modifier.width(8.dp))
                                 }
                                 RoundButton(Icons.Default.Settings, focused = focused == PanelControl.MORE && recentFocus == null, big = false)

@@ -116,6 +116,8 @@ fun LiveTvPlayerScreen(
     var bannerToken by remember { mutableIntStateOf(0) }
     var listVisible by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf(PlayerDialog.NONE) }
+    // Where the backup button sits, so the backup list can open as a flyout right above it.
+    var backupsAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     // Which page the ⚙ panel opens on ("" = the main one; "audio", "subs", "sleep", "size", "info").
     var gearStart by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -869,6 +871,7 @@ fun LiveTvPlayerScreen(
                     splitDescriptionYear(rawDesc, showProgram?.year).let { if (about != null) it.copy(year = null) else it }
                 }
                 LiveTvPlayerPanel(
+                    onBackupsBounds = { backupsAnchor = it },
                     background = settings.panelBackground,
                     channel = ch,
                     mode = mode,
@@ -1127,6 +1130,7 @@ fun LiveTvPlayerScreen(
             onDismiss = { dialog = PlayerDialog.NONE }
         )
         PlayerDialog.BACKUPS -> if (backups.isEmpty()) dialog = PlayerDialog.NONE else BackupChannelsDialog(
+            anchor = backupsAnchor,
             channels = backups,
             playingKey = playback.channelKey,
             nowTitle = { key -> viewModel.currentProgram(key)?.title },
@@ -1237,18 +1241,19 @@ private fun BackupChannelsDialog(
     playingKey: String?,
     nowTitle: (String) -> String?,
     onPick: (LiveChannel) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    anchor: androidx.compose.ui.geometry.Rect? = null
 ) {
     val first = remember { FocusRequester() }
     val colors = NuvioTheme.colors
     val focusKey = channels.firstOrNull { it.key != playingKey }?.key ?: channels.first().key
-    LiveDialog(onDismiss = onDismiss, width = 480.dp) {
-        LiveText("Backup channels", size = 20.sp, weight = FontWeight.Bold)
-        LiveText("Other copies of ${channels.first().name} · OK switches", size = 12.sp, color = colors.TextSecondary)
-        Spacer(Modifier.height(12.dp))
+    // A small flyout above the button (a centered panel if the button's spot isn't known yet).
+    LiveDialog(onDismiss = onDismiss, width = 260.dp, anchor = anchor, minWidth = 240.dp, corner = 12.dp, pad = 10.dp) {
+        LiveText("Backups", size = 13.sp, weight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+        Spacer(Modifier.height(6.dp))
         androidx.compose.foundation.lazy.LazyColumn(
-            Modifier.fillMaxWidth().heightIn(max = 420.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            Modifier.fillMaxWidth().heightIn(max = 190.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             items(channels.size, key = { channels[it].key }) { i ->
                 val ch = channels[i]
@@ -1256,22 +1261,28 @@ private fun BackupChannelsDialog(
                 LiveFocusRow(
                     modifier = Modifier.fillMaxWidth().then(if (ch.key == focusKey) Modifier.focusRequester(first) else Modifier),
                     selected = playing,
-                    onClick = { onPick(ch) }
+                    onClick = { onPick(ch) },
+                    horizontalPadding = 10.dp,
+                    verticalPadding = 6.dp
                 ) { f ->
                     Column(Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            LiveText(ch.name, color = focusedTextColor(f), weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                            LiveText(ch.name, size = 12.sp, color = focusedTextColor(f), weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
                             backupQuality(ch.name)?.let { q ->
-                                Spacer(Modifier.width(8.dp))
-                                LiveText(q, size = 10.sp, weight = FontWeight.Bold, color = focusedTextColor(f))
+                                Spacer(Modifier.width(6.dp))
+                                LiveText(q, size = 9.sp, weight = FontWeight.Bold, color = focusedTextColor(f))
                             }
                             if (playing) {
-                                Spacer(Modifier.width(8.dp))
-                                LiveText("Watching", size = 11.sp, color = focusedTextColor(f))
+                                Spacer(Modifier.width(6.dp))
+                                LiveText("Watching", size = 9.sp, color = focusedTextColor(f))
                             }
                         }
-                        LiveText(listOf(ch.sourceName, ch.group).filter { it.isNotBlank() }.joinToString(" · "), size = 11.sp, color = focusedTextColor(f), maxLines = 1)
-                        nowTitle(ch.key)?.let { LiveText("Now: $it", size = 11.sp, color = focusedTextColor(f), maxLines = 1) }
+                        // Only the highlighted copy shows where it comes from and what's on.
+                        if (f) {
+                            val line = listOf(ch.sourceName, nowTitle(ch.key)?.let { "Now: $it" }.orEmpty())
+                                .filter { it.isNotBlank() }.joinToString(" · ")
+                            if (line.isNotBlank()) LiveText(line, size = 9.sp, color = focusedTextColor(f), maxLines = 1)
+                        }
                     }
                 }
             }
