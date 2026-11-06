@@ -2,17 +2,21 @@
 
 # Nuvio + IPTV
 
-**Everything in Nuvio, plus everything IPTV: a TiviMate-style Live TV guide, a Sports hub that finds every game on your own channels, a Calendar of your shows, movies and games, catch-up, recordings, and your provider's movies and series, all in one app for Google TV, Android TV and Fire TV. Your setup follows your Nuvio account, and there's a [phone app](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile) too.**
+**Everything in Nuvio, plus everything IPTV: a TiviMate-style Live TV guide, a Sports hub that finds every game on your own channels, a Calendar of your shows, movies and games, catch-up, recordings, your provider's movies and series, and a built-in VPN for your playback, all in one app for Google TV, Android TV and Fire TV. Your setup follows your Nuvio account, and there's a [phone app](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile) too.**
 
 [![Latest release](https://img.shields.io/github/v/release/homelessbrian/NuvioPlusIPTV?include_prereleases&label=latest&style=for-the-badge)](https://github.com/homelessbrian/NuvioPlusIPTV/releases)
 [![Downloads](https://img.shields.io/github/downloads/homelessbrian/NuvioPlusIPTV/total?style=for-the-badge)](https://github.com/homelessbrian/NuvioPlusIPTV/releases)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](LICENSE)
 [![Based on Nuvio](https://img.shields.io/badge/based%20on-NuvioMedia%2FNuvioTV-8A2BE2?style=for-the-badge)](https://github.com/NuvioMedia/NuvioTV)
+[![Discord](https://img.shields.io/badge/chat-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/NvK5JVvvm)
 [![Support on Ko-fi](https://img.shields.io/badge/support-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/homelessbrian)
 
 **Downloader code: 6532491**
 
-[Sports hub](#-sports-hub) · [Calendar](#-calendar) · [Sync](#-your-setup-everywhere) · [Phone app](#-on-your-phone-too) · [Download](#-installation) · [Features](#-features) · [Setup](#-getting-started) · [Remote controls](CONTROLS.md) · [Report a bug](#-reporting-bugs-and-requesting-features) · [Support](#-support-the-project)
+[Sports hub](#-sports-hub) · [Calendar](#-calendar) · [VPN](#-built-in-vpn) · [Sync](#-your-setup-everywhere) · [Phone app](#-on-your-phone-too) · [Download](#-installation) · [Features](#-features) · [Setup](#-getting-started) · [Remote controls](CONTROLS.md) · [Report a bug](#-reporting-bugs-and-requesting-features) · [Discord](https://discord.gg/NvK5JVvvm) · [Support](#-support-the-project)
+
+> ### 🙌 Big thanks to [ghbarker](https://github.com/ghbarker)
+> The **built-in VPN** is his work. He wrote the WireGuard and OpenVPN support and contributed it to this project, so your playback can be protected without a separate VPN app. Thank you!
 
 </div>
 
@@ -28,6 +32,7 @@ Sports in the side menu shows scores and schedules, and works out **which of you
   - **Live & Upcoming,** then a row for every team, country, league and name you follow.
   - **Your order:** arrange the rows how you like.
 - **All Events:** every game in your region's leagues plus every league and team you follow (scores for every league, wherever you are), with a live count. **Day tabs** run from a week back to a week ahead.
+- **Choose Leagues:** a bar on All Events turns any league on or off.
 - **Follow anything:**
   - **Teams, countries, whole leagues,** or a **name** (a player, driver or fighter) to catch any show that mentions it.
   - **One search** finds teams and leagues alike.
@@ -41,6 +46,7 @@ Sports in the side menu shows scores and schedules, and works out **which of you
 - **Racing:** F1, NASCAR and IndyCar drivers' standings, with points behind the leader.
 - **Team colours** on every row, and your team outlined in gold.
 - **Team cards:** OK on a team for its record, home and away form, last three results, next game, **Watch now** (or Remind me), **Follow**, and **all its games**.
+- **Players:** a team's page has a **Players** list and player profiles.
 - **From a game:** OK on a game's Table panel opens the whole table with both teams marked.
 
 ### 📡 League Networks
@@ -71,13 +77,22 @@ Sports in the side menu shows scores and schedules, and works out **which of you
 - **Wrestling and boxing schedules.** WWE and AEW shows are matched to your channels by show name.
 - **Your TV guide fills the gaps:** darts, snooker, horse racing, cycling and cricket internationals are found in your own guide.
 
+### 🧩 Sports addons
+Have a sports addon installed in Nuvio, like **HighFly** or **StremVerse**? Sports now uses it too. There's nothing to set up.
+- **Found automatically:** open a game and the app looks for it in your sports addons. While the page is open and nothing has shown up yet, it keeps checking, since streams usually appear close to the start.
+- **Live streams in the channel list:** a game that's on shows the addons' streams in its channel list, after your own channels.
+- **Replays & Highlights:** a finished game gets its own list of replays, highlights and recaps from your addons.
+- **Start times** are read correctly whatever time zone the addon uses.
+- **Recording and Fix Channel** work on your own playlist channels, not on an addon's streams.
+
 ### Watching
 - **Watch on your channels:**
   - **Every channel showing the game,** best match first, with the playlist it comes from. HD, FHD and SD copies of a channel share one row.
+  - **Your country's channels:** TV listings for each game add your own country's channels, and outside the US they come first. The channel airing the game at its start time is picked first.
   - **Labels:** each channel is marked **SHOWING IT** or **MAYBE**.
   - **Channels from:** show only one region's or language's channels (UK, US, Ireland, Canada, Australia, English, or a language), with the rest one click away. Game reminders and Watch now use them first too.
 - **Switch when a channel fails:** during a live game, if a channel won't start, drops or keeps freezing, the next channel showing it takes over.
-- **Fix Channel:** pick the right channel once, for one game, every game on that network, or every game for a team. It's remembered.
+- **Fix Channel:** pick the right channel once, for one game, every game on that network, or every game for a team. It's remembered. Each network can have its own link, listed under **Your Channel Links**, and games with a link skip the guide search.
 - **Video window:** hold OK on a game to watch it on the Sports page while you keep browsing. Hold Back for full screen.
 - **Watch from the start** on channels with catch-up.
 - **Game pages:**
@@ -117,12 +132,30 @@ Sports in the side menu shows scores and schedules, and works out **which of you
 
 ---
 
+## 🔐 Built-in VPN
+
+Protect what you watch without installing a separate VPN app. **Settings → VPN** imports a **WireGuard** or **OpenVPN** profile from your VPN provider and uses it for your playback.
+
+> **Thank you to [ghbarker](https://github.com/ghbarker),** who built the VPN and contributed it to Nuvio + IPTV. This feature exists because of him.
+
+- **Choose how much it protects:**
+  - **Off:** playback uses your normal connection.
+  - **HTTP streams only:** protects plain HTTP streams and leaves HTTPS alone.
+  - **HTTP + HTTPS streams:** protects both.
+  - **Full app:** protects everything the app does (Android asks you to allow it).
+- **Import your provider's file:** WireGuard configs and self-contained OpenVPN profiles (UDP or TCP). If the profile needs a username and password, the app asks for them.
+- **One choice for every profile,** or a separate one for just the Nuvio profile you're using.
+- **Comes with your setup:** your VPN profiles are carried to your other devices by Setup Sync and encrypted on each one.
+- The same VPN is in the [phone app](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile).
+
+---
+
 ## ☁️ Your setup, everywhere
 
-- **Nuvio Account Sync:** sign in to Nuvio and your Live TV setup (playlists, guides, favorites, hidden and renamed channels, reminders, Sports and Calendar follows, and settings) is restored and kept in sync on every TV and phone with that account.
+- **Setup Sync (Nuvio Account Sync):** sign in to Nuvio and your Live TV setup (playlists, guides, favorites, hidden and renamed channels, reminders, Sports and Calendar follows, VPN profiles and settings) is restored and kept in sync on every TV and phone with that account. You can **choose what to sync**.
 - **A new TV in minutes:** sign in with the QR code and everything comes back by itself.
 - **Encrypted:** your saved setup, including your IPTV logins, is encrypted before it's stored. Nothing is written to Nuvio's own servers.
-- **In your control:** **Settings → Live TV → Nuvio Account Sync** has Sync Now, Restore Earlier Copy, Turn Off and Delete Saved Setup.
+- **In your control:** **Settings → Live TV → Setup Sync** has Sync Now, Restore Earlier Copy, Turn Off and Delete Saved Setup.
 - **Coming from Google Drive sync?** **Import from Google Drive** moves your Drive backup over in one step. Drive sync keeps working too.
 
 ---
@@ -138,12 +171,13 @@ Sports in the side menu shows scores and schedules, and works out **which of you
 ### 📺 A proper TV guide
 - **TiviMate-style guide:** channels down the side, a timeline across, and a line marking "now" (which you can hide). It fits **8 or more channels** on screen.
 - **Guide Size:** Compact, Standard, Large or Extra Large. It sets the size of overlay mode too.
+- **Fast browsing:** hold Left to step back through earlier shows at double speed.
 - **Group list:**
   - **Opening it:** it slides out with a tap of Left.
   - **Grouping:** optionally grouped by playlist.
   - **Browse by channel name** (satellite-box style).
 - **Open on Last Group:** Live TV opens on the group you were last watching.
-- **Info panel** with the show's poster (or just the channel logo, if you prefer), time left, the description (as much as fits), the playlist it comes from, and a live preview window.
+- **Info panel** with a big show poster (or just the channel logo, if you prefer), time left, the description (as much as fits), the playlist it comes from, and a live preview window.
 - **Make room for more channels:** a smaller info panel, and hiding numbers, logos, names or episode numbers.
 - **Badges:** catch-up icons on channels that support it, and 4K / FHD / HD / SD badges on channels you've watched.
 - **Change Logo:** pick a channel's logo from your playlists, your guides, logo libraries or TMDB, search for one, or send a link from your phone.
@@ -158,13 +192,14 @@ Sports in the side menu shows scores and schedules, and works out **which of you
 - **Multiple M3U playlists** and **multiple XMLTV guides,** merged into one guide.
 - **Xtream Codes logins:**
   - **Pick what to include:** TV channels, movies & series, or both.
-  - **Stream format:** Auto, TS or HLS.
+  - **Stream format:** Auto, TS or HLS. M3U link playlists have it too, including Dispatcharr.
   - **Account details:** expiry date, status and connections in use, with a warning before it runs out.
 - **Smart guide matching:** real listings always beat "Programming" placeholders. Fine-tune any channel with **Assign EPG**.
 - **Catch-up:**
   - **Watch past shows** with a seek bar, or **restart what's on now**. Skips land where you aimed, even with providers that are slow to jump.
   - **Follow-on playback:** carries straight on into the next show.
   - **Guide time shift** and **Catch-up time shift** for providers that are off by an hour or more.
+- **Backup channels:** a button on the info bar lists the other copies of the channel you're watching, hidden ones included, so you can switch when one is having trouble. Copies match even when the name has a sound layout like 5.1.
 - **Channel name editor** (like TiviMate): strip "USA:", "HD", "24/7" and similar from channel names. Prefixes followed by just a space ("USA ESPN") are removed too when a playlist uses them on lots of channels.
 
 ### ⏺️ Recordings
@@ -188,6 +223,7 @@ Sports in the side menu shows scores and schedules, and works out **which of you
 - **📡 On Demand** in Nuvio's stream list, with quality, codec and audio badges. Choose where its tab goes, and whether auto-play may pick it.
 - **Each title once:** duplicates are merged, and a picker lets you choose the version when there are several. Your provider's copies are listed best quality first, with quality tags.
 - **Play Straight from My Provider:** Play skips the source list for titles you opened from On Demand.
+- **Adult titles** never appear in Continue watching.
 
 ### 🔔 Watching
 - **Start in Full Screen:** open the app straight into the last channel you watched.
@@ -217,7 +253,8 @@ Sports in the side menu shows scores and schedules, and works out **which of you
   - **Your order:** choose which results come first.
   - **Preview behind search:** live channels play in the background while you search.
 - **Find & stream in Nuvio:** see a movie in the guide, and stream it through your own addons and debrid.
-- **Nuvio Account Sync** (or Google Drive sync): your setup on every TV and phone, combined correctly when you use more than one.
+- **Setup Sync** (or Google Drive sync): your setup on every TV and phone, combined correctly when you use more than one.
+- **Settings in order:** Live TV, On Demand, Sports, Calendar and VPN sit together under Playback.
 
 ---
 
@@ -248,7 +285,7 @@ Requires **Android 7.0 or newer** (Fire OS 6 or later). It installs **alongside*
 
 **On a phone or tablet?** Get **[Nuvio + IPTV Mobile](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile/releases)** instead.
 
-**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.1.0-beta.9).
+**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.1.0-beta.11).
 
 ---
 
@@ -263,7 +300,8 @@ Requires **Android 7.0 or newer** (Fire OS 6 or later). It installs **alongside*
    - turn on the **home screen row**
    - choose where recordings are saved under **Recordings**
    - set a parental **PIN**
-   - turn on **Nuvio Account Sync** (signed in to Nuvio)
+   - turn on **Setup Sync** (signed in to Nuvio)
+   - import a WireGuard or OpenVPN profile under **Settings → VPN** if you want your playback protected
 6. In **Sports**, press **✎ Follow Teams & Leagues** to pick your teams. Set your region and reminders under **Settings → Sports**.
 7. Open **Calendar** and ring the bell on the shows you watch.
 
@@ -277,7 +315,7 @@ Every button for the guide, full screen, Sports, the Calendar, On Demand and Rec
 
 ## 🐞 Reporting bugs and requesting features
 
-Please search [existing issues](https://github.com/homelessbrian/NuvioPlusIPTV/issues) first.
+Please search [existing issues](https://github.com/homelessbrian/NuvioPlusIPTV/issues) first. Questions and chat are welcome on **[Discord](https://discord.gg/NvK5JVvvm)**.
 
 | | |
 |---|---|
@@ -394,6 +432,18 @@ Turn off **Audio passthrough** under **Settings → Live TV → Watching**.
 </details>
 
 <details>
+<summary><b>How do I use the VPN?</b></summary>
+
+Open **Settings → VPN**, import the WireGuard config or OpenVPN profile your provider gives you, and pick how much to protect: HTTP streams only, HTTP + HTTPS, or the full app. If the profile asks for a username and password, enter them when prompted.
+</details>
+
+<details>
+<summary><b>Which VPN files work?</b></summary>
+
+WireGuard configs and OpenVPN profiles that contain everything in one file (the certificates inside it, not separate files). Profiles that need extra files, scripts or interactive login aren't supported yet.
+</details>
+
+<details>
 <summary><b>What does Nuvio Account Sync store, and where?</b></summary>
 
 Your Live TV setup (playlists, guides, logins, favorites and settings), encrypted, linked to your Nuvio account and kept only to copy it between your devices. It's stored on the app's own sync service, not on Nuvio's servers. **Delete Saved Setup** removes it at any time. It works only with the official Nuvio server. See the [privacy policy](https://homelessbrian.github.io/privacy.html).
@@ -402,7 +452,7 @@ Your Live TV setup (playlists, guides, logins, favorites and settings), encrypte
 <details>
 <summary><b>My setup didn't come over to my other TV or phone.</b></summary>
 
-Make sure both are signed in to the same Nuvio account and **Nuvio Account Sync** is on in **Settings → Live TV**, then press **Sync Now**.
+Make sure both are signed in to the same Nuvio account and **Setup Sync** is on in **Settings → Live TV**, then press **Sync Now**.
 </details>
 
 <details>
@@ -423,6 +473,7 @@ Nuvio + IPTV is free. If it's made your TV better and you'd like to say thanks, 
 
 ## 🙏 Credits
 
+- **🙌 [ghbarker](https://github.com/ghbarker): a huge thank you.** He built the **built-in VPN** (WireGuard and OpenVPN playback protection) and contributed it to this project. He also made the original [phone port](https://github.com/ghbarker/NuvioMobile-IPTV) that the phone app is built on.
 - **[Nuvio](https://github.com/NuvioMedia/NuvioTV)** by the NuvioMedia team: Nuvio + IPTV is built on their work and follows their releases.
 - Guide and overlay design inspired by **TiviMate**.
 - Channel logo libraries from **[iptv-org](https://github.com/iptv-org)** and **[tv-logos](https://github.com/tv-logo/tv-logos)**.
