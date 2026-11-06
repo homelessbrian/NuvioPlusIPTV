@@ -5,7 +5,12 @@ set -euo pipefail
 # Storage/Context placeholders only satisfy javac; calling them fails the check.
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/nuvio-vpn-profiles.XXXXXX")"
-trap 'rm -rf -- "$work_dir"' EXIT
+download_file=""
+cleanup() {
+    rm -rf -- "$work_dir"
+    if [[ -n "$download_file" ]]; then rm -f -- "$download_file"; fi
+}
+trap cleanup EXIT
 
 javac_cmd="${JAVAC:-javac}"
 java_cmd="${JAVA:-java}"
@@ -18,11 +23,44 @@ if ! grep -Fq "implementation(\"com.wireguard.android:tunnel:$wireguard_version\
 fi
 
 "$javac_cmd" -version
-curl --fail --location --retry 3 --silent --show-error --connect-timeout 20 --max-time 120 \
-    "https://repo.maven.apache.org/maven2/com/wireguard/android/tunnel/$wireguard_version/tunnel-$wireguard_version.aar" \
-    --output "$work_dir/wireguard.aar"
-printf '%s  %s\n' "$wireguard_sha256" "$work_dir/wireguard.aar" | sha256sum --check --status
-unzip -p "$work_dir/wireguard.aar" classes.jar > "$work_dir/wireguard.jar"
+cache_dir="${NUVIO_VPN_CACHE_DIR:-$work_dir/dependencies}"
+mkdir -p -- "$cache_dir"
+wireguard_aar="$cache_dir/wireguard-tunnel-$wireguard_version-$wireguard_sha256.aar"
+verify_aar() {
+    [[ -f "$1" ]] && printf '%s  %s\n' "$wireguard_sha256" "$1" | sha256sum --check --status
+}
+if verify_aar "$wireguard_aar"; then
+    echo "Using SHA-256 verified WireGuard parser cache."
+else
+    if [[ -e "$wireguard_aar" ]]; then
+        echo "Discarding WireGuard parser cache with an invalid SHA-256." >&2
+        rm -f -- "$wireguard_aar"
+    fi
+    # Download beside the cache entry so only a verified, complete file is published.
+    download_file="$(mktemp "$cache_dir/.wireguard-download.XXXXXX")"
+    artifact_path="com/wireguard/android/tunnel/$wireguard_version/tunnel-$wireguard_version.aar"
+    for repository in \
+        https://repo.maven.apache.org/maven2 \
+        https://repo1.maven.org/maven2 \
+        https://maven-central.storage-download.googleapis.com/maven2; do
+        echo "Downloading pinned WireGuard parser from $repository."
+        # curl honors Retry-After; otherwise wait five seconds between retries.
+        if curl --fail --location --retry 2 --retry-delay 5 --retry-max-time 45 \
+            --silent --show-error --connect-timeout 20 --max-time 60 \
+            "$repository/$artifact_path" --output "$download_file" \
+            && verify_aar "$download_file"; then
+            mv -f -- "$download_file" "$wireguard_aar"
+            download_file=""
+            break
+        fi
+        echo "No verified WireGuard parser obtained from $repository; trying the next mirror." >&2
+    done
+    if ! verify_aar "$wireguard_aar"; then
+        echo "Could not download the pinned WireGuard parser with the required SHA-256." >&2
+        exit 1
+    fi
+fi
+unzip -p "$wireguard_aar" classes.jar > "$work_dir/wireguard.jar"
 
 mkdir -p "$work_dir/classes" "$work_dir/src/android/content" "$work_dir/src/android/os" \
     "$work_dir/src/com/nuvio/vpn/android"

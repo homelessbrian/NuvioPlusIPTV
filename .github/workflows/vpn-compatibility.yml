@@ -44,7 +44,14 @@ jobs:
         with:
           go-version: "1.27.3"
           cache-dependency-path: vpn-android/native/go.sum
+      - name: Cache the pinned WireGuard parser
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/nuvio-vpn-dependencies
+          key: vpn-wireguard-${{ runner.os }}-${{ hashFiles('vpn-android/ci/check-profiles.sh') }}
       - name: Check profile import with the pinned WireGuard parser
+        env:
+          NUVIO_VPN_CACHE_DIR: ${{ runner.temp }}/nuvio-vpn-dependencies
         run: bash vpn-android/ci/check-profiles.sh
       - name: Check the native tunnel and private IP stack
         working-directory: vpn-android/native
