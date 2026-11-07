@@ -53,3 +53,7 @@ adb shell am instrument -w -e class com.nuvio.vpn.android.VpnDeviceTest#openVpnA
 Host builds use `:app:assembleFullDebug` and `:app:assembleFullRelease` on TV and `:androidApp:assembleFullDebug` and `:androidApp:assembleFullRelease` on Mobile. Check actual playback, HTTPS bypass in HTTP-only mode, a seek, next-episode handoff and fresh-login restore on a device.
 
 Run `bash vpn-android/ci/check-profiles.sh` to exercise profile validation with the pinned WireGuard parser. The check uses fail-fast Android storage placeholders; it does not validate a live VPN or Android storage.
+
+`native/internal/netstack` contains the local copy of the pinned WireGuard IP stack, its license and the changes needed by the playback tunnel. Native build inputs include its nested Go sources so an incremental build cannot reuse a binary from before a stack fix.
+
+Run `(cd vpn-android/native && go test -race -count=1 -timeout 60s ./...)` for the stream tunnel and packet-ownership regressions.
