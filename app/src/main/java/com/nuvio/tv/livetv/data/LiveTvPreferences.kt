@@ -616,10 +616,10 @@ class LiveTvPreferences @Inject constructor(
 
     // ---------- calendar (synced with the rest of Live TV's settings) ----------
 
-    // Each Nuvio profile has its own followed and hidden shows. The first profile keeps the original
-    // keys; another profile sees the first profile's list until it changes its own, then keeps its own.
+    // Each Nuvio profile has its own followed and hidden shows, and a profile starts with none.
+    // The first profile keeps the original keys; the others use the same names with "_p<id>".
     private fun mineOrShared(p: Preferences, key: Preferences.Key<String>, id: Int): String =
-        (if (id <= 1) p[key] else (p[my(key, id)] ?: p[key])) ?: ""
+        (if (id <= 1) p[key] else p[my(key, id)]) ?: ""
 
     private suspend fun editMine(key: Preferences.Key<String>, transform: (String) -> String) {
         val me = currentProfile

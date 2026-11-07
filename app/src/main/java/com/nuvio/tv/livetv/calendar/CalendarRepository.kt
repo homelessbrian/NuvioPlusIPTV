@@ -56,7 +56,8 @@ class CalendarRepository @Inject constructor(
     private val guideDb: EpgDatabase,
     private val scheduler: LiveTvRecordingScheduler,
     private val sports: com.nuvio.tv.livetv.sports.SportsRepository,
-    private val recorder: com.nuvio.tv.livetv.record.LiveTvRecorder
+    private val recorder: com.nuvio.tv.livetv.record.LiveTvRecorder,
+    private val profileManager: com.nuvio.tv.core.profile.ProfileManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val sources = CalendarSources(context)
@@ -124,6 +125,22 @@ class CalendarRepository @Inject constructor(
             // Then every few hours while the app is open.
             while (true) {
                 delay(3 * CalendarSources.HOUR)
+                refresh(force = false)
+            }
+        }
+        // Another Nuvio profile picked: the Calendar and Home's upcoming row held the last
+        // profile's shows. Clear them and look again from this profile's own history, Library
+        // and bells.
+        scope.launch {
+            profileManager.activeProfileId.drop(1).distinctUntilChanged().collect {
+                mutex.withLock {
+                    baseEntries = emptyList()
+                    _state.value = CalendarState()
+                    CalendarHomeFeed.publish(emptyList(), emptyList())
+                }
+                // Let this profile's bells and hidden shows load first.
+                delay(500)
+                build(fetch = false)
                 refresh(force = false)
             }
         }
