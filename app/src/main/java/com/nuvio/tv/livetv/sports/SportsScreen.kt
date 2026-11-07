@@ -129,11 +129,11 @@ object SportsLaunch {
     fun takeCatchup(): Catchup? = catchup.also { catchup = null }
 }
 
-private const val CHIP_MINE = "mine"
-private const val CHIP_LIVE = "live"
-private const val CHIP_ALL = "all"
+internal const val CHIP_MINE = "mine"
+internal const val CHIP_LIVE = "live"
+internal const val CHIP_ALL = "all"
 /** A league from the top bar: "lg:" + its id. */
-private const val CHIP_LEAGUE = "lg:"
+internal const val CHIP_LEAGUE = "lg:"
 /** A sport you follow: My Teams' rows for that sport only ("sp:" + the sport's name). */
 private const val CHIP_SPORT = "sp:"
 /** Tables: your leagues' tables (see SportsTables). */
@@ -531,12 +531,6 @@ private fun SportsHub(
     BackHandler(enabled = !sidebarOpen) { openSidebar() }
 
     // ---- what this day holds
-    val dayStart = viewModel.repo.dayStart(day)
-    val dayEnd = viewModel.repo.dayStart(day + 1)
-    val active = remember(settings, follows) { viewModel.repo.activeLeagues(settings, follows).map { it.id }.toSet() + SportsMatcher.OTHER_ID }
-    // "Only games on my channels": once channels have been looked for, games on now or coming up
-    // that none of them show are left out (results, your teams' games and names you follow stay).
-    val filterToChannels = settings.onlyOnMyChannels && hasChannels && matches.isNotEmpty()
     // A league from the top bar: that league's whole week (yesterday to a week ahead), by date.
     val pinnedChip = chip?.takeIf { it.startsWith(CHIP_LEAGUE) }
     val followedSports = remember(follows, settings) { SportsRows.followedSports(follows, SportsCatalog.sportsOrder(settings)) }
@@ -569,70 +563,20 @@ private fun SportsHub(
     val rowsSport: Sport? = effectiveChip.takeIf { it.startsWith(CHIP_SPORT) }?.let { c -> followedSports.firstOrNull { CHIP_SPORT + it.name == c } }
     val rowsPage = effectiveChip == CHIP_MINE || rowsSport != null
     val leagueView = effectiveChip.takeIf { it.startsWith(CHIP_LEAGUE) }?.removePrefix(CHIP_LEAGUE)
-    val weekStart = viewModel.repo.dayStart(-1)
-    val weekEnd = viewModel.repo.dayStart(SportsRepository.DAYS_AHEAD + 1)
     // Days before yesterday: their games are fetched when you open one.
     LaunchedEffect(day) { if (day < -1) viewModel.repo.wantPast() }
-    val dayEvents = remember(events, dayStart, dayEnd, active, filterToChannels, matches, follows, leagueView, weekStart, now / 60_000L) {
-        if (leagueView != null) return@remember events.filter { ev ->
-            ev.leagueId == leagueView && ev.startMs < weekEnd && (ev.endMs ?: ev.startMs) >= weekStart
-        }
-        events.filter { ev ->
-            // A finished game or event shows on the day it finished only (a race weekend or a
-            // tournament isn't repeated on every day of its dates once it's over).
-            val onDay = when {
-                ev.state == GameState.POST -> {
-                    val finished = if (ev.hasTime) ev.startMs else minOf(ev.endMs ?: ev.startMs, now)
-                    finished in dayStart until dayEnd
-                }
-                ev.hasTime -> ev.startMs in dayStart until dayEnd
-                // A tournament or race weekend still to come: on the day it starts only.
-                ev.state == GameState.PRE -> ev.startMs in dayStart until dayEnd
-                // One under way: today and the days ahead it still runs (not the days before today).
-                else -> dayEnd > now && ev.startMs < dayEnd && (ev.endMs ?: (ev.startMs + 1)) >= dayStart
-            }
-            ev.leagueId in active && onDay &&
-                (!filterToChannels || ev.state == GameState.POST || isMine(ev, follows) || matches[ev.id]?.isNotEmpty() == true)
-        }
-    }
     // All Events only: narrow the day to one sport (the sport row under the days).
     var allSportPick by rememberSaveable { mutableStateOf<String?>(null) }
-    val allSports = remember(dayEvents, settings) {
-        val order = SportsCatalog.sportsOrder(settings)
-        dayEvents.mapNotNull { SportsCatalog.league(it.leagueId)?.sport }.distinct()
-            .sortedBy { order.indexOf(it).let { i -> if (i < 0) 99 else i } }
-    }
-    val allSport = allSportPick?.takeIf { p -> allSports.any { it.name == p } }
-    val shown = remember(dayEvents, effectiveChip, follows, allSport) {
-        when (effectiveChip) {
-            CHIP_MINE -> dayEvents.filter { isMine(it, follows) }
-            CHIP_LIVE -> dayEvents.filter { it.state == GameState.LIVE }
-            CHIP_ALL -> if (allSport == null) dayEvents else dayEvents.filter { SportsCatalog.league(it.leagueId)?.sport?.name == allSport }
-            else -> if (effectiveChip.startsWith(CHIP_LEAGUE)) dayEvents
-            else dayEvents.filter { SportsCatalog.league(it.leagueId)?.sport?.name == effectiveChip }
-        }
-    }
-    // League rank as a lookup (it was a list search inside every sort comparison).
-    val leagueRank = remember(settings) { SportsCatalog.ordered(settings).mapIndexed { i, l -> l.id to i }.toMap() }
-    // The sections, sorted once per change of games, channels or time, not on every redraw
-    // (moving the highlight redraws this screen).
-    val sections = remember(shown, dayEvents, matches, follows, now, leagueRank, leagueView) {
-        fun rank(ev: SportsEvent) = leagueRank[ev.leagueId] ?: 999
-        // Golf, tennis, a race weekend: "in progress" all week in the feed. Live Now only while one
-        // of your channels is showing it; otherwise listed under This Week.
-        fun airingNow(ev: SportsEvent): Boolean = matches[ev.id]?.any { m -> m.program?.let { now >= it.startMs && now < it.stopMs } == true } == true
-        val weekLong = shown.filter { !it.hasTime && it.state == GameState.LIVE && !airingNow(it) }
-        val weekIds = weekLong.mapTo(HashSet()) { it.id }
-        val live = shown.filter { it.state == GameState.LIVE && it.id !in weekIds }
-            .sortedWith(compareByDescending<SportsEvent> { isMine(it, follows) }.thenByDescending { matches[it.id]?.isNotEmpty() == true }.thenBy { rank(it) }.thenBy { it.startMs })
-        val upcoming = shown.filter { it.state == GameState.PRE || it.state == GameState.OFF }
-            .sortedWith(compareBy<SportsEvent> { if (it.hasTime) it.startMs else Long.MIN_VALUE }.thenByDescending { isMine(it, follows) }.thenBy { rank(it) })
-        val finished = shown.filter { it.state == GameState.POST }
-            .sortedWith(compareByDescending<SportsEvent> { it.startMs }.thenBy { rank(it) })
-            .let { if (leagueView != null) it.take(12) else it }
-        val liveCount = dayEvents.count { it.state == GameState.LIVE && (it.hasTime || airingNow(it)) }
-        DaySections(weekLong, live, upcoming, finished, liveCount)
-    }
+    // The day's games, sections and My Teams' rows: built by the view model in the background
+    // (they used to be worked out here while the screen drew, every 15 seconds and every score).
+    val pageQuery = SportsPageQuery(day, effectiveChip, allSportPick, rowsSport)
+    androidx.compose.runtime.SideEffect { viewModel.setPageQuery(pageQuery) }
+    val latestPage by viewModel.pageData.collectAsStateWithLifecycle()
+    val pageData = remember(pageQuery, latestPage) { viewModel.pageDataFor(pageQuery, latestPage) }
+    val dayEvents = pageData.dayEvents
+    val allSports = pageData.allSports
+    val allSport = pageData.allSport
+    val sections = pageData.sections
     val columns = if (videoOn) 1 else 2
 
     // All Events: a bar above the games says how many leagues show (and how many you've hidden);
@@ -848,8 +792,8 @@ private fun SportsHub(
 
     // ---- My Teams: rows (the next big game, Live & Upcoming, a row per team and league)
     if (rowsPage) {
-        val minute = now / 60_000L
-        val page = remember(known, follows, minute, rowsSport) { SportsRows.build(known, follows, now, rowsSport) { isMine(it, follows) } }
+        // Always there on My Teams (the view model builds the rows with the rest of the page).
+        val page = pageData.rows ?: MyTeamsPage(emptyList(), emptyList())
         Box(Modifier.fillMaxSize()) {
             MyTeamsRows(
                 page = page,
@@ -1859,14 +1803,6 @@ internal fun ChannelPickerDialog(
 /** "1:00 PM" etc., also used by the picker and host. */
 internal fun clock(ms: Long, use24h: Boolean): String = formatClock(ms, use24h)
 
-/** The Sports page's sections for the day on screen. */
-private class DaySections(
-    val weekLong: List<SportsEvent>,
-    val live: List<SportsEvent>,
-    val upcoming: List<SportsEvent>,
-    val finished: List<SportsEvent>,
-    val liveCount: Int
-)
 
 /**
  * A game's scoring plays, kept up to date: asked again when the score changes, and every 30
