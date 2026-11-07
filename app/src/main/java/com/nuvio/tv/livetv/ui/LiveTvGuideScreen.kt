@@ -239,6 +239,8 @@ private fun LiveTvGuideScreenBody(
     // when you come back, so you return to the channel you had selected.
     var savedSpot by remember { mutableStateOf<Pair<String, String?>?>(null) }
     var exitFullscreenTick by remember { mutableIntStateOf(0) }
+    // Back to the guide with the preview window off: the channel stopped, still highlighted.
+    var stoppedKey by remember { mutableStateOf<String?>(null) }
     // Full screen asked for from elsewhere and about to open: the guide mustn't take the
     // highlight meanwhile (it used to land on the hidden group list behind the video, so OK and
     // Back did nothing until pressed several times).
@@ -311,8 +313,11 @@ private fun LiveTvGuideScreenBody(
         viewModel.playback.attach()
         onDispose { viewModel.playback.detach() }
     }
+    // Preview window off: nothing plays behind the guide. Not when the guide is only on its way
+    // to full screen (a game opened from Sports, the home screen row, a reminder, search…):
+    // stopping then left full screen on "Nothing playing".
     LaunchedEffect(settings.showPreview) {
-        if (!settings.showPreview) viewModel.playback.stop()
+        if (!settings.showPreview && !LiveTvFullscreen.pending && !fullscreenComing && !fullscreen) viewModel.playback.stop()
     }
 
     val gridFocus = remember { FocusRequester() }
@@ -500,6 +505,12 @@ private fun LiveTvGuideScreenBody(
         }
     }
 
+    /** Leaving full screen for the guide with the preview window off: playing stops (nothing to see it in). */
+    fun stopIfNoPreview() {
+        if (settings.showPreview) return
+        stoppedKey = playback.channelKey
+        viewModel.playback.stop()
+    }
     fun focusGroups() {
         groupsOpen = true
         // If the group on screen sits in a folded playlist, unfold it so it can take focus.
@@ -558,7 +569,8 @@ private fun LiveTvGuideScreenBody(
         if (exitFullscreenTick == 0) return@LaunchedEffect
         val spot = savedSpot
         savedSpot = null
-        val playing = playback.channelKey
+        val playing = playback.channelKey ?: stoppedKey
+        stoppedKey = null
         if (playing != null) {
             // Stay in the group you were in if the channel's there; otherwise its own group.
             if (channels.none { it.key == playing }) {
@@ -2258,11 +2270,12 @@ private fun LiveTvGuideScreenBody(
                         fullscreen = false
                         onReturnToSports()
                     } else {
+                        stopIfNoPreview()
                         fullscreen = false; exitFullscreenTick++
                     }
                 },
                 onFindInNuvio = { com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; fullscreen = false; exitFullscreenTick++; onFindInNuvio() },
-                onBackToGroups = { com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; fullscreen = false; savedSpot = null; exitFullscreenTick++; focusGroups() },
+                onBackToGroups = { com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; stopIfNoPreview(); fullscreen = false; savedSpot = null; exitFullscreenTick++; focusGroups() },
                 embedded = true,
                 onOpenSettings = onOpenSettings,
                 viewModel = viewModel

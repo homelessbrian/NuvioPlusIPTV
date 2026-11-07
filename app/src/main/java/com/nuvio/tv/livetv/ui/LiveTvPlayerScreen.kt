@@ -231,6 +231,8 @@ fun LiveTvPlayerScreen(
         showBanner()
     }
     val shiftStartedAt by viewModel.playback.shiftStartedAt.collectAsStateWithLifecycle()
+    // A sports addon game that can be paused and skipped through by itself (a replay, or live with a rewind window).
+    val ownTimeline by viewModel.playback.ownTimeline.collectAsStateWithLifecycle()
     var captionsOn by remember { mutableStateOf(false) }
     LaunchedEffect(playback.channelKey, bannerVisible) { captionsOn = viewModel.playback.captionsOn() }
 
@@ -417,7 +419,7 @@ fun LiveTvPlayerScreen(
                     }
                 }
                 val archive = playback.catchupTitle != null
-                val shifting = shiftStartedAt != null
+                val shifting = shiftStartedAt != null || ownTimeline
                 // ---- the remote's Fast Forward and Rewind: 30 seconds on (or back) in catch-up
                 // and in Rewind Anytime, wherever the highlight is.
                 val mediaCode = e.nativeKeyEvent.keyCode
@@ -506,7 +508,9 @@ fun LiveTvPlayerScreen(
                 // ---- the panel's controls (entered with Down while the panel shows)
                 val cf = controlFocus
                 if (cf != null) {
-                    val mode = if (archive) PanelMode.CATCHUP else if (shifting) PanelMode.SHIFT else PanelMode.LIVE
+                    val mode = if (archive) PanelMode.CATCHUP
+                        else if (shiftStartedAt != null || (ownTimeline && viewModel.playback.shiftIsBehind())) PanelMode.SHIFT
+                        else PanelMode.LIVE
                     val paused = playback.userPaused
                     val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty())
                     if (e.type == KeyEventType.KeyUp) return@onPreviewKeyEvent isOk || e.key == Key.Back
@@ -886,6 +890,8 @@ fun LiveTvPlayerScreen(
                 val mode = when {
                     archive -> PanelMode.CATCHUP
                     shiftStartedAt != null -> PanelMode.SHIFT
+                    // A sports addon game: its own timeline once paused, behind live, or a replay.
+                    ownTimeline && viewModel.playback.shiftIsBehind() -> PanelMode.SHIFT
                     else -> PanelMode.LIVE
                 }
                 // 24/7 channels with no episode info: what the channel plays, from your addons.
@@ -926,7 +932,34 @@ fun LiveTvPlayerScreen(
                             statusLive = stillOn
                         )
                     }
-                    PanelMode.SHIFT -> {
+                    PanelMode.SHIFT -> if (ownTimeline) viewModel.playback.ownTimelineNow()?.let { o ->
+                        if (o.live) {
+                            // Its own rewind window, up to live.
+                            val start = tick - o.durationMs
+                            val pos = start + o.positionMs
+                            val behind = (tick - pos).coerceAtLeast(0L)
+                            PanelTimeline(
+                                startMs = start,
+                                endMs = tick,
+                                positionMs = pos,
+                                liveMs = tick,
+                                recordedUntilMs = tick,
+                                leftLabel = "From " + formatClock(start, use24h),
+                                rightLabel = "Live " + formatClock(tick, use24h),
+                                status = formatDuration(behind) + " behind live",
+                                statusLive = true
+                            )
+                        } else PanelTimeline(
+                            // A replay: from its start to its end.
+                            startMs = 0L,
+                            endMs = o.durationMs,
+                            positionMs = o.positionMs,
+                            recordedUntilMs = o.durationMs,
+                            leftLabel = formatDuration(0L),
+                            rightLabel = formatDuration(o.durationMs),
+                            status = formatDuration(o.positionMs) + " / " + formatDuration(o.durationMs)
+                        )
+                    } else {
                         // The buffer's earliest point (older parts drop off past its length).
                         val start = viewModel.playback.shiftEarliestWallMs() ?: shiftStartedAt ?: tick
                         val pos = viewModel.playback.shiftPositionWallMs() ?: start
@@ -1110,7 +1143,7 @@ fun LiveTvPlayerScreen(
         PlayerDialog.OPTIONS -> current?.let { ch ->
             val archive = playback.catchupTitle != null
             val canRestart = !archive && viewModel.canWatchFromStart(ch)
-            val shifting = shiftStartedAt != null
+            val shifting = shiftStartedAt != null || (ownTimeline && viewModel.playback.ownTimelineNow()?.live == true && viewModel.playback.shiftIsBehind())
             val timeAction = when {
                 archive -> "Back to live"
                 canRestart -> viewModel.restartLabel(ch)

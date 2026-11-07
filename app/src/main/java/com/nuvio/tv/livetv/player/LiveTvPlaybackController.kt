@@ -234,6 +234,17 @@ class LiveTvPlaybackController @Inject constructor(
      * you're more than a few seconds behind live (otherwise they keep their usual jobs).
      */
     fun shiftIsBehind(): Boolean {
+        if (_ownTimeline.value) {
+            val p = _player ?: return false
+            if (_state.value.userPaused || !p.isCurrentMediaItemDynamic) return true
+            val offset = p.currentLiveOffset
+            if (offset == C.TIME_UNSET) return false
+            // Past how far behind live it normally plays (so one skip back already counts).
+            val target = runCatching {
+                p.currentTimeline.getWindow(p.currentMediaItemIndex, androidx.media3.common.Timeline.Window()).liveConfiguration?.targetOffsetMs
+            }.getOrNull()?.takeIf { it != C.TIME_UNSET } ?: 10_000L
+            return offset > target + OWN_BEHIND_MS
+        }
         if (_shiftStartedAt.value == null) return false
         if (!alwaysBuffer || _state.value.userPaused) return true
         val pos = shiftPositionWallMs() ?: return false
@@ -282,7 +293,38 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     /** Skipping back and forward works on every recording (TS ones are saved in pieces too now). */
-    fun shiftCanSeek(): Boolean = (timeshift.session != null && shiftPrepared) || _recordingPlayback.value != null
+    fun shiftCanSeek(): Boolean = (timeshift.session != null && shiftPrepared) || _recordingPlayback.value != null || _ownTimeline.value
+
+    // ---------------------------------------------------------------- a sports addon game's own timeline
+
+    private val _ownTimeline = MutableStateFlow(false)
+    /**
+     * True while a sports addon game is playing whose stream can be paused and skipped through
+     * by itself (a replay, or a live stream with its own rewind window). Pause and skipping then
+     * work on the stream itself, as in Nuvio's own player, instead of the pause buffer.
+     */
+    val ownTimeline: StateFlow<Boolean> = _ownTimeline.asStateFlow()
+
+    /** Where the stream is, how long its timeline is, and whether it's live (still growing). */
+    data class OwnTimeline(val positionMs: Long, val durationMs: Long, val live: Boolean)
+
+    fun ownTimelineNow(): OwnTimeline? {
+        if (!_ownTimeline.value) return null
+        val p = _player ?: return null
+        val d = p.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: return null
+        return OwnTimeline(p.currentPosition.coerceIn(0L, d), d, p.isCurrentMediaItemDynamic)
+    }
+
+    private fun updateOwnTimeline() {
+        val p = _player
+        val ch = currentChannel
+        _ownTimeline.value = p != null && ch?.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID &&
+            _state.value.catchupTitle == null && _shiftStartedAt.value == null && _recordingPlayback.value == null &&
+            p.isCurrentMediaItemSeekable && p.duration != C.TIME_UNSET &&
+            // Live: only with a real rewind window (a short one would run out while paused, so
+            // those keep the pause buffer). A replay: any real length.
+            p.duration >= (if (p.isCurrentMediaItemDynamic) OWN_LIVE_WINDOW_MS else OWN_MIN_MS)
+    }
 
     // ---------------------------------------------------------------- watching while recording
 
@@ -464,6 +506,8 @@ class LiveTvPlaybackController @Inject constructor(
 
     /** Go live: drop the recording and play the channel live again. */
     fun goLive() {
+        // A sports addon game's own rewind window: back to its newest part.
+        if (_ownTimeline.value) { _player?.seekToDefaultPosition(); _player?.play(); return }
         // Rewind anytime: back to the newest part of the buffer (it keeps your rewind history).
         if (alwaysBuffer && _shiftStartedAt.value != null && shiftPrepared) {
             _player?.seekToDefaultPosition(); _player?.play(); return
@@ -593,6 +637,7 @@ class LiveTvPlaybackController @Inject constructor(
         if (!switchingForGame) gameTried.clear()
         if (currentChannel?.key != channel.key) recentStalls.clear()
         shiftStartPending = false
+        _ownTimeline.value = false
         if (_shiftStartedAt.value != null) stopShift()
         if (_recordingPlayback.value != null) { _recordingPlayback.value = null; shiftJob?.cancel() }
         archiveStartWallMs = if (catchupTitle != null) catchupStartMs else null
@@ -799,11 +844,16 @@ class LiveTvPlaybackController @Inject constructor(
         clearStarting()
         reconnectJob?.cancel()
         stopReplayCache()
+        // A pause buffer lets go of its provider connection too (a recording you're watching
+        // from carries on; only watching it stops).
+        if (_shiftStartedAt.value != null || timeshift.session != null) stopShift()
+        if (_recordingPlayback.value != null) { _recordingPlayback.value = null; shiftJob?.cancel() }
         _player?.stop()
         _player?.clearMediaItems()
         currentChannel = null
         LiveWatching.sourceId = null
         currentUrl = null
+        _ownTimeline.value = false
         _state.value = LivePlaybackState()
     }
 
@@ -1019,6 +1069,8 @@ class LiveTvPlaybackController @Inject constructor(
         when {
             _shiftStartedAt.value != null -> if (p.isPlaying) p.pause() else resumeShift()
             _recordingPlayback.value != null -> if (p.isPlaying) p.pause() else p.play()
+            // A sports addon game: the stream itself pauses (no pause buffer needed).
+            _ownTimeline.value -> p.playWhenReady = !p.playWhenReady
             p.isPlaying && _state.value.catchupTitle == null -> pauseLive()
             p.isPlaying -> p.pause()
             else -> p.play()
@@ -1480,6 +1532,7 @@ class LiveTvPlaybackController @Inject constructor(
         }
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+            updateOwnTimeline()
             if (shiftStartPending && !timeline.isEmpty) {
                 val pl = _player
                 if (pl != null) {
@@ -2064,6 +2117,7 @@ class LiveTvPlaybackController @Inject constructor(
         currentChannel = null
         LiveWatching.sourceId = null
         currentUrl = null
+        _ownTimeline.value = false
         _state.value = LivePlaybackState()
     }
 
@@ -2090,6 +2144,12 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     companion object {
+        /** A sports addon stream needs at least this much timeline to pause and skip in it by itself. */
+        private const val OWN_MIN_MS = 60_000L
+        /** A live sports addon stream with at least this much rewind window is paused and skipped in by itself. */
+        private const val OWN_LIVE_WINDOW_MS = 5 * 60_000L
+        /** This much further behind live than it normally plays counts as "behind live" in a sports addon game. */
+        private const val OWN_BEHIND_MS = 8_000L
         private const val MAX_RECONNECTS = 8
         /** No progress for this long while it should be playing = stalled. */
         private const val STALL_MS = 15_000L
