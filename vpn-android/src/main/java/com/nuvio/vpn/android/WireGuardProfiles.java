@@ -46,6 +46,25 @@ public final class WireGuardProfiles {
         }
     }
 
+    /**
+     * Backup restore: only the basic shape is checked, so one older profile that a later
+     * rule would refuse never blocks restoring the rest. It is still checked again before use.
+     */
+    static void parseForRestore(ProfileImport.Candidate candidate) throws IOException {
+        if (candidate == null || candidate.getProtocol() != ProfileImport.Protocol.WIREGUARD) {
+            throw new IOException("A WireGuard configuration is required.");
+        }
+        char[] text = candidate.copyContents();
+        try (BufferedReader reader = new BufferedReader(new CharArrayReader(text))) {
+            Config config = Config.parse(reader);
+            if (config.getInterface().getAddresses().isEmpty() || config.getPeers().isEmpty()) {
+                throw new IOException("WireGuard interface addresses and peers are required.");
+            }
+        } catch (BadConfigException | IllegalArgumentException e) {
+            throw new IOException("WireGuard configuration is invalid.");
+        } finally { Arrays.fill(text, '\0'); }
+    }
+
     private static Config parseContents(char[] text) throws IOException {
         try (BufferedReader reader = new BufferedReader(new CharArrayReader(text))) {
             Config config = Config.parse(reader);
@@ -78,10 +97,8 @@ public final class WireGuardProfiles {
             if (network.getAddress() instanceof Inet6Address) configuredV6 = true; else configuredV4 = true;
         }
         for (InetAddress address : config.getInterface().getDnsServers()) {
-            if (address instanceof Inet6Address ? !configuredV6 : !configuredV4) {
-                throw new IOException("WireGuard DNS servers must use an IP family configured in Address. "
-                        + "Use matching DNS servers or add the required interface address.");
-            }
+            // A DNS server's family needs a default route below, but not an interface address of its own.
+            if (address instanceof Inet6Address) configuredV6 = true; else configuredV4 = true;
         }
         for (Peer peer : config.getPeers()) for (InetNetwork network : peer.getAllowedIps()) {
             if (network.getAddress() instanceof Inet6Address) {

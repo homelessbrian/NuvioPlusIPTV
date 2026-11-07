@@ -94,7 +94,7 @@ public final class VpnBackup {
                     try {
                         ProfileImport.Candidate candidate = ProfileImport.read(new ByteArrayInputStream(raw), ProfileImport.Protocol.valueOf(p.getString("protocol")));
                         candidates.add(candidate);
-                        if (candidate.getProtocol() == ProfileImport.Protocol.WIREGUARD) WireGuardProfiles.parse(candidate);
+                        if (candidate.getProtocol() == ProfileImport.Protocol.WIREGUARD) WireGuardProfiles.parseForRestore(candidate);
                     }
                     finally { Arrays.fill(raw, (byte) 0); }
                 }

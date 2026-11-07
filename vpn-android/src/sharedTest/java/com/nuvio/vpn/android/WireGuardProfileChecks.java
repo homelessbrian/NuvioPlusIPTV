@@ -45,11 +45,13 @@ public final class WireGuardProfileChecks {
         String dualRoutes = SAMPLE.replace("AllowedIPs = 0.0.0.0/0", "AllowedIPs = 0.0.0.0/0, ::/0");
         // A route for an unconfigured family blocks that family rather than requiring a source address.
         check(WireGuardProfiles.forAppWide(parse(dualRoutes), "com.example.nuvio").getPeers().size() == 1);
-        rejects(dualRoutes.replace("DNS = 10.0.0.1", "DNS = fd00::1"));
-        rejects(dualRoutes.replace("DNS = 10.0.0.1", "DNS = fd00::1, 10.0.0.1"));
+        // An IPv6 DNS server with an IPv4-only address is accepted when IPv6 is routed.
+        check(WireGuardProfiles.forAppWide(parse(dualRoutes.replace("DNS = 10.0.0.1", "DNS = fd00::1")), "com.example.nuvio").getPeers().size() == 1);
+        check(WireGuardProfiles.forAppWide(parse(dualRoutes.replace("DNS = 10.0.0.1", "DNS = fd00::1, 10.0.0.1")), "com.example.nuvio").getPeers().size() == 1);
+        // Without an IPv6 default route, an IPv6 DNS server is still refused.
+        rejects(SAMPLE.replace("DNS = 10.0.0.1", "DNS = 10.0.0.1, fd00::1"));
         rejects(dualRoutes.replace("Address = 10.0.0.2/32", "Address = fd00::2/128"));
         // Revalidate configurations obtained outside the import path, including stored selections.
-        rejectsBeforeUse(dualRoutes.replace("DNS = 10.0.0.1", "DNS = fd00::1"));
         rejectsBeforeUse(SAMPLE.replace("0.0.0.0/0", "10.0.0.0/8"));
         Config dual = parse(SAMPLE.replace("Address = 10.0.0.2/32", "Address = 10.0.0.2/32, fd00::2/128")
                 .replace("DNS = 10.0.0.1", "DNS = 10.0.0.1, fd00::1")
