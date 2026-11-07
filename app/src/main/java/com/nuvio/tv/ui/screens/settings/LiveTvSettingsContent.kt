@@ -1510,7 +1510,7 @@ internal fun LiveTvSettingsContent(
                         title = "Save Recordings To",
                         subtitle = if (chosen == null && s.recordingStorage.isNotEmpty())
                             "The chosen drive isn't plugged in: recordings go to this device until it's back"
-                        else "Where new recordings go. Ones already recorded stay where they are.",
+                        else "Where new recordings go. To move ones already recorded, hold OK on one in Recordings and choose Move To.",
                         value = chosen?.label ?: "This Device",
                         onClick = { pickingDrive = true }
                     )

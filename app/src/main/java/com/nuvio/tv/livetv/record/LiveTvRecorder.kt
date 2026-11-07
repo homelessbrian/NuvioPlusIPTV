@@ -205,6 +205,98 @@ class LiveTvRecorder @Inject constructor(
         stopServiceIfIdle()
     }
 
+    /** How far a move between drives has got (null when nothing is being moved). */
+    data class MoveProgress(val title: String, val doneBytes: Long, val totalBytes: Long, val index: Int, val count: Int)
+
+    private val _move = MutableStateFlow<MoveProgress?>(null)
+    val move: StateFlow<MoveProgress?> = _move.asStateFlow()
+
+    /** The drive id a recording is on ("" for this device), or null if its drive isn't plugged in. */
+    fun storageIdOf(rec: LiveTvRecording): String? =
+        RecordingStorage.choices(context)
+            .filter { rec.dir.startsWith(it.dir.absolutePath + File.separator) }
+            .maxByOrNull { it.dir.absolutePath.length }?.id
+
+    /**
+     * Moves finished recordings to [target] (this device or a plugged-in drive): each folder is
+     * copied across, checked, and only then removed from where it was. One move at a time.
+     * A recording still being recorded is left where it is.
+     */
+    fun moveTo(ids: List<String>, target: RecordingStorage.Choice) {
+        if (_move.value != null) { LiveTvNotice.show("Already moving recordings: wait for it to finish"); return }
+        val list = ids.mapNotNull { id -> _recordings.value.firstOrNull { it.id == id } }
+            .filter { !it.isRecording && !it.dir.startsWith(target.dir.absolutePath + File.separator) }
+        if (list.isEmpty()) { LiveTvNotice.show("Nothing to move: already on ${target.label}"); return }
+        val total = list.sumOf { dirSize(File(it.dir)) }
+        if (total + MOVE_MARGIN > target.freeBytes) {
+            LiveTvNotice.show("Not enough room on ${target.label}: needs ${RecordingStorage.sizeLabel(total)}, has ${RecordingStorage.sizeLabel(target.freeBytes)} free")
+            return
+        }
+        _move.value = MoveProgress(list.first().title, 0, total, 1, list.size)
+        scope.launch {
+            var done = 0L
+            var moved = 0
+            var failure: String? = null
+            try {
+                for ((i, rec) in list.withIndex()) {
+                    val sizeBefore = done
+                    val ok = runCatching {
+                        moveOne(rec, target) { copied -> _move.value = MoveProgress(rec.title, sizeBefore + copied, total, i + 1, list.size) }
+                    }.getOrElse { failure = it.message ?: "something went wrong"; false }
+                    if (!ok) { if (failure == null) failure = "\"${rec.title}\" couldn't be moved"; break }
+                    moved++
+                    done += dirSize(File(_recordings.value.firstOrNull { it.id == rec.id }?.dir ?: rec.dir))
+                }
+            } finally {
+                _move.value = null
+            }
+            LiveTvNotice.show(
+                when {
+                    failure != null && moved == 0 -> "Couldn't move: $failure. Nothing was lost."
+                    failure != null -> "Moved $moved of ${list.size} to ${target.label}. Stopped: $failure"
+                    moved == 1 -> "Moved \"${list.first().title}\" to ${target.label}"
+                    else -> "Moved $moved recordings to ${target.label}"
+                }
+            )
+        }
+    }
+
+    private fun moveOne(rec: LiveTvRecording, target: RecordingStorage.Choice, onCopied: (Long) -> Unit): Boolean {
+        val src = File(rec.dir)
+        if (!src.isDirectory) return false
+        val root = target.dir.apply { mkdirs() }
+        val dst = File(root, src.name)
+        if (dst.exists()) throw IllegalStateException("\"${rec.title}\" is already on ${target.label}")
+        // Copied into a hidden folder first (info.json last), so a half-copy is never taken for a recording.
+        val tmp = File(root, ".moving-" + src.name)
+        tmp.deleteRecursively()
+        tmp.mkdirs()
+        var copied = 0L
+        val files = src.walkTopDown().filter { it.isFile }.toList()
+        val ordered = files.filter { it.name != "info.json" } + files.filter { it.name == "info.json" }
+        for (f in ordered) {
+            val out = File(tmp, f.relativeTo(src).path)
+            out.parentFile?.mkdirs()
+            f.inputStream().use { input -> out.outputStream().use { o ->
+                val buf = ByteArray(256 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    o.write(buf, 0, n)
+                    copied += n
+                    onCopied(copied)
+                }
+            } }
+            if (out.length() != f.length()) { tmp.deleteRecursively(); throw IllegalStateException("the copy of \"${rec.title}\" came out the wrong size") }
+        }
+        if (!tmp.renameTo(dst)) { tmp.deleteRecursively(); throw IllegalStateException("couldn't finish copying to ${target.label}") }
+        // The copy is complete: the list points at it, then the old one goes.
+        val moved = rec.copy(dir = dst.absolutePath)
+        update(moved)
+        runCatching { src.deleteRecursively() }
+        return true
+    }
+
     /** Changes when a running recording stops. */
     fun extend(id: String, stopAtMs: Long) {
         val rec = _recordings.value.firstOrNull { it.id == id } ?: return
@@ -546,5 +638,7 @@ class LiveTvRecorder @Inject constructor(
         const val TAG = "LiveTvRecorder"
         /** Below this much free space, recording stops (or the oldest recordings make room). */
         const val MIN_FREE = 500L * 1024 * 1024
+        /** Room to leave free on the drive being moved to. */
+        const val MOVE_MARGIN = 200L * 1024 * 1024
     }
 }
