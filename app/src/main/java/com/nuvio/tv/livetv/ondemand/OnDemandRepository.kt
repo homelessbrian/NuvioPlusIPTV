@@ -21,7 +21,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -29,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.nuvio.tv.livetv.data.ForkHttp
 
 /** What the provider reports about the file itself (from its own media scan). */
 data class VodTech(
@@ -106,7 +106,7 @@ class OnDemandRepository @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
-    private val http = OkHttpClient.Builder()
+    private val http = ForkHttp.builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         // Big catalogs (100,000+ titles) on slow panels can take a long time to send.

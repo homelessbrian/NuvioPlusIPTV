@@ -19,6 +19,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1292,10 +1293,15 @@ class LiveTvPlaybackController @Inject constructor(
         return out
     }
 
-    /** How much the player may download ahead, in bytes, from how much memory the app gets. */
+    /**
+     * How much the player may download ahead, in bytes, from how much memory the app really gets.
+     * Uses the same figure as the image cache and the main player ([MemoryBudget.heapMb]): on a
+     * 1 GB box that reports a 512 MB "large" heap it can't back, that is half the reported heap,
+     * so the download-ahead is about 75 MB there instead of about 150 MB.
+     */
     private fun playerBufferBytes(): Int {
-        val appMemory = Runtime.getRuntime().maxMemory().takeIf { it in 1 until Long.MAX_VALUE } ?: (512L shl 20)
-        return (appMemory * 3 / 10).coerceIn(32L shl 20, 160L shl 20).toInt()
+        val heapMb = MemoryBudget.heapMb.takeIf { it > 0 } ?: 512L
+        return ((heapMb shl 20) * 3 / 10).coerceIn(32L shl 20, 160L shl 20).toInt()
     }
 
     private fun buildPlayer(): ExoPlayer {
@@ -1334,7 +1340,8 @@ class LiveTvPlaybackController @Inject constructor(
             .setPrioritizeTimeOverSizeThresholds(true)
             // The download-ahead lives in the app's memory. The player's own cap (about 130 MB
             // for video) is more than half of what a cheap stick gives an app, which made the
-            // whole app stutter as memory ran short. Capped to about 30% of the app's memory:
+            // whole app stutter as memory ran short. Capped to about 30% of the memory the app can
+            // really use (see playerBufferBytes):
             // the same on boxes with plenty, smaller on low-memory ones. The minimum buffer
             // time is always kept, so channels are just as steady.
             .setTargetBufferBytes(playerBufferBytes())

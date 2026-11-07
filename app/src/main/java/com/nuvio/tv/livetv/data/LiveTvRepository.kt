@@ -62,7 +62,7 @@ class LiveTvRepository @Inject constructor(
 
     private val mutex = Mutex()
 
-    private val http: OkHttpClient = OkHttpClient.Builder()
+    private val http: OkHttpClient = ForkHttp.builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
         // A provider that trickles data forever would otherwise hold up every other update

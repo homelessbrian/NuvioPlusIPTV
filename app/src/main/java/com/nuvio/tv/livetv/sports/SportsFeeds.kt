@@ -9,6 +9,7 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
+import com.nuvio.tv.livetv.data.ForkHttp
 
 /** A goal, touchdown or basket worth listing on the game page. */
 data class ScoringPlay(val clock: String, val teamAbbr: String?, val text: String, val awayScore: String?, val homeScore: String?)
@@ -19,7 +20,7 @@ data class ScoringPlay(val clock: String, val teamAbbr: String?, val text: Strin
  */
 internal class SportsFeeds {
 
-    private val http: OkHttpClient = OkHttpClient.Builder()
+    private val http: OkHttpClient = ForkHttp.builder()
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(40, TimeUnit.SECONDS)

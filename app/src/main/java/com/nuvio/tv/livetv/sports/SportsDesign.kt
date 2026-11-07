@@ -140,10 +140,7 @@ internal fun Modifier.sportsFrame(
 internal fun LeagueMark(league: League?, size: Dp) {
     val logo = league?.let { SportsFeeds.leagueLogos[it.id] }
     when {
-        logo != null -> AsyncImage(
-            model = logo, contentDescription = league?.name, contentScale = ContentScale.Fit,
-            modifier = Modifier.size(size)
-        )
+        logo != null -> SportsLogoImage(logo, size, league?.name)
         // A wrestling promotion without an approved logo (AEW, TNA): its name in its colour,
         // lettering only (like the NXT tile), rather than the sport's symbol.
         league != null && league.sport == Sport.WRESTLING && league.short.length <= 4 -> Box(
@@ -199,7 +196,7 @@ internal fun TeamLogo(team: TeamInfo?, size: Dp) {
                 Modifier.size(size * 0.86f).clip(CircleShape)
                     .background(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.16f), Color.Transparent)))
             )
-            AsyncImage(model = team.logo, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(size))
+            SportsLogoImage(team.logo, size, null)
         } else {
             val c = teamColor(team)
             Box(

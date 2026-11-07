@@ -1222,7 +1222,7 @@ private fun GameHubCard(e: CalendarEntry, use24h: Boolean, live: Boolean, st: Ca
                 ) {
                     Box(Modifier.size(logo), contentAlignment = Alignment.Center) {
                         if (t?.logo != null) {
-                            coil3.compose.AsyncImage(model = t.logo, contentDescription = t.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                            com.nuvio.tv.livetv.sports.SportsLogoImage(t.logo, logo, t.name, Modifier.fillMaxSize())
                         } else {
                             Box(Modifier.fillMaxSize().clip(RoundedCornerShape(50)).background(t?.color?.let { Color(it).copy(alpha = 1f) } ?: Color(0xFF3A4150)), contentAlignment = Alignment.Center) {
                                 LiveText((t?.abbr ?: t?.name?.take(3)?.uppercase()).orEmpty(), size = 8.sp, weight = FontWeight.ExtraBold, color = Color.White)
@@ -1259,7 +1259,7 @@ private fun TeamMark(t: CalendarTeam?, size: Dp, big: Boolean, compact: Boolean,
     ) {
         Box(Modifier.size(size), contentAlignment = Alignment.Center) {
             if (t?.logo != null) {
-                coil3.compose.AsyncImage(model = t.logo, contentDescription = t.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                com.nuvio.tv.livetv.sports.SportsLogoImage(t.logo, size, t.name, Modifier.fillMaxSize())
             } else {
                 // No logo: the team's colour with its letters.
                 Box(
