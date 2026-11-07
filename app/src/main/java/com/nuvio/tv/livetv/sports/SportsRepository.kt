@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.flowOn
@@ -129,10 +130,25 @@ class SportsRepository @Inject constructor(
     /** Last round's clock copies of schedule and guide events, by the event they were made from. */
     @Volatile private var timedCopies: Map<SportsEvent, SportsEvent> = java.util.IdentityHashMap()
 
-    /** Every game and event on the page's days (yesterday to a week ahead), with your country's channels from the TV listings. */
-    val events: StateFlow<List<SportsEvent>> = combine(plainEvents(), tvData, tvCountries) { ev, tv, countries ->
+    /** The newest data, before Score Delay: only [events] reads it. */
+    private val withChannels: StateFlow<List<SportsEvent>> = combine(plainEvents(), tvData, tvCountries) { ev, tv, countries ->
         runCatching { SportsTvListings.addChannels(ev, tv, countries, tvCache) }.getOrDefault(ev)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** Score Delay (Sports settings), see [SportsScoreDelay]. */
+    private val scoreDelay = SportsScoreDelay()
+    private val scoreDelayMs: StateFlow<Long> = settings.map { it.scoreDelaySeconds * 1_000L }.distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, settings.value.scoreDelaySeconds * 1_000L)
+    /** Moves on when a held-back change is due, so it shows without waiting for new data. */
+    private val delayTick = MutableStateFlow(0)
+
+    /**
+     * Every game and event on the page's days (yesterday to a week ahead), with your country's
+     * channels from the TV listings, and scores as late as Score Delay says.
+     */
+    val events: StateFlow<List<SportsEvent>> = combine(withChannels, scoreDelayMs, delayTick) { ev, delayMs, _ ->
+        scoreDelay.apply(ev, delayMs, System.currentTimeMillis())
+    }.flowOn(Dispatchers.Default).stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     private data class EventInputs(
         val l: Map<String, LeagueData>, val w: Map<String, LeagueData>, val f: Map<String, LeagueData>,
@@ -362,6 +378,7 @@ class SportsRepository @Inject constructor(
         // the next one showing it (wherever the game was started from: here, the Calendar, a
         // reminder, the guide).
         playback.gameFailover = { key, tried -> nextChannelForGame(key, tried) }
+        watchDelayedScores()
     }
 
     /**
@@ -636,7 +653,8 @@ class SportsRepository @Inject constructor(
                         if (before != parsed || leagueData.value[l.id]?.error != null) leagueData.update { it + (l.id to LeagueData(parsed, at, null)) }
                         val file = File(dir, "sb_${safe(l.id)}.json")
                         if (before != parsed || resave.remove("sb|" + l.id)) saveGames(file, at, parsed) else touch(file)
-                        if (before != null) noticeScoring(l, before, parsed)
+                        // With Score Delay on, alerts come from the delayed scores instead (see watchDelayedScores).
+                        if (before != null && scoreDelayMs.value <= 0) noticeScoring(l, before, parsed)
                     }.onFailure { e ->
                         synchronized(failed) { failed += l.name; reasons += describe(e) }
                         leagueData.update { m ->
@@ -1581,6 +1599,36 @@ class SportsRepository @Inject constructor(
         SportsLive.cardByChannel.value = cards
     }
 
+    /**
+     * Score Delay: held-back changes show when they're due, scores elsewhere in the app follow
+     * what the Sports page shows, and Scoring Alerts go off when the delayed score moves.
+     */
+    private fun watchDelayedScores() {
+        scope.launch {
+            scoreDelay.nextChangeAt.collectLatest { at ->
+                if (at == null) return@collectLatest
+                delay((at - System.currentTimeMillis()).coerceAtLeast(0L) + 50L)
+                delayTick.value++
+            }
+        }
+        scope.launch {
+            var before: Map<String, SportsEvent> = emptyMap()
+            events.collect { list ->
+                val now = list.associateBy { it.id }
+                if (scoreDelayMs.value > 0 && before.isNotEmpty()) {
+                    runCatching { rebuildLiveScores() }
+                    list.filter { ev -> before[ev.id].let { it != null && it !== ev && it.sides != ev.sides } }
+                        .groupBy { it.leagueId }
+                        .forEach { (leagueId, changed) ->
+                            val league = SportsCatalog.league(leagueId) ?: return@forEach
+                            noticeScoring(league, changed.mapNotNull { before[it.id] }, changed)
+                        }
+                }
+                before = now
+            }
+        }
+    }
+
     /** A team you follow scored: tell the app (Scoring Alerts). */
     private fun noticeScoring(league: League, before: List<SportsEvent>, after: List<SportsEvent>) {
         if (!settings.value.scoringAlerts) return
@@ -1848,11 +1896,32 @@ class SportsRepository @Inject constructor(
     }
 
     /** The game's scoring plays (touchdowns, goals…), when ESPN has them. */
-    suspend fun scoringPlays(ev: SportsEvent): List<ScoringPlay> =
-        if (ev.state == GameState.PRE) emptyList() else summaryFor(ev)?.plays.orEmpty()
+    suspend fun scoringPlays(ev: SportsEvent): List<ScoringPlay> {
+        if (ev.state == GameState.PRE) return emptyList()
+        val plays = summaryFor(ev)?.plays.orEmpty()
+        // Score Delay: a play past the score shown waits until that score shows.
+        return if (scoreDelayMs.value > 0) SportsScoreDelay.playsUpTo(plays, ev) else plays
+    }
 
     /** Everything else about the game ESPN has (see [GameExtras]); null when there's nothing to ask. */
-    suspend fun gameExtras(ev: SportsEvent): GameExtras? = summaryFor(ev)?.extras
+    suspend fun gameExtras(ev: SportsEvent): GameExtras? {
+        val summary = summaryFor(ev) ?: return null
+        val delayMs = scoreDelayMs.value
+        if (delayMs <= 0 || ev.state != GameState.LIVE) return summary.extras
+        // Score Delay: live stats and win chances as they were that long ago (none until then).
+        return synchronized(delayedExtras) {
+            val l = delayedExtras.getOrPut(ev.id) { ArrayDeque() }
+            if (l.lastOrNull()?.first != summary.at) l.addLast(summary.at to summary.extras)
+            val cutoff = System.currentTimeMillis() - delayMs
+            while (l.size > 1 && l[1].first <= cutoff) l.removeFirst()
+            l.first().takeIf { it.first <= cutoff }?.second
+        }
+    }
+
+    /** Score Delay: a live game's extras by when they arrived, oldest first. */
+    private val delayedExtras = object : LinkedHashMap<String, ArrayDeque<Pair<Long, GameExtras>>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ArrayDeque<Pair<Long, GameExtras>>>?) = size > 12
+    }
 
     // ------------------------------------------------------------------ your choices
 
