@@ -709,20 +709,27 @@ class CalendarRepository @Inject constructor(
 
     // ------------------------------------------------------------------ the guide
 
+    private val guideWork = CalendarGuideWork(
+        scope,
+        onFailure = { error -> LiveTvLoadReport.add("Calendar: guide refresh failed (${error.javaClass.simpleName})") }
+    ) { matchGuideNow() }
+
     private fun matchGuide() {
-        scope.launch {
-            mutex.withLock {
-                val s = settings.value
-                val cur = _state.value
-                if (baseEntries.isNotEmpty()) {
-                    baseEntries = byTime(withGuide(baseEntries.map { if (it.kind == CalendarKind.EPISODE) it.copy(guide = null, guideOptions = emptyList()) else it }, s))
-                    _state.value = cur.copy(entries = withGames(baseEntries))
-                }
+        guideWork.request()
+    }
+
+    private suspend fun matchGuideNow() {
+        mutex.withLock {
+            val s = settings.value
+            val cur = _state.value
+            if (baseEntries.isNotEmpty()) {
+                baseEntries = byTime(withGuide(baseEntries.map { if (it.kind == CalendarKind.EPISODE) it.copy(guide = null, guideOptions = emptyList()) else it }, s))
+                _state.value = cur.copy(entries = withGames(baseEntries))
             }
-            val a = _airing.value
-            if (a.entries.isNotEmpty()) _airing.value = a.copy(entries = withGuide(a.entries.map { it.copy(guide = null, guideOptions = emptyList()) }, settings.value))
-            applyPlans()
         }
+        val a = _airing.value
+        if (a.entries.isNotEmpty()) _airing.value = a.copy(entries = withGuide(a.entries.map { it.copy(guide = null, guideOptions = emptyList()) }, settings.value))
+        applyPlans()
     }
 
     /** The channel picked for a network ("Always use the channel I pick for FX"): network -> channel key. */
