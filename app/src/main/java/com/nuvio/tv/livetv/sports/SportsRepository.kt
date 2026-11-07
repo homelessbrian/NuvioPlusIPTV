@@ -417,6 +417,8 @@ class SportsRepository @Inject constructor(
     private val foreground = MutableStateFlow(true)
     private val kick = MutableStateFlow(0)
     @Volatile private var started = false
+    /** The saved games are read (see [start]); channel searching waits for it. */
+    private val cacheLoaded = MutableStateFlow(false)
 
     /** Starts the background updates (once). Called by the app as it starts. */
     fun start() {
@@ -426,8 +428,22 @@ class SportsRepository @Inject constructor(
             // Reading the saved scores is a lot of work at start-up: low priority, so the screen
             // and the video come first.
             val t0 = System.currentTimeMillis()
-            withContext(com.nuvio.tv.livetv.data.BackgroundWork.quiet) { runCatching { loadCache() } }
-            LiveTvLoadReport.add("Sports: saved scores read in ${(System.currentTimeMillis() - t0) / 1000.0} s (${leagueData.value.size} leagues)")
+            // The Sports page's own leagues (yours and your region's) first, at normal speed: the
+            // background threads are busy with the guide at start-up, and reading everything there
+            // took over 20 seconds before the page had anything to show.
+            val first = runCatching {
+                val f = SportsFollows.fromJson(prefs.sportsMineJson.first())
+                val st = SportsSettings.fromJson(prefs.sportsSettingsJson.first())
+                SportsCatalog.leagues.filter { it.espnPath != null && (isMine(it, f) || SportsCatalog.shown(it, st)) }.map { it.id }.toSet()
+            }.getOrDefault(emptySet())
+            withContext(Dispatchers.IO) { runCatching { leagueData.update { it + readSavedScores(first) } } }
+            val tFirst = System.currentTimeMillis()
+            withContext(com.nuvio.tv.livetv.data.BackgroundWork.quiet) { runCatching { loadCache(skip = first) } }
+            cacheLoaded.value = true
+            LiveTvLoadReport.add(
+                "Sports: saved scores read in ${(System.currentTimeMillis() - t0) / 1000.0} s (${leagueData.value.size} leagues; " +
+                    "${first.size} of the page's own in ${(tFirst - t0) / 1000.0} s)"
+            )
             awaitFirstRound()
             runCatching { updateLoop() }.onFailure { Log.w(TAG, "Sports updates stopped", it) }
         }
@@ -1251,24 +1267,40 @@ class SportsRepository @Inject constructor(
         }
     }
 
-    private fun loadCache() {
+    /** The saved scores of [ids] (leagues read from their files; too old ones are left out). */
+    private fun readSavedScores(ids: Set<String>): Map<String, LeagueData> {
+        val now = System.currentTimeMillis()
+        val m = HashMap<String, LeagueData>()
+        for (l in SportsCatalog.leagues) {
+            if (l.espnPath == null || l.id !in ids) continue
+            readSavedLeague(l, now)?.let { m[l.id] = it }
+        }
+        return m
+    }
+
+    private fun readSavedLeague(l: League, now: Long): LeagueData? {
+        val file = File(dir, "sb_${safe(l.id)}.json")
+        if (!file.exists()) return null
+        return runCatching {
+            // Too old to be worth reading (saved more than 2 days ago).
+            if (now - file.lastModified() > 2 * DAY + HOUR) return@runCatching null
+            val (savedAt, games) = readGames(l, file.readText(), "sb|" + l.id) ?: return@runCatching null
+            // Checked since without a change: as fresh as that check.
+            val at = maxOf(savedAt, file.lastModified())
+            if (now - at > 2 * DAY) return@runCatching null
+            // Saved a while ago: counts as old, so it's checked again when wanted.
+            LeagueData(games, at, null)
+        }.getOrNull()
+    }
+
+    /** Everything else saved last time ([skip]: leagues whose scores were already read). */
+    private fun loadCache(skip: Set<String> = emptySet()) {
         val now = System.currentTimeMillis()
         loadCompactSeen()
         val m = HashMap<String, LeagueData>()
         for (l in SportsCatalog.leagues) {
-            if (l.espnPath == null) continue
-            val file = File(dir, "sb_${safe(l.id)}.json")
-            if (!file.exists()) continue
-            runCatching {
-                // Too old to be worth reading (saved more than 2 days ago).
-                if (now - file.lastModified() > 2 * DAY + HOUR) return@runCatching
-                val (savedAt, games) = readGames(l, file.readText(), "sb|" + l.id) ?: return@runCatching
-                // Checked since without a change: as fresh as that check.
-                val at = maxOf(savedAt, file.lastModified())
-                if (now - at > 2 * DAY) return@runCatching
-                // Saved a while ago: counts as old, so it's checked again when wanted.
-                m[l.id] = LeagueData(games, at, null)
-            }
+            if (l.espnPath == null || l.id in skip) continue
+            readSavedLeague(l, now)?.let { m[l.id] = it }
         }
         // TheSportsDB's list first: which of the app's leagues it fills.
         runCatching { File(dir, "tsdb_index.json").takeIf { it.exists() }?.readText()?.let { applyTsdbIndex(it) } }
@@ -1283,7 +1315,8 @@ class SportsRepository @Inject constructor(
             val file = File(dir, "fx_wrestling.json")
             if (file.exists()) SportsFeeds.parseWrestling(file.readText()).forEach { (id, list) -> fx[id] = LeagueData(list, 0L, null) }
         }
-        leagueData.value = m
+        // Added to the page's own leagues, read first (see start).
+        leagueData.update { it + m }
         fixtureData.value = fx
         // The week ahead, team seasons and non-league football, as last saved.
         val wk = HashMap<String, LeagueData>()
@@ -1404,6 +1437,8 @@ class SportsRepository @Inject constructor(
                 if (_matches.value.isEmpty()) runCatching { restoreMatches(saved, chans) }
             }
         }
+        // Not before the saved games are read: a search with no games found nothing, then ran again.
+        cacheLoaded.first { it }
         combine(trigger, matchKick) { t, k -> t to k }.debounce { if (_matches.value.isEmpty()) 0L else 1_500L }.collect {
             // Put off (not lost): it runs when the app is back in front / the update is done.
             if (!foreground.value && viewers.value == 0) { matchMissed = true; return@collect }
