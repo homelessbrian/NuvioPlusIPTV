@@ -86,6 +86,17 @@ public final class VpnCoreChecks {
         rejects(express + "ca secrets.txt\n", ProfileImport.Protocol.OPENVPN);
         rejects("remote vpn.example 1194\n<ca>\ntls-client\npull\n</ca>\n",
                 ProfileImport.Protocol.OPENVPN);
+        for (String profile : new String[] {OVPN + "fragment 1300\n", express + "--fragment 1300\n"}) {
+            try (ProfileImport.Candidate candidate = read(profile, ProfileImport.Protocol.OPENVPN)) {
+                throw new AssertionError("Unsupported OpenVPN fragmentation accepted.");
+            } catch (IOException expected) {
+                check(expected.getMessage().contains("fragmentation"));
+                check(expected.getMessage().contains("server"));
+            }
+        }
+        // Certificate contents are not OpenVPN directives.
+        read(OVPN.replace("certificate-placeholder", "fragment 1300"), ProfileImport.Protocol.OPENVPN).close();
+        checks++;
         try (ProfileImport.Candidate candidate = read(WG, ProfileImport.Protocol.WIREGUARD)) {
             check(candidate.getProtocol() == ProfileImport.Protocol.WIREGUARD);
             check(!candidate.toString().contains("secret-key"));
@@ -126,7 +137,8 @@ public final class VpnCoreChecks {
             rejects(OVPN + option + " secrets.txt\n", ProfileImport.Protocol.OPENVPN);
         }
         rejects(OVPN + "<key>\nunclosed\n", ProfileImport.Protocol.OPENVPN);
-        rejects(OVPN + "<connection>\nremote another.example\n</connection>", ProfileImport.Protocol.OPENVPN);
+        openVpnConnectionBlocks();
+        openVpnRevocationLists();
         try {
             ProfileImport.read(new ByteArrayInputStream(new byte[] {(byte) 0xc3, (byte) 0x28}),
                     ProfileImport.Protocol.OPENVPN);
@@ -155,6 +167,88 @@ public final class VpnCoreChecks {
             check(!inputClosed[0]);
         }
         ownedByCaller.close();
+    }
+
+    private static void openVpnConnectionBlocks() throws Exception {
+        String blocks = "<connection>\nremote one.example\nremote two.example 443 tcp-client\n</connection>\n"
+                + "<connection>\n# provider fallback\nproto tcp6-client\nport 9443\nremote three.example\n</connection>\n";
+        String withoutTopRemote = OVPN.replace("remote vpn.example 1194\n", "");
+        importPreserves(withoutTopRemote + blocks);
+        importPreserves(OVPN + "proto udp\nport 1194\n" + blocks);
+        importPreserves(OVPN + "<connection>\n  remote fallback.example 443 tcp-client # comment\n</connection>\n");
+        for (String block : new String[] {
+                "<connection>\n</connection>\n",
+                "<connection>\nproto tcp-client\nport 443\n</connection>\n",
+                "<connection>\nremote fallback.example\n",
+                "<connection>\nremote\n</connection>\n",
+                "<connection>\nremote # missing host\n</connection>\n",
+                "<connection>\nremote ; missing host\n</connection>\n",
+                "<connection>\nremote \"\"\n</connection>\n",
+                "<connection>\nremote fallback.example\n<connection>\nremote nested.example\n</connection>\n</connection>\n",
+                "<connection>\nremote fallback.example\n<ca>\ncertificate\n</ca>\n</connection>\n",
+                "<connection>\nremote fallback.example\n</ca>\n</connection>\n",
+                "<connection>\nremote fallback.example\n</connection> # trailing text\n",
+                "<connection> # trailing text\nremote fallback.example\n</connection>\n",
+                "</connection>\n"}) {
+            rejects(OVPN + block, ProfileImport.Protocol.OPENVPN);
+        }
+        // The pinned engine ignores these inside connection blocks; never silently accept them.
+        for (String option : new String[] {"up script", "plugin script", "config another.ovpn",
+                "http-proxy proxy.example 8080", "http-proxy-user-pass login.txt",
+                "verify-x509-name different name", "remote-cert-tls server", "tls-auth [inline]",
+                "crl-verify [inline]", "auth-user-pass", "fragment 1300", "mssfix 1200",
+                "client", "pull", "unknown-option value", "--remote fallback.example"}) {
+            IOException error = rejects(OVPN + "<connection>\nremote fallback.example\n"
+                    + option + "\n</connection>\n", ProfileImport.Protocol.OPENVPN);
+            check(error.getMessage().contains("remote, proto and port"));
+            check(error.getMessage().length() <= 200);
+        }
+        // Many short directives exceed the engine budget because each option/token has overhead.
+        StringBuilder manyServers = new StringBuilder("<connection>\n");
+        for (int i = 0; i < 40; i++) manyServers.append("remote fallback").append(i).append(".example\n");
+        manyServers.append("</connection>\n");
+        check(manyServers.length() < 4096);
+        check(rejects(OVPN + manyServers, ProfileImport.Protocol.OPENVPN).getMessage().contains("4096-byte"));
+        char[] comment = new char[4096];
+        Arrays.fill(comment, '#');
+        rejects(OVPN + "<connection>\nremote fallback.example\n" + new String(comment)
+                + "\n</connection>\n", ProfileImport.Protocol.OPENVPN);
+        rejects("<connection>\nremote fallback.example\nclient\n</connection>\n", ProfileImport.Protocol.OPENVPN);
+    }
+
+    private static void openVpnRevocationLists() throws Exception {
+        // Certificate material stays opaque here; the selected TLS engine validates its PEM.
+        String crl = "<crl-verify>\n-----BEGIN X509 CRL-----\nrevocations-placeholder\n-----END X509 CRL-----\n</crl-verify>\n";
+        importPreserves(OVPN + crl);
+        importPreserves(OVPN + "crl-verify [inline]\n" + crl);
+        importPreserves(OVPN.replace("auth-user-pass\n", "") + crl
+                + "<auth-user-pass>\nservice-user\nservice-password\n</auth-user-pass>\n");
+        // Credential fields are opaque text even when they resemble an opening block tag.
+        importPreserves(OVPN.replace("auth-user-pass\n", "") + crl
+                + "<auth-user-pass>\n<service-user>\n<service-password>\n</auth-user-pass>\n");
+        for (String external : new String[] {"crl-verify revocations.pem\n", "crl-verify revocations dir\n",
+                "--crl-verify private/path/revocations.pem\n"}) {
+            IOException error = rejects(OVPN + external, ProfileImport.Protocol.OPENVPN);
+            check(error.getMessage().contains("inline CRL"));
+            check(error.getMessage().contains("revocation checks enabled"));
+            check(error.getMessage().length() <= 200);
+            check(!error.getMessage().contains("private/path"));
+            rejects(OVPN + crl + external, ProfileImport.Protocol.OPENVPN);
+        }
+        rejects("client\n" + crl.replace("revocations-placeholder", "remote hidden.example"), ProfileImport.Protocol.OPENVPN);
+        rejects("remote vpn.example\n" + crl.replace("revocations-placeholder", "client"), ProfileImport.Protocol.OPENVPN);
+        rejects(OVPN + "<crl-verify>\nunclosed\n", ProfileImport.Protocol.OPENVPN);
+        rejects(OVPN + "<crl-verify>\n<ca>\nmaterial\n</ca>\n</crl-verify>\n", ProfileImport.Protocol.OPENVPN);
+        rejects(OVPN + "<crl-verify>\nmaterial\n</ca>\n", ProfileImport.Protocol.OPENVPN);
+        rejects(OVPN + "</crl-verify>\n", ProfileImport.Protocol.OPENVPN);
+    }
+
+    private static void importPreserves(String profile) throws IOException {
+        try (ProfileImport.Candidate candidate = read(profile, ProfileImport.Protocol.OPENVPN)) {
+            char[] actual = candidate.copyContents();
+            try { check(Arrays.equals(actual, profile.toCharArray())); }
+            finally { Arrays.fill(actual, '\0'); }
+        }
     }
 
     private static ProfileImport.Candidate read(String text, ProfileImport.Protocol protocol) throws IOException {
@@ -270,11 +364,12 @@ public final class VpnCoreChecks {
         } catch (GeneralSecurityException | IOException expected) { checks++; }
     }
 
-    private static void rejects(String text, ProfileImport.Protocol protocol) throws Exception {
+    private static IOException rejects(String text, ProfileImport.Protocol protocol) throws Exception {
         try (ProfileImport.Candidate candidate = read(text, protocol)) {
             throw new AssertionError("Unsupported configuration accepted: " + candidate.getProtocol());
         } catch (IOException expected) {
             check(!expected.getMessage().contains("secret-key"));
+            return expected;
         }
     }
 

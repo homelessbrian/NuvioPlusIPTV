@@ -11,6 +11,10 @@ TV and Mobile open the same settings page from **Settings > VPN profiles**. Matc
 
 Import a WireGuard configuration or a self-contained OpenVPN TUN profile. OpenVPN supports UDP and TCP, inline CA and certificate material, and service credentials. Importing a profile with a bare `auth-user-pass` directive prompts for credentials. Use **OpenVPN service credentials** to update a previously imported profile. Desktop scripts, external credential files, interactive authentication challenges and external PKI are outside the supported profile format.
 
+OpenVPN's `client` directive and its equivalent `tls-client` plus `pull` form are both accepted. OpenVPN 3 does not support the `fragment` option. Use a provider export without client-side fragmentation, or choose another compatible protocol. Do not remove `fragment` from a profile when the server requires it.
+
+Self-contained OpenVPN profiles may keep provider fallback servers in connection blocks and revocation lists in inline crl-verify blocks. Unsupported or oversized connection blocks are rejected rather than silently dropping their settings.
+
 **Apply VPN settings to** defaults to **All profiles**. The selected VPN and protection mode apply to current and future Nuvio profiles. **Only this profile** starts a separate choice for the active Nuvio profile. Switching back to **All profiles** uses the current shared settings again. Setup Sync restores both the shared choice and individual overrides.
 
 Profiles are encrypted with the device’s Android Keystore. HomelessBrian’s Setup Sync carries a portable `vpn_profiles_v1` entry with the configurations, selected profile and scope. Exported backups contain private VPN configuration, including saved OpenVPN service credentials. The destination validates and re-encrypts the profiles with its own key. Older backups without a VPN entry preserve the local setup.
