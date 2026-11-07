@@ -42,7 +42,10 @@ class LiveTvChannelStore @Inject constructor(
 
     /** Channels with the user's renames and renumbering applied. */
     val displayChannels: StateFlow<List<LiveChannel>> = combine(
-        repository.channels, prefs.userState, prefs.settings, repository.epgLogos,
+        repository.channels,
+        prefs.userState.displayChannelUserChanges(),
+        prefs.settings.displayChannelSettingsChanges(),
+        repository.epgLogos,
         // Only the playlists that prefer the guide's logos (not every saved playlist change).
         prefs.playlists.map { list -> list.filter { it.logoSource == "epg" }.mapTo(HashSet()) { it.id } as Set<String> }
             .distinctUntilChanged()
