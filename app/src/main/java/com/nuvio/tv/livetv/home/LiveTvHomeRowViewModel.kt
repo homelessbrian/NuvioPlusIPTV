@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
-import com.nuvio.tv.livetv.model.ChannelGroup
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveTvSettings
@@ -13,7 +12,6 @@ import com.nuvio.tv.livetv.player.LivePlaybackState
 import com.nuvio.tv.livetv.player.LiveTvPlaybackController
 import com.nuvio.tv.livetv.ui.LiveTvSession
 import com.nuvio.tv.livetv.ui.LiveTvViewModel
-import com.nuvio.tv.livetv.ui.buildUi
 import com.nuvio.tv.livetv.ui.channelInGroup
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -59,21 +57,10 @@ class LiveTvHomeRowViewModel @Inject constructor(
     private val _now = MutableStateFlow(System.currentTimeMillis())
     val now: StateFlow<Long> = _now
 
-    /** The row's group (Favorites, Recently watched or one of your own groups). */
-    private fun rowGroup(s: LiveTvSettings): String = when (s.homeRowSource) {
-        "favorites", "" -> ChannelGroup.FAVORITES
-        "recent" -> ChannelGroup.RECENT
-        else -> s.homeRowSource
-    }
-
-    /**
-     * The row's channels (which group, in what order). Worked out only when channels, your
-     * favorites or settings change, not every time the clock or the guide moves on.
-     */
-    private val rowChannels = combine(channelStore.displayChannels, userState, settings) { channels, user, s ->
-        if (!s.homeRowEnabled || channels.isEmpty()) return@combine emptyList<LiveChannel>() to s
-        buildUi(channels, user, s, rowGroup(s), "", true, exactGroup = true).channels to s
-    }.flowOn(Dispatchers.Default).distinctUntilChanged()
+    /** Shared by the Home cards and the guide prefetcher; unrelated saves skip selection. */
+    private val rowChannels = homeRowChannelSelections(
+        channelStore.displayChannels, userState, settings, viewModelScope
+    )
 
     val homeRow: StateFlow<List<LiveTvViewModel.HomeRowEntry>> = combine(
         rowChannels,
@@ -127,7 +114,7 @@ class LiveTvHomeRowViewModel @Inject constructor(
 
     /** Home screen: play [channel] (the guide then opens on the row's group behind it). */
     fun playFromHome(channel: LiveChannel) {
-        val groupId = rowGroup(settings.value)
+        val groupId = homeRowGroup(settings.value)
         session.currentGroupId.value = groupId
         // Another channel from a provider that's recording: the recording holds a connection.
         recorder.recordings.value.firstOrNull {
