@@ -315,13 +315,16 @@ class UpdateViewModel @Inject constructor(
         }
 
         _uiState.update { it.copy(showUnknownSourcesDialog = false) }
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { ApkInstaller.install(context, apkFile, background = false) }
-                .onFailure {
-                    Log.w(TAG, "Session install failed, falling back to the system installer", it)
-                    ApkInstaller.launchSystemInstaller(context, apkFile)
+        // An install the user starts opens the system installer screen right away, with its own progress and
+        // Done/Open steps. Only automatic idle installs use the silent session install.
+        runCatching { ApkInstaller.launchSystemInstaller(context, apkFile) }
+            .onFailure {
+                Log.w(TAG, "System installer unavailable, falling back to a session install", it)
+                viewModelScope.launch(Dispatchers.IO) {
+                    runCatching { ApkInstaller.install(context, apkFile, background = false, withDexMetadata = false) }
+                        .onFailure { e -> Log.w(TAG, "Session install failed", e) }
                 }
-        }
+            }
     }
 
     // Shows the "updated" banner once after the idle job installed a release, then forgets it.
