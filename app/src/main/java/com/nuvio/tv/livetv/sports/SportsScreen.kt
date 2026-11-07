@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -78,6 +79,7 @@ import com.nuvio.tv.livetv.ui.drawThemeGlow
 import com.nuvio.tv.livetv.ui.formatClock
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -1823,12 +1825,14 @@ internal fun ChannelPickerDialog(
     onDismiss: () -> Unit
 ) {
     var q by remember { mutableStateOf(initial) }
-    val all = remember { viewModel.repo.channelsForPicker() }
-    val list = remember(q, all) {
-        val n = SportsCatalog.norm(q).trim()
-        if (n.length < 2) emptyList()
-        else all.asSequence().filter { SportsCatalog.norm(it.name).contains(n) }.take(80).toList()
+    val all = remember(viewModel.repo) { viewModel.repo.channelsForPicker() }
+    var result by remember(all) { mutableStateOf<ChannelPickerSearchResult<LiveChannel>?>(null) }
+    LaunchedEffect(all) {
+        channelPickerSearchResults(all, snapshotFlow { q }) { it.name }.collect { result = it }
     }
+    val list = result?.forQuery(q).orEmpty()
+    val searching = result?.query != q
+    var focusResultsFor by remember { mutableStateOf<String?>(null) }
     val field = remember { FocusRequester() }
     val firstResult = remember { FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -1837,20 +1841,27 @@ internal fun ChannelPickerDialog(
         Spacer(Modifier.height(10.dp))
         // ✓ on the keyboard: down to the channels found (no need to press Back first).
         LiveTextField(
-            value = q, onValueChange = { q = it }, hint = "Type part of the channel's name", focusRequester = field,
+            value = q, onValueChange = { q = it; focusResultsFor = null }, hint = "Type part of the channel's name", focusRequester = field,
             onDone = {
                 keyboard?.hide()
                 if (list.isNotEmpty()) runCatching { firstResult.requestFocus() }
+                else if (searching) focusResultsFor = q
             }
         )
         Spacer(Modifier.height(8.dp))
-        if (q.trim().length >= 2 && list.isEmpty()) {
+        if (q.trim().length >= 2 && list.isEmpty() && !searching) {
             LiveText("No channel names match.", color = SportsLook.Dim, size = 12.sp)
         }
         LazyColumn(Modifier.heightIn(max = 330.dp).keepFocusWhileHeld(horizontal = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             itemsIndexed(list, key = { _, ch -> ch.key }) { i, ch ->
                 ChannelLine(channel = ch, detail = listOf(ch.sourceName, ch.group).filter { it.isNotBlank() }.joinToString(" · "), modifier = if (i == 0) Modifier.focusRequester(firstResult) else Modifier, onClick = { onPick(ch) })
             }
+        }
+    }
+    LaunchedEffect(q, result, focusResultsFor) {
+        if (focusResultsFor == q && !searching) {
+            focusResultsFor = null
+            if (list.isNotEmpty()) runCatching { firstResult.requestFocus() }
         }
     }
     LaunchedEffect(Unit) { delay(80); runCatching { field.requestFocus() } }
