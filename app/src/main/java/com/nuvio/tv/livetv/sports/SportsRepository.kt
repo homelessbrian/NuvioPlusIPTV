@@ -125,6 +125,9 @@ class SportsRepository @Inject constructor(
     private val tvCache = SportsTvListings.Cache()
     private val tvCountries = settings.map { SportsTvListings.countriesFor(it) }.distinctUntilChanged()
 
+    /** Last round's clock copies of schedule and guide events, by the event they were made from. */
+    @Volatile private var timedCopies: Map<SportsEvent, SportsEvent> = java.util.IdentityHashMap()
+
     /** Every game and event on the page's days (yesterday to a week ahead), with your country's channels from the TV listings. */
     val events: StateFlow<List<SportsEvent>> = combine(plainEvents(), tvData, tvCountries) { ev, tv, countries ->
         runCatching { SportsTvListings.addChannels(ev, tv, countries, tvCache) }.getOrDefault(ev)
@@ -145,10 +148,11 @@ class SportsRepository @Inject constructor(
         EventInputs(l, w, f, g, t)
     }.debounce(400).map { (l, w, f, g, t) ->
         val now = System.currentTimeMillis()
-        val guide = mergeWrestlingAirings(g.values.flatten()).map { timed(it, now) }
+        val copies = java.util.IdentityHashMap<SportsEvent, SportsEvent>()
+        val guide = mergeWrestlingAirings(g.values.flatten()).map { timed(it, now, copies) }
         val from = dayStart(-DAYS_BACK - 1)
         val to = dayStart(DAYS_AHEAD + 2)
-        val tsdbAll = t.values.flatMap { it.events }.filter { it.startMs in from until to }.map { timed(it, now) }
+        val tsdbAll = t.values.flatMap { it.events }.filter { it.startMs in from until to }.map { timed(it, now, copies) }
         // A league with TheSportsDB's schedule (WWE, MotoGP…) doesn't also take the older one.
         val tsdbLeagues = t.filterValues { it.events.isNotEmpty() }.keys
         val (tsdbNamed, tsdb) = tsdbAll.partition { it.home == null }
@@ -161,7 +165,7 @@ class SportsRepository @Inject constructor(
         // already ended (a preview or early replay) while the fight is still on, the schedule's
         // entry is the one kept, so the fight shows as live with its own channels.
         val replacedGuide = HashSet<String>()
-        val fixtures = (f.values.flatMap { it.events }.map { timed(it, now) }.filter { it.leagueId !in tsdbLeagues } + tsdbNamed).filter { fx ->
+        val fixtures = (f.values.flatMap { it.events }.map { timed(it, now, copies) }.filter { it.leagueId !in tsdbLeagues } + tsdbNamed).filter { fx ->
             val same = guideByLeague[fx.leagueId].orEmpty()
             if (fx.hasTime) {
                 val near = same.filter { kotlin.math.abs(it.startMs - fx.startMs) <= 3 * HOUR || sameShowShifted(it, fx) }
@@ -206,6 +210,7 @@ class SportsRepository @Inject constructor(
             }
             return false
         }
+        timedCopies = copies
         (espn + (fixtures + guide.filterNot { it.id in replacedGuide }).filterNot(::coveredByEspn) + tsdb).distinctBy { it.id }
     }.flowOn(Dispatchers.Default).stateIn(scope, SharingStarted.Eagerly, emptyList())
 
@@ -214,7 +219,7 @@ class SportsRepository @Inject constructor(
      * file or guide was read (schedule files only every 12 hours), so a fight read in the morning
      * never went live, and one read mid-card could stay live too long.
      */
-    private fun timed(ev: SportsEvent, now: Long): SportsEvent {
+    private fun timed(ev: SportsEvent, now: Long, next: java.util.IdentityHashMap<SportsEvent, SportsEvent>): SportsEvent {
         // Only events without two teams (fights, races, shows): a team game's state comes from its feed.
         if (ev.source == EventSource.ESPN || !ev.hasTime || ev.state == GameState.OFF || ev.home != null || ev.away != null) return ev
         val end = ev.endMs ?: return ev
@@ -223,7 +228,11 @@ class SportsRepository @Inject constructor(
             now >= ev.startMs -> GameState.LIVE
             else -> GameState.PRE
         }
-        return if (state == ev.state) ev else ev.copy(state = state)
+        if (state == ev.state) return ev
+        // The same copy as last round while its state hasn't moved, not a new one every round.
+        val copy = timedCopies[ev]?.takeIf { it.state == state } ?: ev.copy(state = state)
+        next[ev] = copy
+        return copy
     }
 
     /**
@@ -1674,14 +1683,31 @@ class SportsRepository @Inject constructor(
 
     /** A game's summary as last asked: when, the score then, its scoring plays and the rest. */
     private class GameSummary(val at: Long, val sig: String, val plays: List<ScoringPlay>, val extras: GameExtras)
-    private val summaryCache = HashMap<String, GameSummary>()
+    // The 50 games last opened; older ones are asked again if opened later.
+    private val summaryCache = object : LinkedHashMap<String, GameSummary>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, GameSummary>?) = size > SUMMARY_CACHE_SIZE
+    }
+
+    /** A summary being fetched right now: the game page asks for its plays and its extras at once, and both share one request. */
+    private val summaryInFlight = HashMap<String, kotlinx.coroutines.Deferred<GameSummary?>>()
 
     /**
      * The game's ESPN summary, one request for the latest scoring and everything under it (team
      * stats, leaders, form, the table…). Asked again after 25 seconds while it's on (straight away
      * when the score changes), otherwise after half an hour.
      */
-    private suspend fun summaryFor(ev: SportsEvent): GameSummary? = withContext(Dispatchers.IO) {
+    private suspend fun summaryFor(ev: SportsEvent): GameSummary? {
+        val key = "${ev.id}|${ev.away?.score}-${ev.home?.score}-${ev.state}"
+        val job = synchronized(summaryCache) {
+            summaryInFlight[key]?.takeIf { it.isActive } ?: scope.async { loadSummary(ev) }.also { d ->
+                summaryInFlight[key] = d
+                d.invokeOnCompletion { synchronized(summaryCache) { if (summaryInFlight[key] === d) summaryInFlight.remove(key) } }
+            }
+        }
+        return job.await()
+    }
+
+    private suspend fun loadSummary(ev: SportsEvent): GameSummary? = withContext(Dispatchers.IO) {
         val league = SportsCatalog.league(ev.leagueId) ?: return@withContext null
         if (league.kind != LeagueKind.TEAMS) return@withContext null
         // TheSportsDB's games: the details the nuvio-data job keeps (finished and live games).
@@ -1929,6 +1955,7 @@ class SportsRepository @Inject constructor(
         private val EUROPEAN_TABLES = setOf("soccer/uefa.champions", "soccer/uefa.europa", "soccer/uefa.europa.conf")
         private const val MINUTE = 60_000L
         private const val HOUR = 60 * MINUTE
+        private const val SUMMARY_CACHE_SIZE = 50
         /** The safety-net round: this long after the last one. */
         private const val SAFETY_ROUND = 4 * HOUR
         private const val DAY = 24 * HOUR

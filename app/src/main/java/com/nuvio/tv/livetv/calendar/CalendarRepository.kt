@@ -141,7 +141,13 @@ class CalendarRepository @Inject constructor(
         scope.launch {
             kotlinx.coroutines.flow.combine(sports.known, sports.matches, sports.follows, sports.settings, settings.map { it.calendarSports }) { _, _, _, _, _ -> Unit }
                 .drop(1).debounce(5_000).collect {
-                    mutex.withLock { if (!isOff) _state.value = _state.value.copy(entries = withGames(baseEntries)) }
+                    // Sports changes all day (every score in every league); the Calendar is only
+                    // rebuilt when something about your teams' games it shows has changed.
+                    val fp = runCatching { gamesFingerprint() }.getOrNull()
+                    if (fp == null || fp != lastGamesFingerprint) {
+                        lastGamesFingerprint = fp
+                        mutex.withLock { if (!isOff) _state.value = _state.value.copy(entries = withGames(baseEntries)) }
+                    }
                 }
         }
         // A plan made or dropped: carry it out now if its episode is already in the guide.
@@ -396,6 +402,28 @@ class CalendarRepository @Inject constructor(
     @Volatile private var baseEntries: List<CalendarEntry> = emptyList()
 
     /** [base] with the games of the teams you follow in Sports, in date order. */
+    @Volatile private var lastGamesFingerprint: Int? = null
+
+    /** Everything [gameEntries] shows, boiled down to one number: same number, same games on the Calendar. */
+    private fun gamesFingerprint(): Int {
+        val s = settings.value
+        val ss = sports.settings.value
+        if (!s.calendarSports || !ss.showInSidebar) return 0
+        val f = sports.follows.value
+        if (f.teams.isEmpty()) return 0
+        val matches = sports.matches.value
+        var h = 31 * LocalDate.now().toEpochDay().toInt() + (if (ss.hideScores) 1 else 2)
+        for (ev in sports.known.value) {
+            val mine = ev.sides.firstOrNull { f.followsTeam(ev.leagueId, it.team.id) } ?: continue
+            h = 31 * h + java.util.Objects.hash(
+                ev.id, ev.startMs, ev.endMs, ev.hasTime, ev.state, ev.status, ev.title, ev.broadcasts.firstOrNull(), mine.team.logo,
+                ev.sides.map { listOf(it.team.name, it.team.logo, it.team.color, it.team.altColor, it.score) },
+                matches[ev.id]?.firstOrNull()?.channel?.let { listOf(it.key, it.name, it.logo) }
+            )
+        }
+        return h
+    }
+
     private fun withGames(base: List<CalendarEntry>): List<CalendarEntry> {
         val games = runCatching { gameEntries() }.getOrDefault(emptyList())
         if (games.isEmpty()) return base

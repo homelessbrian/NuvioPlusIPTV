@@ -309,12 +309,41 @@ class LiveTvPreferences @Inject constructor(
         deviceStore.edit { it[Keys.groupPlaylistTurnedOn] = true }
     }
 
+    /**
+     * Each screen that watches these lists, settings or user data used to decode them again on
+     * every save (every channel change saves). One saved copy is now decoded once and every
+     * screen gets the same result; an unchanged result is handed back as the same object, so
+     * each screen's "did it change" check is instant.
+     */
+    private class SnapshotMemo<T> {
+        private var a: Any? = null
+        private var b: Any? = null
+        private var id = Int.MIN_VALUE
+        private var has = false
+        private var value: T? = null
+
+        @Suppress("UNCHECKED_CAST")
+        @Synchronized
+        fun get(a: Any, b: Any?, id: Int, compute: () -> T): T {
+            if (has && a === this.a && b === this.b && id == this.id) return value as T
+            val fresh = compute()
+            val result = if (has && fresh == value) value as T else fresh
+            this.a = a; this.b = b; this.id = id; value = result; has = true
+            return result
+        }
+    }
+
+    private val playlistsMemo = SnapshotMemo<List<PlaylistSource>>()
+    private val epgsMemo = SnapshotMemo<List<EpgSource>>()
+    private val settingsMemo = SnapshotMemo<LiveTvSettings>()
+    private val userStateMemo = SnapshotMemo<LiveUserState>()
+
     val playlists: Flow<List<PlaylistSource>> = store.data
-        .map { decodePlaylists(it[Keys.playlists]) }
+        .map { p -> playlistsMemo.get(p, null, 0) { decodePlaylists(p[Keys.playlists]) } }
         .distinctUntilChanged()
 
     val epgSources: Flow<List<EpgSource>> = store.data
-        .map { decodeEpgs(it[Keys.epgs]) }
+        .map { p -> epgsMemo.get(p, null, 0) { decodeEpgs(p[Keys.epgs]) } }
         .distinctUntilChanged()
 
     /**
@@ -331,10 +360,12 @@ class LiveTvPreferences @Inject constructor(
     }
 
     val settings: Flow<LiveTvSettings> = kotlinx.coroutines.flow.combine(store.data, profileManager.activeProfileId) { p0, id ->
-        withMyMenu(p0, id)
-    }.map { p ->
+        settingsMemo.get(p0, null, id) { buildSettings(withMyMenu(p0, id)) }
+    }.distinctUntilChanged()
+
+    private fun buildSettings(p: Preferences): LiveTvSettings {
         val d = LiveTvSettings()
-        LiveTvSettings(
+        return LiveTvSettings(
             showInSidebar = p[Keys.showInSidebar] ?: d.showInSidebar,
             showChannelNames = p[Keys.showNames] ?: d.showChannelNames,
             showChannelNumbers = p[Keys.showNumbers] ?: d.showChannelNumbers,
@@ -467,7 +498,7 @@ class LiveTvPreferences @Inject constructor(
             guideInfoHidden = p[Keys.guideInfoHidden] ?: d.guideInfoHidden,
             launcherRows = p[Keys.launcherRows] ?: d.launcherRows
         )
-    }.distinctUntilChanged()
+    }
 
     /**
      * Channels and groups hidden in every profile that uses Live TV. No one sees them, so the
@@ -495,7 +526,12 @@ class LiveTvPreferences @Inject constructor(
     suspend fun currentHiddenEverywhere(): HiddenEverywhere = hiddenEverywhere.first()
 
     val userState: Flow<LiveUserState> = kotlinx.coroutines.flow.combine(store.data, deviceStore.data, profileManager.activeProfileId) { p0, d, id ->
-        val p = profileView(p0, id)
+        userStateMemo.get(p0, d, id) { buildUserState(profileView(p0, id), d) }
+    // Read off the main thread: this runs on every settings change, and on a slow box with
+    // memory nearly full it used to hold up the screen until Android closed the app.
+    }.flowOn(Dispatchers.Default).distinctUntilChanged()
+
+    private fun buildUserState(p: Preferences, d: Preferences): LiveUserState =
         LiveUserState(
             hiddenChannels = p[Keys.hiddenChannels] ?: emptySet(),
             hiddenGroups = p[Keys.hiddenGroups] ?: emptySet(),
@@ -525,9 +561,6 @@ class LiveTvPreferences @Inject constructor(
             vodGroupNames = decodeStringMap(p[Keys.vodGroupNames]),
             vodSorts = decodeStringMap(p[Keys.vodSorts])
         )
-    // Read off the main thread: this runs on every settings change, and on a slow box with
-    // memory nearly full it used to hold up the screen until Android closed the app.
-    }.flowOn(Dispatchers.Default).distinctUntilChanged()
 
     suspend fun currentPlaylists(): List<PlaylistSource> = playlists.first()
     suspend fun currentEpgSources(): List<EpgSource> = epgSources.first()
