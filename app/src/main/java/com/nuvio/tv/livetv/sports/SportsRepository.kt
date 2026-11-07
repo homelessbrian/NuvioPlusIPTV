@@ -62,8 +62,9 @@ class SportsRepository @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val feeds = SportsFeeds()
-    private val matcher = SportsMatcher(guideDb)
     private val dir = File(context.filesDir, "sports").apply { mkdirs() }
+    // Test builds also try the guide's sports-shows table (checked against the whole guide).
+    private val matcher = SportsMatcher(guideDb, dir, sportsTable = com.nuvio.tv.BuildConfig.NUVIO_CHANNEL == "test")
 
     val settings: StateFlow<SportsSettings> = prefs.sportsSettingsJson
         .map { SportsSettings.fromJson(it) }
@@ -1519,6 +1520,7 @@ class SportsRepository @Inject constructor(
             // there's no traffic reason to leave any of them out) — plus names you follow.
             val guideLeagues = SportsCatalog.all.filter { it.guideOnly }
             val keys = channels.associateBy { it.key }
+            matcher.prepareTable(events.value, guideLeagues, f.words, now, gentle = viewers.value == 0)
             // All three days from one read of the guide (none at all when it hasn't changed).
             val days = runCatching {
                 matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, f.words, keys, shift, now)

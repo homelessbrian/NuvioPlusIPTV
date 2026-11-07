@@ -6,6 +6,9 @@ import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.sports.SportsCatalog.hasWord
 import com.nuvio.tv.livetv.sports.SportsCatalog.norm
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 
 /**
  * Finds which of your channels show each game, in four ways (best first):
@@ -15,7 +18,16 @@ import com.nuvio.tv.livetv.sports.SportsCatalog.norm
  *  4. channels you picked yourself with Fix Match (and never the ones you said were wrong).
  * Works for any country: UK users get Sky Sports / TNT Sports from their own guide.
  */
-internal class SportsMatcher(private val db: EpgDatabase) {
+internal class SportsMatcher(
+    private val db: EpgDatabase,
+    /** Where what was found in the guide is saved, so a restart with the same guide doesn't search it all again. */
+    private val dir: File? = null,
+    /**
+     * Test builds: read the guide's sports-shows table instead of the whole guide (see
+     * [prepareTable]); after each rebuild the whole guide is read once more and the two compared.
+     */
+    private val sportsTable: Boolean = false
+) {
 
     class Input(
         val events: List<SportsEvent>,
@@ -35,6 +47,9 @@ internal class SportsMatcher(private val db: EpgDatabase) {
     private class SlotFind(val eventId: String, val key: String, val score: Int, val how: String, val program: EpgProgram)
     @Volatile private var slotCacheKey = 0L
     @Volatile private var slotCache: Map<Long, List<SlotFind>> = emptyMap()
+    /** The saved copy has been looked at (once per app start), and which cache it holds. */
+    @Volatile private var slotsLoaded = false
+    @Volatile private var savedSlotsKey = 0L
 
     /** What step 1's result for a half-hour depends on: its games (who, when, where) and the words looked for. */
     private fun slotSignature(gs: GuideSlot, discIds: Set<String>): Long {
@@ -226,7 +241,16 @@ internal class SportsMatcher(private val db: EpgDatabase) {
         // (and race weekends / tournaments, which depend on what else is on) are searched. That
         // also covers games that found nothing: they aren't searched again until something changes.
         val guideAt = db.changes
-        val cacheKey = (guideAt * 1_000_003L + nd0.fingerprint) * 31 + input.shiftMs
+        // The guide's own stamp, kept across restarts: what was found last time (saved) still holds
+        // after a restart while the guide is the same.
+        val rev = runCatching { db.revision() }.getOrNull()
+        val cacheKey = ((rev ?: guideAt) * 1_000_003L + nd0.fingerprint) * 31 + input.shiftMs
+        if (!slotsLoaded) {
+            slotsLoaded = true
+            if (rev != null && slotCacheKey != cacheKey) loadSlots(cacheKey)?.let {
+                slotCache = it; slotCacheKey = cacheKey; savedSlotsKey = cacheKey
+            }
+        }
         val prevCache = if (cacheKey == slotCacheKey) slotCache else emptyMap()
         val newCache = HashMap<Long, List<SlotFind>>()
         val toScan = ArrayList<GuideSlot>()
@@ -246,7 +270,7 @@ internal class SportsMatcher(private val db: EpgDatabase) {
             }
         }
         var scanned = true
-        val slotHits = runCatching { guideHitsBySlot(toScan, input.gentle) }
+        val slotHits = runCatching { guideHitsBySlot(toScan, input.gentle, rev) }
             .getOrElse { scanned = false; toScan.map { emptyList() } }
         toScan.forEachIndexed { slotIndex, gs ->
             val slot = gs.slot
@@ -300,7 +324,13 @@ internal class SportsMatcher(private val db: EpgDatabase) {
             }
         }
         // The guide changed while it was being read: keep nothing, search it all next time.
-        if (db.changes == guideAt) { slotCache = newCache; slotCacheKey = cacheKey }
+        if (db.changes == guideAt) {
+            // Saved when its half-hours changed (or it's for another guide), for the next app start.
+            if (rev != null && (savedSlotsKey != cacheKey || newCache.keys != prevCache.keys)) {
+                saveSlots(cacheKey, newCache); savedSlotsKey = cacheKey
+            }
+            slotCache = newCache; slotCacheKey = cacheKey
+        }
         else { slotCache = emptyMap(); slotCacheKey = 0L }
         byGuide = found.size
         val tGuide = System.currentTimeMillis()
@@ -445,7 +475,7 @@ internal class SportsMatcher(private val db: EpgDatabase) {
             "(guide $byGuide, channel names $byName, networks $byNetwork, ${linked.size} linked games skipped the guide, " +
             "$reused of ${guideSlots.size} half-hours unchanged) · ${input.channels.size} channels searched in " +
             "${(tEnd - tStart) / 1000} s (guide ${(tGuide - tStart) / 1000}, names ${(tNames - tGuide) / 1000}, networks ${(tEnd - tNames) / 1000})" +
-            (if (multi.isNotEmpty()) " · multi-day: $multi" else "")
+            (if (multi.isNotEmpty()) " · multi-day: $multi" else "") + takeTableNotes()
         return Result(out, summary)
     }
 
@@ -466,6 +496,7 @@ internal class SportsMatcher(private val db: EpgDatabase) {
     /** What [guideEventsDays] read from the guide last time, kept while the guide and the words stay the same. */
     private class DayHits(val key: Long, val byDay: Map<Long, List<Pair<String, EpgProgram>>>)
     @Volatile private var dayHits: DayHits? = null
+    @Volatile private var daysLoaded = false
 
     /**
      * [guideEvents] for several days at once, by day start: the guide is read once for all of
@@ -486,11 +517,16 @@ internal class SportsMatcher(private val db: EpgDatabase) {
         val titleWords = leagueWords.map { norm(it.first).trim() }.filter { it.length >= 3 }.toSet()
         val followed = followedWords.map { norm(it).trim() }.filter { it.length >= 3 }.toSet()
         val guideAt = db.changes
-        var key = guideAt * 31 + shiftMs
+        val rev = runCatching { db.revision() }.getOrNull()
+        var key = (rev ?: guideAt) * 31 + shiftMs
         for (d in days) key = key * 31 + d.first * 7 + d.second
         for (w in titleWords.sorted()) key = key * 31 + w.hashCode()
         key = key * 17
         for (w in followed.sorted()) key = key * 31 + w.hashCode()
+        if (!daysLoaded) {
+            daysLoaded = true
+            if (rev != null && dayHits?.key != key) loadDays(key)?.let { dayHits = DayHits(key, it) }
+        }
         val byDay = dayHits?.takeIf { it.key == key }?.byDay ?: run {
             val out = days.associate { it.first to ArrayList<Pair<String, EpgProgram>>() }
             var ok = true
@@ -510,21 +546,47 @@ internal class SportsMatcher(private val db: EpgDatabase) {
                 }
                 val from = days.minOf { it.first } - shiftMs
                 val to = days.maxOf { it.second } - shiftMs
-                db.scanListings(from, to, from) { ch, start, stop, title, descr, cat ->
-                    val nt = norm(title)
-                    val hit = has(nt, firstTitle) || has(nt, firstFollowed) ||
-                        (firstFollowed.isNotEmpty() && !descr.isNullOrEmpty() && has(norm(descr), firstFollowed))
-                    if (!hit) return@scanListings
-                    for ((ds, de) in days) {
-                        if (start >= ds - shiftMs && start < de - shiftMs && stop > ds - shiftMs) {
-                            out[ds]?.add(ch to EpgProgram(startMs = start, stopMs = stop, title = title, description = descr, category = cat))
+                // (A description is only cleaned up when names you follow are looked for in it.)
+                val wantDesc = firstFollowed.isNotEmpty()
+                fun collect(src: From, into: Map<Long, ArrayList<Pair<String, EpgProgram>>>) =
+                    readRows(src, from, to, from, wantDesc, gentle = false) { ch, start, stop, title, descr, cat, nt, nd ->
+                        val hit = has(nt, firstTitle) || has(nt, firstFollowed) || (wantDesc && has(nd, firstFollowed))
+                        if (!hit) return@readRows
+                        for ((ds, de) in days) {
+                            if (start >= ds - shiftMs && start < de - shiftMs && stop > ds - shiftMs) {
+                                into[ds]?.add(ch to EpgProgram(startMs = start, stopMs = stop, title = title, description = descr, category = cat))
+                            }
+                        }
+                    }
+                val src = pickSource(rev, from, to, titleWords + followed)
+                val t0 = System.currentTimeMillis()
+                collect(src, out)
+                if (src == From.TABLE) {
+                    val tTable = System.currentTimeMillis() - t0
+                    if (checkDays) {
+                        checkDays = false
+                        val full = days.associate { it.first to ArrayList<Pair<String, EpgProgram>>() }
+                        val t1 = System.currentTimeMillis()
+                        collect(From.GUIDE, full)
+                        val tFull = System.currentTimeMillis() - t1
+                        fun ids(m: Map<Long, List<Pair<String, EpgProgram>>>) =
+                            m.flatMapTo(HashSet()) { (ds, l) -> l.map { (ch, p) -> "$ds|$ch|${p.startMs}" } }
+                        val a = ids(out); val b = ids(full)
+                        if (a == b) tableNote("check: guide-only sports and followed names the same (${b.size} shows; table ${tTable} ms, whole guide ${tFull / 1000} s)")
+                        else {
+                            tableNote("check: guide-only sports DIFFER (table ${a.size} shows, whole guide ${b.size}; " +
+                                "missing ${(b - a).take(3).joinToString { it.substringAfter('|') }}); the whole guide's result is used")
+                            days.forEach { (ds, _) -> out[ds]?.clear(); out[ds]?.addAll(full[ds].orEmpty()) }
                         }
                     }
                 }
             }.onFailure { ok = false }
             val read: Map<Long, List<Pair<String, EpgProgram>>> = out
             // Not kept when the guide couldn't be read, or changed while it was being read.
-            if (ok && db.changes == guideAt) dayHits = DayHits(key, read)
+            if (ok && db.changes == guideAt) {
+                dayHits = DayHits(key, read)
+                if (rev != null) saveDays(key, read)
+            }
             read
         }
         return days.associate { (ds, _) -> ds to guideEventsFrom(byDay[ds].orEmpty(), leagueWords, followedWords, channels, shiftMs, now) }
@@ -683,34 +745,53 @@ internal class SportsMatcher(private val db: EpgDatabase) {
      * than every show being compared with every word for every slot. With [gentle], a short pause
      * every so often so the screen and video keep priority on slower boxes.
      */
-    private fun guideHitsBySlot(slots: List<GuideSlot>, gentle: Boolean): List<List<Pair<String, EpgProgram>>> {
-        val out = List(slots.size) { ArrayList<Pair<String, EpgProgram>>() }
-        if (slots.isEmpty()) return out
-        // Every word looked for, by its first word, so a show only needs checking against the few that start like one of its own words.
-        val byFirst = HashMap<String, MutableList<String>>()
-        slots.flatMapTo(HashSet<String>()) { it.words }.forEach { w ->
-            byFirst.getOrPut(w.substringBefore(' ')) { ArrayList() } += w
+    private fun guideHitsBySlot(slots: List<GuideSlot>, gentle: Boolean, rev: Long? = null): List<List<Pair<String, EpgProgram>>> {
+        if (slots.isEmpty()) return emptyList()
+        val words = slots.flatMapTo(HashSet<String>()) { it.words }
+        val from = slots.minOf { it.fromMs }
+        val to = slots.maxOf { it.toMs }
+        val minStop = slots.minOf { it.minStopMs }
+        val src = pickSource(rev, from, to, words)
+        val t0 = System.currentTimeMillis()
+        val out = hitsBySlot(src, slots, words, from, to, minStop, gentle)
+        if (src != From.TABLE) return out
+        val tTable = System.currentTimeMillis() - t0
+        if (!checkSlots) {
+            tableNote("${slots.size} half-hours read from it in $tTable ms")
+            return out
         }
+        // First use since it was built: the whole guide too, to check nothing is missed.
+        checkSlots = false
+        val t1 = System.currentTimeMillis()
+        val full = hitsBySlot(From.GUIDE, slots, words, from, to, minStop, gentle)
+        val tFull = System.currentTimeMillis() - t1
+        val differ = slots.indices.filter { i ->
+            out[i].mapTo(HashSet()) { (ch, p) -> "$ch|${p.startMs}" } != full[i].mapTo(HashSet()) { (ch, p) -> "$ch|${p.startMs}" }
+        }
+        if (differ.isEmpty()) {
+            tableNote("check: same shows for all ${slots.size} half-hours (table $tTable ms, whole guide ${tFull / 1000} s)")
+            return out
+        }
+        tableNote("check: ${differ.size} of ${slots.size} half-hours DIFFER (" +
+            differ.take(3).joinToString { i -> slots[i].slot.first().title.take(40) } + "); the whole guide's result is used")
+        return full
+    }
+
+    private fun hitsBySlot(
+        src: From,
+        slots: List<GuideSlot>,
+        words: Set<String>,
+        from: Long,
+        to: Long,
+        minStop: Long,
+        gentle: Boolean
+    ): List<List<Pair<String, EpgProgram>>> {
+        val out = List(slots.size) { ArrayList<Pair<String, EpgProgram>>() }
+        // Every word looked for, by its first word, so a show only needs checking against the few that start like one of its own words.
+        val byFirst = byFirstWord(words)
         val seen = List(slots.size) { HashSet<String>() }
-        var rows = 0
-        db.scanListings(slots.minOf { it.fromMs }, slots.maxOf { it.toMs }, slots.minOf { it.minStopMs }) { ch, start, stop, title, descr, cat ->
-            if (gentle && ++rows % 1000 == 0) Thread.sleep(3)
-            val nt = norm(title)
-            val nd = if (descr.isNullOrEmpty()) "" else norm(descr)
-            var matched: HashSet<String>? = null
-            fun look(text: String) {
-                if (text.isEmpty()) return
-                for (tok in text.split(' ')) {
-                    if (tok.isEmpty()) continue
-                    val cands = byFirst[tok] ?: continue
-                    for (w in cands) {
-                        if (hasWord(nt, w) || hasWord(nd, w)) (matched ?: HashSet<String>().also { matched = it }).add(w)
-                    }
-                }
-            }
-            look(nt)
-            look(nd)
-            val m = matched ?: return@scanListings
+        readRows(src, from, to, minStop, wantDesc = true, gentle = gentle) { ch, start, stop, title, descr, cat, nt, nd ->
+            val m = matchedWords(nt, nd, byFirst) ?: return@readRows
             for (i in slots.indices) {
                 val s = slots[i]
                 if (start < s.fromMs || start >= s.toMs || stop <= s.minStopMs) continue
@@ -721,6 +802,237 @@ internal class SportsMatcher(private val db: EpgDatabase) {
         }
         return out
     }
+
+    /** Words by their first word (see [matchedWords]). */
+    private fun byFirstWord(words: Collection<String>): Map<String, List<String>> {
+        val byFirst = HashMap<String, MutableList<String>>()
+        words.forEach { w -> byFirst.getOrPut(w.substringBefore(' ')) { ArrayList() } += w }
+        return byFirst
+    }
+
+    /** The words in [byFirst] that a show's cleaned-up title [nt] or description [nd] has, or null for none. */
+    private fun matchedWords(nt: String, nd: String, byFirst: Map<String, List<String>>): HashSet<String>? {
+        var matched: HashSet<String>? = null
+        fun look(text: String) {
+            if (text.isEmpty()) return
+            for (tok in text.split(' ')) {
+                if (tok.isEmpty()) continue
+                val cands = byFirst[tok] ?: continue
+                for (w in cands) {
+                    if (hasWord(nt, w) || hasWord(nd, w)) (matched ?: HashSet<String>().also { matched = it }).add(w)
+                }
+            }
+        }
+        look(nt)
+        look(nd)
+        return matched
+    }
+
+    // ------------------------------------------------------------------ where the guide is read from
+
+    private enum class From { GUIDE, TABLE }
+
+    /**
+     * Guide shows starting in [from, to) and still on after [minStop], with their title and
+     * description cleaned up for matching ([wantDesc] false: the description isn't, "" instead).
+     * From the whole guide, or from the sports-shows table (already cleaned up there).
+     * With [gentle], a short pause every so often so the screen and video keep priority.
+     */
+    private fun readRows(
+        src: From,
+        from: Long,
+        to: Long,
+        minStop: Long,
+        wantDesc: Boolean,
+        gentle: Boolean,
+        onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) -> Unit
+    ) {
+        var rows = 0
+        if (src == From.TABLE) {
+            db.scanSportsRows(from, to, minStop) { ch, start, stop, title, descr, cat, nt, nd ->
+                if (gentle && ++rows % 1000 == 0) Thread.sleep(3)
+                onRow(ch, start, stop, title, descr, cat, nt, if (wantDesc) nd else "")
+            }
+        } else {
+            db.scanListings(from, to, minStop) { ch, start, stop, title, descr, cat ->
+                if (gentle && ++rows % 1000 == 0) Thread.sleep(3)
+                onRow(ch, start, stop, title, descr, cat, norm(title), if (wantDesc && !descr.isNullOrEmpty()) norm(descr) else "")
+            }
+        }
+    }
+
+    /** The sports-shows table as last read: which guide it's for, the time span, and the words it was built for. */
+    private class TableState(val stamp: String, val rev: Long, val fromMs: Long, val toMs: Long, val rows: Int, val words: Set<String>)
+    @Volatile private var tableState: TableState? = null
+    /** The table was just (re)built: the next guide reads also read the whole guide, to compare. */
+    @Volatile private var checkSlots = false
+    @Volatile private var checkDays = false
+    private val tableNotes = ArrayList<String>()
+
+    private fun tableNote(text: String) = synchronized(tableNotes) { tableNotes += text }
+
+    private fun takeTableNotes(): String = synchronized(tableNotes) {
+        if (tableNotes.isEmpty()) "" else (" · guide sports table (test build): " + tableNotes.joinToString("; ")).also { tableNotes.clear() }
+    }
+
+    private fun refreshTable() {
+        val info = db.sportsRowsInfo()
+        if (info?.stamp == tableState?.stamp) return
+        tableState = info?.let { TableState(it.stamp, it.rev, it.fromMs, it.toMs, it.rows, db.sportsRowsWords()) }
+    }
+
+    /**
+     * The table, when it's built for this guide, covers [from, to) and was built for every one of
+     * [words] (then it holds every show the whole guide would give for them); otherwise the whole guide.
+     */
+    private fun pickSource(rev: Long?, from: Long, to: Long, words: Collection<String>): From {
+        if (!sportsTable || rev == null) return From.GUIDE
+        val t = tableState ?: return From.GUIDE
+        if (t.rev != rev || from < t.fromMs || to > t.toMs) return From.GUIDE
+        if (!t.words.containsAll(words)) {
+            tableNote("whole guide read: ${(words - t.words).size} words the table wasn't built for")
+            return From.GUIDE
+        }
+        return From.TABLE
+    }
+
+    /**
+     * Test builds: makes sure the guide's sports-shows table is there for the guide stored now and
+     * holds every show naming a word these games (or the guide-only sports and names you follow)
+     * are looked for by; otherwise rebuilds it from one read of the guide. Runs before the
+     * searches ([guideEventsDays], [match]).
+     */
+    fun prepareTable(events: List<SportsEvent>, leagues: List<League>, followedWords: List<String>, now: Long, gentle: Boolean) {
+        if (!sportsTable) return
+        runCatching {
+            val rev = db.revision()
+            refreshTable()
+            val words = tableWords(events, leagues, followedWords)
+            val t = tableState
+            if (t != null && t.rev == rev && t.words.containsAll(words) &&
+                t.fromMs <= now - 50 * HOUR && t.toMs >= now + AHEAD_MS + 12 * HOUR
+            ) return
+            // Same guide: the words it was built for stay, so it isn't rebuilt back and forth.
+            val all = if (t != null && t.rev == rev) words + t.words else words
+            buildTable(rev, now - 60 * HOUR, now + 8 * 24 * HOUR, all, gentle)
+            refreshTable()
+        }.onFailure { tableNote("couldn't be built (${it.javaClass.simpleName})") }
+    }
+
+    /** Every word a search might look for: each game's ([termsFor]), the listed sports' guide words, names you follow. */
+    private fun tableWords(events: List<SportsEvent>, leagues: List<League>, followedWords: List<String>): Set<String> {
+        val out = HashSet<String>()
+        for (ev in events) {
+            val fight = ev.source == EventSource.GUIDE && SportsCatalog.league(ev.leagueId)?.sport == Sport.FIGHTING &&
+                SportsCatalog.fightSides(ev.title) != null
+            if (ev.source == EventSource.GUIDE && !fight) continue
+            termsFor(ev).sqlWords.forEach { w -> w.trim().takeIf { it.length >= 3 }?.let(out::add) }
+        }
+        leagues.forEach { l -> l.guideWords.forEach { w -> norm(w).trim().takeIf { it.length >= 3 }?.let(out::add) } }
+        followedWords.forEach { w -> norm(w).trim().takeIf { it.length >= 3 }?.let(out::add) }
+        return out
+    }
+
+    private fun buildTable(rev: Long, from: Long, to: Long, words: Set<String>, gentle: Boolean) {
+        val t0 = System.currentTimeMillis()
+        val byFirst = byFirstWord(words)
+        val writer = db.startSportsRows()
+        var read = 0
+        val ok = try {
+            readRows(From.GUIDE, from, to, from, wantDesc = true, gentle = gentle) { ch, start, stop, title, descr, cat, nt, nd ->
+                read++
+                if (matchedWords(nt, nd, byFirst) != null) writer.add(ch, start, stop, title, descr, cat, nt, nd)
+            }
+            writer.finish(rev, from, to, words)
+        } catch (e: Throwable) {
+            writer.abort()
+            throw e
+        }
+        val secs = (System.currentTimeMillis() - t0) / 1000
+        if (ok) {
+            checkSlots = true; checkDays = true
+            tableNote("built: ${writer.rows} of $read shows kept, for ${words.size} words, in $secs s")
+        } else {
+            tableNote("guide changed while it was built (${secs} s): whole guide read until the next try")
+        }
+    }
+
+    // ------------------------------------------------------------------ saved between app starts
+
+    private fun saveJson(name: String, o: JSONObject) {
+        val d = dir ?: return
+        runCatching {
+            val tmp = File(d, "$name.tmp")
+            tmp.writeText(o.toString())
+            if (!tmp.renameTo(File(d, name))) { File(d, name).delete(); tmp.renameTo(File(d, name)) }
+        }
+    }
+
+    private fun loadJson(name: String): JSONObject? {
+        val d = dir ?: return null
+        return runCatching { File(d, name).takeIf { it.exists() }?.readText()?.let { JSONObject(it) } }.getOrNull()
+    }
+
+    private fun JSONArray.str(i: Int): String? = if (isNull(i)) null else getString(i)
+
+    /** A show as [start, stop, title, description, category]. */
+    private fun programJson(a: JSONArray, p: EpgProgram): JSONArray = a.put(p.startMs).put(p.stopMs).put(p.title)
+        .put(p.description ?: JSONObject.NULL).put(p.category ?: JSONObject.NULL)
+
+    private fun programFrom(a: JSONArray, at: Int): EpgProgram = EpgProgram(
+        startMs = a.getLong(at), stopMs = a.getLong(at + 1), title = a.getString(at + 2),
+        description = a.str(at + 3), category = a.str(at + 4)
+    )
+
+    private fun saveSlots(key: Long, cache: Map<Long, List<SlotFind>>) {
+        val s = JSONArray()
+        cache.forEach { (sig, finds) ->
+            val f = JSONArray()
+            finds.forEach { x -> f.put(programJson(JSONArray().put(x.eventId).put(x.key).put(x.score).put(x.how), x.program)) }
+            s.put(JSONArray().put(sig).put(f))
+        }
+        saveJson(SLOTS_FILE, JSONObject().put("v", 1).put("k", key).put("s", s))
+    }
+
+    /** The saved half-hour finds, when they were saved for [key] (same guide, channels and time shift). */
+    private fun loadSlots(key: Long): Map<Long, List<SlotFind>>? = runCatching {
+        val o = loadJson(SLOTS_FILE) ?: return null
+        if (o.optInt("v") != 1 || o.optLong("k") != key) return null
+        val s = o.getJSONArray("s")
+        val out = HashMap<Long, List<SlotFind>>(s.length())
+        for (i in 0 until s.length()) {
+            val e = s.getJSONArray(i)
+            val f = e.getJSONArray(1)
+            out[e.getLong(0)] = (0 until f.length()).map { j ->
+                val x = f.getJSONArray(j)
+                SlotFind(x.getString(0), x.getString(1), x.getInt(2), x.getString(3), programFrom(x, 4))
+            }
+        }
+        out
+    }.getOrNull()
+
+    private fun saveDays(key: Long, byDay: Map<Long, List<Pair<String, EpgProgram>>>) {
+        val d = JSONArray()
+        byDay.forEach { (ds, hits) ->
+            val h = JSONArray()
+            hits.forEach { (ch, p) -> h.put(programJson(JSONArray().put(ch), p)) }
+            d.put(JSONArray().put(ds).put(h))
+        }
+        saveJson(DAYS_FILE, JSONObject().put("v", 1).put("k", key).put("d", d))
+    }
+
+    private fun loadDays(key: Long): Map<Long, List<Pair<String, EpgProgram>>>? = runCatching {
+        val o = loadJson(DAYS_FILE) ?: return null
+        if (o.optInt("v") != 1 || o.optLong("k") != key) return null
+        val d = o.getJSONArray("d")
+        val out = HashMap<Long, List<Pair<String, EpgProgram>>>(d.length())
+        for (i in 0 until d.length()) {
+            val e = d.getJSONArray(i)
+            val h = e.getJSONArray(1)
+            out[e.getLong(0)] = (0 until h.length()).map { j -> h.getJSONArray(j).let { x -> x.getString(0) to programFrom(x, 1) } }
+        }
+        out
+    }.getOrNull()
 
     // ------------------------------------------------------------------ how a game is named
 
@@ -888,6 +1200,10 @@ internal class SportsMatcher(private val db: EpgDatabase) {
         private const val HOUR = 60 * MINUTE
         /** How far ahead games are looked for in your channels (most guides cover 2–3 days). */
         const val AHEAD_MS = 56 * HOUR
+
+        /** What the guide gave each half-hour of games, and the guide-only sports by day (see [match], [guideEventsDays]). */
+        private const val SLOTS_FILE = "matcher_slots.json"
+        private const val DAYS_FILE = "matcher_days.json"
 
         private val NAME_PREFIX = Regex("""^\s*[A-Za-z]{2,3}\s*[:|\-]\s*""")
         private val NAME_NOISE = Regex(""" (fhd|uhd|hd|sd|4k|hevc|raw|backup|vip) """)

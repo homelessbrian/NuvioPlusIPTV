@@ -174,6 +174,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
 
     /** Stores the fingerprint, and its parts (or clears stale parts), inside the caller's transaction. */
     private fun putFingerprint(db: SQLiteDatabase, fingerprint: String, parts: String?) {
+        putRevision(db)
         db.insertWithOnConflict("meta", null, ContentValues().apply { put("k", "fingerprint"); put("v", fingerprint) },
             SQLiteDatabase.CONFLICT_REPLACE)
         if (parts != null) {
@@ -225,6 +226,37 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             changes++
         }
     }
+
+    /**
+     * A stamp for the stored listings that changes with every write and, unlike [changes], is kept
+     * in the database: what Sports works out from the guide can be saved and used again after a
+     * restart, as long as the guide is the same. A guide stored by an older version gets one now.
+     */
+    fun revision(): Long {
+        val at = changes
+        revCache?.let { (c, r) -> if (c == at) return r }
+        fun read(): Long? = readableDatabase.rawQuery("SELECT v FROM meta WHERE k = 'rev'", null).use { c ->
+            if (c.moveToFirst()) c.getString(0)?.toLongOrNull() else null
+        }
+        val r = read() ?: run {
+            writableDatabase.insertWithOnConflict("meta", null, ContentValues().apply {
+                put("k", "rev"); put("v", newRevision().toString())
+            }, SQLiteDatabase.CONFLICT_IGNORE)
+            read() ?: 0L
+        }
+        if (changes == at) revCache = at to r
+        return r
+    }
+
+    @Volatile private var revCache: Pair<Long, Long>? = null
+
+    /** A new [revision], inside the caller's transaction. */
+    private fun putRevision(db: SQLiteDatabase) {
+        db.insertWithOnConflict("meta", null, ContentValues().apply { put("k", "rev"); put("v", newRevision().toString()) },
+            SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    private fun newRevision(): Long = kotlin.random.Random.nextLong().let { if (it == 0L) 1L else it }
 
     fun fingerprint(): String? =
         readableDatabase.rawQuery("SELECT v FROM meta WHERE k = 'fingerprint'", null).use { c ->
@@ -391,6 +423,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                     stmt.bindNull(6); stmt.bindNull(7); stmt.bindNull(8); stmt.bindNull(9); stmt.bindNull(10)
                     stmt.executeInsert()
                 }
+                putRevision(db)
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
@@ -409,6 +442,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             db.beginTransaction()
             try {
                 channels.forEach { ch -> db.delete("programs", "ch = ?", arrayOf(ch)) }
+                putRevision(db)
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
@@ -699,6 +733,145 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         }
     }
 
+    // ------------------------------------------------------------ sports shows
+    //
+    // Test builds: the guide's shows that name a sport, a competition or a team (with their text
+    // already cleaned up for matching), so Sports' channel search reads a few thousand rows instead
+    // of the whole guide. Built by SportsMatcher from one read of the guide, and only good for the
+    // guide [revision] it was built from. Its tables are made the first time they're used (no
+    // database version change, so an older app version still opens this database).
+
+    /** What the sports-shows table holds: the guide it came from, the time span read, how many shows. */
+    class SportsRowsInfo(val stamp: String, val rev: Long, val fromMs: Long, val toMs: Long, val rows: Int)
+
+    private fun ensureSportsTables(db: SQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS sports_rows (
+                ch TEXT NOT NULL, start INTEGER NOT NULL, stop INTEGER NOT NULL, title TEXT NOT NULL,
+                descr TEXT, cat TEXT, nt TEXT NOT NULL, nd TEXT NOT NULL)"""
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS sports_rows_start ON sports_rows(start)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS sports_words (w TEXT PRIMARY KEY)")
+    }
+
+    /** The sports-shows table's details, or null when there's none (never built, or being rebuilt). */
+    fun sportsRowsInfo(): SportsRowsInfo? = runCatching {
+        readableDatabase.rawQuery("SELECT v FROM meta WHERE k = 'sports_rows'", null).use { c ->
+            if (!c.moveToFirst()) return@use null
+            val stamp = c.getString(0) ?: return@use null
+            val f = stamp.split('|')
+            if (f.size < 4) null else SportsRowsInfo(stamp, f[0].toLong(), f[1].toLong(), f[2].toLong(), f[3].toInt())
+        }
+    }.getOrNull()
+
+    /** The words the sports-shows table was built for (every show naming one of them is in it). */
+    fun sportsRowsWords(): Set<String> = runCatching {
+        val out = HashSet<String>()
+        readableDatabase.rawQuery("SELECT w FROM sports_words", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        out
+    }.getOrDefault(emptySet())
+
+    /**
+     * Rebuilds the sports-shows table: [add] each show, then [finish] (or [abort]). Shows are written
+     * a couple of thousand at a time in short steps, so a guide update never waits long behind it.
+     */
+    inner class SportsRowsWriter internal constructor() {
+        private val db = writableDatabase
+        private val startedAt = changes
+        private val buffer = ArrayList<Array<Any?>>(BATCH)
+        private var open = true
+        var rows = 0
+            private set
+
+        init {
+            db.beginTransaction()
+            try {
+                ensureSportsTables(db)
+                // Cleared first: a table that's half rebuilt is never taken for a finished one.
+                db.delete("meta", "k = ?", arrayOf("sports_rows"))
+                db.delete("sports_rows", null, null)
+                db.delete("sports_words", null, null)
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+        }
+
+        fun add(ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) {
+            buffer += arrayOf(ch, start, stop, title, descr, cat, nt, nd)
+            rows++
+            if (buffer.size >= BATCH) { db.beginTransaction(); try { flush(); db.setTransactionSuccessful() } finally { db.endTransaction() } }
+        }
+
+        /** Writes what's waiting, inside the caller's transaction. */
+        private fun flush() {
+            if (buffer.isEmpty()) return
+            val stmt = db.compileStatement("INSERT INTO sports_rows (ch, start, stop, title, descr, cat, nt, nd) VALUES (?,?,?,?,?,?,?,?)")
+            for (r in buffer) {
+                stmt.clearBindings()
+                stmt.bindString(1, r[0] as String); stmt.bindLong(2, r[1] as Long); stmt.bindLong(3, r[2] as Long)
+                stmt.bindString(4, r[3] as String)
+                (r[4] as String?)?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
+                (r[5] as String?)?.let { stmt.bindString(6, it) } ?: stmt.bindNull(6)
+                stmt.bindString(7, r[6] as String); stmt.bindString(8, r[7] as String)
+                stmt.executeInsert()
+            }
+            stmt.close()
+            buffer.clear()
+        }
+
+        /** Marks the table finished for guide [rev] — unless the guide changed while it was read (then it's left unfinished, never used). */
+        fun finish(rev: Long, fromMs: Long, toMs: Long, words: Collection<String>): Boolean {
+            if (!open) return false
+            open = false
+            db.beginTransaction()
+            try {
+                flush()
+                val ok = changes == startedAt
+                if (ok) {
+                    val w = db.compileStatement("INSERT OR IGNORE INTO sports_words (w) VALUES (?)")
+                    words.forEach { w.clearBindings(); w.bindString(1, it); w.executeInsert() }
+                    w.close()
+                    db.insertWithOnConflict("meta", null, ContentValues().apply {
+                        put("k", "sports_rows"); put("v", "$rev|$fromMs|$toMs|$rows|${System.currentTimeMillis()}")
+                    }, SQLiteDatabase.CONFLICT_REPLACE)
+                }
+                db.setTransactionSuccessful()
+                return ok
+            } finally {
+                db.endTransaction()
+            }
+        }
+
+        /** Something went wrong: the table stays unfinished (never used) until the next rebuild. */
+        fun abort() {
+            open = false
+            buffer.clear()
+        }
+    }
+
+    fun startSportsRows(): SportsRowsWriter = SportsRowsWriter()
+
+    /** [scanListings] over the sports-shows table, with each show's cleaned-up title and description. */
+    fun scanSportsRows(
+        fromMs: Long,
+        toMs: Long,
+        minStopMs: Long,
+        onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) -> Unit
+    ) {
+        val sql = "SELECT ch, start, stop, title, descr, cat, nt, nd FROM sports_rows WHERE start >= ? AND start < ? AND stop > ?"
+        readableDatabase.rawQuery(sql, arrayOf(fromMs.toString(), toMs.toString(), minStopMs.toString())).use { c ->
+            while (c.moveToNext()) {
+                onRow(
+                    c.getString(0), c.getLong(1), c.getLong(2), c.getString(3),
+                    if (c.isNull(4)) null else c.getString(4),
+                    if (c.isNull(5)) null else c.getString(5),
+                    c.getString(6), c.getString(7)
+                )
+            }
+        }
+    }
+
     /** Gives back space left empty by deleted listings (see [SqliteCompact]). */
     fun compact(): Long = SqliteCompact.compactIfWasteful(writableDatabase, "guide")
 
@@ -710,6 +883,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             db.delete("auto", null, null)
             db.delete("meta", null, null)
             runCatching { db.delete("stage", null, null); db.delete("stage_meta", null, null); db.delete("stage_channels", null, null); db.delete("stage_info", null, null) }
+            runCatching { db.delete("meta", "k = ?", arrayOf("sports_rows")); db.delete("sports_rows", null, null); db.delete("sports_words", null, null) }
         } finally {
             changes++
         }
@@ -718,3 +892,6 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
 
 /** Longest single listing assumed when reading a time window (longer ones are very rare). */
 private const val MAX_SHOW_MS = 6L * 60 * 60 * 1000
+
+/** Sports shows written to their table at a time (see [EpgDatabase.SportsRowsWriter]). */
+private const val BATCH = 2_000
