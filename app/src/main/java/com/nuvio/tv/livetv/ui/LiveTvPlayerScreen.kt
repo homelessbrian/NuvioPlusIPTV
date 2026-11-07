@@ -64,6 +64,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.matchFrameRate
 import com.nuvio.tv.livetv.player.LiveTrackOption
+import com.nuvio.tv.livetv.player.LiveFrameRateStabilizer
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -191,7 +192,10 @@ fun LiveTvPlayerScreen(
     var videoFps by remember { mutableStateOf(-1f) }
     // For the info bar: this channel's frame rate (not the last channel's while it starts).
     var shownFps by remember { mutableStateOf(-1f) }
-    LaunchedEffect(playback.channelKey, playback.catchupTitle) {
+    LaunchedEffect(playback.channelKey, playback.catchupTitle, settings.matchFrameRate) {
+        val frameRateStabilizer = LiveFrameRateStabilizer()
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        var hasMeasuredFrames = false
         shownFps = -1f
         // A new channel is matched afresh (the last channel's rate never stands in for it).
         videoFps = -1f
@@ -204,8 +208,20 @@ fun LiveTvPlayerScreen(
                 // actually on screen (a stream's stated rate can be wrong, or left over from
                 // another feed). Until then, the stream's stated rate.
                 val measured = viewModel.playback.measuredFps
+                if (measured > 0f) hasMeasuredFrames = true
                 val fps = if (measured > 0f) measured else f.frameRate
-                if (fps > 0f) { videoFps = fps; shownFps = fps }
+                if (fps > 0f) shownFps = fps
+                // Give timestamp measurement time to distinguish 59.94 from 60 before the first
+                // switch. Metadata remains a fallback for decoders that supply no frame callbacks.
+                val now = android.os.SystemClock.elapsedRealtime()
+                val matchingFps = when {
+                    measured > 0f -> measured
+                    !hasMeasuredFrames && now - startedAt >= 6_000L -> f.frameRate
+                    else -> -1f
+                }
+                videoFps = frameRateStabilizer.update(matchingFps, now)
+            } else {
+                videoFps = frameRateStabilizer.update(-1f, android.os.SystemClock.elapsedRealtime())
             }
             // Match Frame Rate switches the display itself: the player's own frame rate hint to
             // the screen is turned off then, so the two don't pull against each other.
@@ -1466,14 +1482,8 @@ private fun MatchFrameRate(
             "Match frame rate: this stream doesn't say its frame rate and it couldn't be measured yet, so the display wasn't switched"
         )
     }
-    // Snapped to the nearest standard rate when close (a measured 59.93 is 59.94, not 60), else
-    // rounded, so the measured rate wobbling (49.98, 50.02…) doesn't ask again and again.
-    val target = if (fps > 0f) {
-        listOf(23.976f, 24f, 25f, 29.97f, 30f, 47.952f, 48f, 50f, 59.94f, 60f, 100f, 119.88f, 120f)
-            .minBy { kotlin.math.abs(it - fps) }
-            .takeIf { kotlin.math.abs(it - fps) <= 0.04f }
-            ?: (kotlin.math.round(fps * 10f) / 10f)
-    } else -1f
+    // The per-channel stabilizer has already normalized and confirmed the rate.
+    val target = fps
     LaunchedEffect(enabled, target, channelKey) {
         if (!enabled || target <= 0f) return@LaunchedEffect
         val fps = target

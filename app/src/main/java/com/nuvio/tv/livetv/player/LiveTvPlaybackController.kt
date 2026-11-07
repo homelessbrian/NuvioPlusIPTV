@@ -508,34 +508,15 @@ class LiveTvPlaybackController @Inject constructor(
      * Many live streams don't state their frame rate, so the player's own value is often
      * missing and the display was never switched.
      */
-    @Volatile var measuredFps: Float = -1f
-        private set
-    private val frameDeltas = LongArray(48)
-    private var frameDeltaCount = 0
-    private var lastFrameUs = Long.MIN_VALUE
+    private val frameRateEstimator = LiveFrameRateEstimator()
+    val measuredFps: Float get() = frameRateEstimator.framesPerSecond
     private val frameListener = androidx.media3.exoplayer.video.VideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
-        val last = lastFrameUs
-        lastFrameUs = presentationTimeUs
-        if (last == Long.MIN_VALUE) return@VideoFrameMetadataListener
-        val d = presentationTimeUs - last
-        if (d !in 5_000L..100_000L) return@VideoFrameMetadataListener // a jump, a seek, a new channel
-        frameDeltas[frameDeltaCount % frameDeltas.size] = d
-        frameDeltaCount++
-        if (frameDeltaCount >= frameDeltas.size && frameDeltaCount % 24 == 0) {
-            // The average of the gaps near the middle one: streams whose frame times are rounded
-            // to whole milliseconds (60 fps as 17, 17, 16 ms…) gave 17 ms, 58.8 fps, as the
-            // middle gap, which matched no refresh rate. Averaged, they come out at 59.94.
-            val median = frameDeltas.sorted()[frameDeltas.size / 2]
-            val near = frameDeltas.filter { kotlin.math.abs(it - median) <= median / 4 }
-            measuredFps = 1_000_000f / near.average().toFloat()
-        }
+        frameRateEstimator.onFrame(presentationTimeUs)
     }
 
     /** A new channel: measure its frame rate afresh. */
     private fun resetFrameRate() {
-        measuredFps = -1f
-        frameDeltaCount = 0
-        lastFrameUs = Long.MIN_VALUE
+        frameRateEstimator.reset()
     }
 
     /** Live TV buffer size ("none", "small", "normal", "large", "xlarge"); changing it rebuilds the player. */
