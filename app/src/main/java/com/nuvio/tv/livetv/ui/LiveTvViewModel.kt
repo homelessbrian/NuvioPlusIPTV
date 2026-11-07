@@ -188,6 +188,7 @@ class LiveTvViewModel @Inject constructor(
      * app (guide, full screen and search share it) instead of once per screen.
      */
     val displayChannels: StateFlow<List<LiveChannel>> = channelStore.displayChannels
+    private val channelKeyLookup = ChannelKeyLookup<LiveChannel> { it.key }
 
     val uiState: StateFlow<LiveTvUiState> = combine(
         // Only what the lists use: saving the last channel, its picture quality or audio track
@@ -222,6 +223,9 @@ class LiveTvViewModel @Inject constructor(
         // The player's settings, audio memory and catch-up notes are kept by [hooks] for the
         // whole app; this screen only answers backup switches and stalled replays while open.
         hooks.register(this)
+        viewModelScope.launch {
+            displayChannels.collectLatest { channelKeyLookup.update(it) }
+        }
         repository.ensureLoaded()
         // Coming back to Live TV after hours in the background: anything due is updated now.
         repository.refreshIfStale()
@@ -1147,7 +1151,7 @@ class LiveTvViewModel @Inject constructor(
     }
 
     fun channelByKey(key: String?): LiveChannel? =
-        key?.let { k -> displayChannels.value.firstOrNull { it.key == k } ?: playback.playingChannel?.takeIf { it.key == k } }
+        key?.let { k -> channelKeyLookup.find(displayChannels.value, k) ?: playback.playingChannel?.takeIf { it.key == k } }
 
     // ------------------------------------------------------------ recording
 
