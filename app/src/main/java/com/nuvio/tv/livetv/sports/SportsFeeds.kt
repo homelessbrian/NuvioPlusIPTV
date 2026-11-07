@@ -220,6 +220,91 @@ internal class SportsFeeds {
     /** Forget what [espnSharedRead] remembered for this league, so the next read is a full one. */
     fun forgetShared(leagueId: String, window: String) { sharedMemo.remove("$window|$leagueId") }
 
+    // ------------------------------------------------------------------ ready-made score files
+
+    /**
+     * nuvio-data's list of its ready-made score files (espn/compact): per league, a fingerprint of
+     * its yesterday-to-tomorrow file ("d") and its week-ahead file ("w"), and when each day was
+     * last asked of ESPN. [day] and [week] are the days the files cover.
+     */
+    class CompactIndex(val day: List<String>, val week: List<String>, val leagues: Map<String, Entry>) {
+        class Entry(val dayHash: String?, val dayStamps: List<Long>, val weekHash: String?, val weekStamps: List<Long>)
+    }
+
+    /** One ready-made file: its games, the league's logo, and the fingerprint of what came. */
+    class CompactFile(val games: List<SportsEvent>, val logo: String?, val hash: String)
+
+    @Volatile private var compactIndexKept: CompactIndex? = null
+    @Volatile private var compactIndexEtag: String? = null
+    @Volatile private var compactIndexAt = 0L
+
+    /**
+     * The index, asked again at most once a minute (one small request for every league in a
+     * round), and only downloaded when it changed. The last copy when it can't be reached for a
+     * little while; null when there is none, or it's old (the caller then reads the old way).
+     */
+    fun compactIndex(now: Long): CompactIndex? {
+        val kept = compactIndexKept
+        if (kept != null && now - compactIndexAt < 60_000L) return kept
+        synchronized(this) {
+            val again = compactIndexKept
+            if (again != null && now - compactIndexAt < 60_000L) return again
+            val fresh = runCatching {
+                val b = Request.Builder().url(DATA_URL + "espn/compact/index.json").header("Accept", "application/json")
+                val tag = compactIndexEtag
+                if (again != null && tag != null) b.header("If-None-Match", tag)
+                http.newCall(b.build()).execute().use { r ->
+                    when {
+                        r.code == 304 && again != null -> again
+                        !r.isSuccessful -> null
+                        else -> {
+                            val parsed = parseCompactIndex(r.body?.string() ?: return@use null)
+                            compactIndexEtag = if (parsed != null) r.header("ETag") else null
+                            parsed
+                        }
+                    }
+                }
+            }.getOrNull()
+            if (fresh != null) {
+                compactIndexKept = fresh
+                compactIndexAt = now
+                return fresh
+            }
+            // Couldn't be had: the last copy is still fine for a few minutes (its stamps say how fresh).
+            return again?.takeIf { now - compactIndexAt < 20 * 60_000L }
+        }
+    }
+
+    /** One league's ready-made file ("day" or "week"); null when it can't be had or read. */
+    fun compactFile(leagueId: String, window: String): CompactFile? = runCatching {
+        val text = get(DATA_URL + "espn/compact/$window/" + safeFileId(leagueId) + ".json")
+        val o = JSONObject(text)
+        if (o.optInt("v") != 1) return@runCatching null
+        val games = SportsEventCodec.decode(o.optJSONArray("g")?.toString() ?: return@runCatching null) ?: return@runCatching null
+        CompactFile(games, o.optString("lg").takeIf { it.startsWith("http") }, compactHash(text))
+    }.getOrNull()
+
+    /** The fingerprint nuvio-data gives a ready-made file (the start of its SHA-256). */
+    private fun compactHash(text: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }.take(16)
+
+    private fun parseCompactIndex(text: String): CompactIndex? = runCatching {
+        val o = JSONObject(text)
+        if (o.optInt("v") != 1) return@runCatching null
+        fun days(a: JSONArray?) = if (a == null) emptyList() else (0 until a.length()).map { a.optString(it) }
+        fun stamps(a: JSONArray?) = if (a == null) emptyList() else (0 until a.length()).map { a.optLong(it) * 1000 }
+        val all = o.optJSONObject("leagues") ?: return@runCatching null
+        val map = HashMap<String, CompactIndex.Entry>()
+        all.keys().forEach { id ->
+            val e = all.optJSONObject(id) ?: return@forEach
+            map[id] = CompactIndex.Entry(
+                e.optString("d").ifBlank { null }, stamps(e.optJSONArray("ds")),
+                e.optString("w").ifBlank { null }, stamps(e.optJSONArray("ws"))
+            )
+        }
+        CompactIndex(days(o.optJSONArray("day")), days(o.optJSONArray("week")), map)
+    }.getOrNull()
+
     companion object {
         private const val ESPN = "https://site.api.espn.com/apis/site/v2/sports/"
         const val DATA_URL = "https://raw.githubusercontent.com/homelessbrian/nuvio-data/main/"

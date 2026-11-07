@@ -579,6 +579,7 @@ class SportsRepository @Inject constructor(
         val roundStart = System.currentTimeMillis()
         val read = java.util.concurrent.atomic.AtomicInteger()
         val same = java.util.concurrent.atomic.AtomicInteger()
+        val ready = java.util.concurrent.atomic.AtomicInteger()
         try {
             val (from, to) = espnRange(now)
             val days = espnDays(now)
@@ -598,19 +599,33 @@ class SportsRepository @Inject constructor(
                         noteSkipped()
                         return@withPermit
                     }
-                    val r = runCatching { if (useDirect) fetchScoreboard(l, from, to, days) else fetchViaSharedCache(l, days, now) }
-                    r.onSuccess { raws ->
-                        // Same answer as last time (or the shared file hasn't changed): nothing to read or save.
-                        if (raws == null || sameAsLast("sb|" + l.id, raws) && leagueData.value[l.id] != null) {
+                    // Leagues nobody is looking at: nuvio-data's ready-made file when it's fresh
+                    // (already read, and only downloaded when it changed); otherwise as before.
+                    val compact = if (useDirect) null else runCatching {
+                        fromCompact(l, "d", days, now, leagueData.value[l.id] != null) { i -> if (i == 1) 20 * MINUTE else 90 * MINUTE }
+                    }.getOrNull()
+                    val r = runCatching<List<SportsEvent>?> {
+                        if (compact != null) compact.games
+                        else {
+                            val raws = if (useDirect) fetchScoreboard(l, from, to, days) else fetchViaSharedCache(l, days, now)
+                            // Same answer as last time (or the shared file hasn't changed): nothing to read or save.
+                            if (raws == null || sameAsLast("sb|" + l.id, raws) && leagueData.value[l.id] != null) null
+                            else withContext(if (useDirect) Dispatchers.IO else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+                                raws.flatMap { raw -> runCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrElse { emptyList() } }
+                                    .distinctBy { it.id }
+                            }
+                        }
+                    }
+                    r.onSuccess { parsed ->
+                        if (parsed == null) {
                             checkedAt[l.id] = System.currentTimeMillis()
                             touch(File(dir, "sb_${safe(l.id)}.json"))
                             same.incrementAndGet()
                             return@onSuccess
                         }
-                        val parsed = withContext(if (useDirect) Dispatchers.IO else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
-                            raws.flatMap { raw -> runCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrElse { emptyList() } }
-                                .distinctBy { it.id }
-                        }
+                        if (compact != null) { compact.hash?.let { compactSeen["d|" + l.id] = it }; ready.incrementAndGet() }
+                        else compactSeen.remove("d|" + l.id)
+                        compactDirty = true
                         read.incrementAndGet()
                         val before = leagueData.value[l.id]?.events
                         val at = System.currentTimeMillis()
@@ -637,11 +652,12 @@ class SportsRepository @Inject constructor(
                 if (line != lastFailLine) { lastFailLine = line; LiveTvLoadReport.add(line) }
             } else lastFailLine = null
             _updatedAt.value = System.currentTimeMillis()
+            saveCompactSeen()
             rebuildLiveScores()
             // How long a bigger round took and how much of it could be skipped (for the Start-Up Report).
             val took = System.currentTimeMillis() - roundStart
             if (took > 5_000 || due.size >= 10) {
-                LiveTvLoadReport.add("Sports scores: ${due.size} leagues checked in ${took / 1000.0} s (${same.get()} unchanged, ${read.get()} read, ${failed.size} failed)")
+                LiveTvLoadReport.add("Sports scores: ${due.size} leagues checked in ${took / 1000.0} s (${same.get()} unchanged, ${read.get()} read, ${ready.get()} of them ready-made, ${failed.size} failed)")
             }
         } finally {
             _loading.value = false
@@ -766,6 +782,23 @@ class SportsRepository @Inject constructor(
                     noteSkipped()
                     return@withPermit
                 }
+                // Leagues nobody is looking at: nuvio-data's ready-made week file when it's fresh.
+                val compact = if (useDirect) null else runCatching {
+                    fromCompact(l, "w", singleDays, now, weekData.value[l.id] != null) { 6 * HOUR }
+                }.getOrNull()
+                if (compact != null) {
+                    val at = System.currentTimeMillis()
+                    checkedAt["wk|" + l.id] = at
+                    val file = File(dir, "wk_${safe(l.id)}.json")
+                    val games = compact.games
+                    if (games == null) { touch(file); return@withPermit }
+                    val before = weekData.value[l.id]?.events
+                    if (before != games || weekData.value[l.id]?.error != null) weekData.update { it + (l.id to LeagueData(games, at, null)) }
+                    if (before != games || resave.remove("wk|" + l.id)) saveGames(file, at, games) else touch(file)
+                    compact.hash?.let { compactSeen["w|" + l.id] = it }
+                    compactDirty = true
+                    return@withPermit
+                }
                 // One request for the whole week; a feed that won't take a range of days: a day at a time.
                 // A day at a time (ESPN turns down a range of days).
                 val raws: List<String>? = if (useDirect) singleDays.mapNotNull { d -> runCatching { feeds.scoreboardDayRaw(l, d) }.getOrNull() }
@@ -791,7 +824,61 @@ class SportsRepository @Inject constructor(
                 if (before != parsed || weekData.value[l.id]?.error != null) weekData.update { it + (l.id to LeagueData(parsed, at, null)) }
                 val file = File(dir, "wk_${safe(l.id)}.json")
                 if (before != parsed || resave.remove("wk|" + l.id)) saveGames(file, at, parsed) else touch(file)
+                if (compactSeen.remove("w|" + l.id) != null) compactDirty = true
             }
+        }
+        saveCompactSeen()
+    }
+
+    // ------------------------------------------------------------------ ready-made score files (nuvio-data)
+
+    /** What a ready-made file gave: new [games], or null games when it's the same file as last time. */
+    private class Compact(val games: List<SportsEvent>?, val hash: String?)
+
+    /**
+     * The fingerprint of the ready-made file each league's games last came from ("d|<id>" for
+     * yesterday to tomorrow, "w|<id>" for the week ahead). Saved, so after a restart a league
+     * that hasn't changed isn't downloaded again.
+     */
+    private val compactSeen = java.util.concurrent.ConcurrentHashMap<String, String>()
+    @Volatile private var compactDirty = false
+
+    /**
+     * [l]'s games for [days] from nuvio-data's ready-made files: already read by the same code as
+     * the app's, so nothing to work through here. Null when they can't be used (not made yet, a
+     * day missing, not fresh enough by [maxAgeFor], other days than wanted, or can't be reached):
+     * the caller then reads the old way. [have]: there are games for this league already, so the
+     * same file as last time needn't be downloaded.
+     */
+    private fun fromCompact(l: League, window: String, days: List<String>, now: Long, have: Boolean, maxAgeFor: (Int) -> Long): Compact? {
+        val index = feeds.compactIndex(now) ?: return null
+        if ((if (window == "d") index.day else index.week) != days) return null
+        val entry = index.leagues[l.id] ?: return null
+        val hash = (if (window == "d") entry.dayHash else entry.weekHash) ?: return null
+        val stamps = if (window == "d") entry.dayStamps else entry.weekStamps
+        if (stamps.size != days.size || stamps.withIndex().any { (i, at) -> at <= 0L || now - at > maxAgeFor(i) }) return null
+        if (have && compactSeen["$window|${l.id}"] == hash) return Compact(null, hash)
+        val file = feeds.compactFile(l.id, if (window == "d") "day" else "week") ?: return null
+        file.logo?.let { SportsFeeds.leagueLogos.putIfAbsent(l.id, it) }
+        return Compact(file.games, file.hash)
+    }
+
+    private fun saveCompactSeen() {
+        if (!compactDirty) return
+        compactDirty = false
+        runCatching {
+            val o = org.json.JSONObject()
+            compactSeen.forEach { (k, v) -> o.put(k, v) }
+            File(dir, "compact_seen.json").writeText(o.toString())
+        }
+    }
+
+    private fun loadCompactSeen() {
+        runCatching {
+            val file = File(dir, "compact_seen.json")
+            if (!file.exists()) return
+            val o = org.json.JSONObject(file.readText())
+            o.keys().forEach { k -> o.optString(k).ifBlank { null }?.let { compactSeen[k] = it } }
         }
     }
 
@@ -1147,6 +1234,7 @@ class SportsRepository @Inject constructor(
 
     private fun loadCache() {
         val now = System.currentTimeMillis()
+        loadCompactSeen()
         val m = HashMap<String, LeagueData>()
         for (l in SportsCatalog.leagues) {
             if (l.espnPath == null) continue
