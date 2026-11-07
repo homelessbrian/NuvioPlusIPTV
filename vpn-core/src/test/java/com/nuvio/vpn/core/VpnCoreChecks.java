@@ -20,6 +20,7 @@ public final class VpnCoreChecks {
     public static void main(String[] args) throws Exception {
         routing();
         imports();
+        checks += OpenVpnBundleChecks.run();
         encryptedProfiles();
         preferences();
         System.out.println("VPN core: " + checks + " checks passed.");
