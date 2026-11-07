@@ -69,7 +69,10 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private enum class PlayerDialog { NONE, OPTIONS, AUDIO, SUBTITLES, SCREEN_SIZE, STREAM_INFO, SLEEP, BACKUPS }
+private enum class PlayerDialog { NONE, OPTIONS, AUDIO, SUBTITLES, SCREEN_SIZE, STREAM_INFO, SLEEP, BACKUPS, BACKUP_FLYOUT }
+
+/** Right twice within this long, in full screen: the backup channels flyout. */
+private const val DOUBLE_RIGHT_MS = 400L
 
 /** The picture size saved in settings, as one of Nuvio's own player modes. */
 internal fun aspectModeOf(name: String): com.nuvio.tv.ui.screens.player.AspectMode =
@@ -148,6 +151,8 @@ fun LiveTvPlayerScreen(
     // Holding Right (live): back to the channel you were watching before.
     var rightDownAt by remember { mutableStateOf(0L) }
     var rightHoldDone by remember { mutableStateOf(false) }
+    // Right twice in a row: the backup channels flyout (when the last Right press was a moment ago).
+    var lastRightTapAt by remember { mutableStateOf(0L) }
     // The full panel (OK): timeline, buttons and options. Changing channels shows the compact one.
     var panelFull by remember { mutableStateOf(false) }
     // Opened with the bar hidden (a long press in full screen): the full bar comes up with the
@@ -576,9 +581,22 @@ fun LiveTvPlayerScreen(
                                 viewModel.playback.shiftSeekBy(10_000L * (1 + minOf(e.nativeKeyEvent.repeatCount, 11))); showBanner()
                             }
                             e.nativeKeyEvent.repeatCount == 0 -> {
-                                rightDownAt = System.currentTimeMillis()
+                                val tapAt = System.currentTimeMillis()
+                                rightDownAt = tapAt
                                 rightHoldDone = false
-                                showBanner()
+                                if (tapAt - lastRightTapAt <= DOUBLE_RIGHT_MS) {
+                                    // Right twice: this channel's backups from the right edge.
+                                    lastRightTapAt = 0L
+                                    rightHoldDone = true
+                                    if (backups.isNotEmpty()) {
+                                        closeFull()
+                                        bannerVisible = false
+                                        dialog = PlayerDialog.BACKUP_FLYOUT
+                                    } else toast = "No backup channels for this channel"
+                                } else {
+                                    lastRightTapAt = tapAt
+                                    showBanner()
+                                }
                             }
                             // Held for over half a second: the previous channel (once per press).
                             !rightHoldDone && System.currentTimeMillis() - rightDownAt >= 600 -> {
@@ -947,6 +965,25 @@ fun LiveTvPlayerScreen(
             }
         }
 
+        // Right twice: backup channels from the right edge, in overlay mode's look.
+        if (dialog == PlayerDialog.BACKUP_FLYOUT && backups.isNotEmpty()) {
+            LiveTvBackupFlyout(
+                viewModel = viewModel,
+                channels = backups,
+                playingKey = playback.channelKey,
+                modifier = Modifier.align(Alignment.CenterEnd),
+                onPick = { ch ->
+                    dialog = PlayerDialog.NONE
+                    if (ch.key != playback.channelKey) {
+                        viewModel.preview(ch)
+                        showBanner()
+                    }
+                    scope.launch { delay(60); runCatching { rootFocus.requestFocus() } }
+                },
+                onClose = { dialog = PlayerDialog.NONE; scope.launch { delay(60); runCatching { rootFocus.requestFocus() } } }
+            )
+        }
+
         // Overlay mode (TiviMate style): channels, groups and each channel's schedule over the video.
         if (listVisible) {
             LiveTvOverlayMode(
@@ -1173,6 +1210,7 @@ fun LiveTvPlayerScreen(
             },
             onDismiss = { dialog = PlayerDialog.NONE }
         )
+        PlayerDialog.BACKUP_FLYOUT -> if (backups.isEmpty()) dialog = PlayerDialog.NONE
         PlayerDialog.NONE -> Unit
     }
     }

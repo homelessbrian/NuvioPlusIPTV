@@ -895,3 +895,155 @@ private fun dayLabel(dayStart: Long, now: Long): String {
         else -> SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date(dayStart))
     }
 }
+
+// ==================================================================== backup channels flyout
+
+/**
+ * Backup channels from the right edge (Right twice in full screen): this channel's other copies,
+ * in overlay mode's look and Guide Size, with what's on and where each comes from. OK switches to
+ * the highlighted copy; Left or Back closes it.
+ */
+@Composable
+internal fun LiveTvBackupFlyout(
+    viewModel: LiveTvViewModel,
+    channels: List<LiveChannel>,
+    playingKey: String?,
+    onPick: (LiveChannel) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val sizeSettings by viewModel.settings.collectAsStateWithLifecycle()
+    val (textScale, rowScale) = when (sizeSettings.effectiveGuideSize) {
+        "COMPACT" -> 0.93f to 0.85f
+        "LARGE" -> 1.2f to 1.2f
+        "XLARGE" -> 1.4f to 1.4f
+        else -> 1f to 1f
+    }
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalOverlayScale provides textScale,
+        LocalOverlayRowScale provides rowScale
+    ) {
+        BackupFlyoutContent(viewModel, channels, playingKey, onPick, onClose, modifier)
+    }
+}
+
+@Composable
+private fun BackupFlyoutContent(
+    viewModel: LiveTvViewModel,
+    channels: List<LiveChannel>,
+    playingKey: String?,
+    onPick: (LiveChannel) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier
+) {
+    val programs by viewModel.programs.collectAsStateWithLifecycle()
+    val now by viewModel.now.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()
+    // Opens on the first copy that isn't the one playing.
+    var index by remember { mutableIntStateOf(channels.indexOfFirst { it.key != playingKey }.coerceAtLeast(0)) }
+    var activity by remember { mutableIntStateOf(0) }
+    val focus = remember { FocusRequester() }
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = (index - 3).coerceAtLeast(0))
+    keepVisible(state, index)
+    LaunchedEffect(Unit) { delay(60); runCatching { focus.requestFocus() } }
+    // Closes itself after a while without a key press, like overlay mode.
+    LaunchedEffect(activity) {
+        delay(15_000)
+        onClose()
+    }
+    var restingIndex by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(index) {
+        restingIndex = -1
+        delay(900)
+        restingIndex = index
+    }
+    Column(
+        modifier = modifier
+            .width(340.dp)
+            .fillMaxHeight()
+            .background(PanelDark)
+            .focusRequester(focus)
+            .onPreviewKeyEvent { e ->
+                val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent isOk || e.key == Key.Back
+                activity++
+                when {
+                    e.key == Key.DirectionUp -> index = (index - 1).let { if (it < 0) channels.lastIndex else it }.coerceAtLeast(0)
+                    e.key == Key.DirectionDown -> index = (index + 1).let { if (it > channels.lastIndex) 0 else it }
+                    isOk -> if (e.nativeKeyEvent.repeatCount == 0) channels.getOrNull(index)?.let(onPick)
+                    e.key == Key.DirectionLeft || e.key == Key.Back -> onClose()
+                }
+                true
+            }
+            .focusable()
+    ) {
+        PanelHeader {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                LiveText("Backups", size = osp(17f), weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                LiveText("${channels.size}", color = NuvioTheme.colors.TextSecondary, size = osp(12f))
+            }
+        }
+        LazyColumn(state = state, modifier = Modifier.fillMaxSize()) {
+            itemsIndexed(channels, key = { _, c -> c.key }) { i, ch ->
+                val p = programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
+                    ?: viewModel.currentProgram(ch.key)
+                val isFocused = i == index
+                val colors = liveCellColors(focused = isFocused, idle = if (ch.key == playingKey) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+                // On a solid highlight the accent-colored bits would disappear: make them white.
+                val onSolid = isFocused && LocalLiveSolidHighlight.current
+                val accent = if (onSolid) Color.White else NuvioTheme.colors.Secondary
+                val dim = if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextSecondary
+                val shape = RoundedCornerShape(8.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(orow(74f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .clip(shape)
+                        .background(colors.background)
+                        .border(2.dp, colors.border, shape)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (settings.showChannelLogos) {
+                        ChannelLogo(ch.logo, 32.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            LiveText(ch.name, color = colors.text, size = osp(15f), modifier = Modifier.weight(1f, fill = false), marquee = isFocused && i == restingIndex)
+                            backupQuality(ch.name)?.let { q ->
+                                Spacer(Modifier.width(6.dp))
+                                LiveText(q, color = dim, size = osp(11f), weight = FontWeight.Bold)
+                            }
+                        }
+                        val from = playlistNames[ch.sourceId] ?: ch.sourceName
+                        LiveText(
+                            listOfNotNull(from.takeIf { it.isNotBlank() }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
+                            color = dim, size = osp(12f), maxLines = 1
+                        )
+                        LiveText(
+                            p?.title ?: "No program information",
+                            color = if (p == null) (if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextTertiary) else accent,
+                            size = osp(13f),
+                            marquee = isFocused && i == restingIndex
+                        )
+                        if (p != null) {
+                            Spacer(Modifier.height(3.dp))
+                            ProgressBar(
+                                p.progress(now),
+                                Modifier.fillMaxWidth(),
+                                color = if (onSolid) Color.White else null,
+                                trackColor = if (onSolid) Color.White.copy(alpha = 0.35f) else null
+                            )
+                        }
+                    }
+                    if (ch.key == playingKey) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Playing", tint = accent, modifier = Modifier.size(odp(20f)))
+                    }
+                }
+            }
+        }
+    }
+}
