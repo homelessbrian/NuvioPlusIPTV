@@ -410,9 +410,40 @@ class SportsRepository @Inject constructor(
             val t0 = System.currentTimeMillis()
             withContext(com.nuvio.tv.livetv.data.BackgroundWork.quiet) { runCatching { loadCache() } }
             LiveTvLoadReport.add("Sports: saved scores read in ${(System.currentTimeMillis() - t0) / 1000.0} s (${leagueData.value.size} leagues)")
+            awaitFirstRound()
             runCatching { updateLoop() }.onFailure { Log.w(TAG, "Sports updates stopped", it) }
         }
         scope.launch { matchLoop() }
+    }
+
+    /**
+     * The first scores round (network) waits, so it doesn't land while Home is loading: until
+     * the Sports page opens, a followed team is playing with Scoring Alerts on, or Home has been
+     * up for a while (or the app has been, when it opened straight on Live TV). The saved scores
+     * show meanwhile.
+     */
+    private suspend fun awaitFirstRound() {
+        val t0 = System.currentTimeMillis()
+        while (viewers.value == 0 && !followedGameOn() &&
+            !com.nuvio.tv.livetv.startup.AppSettled.settledFor(FIRST_ROUND_AFTER_HOME, FIRST_ROUND_FALLBACK)
+        ) {
+            withTimeoutOrNull(1_000) { viewers.first { it > 0 } }
+        }
+        LiveTvLoadReport.add("Sports: first update ${(System.currentTimeMillis() - t0) / 1000} s after the saved scores")
+    }
+
+    /** A followed team's game on now (by the clock, from the saved scores), with Scoring Alerts on. */
+    private fun followedGameOn(): Boolean {
+        if (!settings.value.scoringAlerts) return false
+        val f = follows.value
+        if (f.teams.isEmpty()) return false
+        val now = System.currentTimeMillis()
+        return (leagueData.value.values + weekData.value.values).any { d ->
+            d.events.any { ev ->
+                ev.hasTime && ev.state != GameState.POST && now >= ev.startMs - 5 * MINUTE && now < endEstimate(ev) &&
+                    ev.sides.any { f.followsTeam(ev.leagueId, it.team.id) }
+            }
+        }
     }
 
     /** The Sports page (or a game) is on screen: keep scores fresh. */
@@ -1956,6 +1987,10 @@ class SportsRepository @Inject constructor(
         private const val MINUTE = 60_000L
         private const val HOUR = 60 * MINUTE
         private const val SUMMARY_CACHE_SIZE = 50
+        /** Sports' first scores round: this long after Home is drawn… */
+        private const val FIRST_ROUND_AFTER_HOME = 35_000L
+        /** …or this long after the app started, when Home never shows. */
+        private const val FIRST_ROUND_FALLBACK = 55_000L
         /** The safety-net round: this long after the last one. */
         private const val SAFETY_ROUND = 4 * HOUR
         private const val DAY = 24 * HOUR

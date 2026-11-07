@@ -107,8 +107,10 @@ class CalendarRepository @Inject constructor(
         if (started) return
         started = true
         scope.launch {
-            // What's kept on the TV first (quick), then a fresh look.
-            delay(8_000)
+            // What's kept on the TV first (quick, a few seconds after Home is drawn), then a
+            // fresh look once Home has settled, so neither lands while Home is still loading.
+            com.nuvio.tv.livetv.startup.AppSettled.awaitDrawn(maxWaitMs = 15_000)
+            delay(3_000)
             // Movie airings from Live TV, two weeks after they aired: gone.
             runCatching {
                 val cutoff = System.currentTimeMillis() - 14 * CalendarSources.DAY
@@ -117,7 +119,7 @@ class CalendarRepository @Inject constructor(
                 }
             }
             build(fetch = false)
-            delay(20_000)
+            while (!com.nuvio.tv.livetv.startup.AppSettled.settledFor(afterMs = 30_000, fallbackMs = 45_000)) delay(1_000)
             refresh(force = false)
             // Then every few hours while the app is open.
             while (true) {

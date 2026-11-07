@@ -321,6 +321,11 @@ open class MainActivity : ComponentActivity() {
     @Inject
     lateinit var calendarRepository: com.nuvio.tv.livetv.calendar.CalendarRepository
 
+    // Live TV fork: set up with the app, so the Live TV player's settings and callbacks are in
+    // place whatever screen starts a channel (Home, Sports, the Calendar…).
+    @Inject
+    lateinit var liveTvPlayerHooks: com.nuvio.tv.livetv.player.LiveTvPlayerHooks
+
     @Inject
     lateinit var layoutPreferenceDataStore: LayoutPreferenceDataStore
 
@@ -422,6 +427,9 @@ open class MainActivity : ComponentActivity() {
         // Live TV fork: start reading the saved channel list and guide as the app opens (before
         // any screen, even the profile picker), so Live TV is ready when you get to it.
         lifecycleScope.launch { runCatching { com.nuvio.tv.livetv.startup.LiveTvPreload.start(this@MainActivity) } }
+        // Live TV fork: Home drawn (see AppSettled): Sports' first scores round and the Calendar's
+        // first look-ups wait for it, so they don't land while Home is still loading.
+        runCatching { fullyDrawnReporter.addOnReportDrawnListener { com.nuvio.tv.livetv.startup.AppSettled.markDrawn() } }
         // Live TV fork: "Open the App On" kept where the first screen can read it instantly.
         lifecycleScope.launch {
             runCatching {
