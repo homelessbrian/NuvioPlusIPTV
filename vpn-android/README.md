@@ -15,6 +15,8 @@ OpenVPN's `client` directive and its equivalent `tls-client` plus `pull` form ar
 
 Self-contained OpenVPN profiles may keep provider fallback servers in connection blocks and revocation lists in inline crl-verify blocks. Unsupported or oversized connection blocks are rejected rather than silently dropping their settings.
 
+OpenVPN also accepts a provider ZIP containing exactly one `.ovpn` and its referenced UTF-8 CA, certificate, private key, TLS key or certificate revocation list files (`.crt`, `.cer`, `.pem`, `.key`, `.crl`). References must use relative archive paths within the configuration's folder; parent paths, ambiguous names and files outside the ZIP are rejected. The archive is limited to 32 entries and 1 MiB compressed, decompressed and after conversion. Only referenced material is inlined in memory before the ordinary profile and engine validation; the saved and synced profile stays self-contained. ZIP scripts, credential files and binary PKCS#12 files are unsupported.
+
 **Apply VPN settings to** defaults to **All profiles**. The selected VPN and protection mode apply to current and future Nuvio profiles. **Only this profile** starts a separate choice for the active Nuvio profile. Switching back to **All profiles** uses the current shared settings again. Setup Sync restores both the shared choice and individual overrides.
 
 Profiles are encrypted with the device’s Android Keystore. HomelessBrian’s Setup Sync carries a portable `vpn_profiles_v1` entry with the configurations, selected profile and scope. Exported backups contain private VPN configuration, including saved OpenVPN service credentials. The destination validates and re-encrypts the profiles with its own key. Older backups without a VPN entry preserve the local setup.
