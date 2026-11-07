@@ -662,6 +662,7 @@ class LiveTvRepository @Inject constructor(
             LIVE_REPORT.add("Channels re-read from playlists: ${_channels.value.size} in ${System.currentTimeMillis() - t0} ms")
         } else {
             LIVE_REPORT.add("Saved channel list used: ${_channels.value.size} channels in ${System.currentTimeMillis() - t0} ms")
+            carryOverRenamedChannels(null, _channels.value)
         }
         val targets = collectEpgTargets()
         val settings = prefs.currentSettings()
@@ -721,10 +722,14 @@ class LiveTvRepository @Inject constructor(
         runCatching {
             java.io.DataInputStream(java.io.BufferedInputStream(file.inputStream(), 256 * 1024)).use { input ->
                 val stored = input.readUTF()
-                if (stored != expected) {
+                // Out of date: the playlists get read again. Its stream links are still read
+                // (same format only) so channels renamed in the playlist keep their favorites etc.
+                val outdated = stored != expected
+                if (outdated) {
                     LIVE_REPORT.add("Saved channel list out of date: ${fingerprintDiff(stored, expected)}")
-                    return@withContext false
+                    if (stored.substringBefore('|') != expected.substringBefore('|')) return@withContext false
                 }
+                val links = HashMap<String, String>()
                 val epg = HashMap<String, List<String>>()
                 repeat(input.readInt()) {
                     val id = input.readUTF()
@@ -734,7 +739,7 @@ class LiveTvRepository @Inject constructor(
                 fun shared(): String = table[input.readInt()]
                 fun opt(): String? = if (input.readBoolean()) input.readUTF() else null
                 val count = input.readInt()
-                val list = ArrayList<LiveChannel>(count)
+                val list = ArrayList<LiveChannel>(if (outdated) 0 else count)
                 repeat(count) {
                     val key = input.readUTF()
                     val sourceId = shared()
@@ -757,7 +762,12 @@ class LiveTvRepository @Inject constructor(
                         val lh = HashMap<String, String>().apply { repeat(input.readInt()) { put(input.readUTF(), input.readUTF()) } }
                         com.nuvio.tv.livetv.model.DrmInfo(scheme, license, lh, opt())
                     } else null
-                    list += LiveChannel(key, sourceId, sourceName, name, tvgId, tvgName, logo, groupId, group, number, url, headers, catchup, drm)
+                    if (outdated) links[key] = url
+                    else list += LiveChannel(key, sourceId, sourceName, name, tvgId, tvgName, logo, groupId, group, number, url, headers, catchup, drm)
+                }
+                if (outdated) {
+                    previousLinks = links
+                    return@withContext false
                 }
                 embeddedEpgUrls.clear()
                 embeddedEpgUrls.putAll(epg)
@@ -1633,7 +1643,36 @@ class LiveTvRepository @Inject constructor(
 
     private val embeddedEpgUrls = HashMap<String, List<String>>()
 
+    /** Channel key → stream link from an out-of-date saved channel list (see [loadSavedChannels]). */
+    private var previousLinks: Map<String, String> = emptyMap()
+
+    /**
+     * A channel renamed in the playlist (by the provider or a playlist editor) gets a new key.
+     * This moves favorites, hidden channels, groups you made, renames, guide choices and so on
+     * over to it (see [RenamedChannels]). [before]: each channel's stream link before the
+     * playlists were read again, null when there's no earlier list. Without one, any channel can
+     * be the match, so that's only done once per TV (for channels renamed before this existed).
+     */
+    private suspend fun carryOverRenamedChannels(before: Map<String, String>?, now: List<LiveChannel>) {
+        runCatching {
+            if (now.isEmpty()) return
+            val firstTime = !prefs.renamedChannelsChecked()
+            if (before == null && !firstTime) return
+            val current = now.mapTo(HashSet(now.size * 2)) { it.key }
+            val lost = prefs.channelKeysInUse().filter { it !in current }
+            val moves = RenamedChannels.match(lost, now, before.orEmpty(), onlyNew = !firstTime)
+            if (moves.isNotEmpty()) {
+                prefs.moveChannelKeys(moves)
+                LIVE_REPORT.add("Renamed channels: settings moved over for ${moves.size}")
+            }
+            if (firstTime) prefs.setRenamedChannelsChecked()
+        }.onFailure { Log.w(TAG, "Carrying settings over to renamed channels failed", it) }
+    }
+
     private suspend fun buildChannels() = withContext(BackgroundWork.cpu()) {
+        val before = (_channels.value.takeIf { it.isNotEmpty() }?.associate { it.key to it.url } ?: previousLinks)
+            .takeIf { it.isNotEmpty() }
+        previousLinks = emptyMap()
         val playlists = prefs.currentPlaylists().filter { it.liveEnabled }
         val multi = playlists.size > 1
         val out = ArrayList<LiveChannel>()
@@ -1684,6 +1723,7 @@ class LiveTvRepository @Inject constructor(
             prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(channelCount = parsed.entries.size) else it } }
         }
         _channels.value = out
+        carryOverRenamedChannels(before, out)
     }
 
     private suspend fun buildPrograms(settings: LiveTvSettings, targets: List<EpgTarget>) {

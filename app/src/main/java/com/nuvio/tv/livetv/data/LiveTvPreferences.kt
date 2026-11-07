@@ -146,6 +146,8 @@ class LiveTvPreferences @Inject constructor(
         val groupPlaylistHeadings = booleanPreferencesKey("group_playlist_headings")
         /** This TV has had Group by Playlist turned on once (per TV, never synced). */
         val groupPlaylistTurnedOn = booleanPreferencesKey("group_playlist_turned_on_once")
+        /** This TV has looked once for channels renamed before renames were followed (per TV). */
+        val renamedChannelsChecked = booleanPreferencesKey("renamed_channels_checked")
         /** This TV only: ids of playlists and guides removed here, not yet passed on by sync. */
         val removedSources = stringSetPreferencesKey("removed_sources")
         val nameRemovals = stringPreferencesKey("name_removals")
@@ -1203,6 +1205,91 @@ class LiveTvPreferences @Inject constructor(
 
     suspend fun clearFavorites() {
         store.edit { it[my(Keys.favorites)] = encodeStringList(emptyList()) }
+    }
+
+    // ---------- Channels renamed in the playlist ----------
+    // Everything kept per channel key, in every profile: favorites, recents, last channels,
+    // hidden channels, groups you made, channel order and copies, reminders, and the per-channel
+    // renames, logos, numbers, guide choices, picture shapes, audio and quality.
+
+    private val keyLists = setOf("favorites", "recent")
+    private val keySingles = setOf("last_channel", "previous_channel")
+    private val keyListMaps = setOf("channel_order", "channel_copies")
+    private val keyMaps = setOf(
+        "channel_names", "channel_logos", "channel_numbers", "epg_overrides",
+        "picture_shapes", "channel_audio", "channel_quality"
+    )
+
+    suspend fun renamedChannelsChecked(): Boolean = deviceStore.data.first()[Keys.renamedChannelsChecked] == true
+
+    suspend fun setRenamedChannelsChecked() {
+        deviceStore.edit { it[Keys.renamedChannelsChecked] = true }
+    }
+
+    /** Every channel key something is saved for (see above). */
+    suspend fun channelKeysInUse(): Set<String> {
+        val out = HashSet<String>()
+        fun collect(p: Preferences) = p.asMap().forEach { (k, v) ->
+            val base = k.name.replace(PROFILE_SUFFIX, "")
+            when (base) {
+                in keyLists -> out += decodeStringList(v as? String)
+                in keySingles -> (v as? String)?.takeIf { it.isNotEmpty() }?.let { out += it }
+                "hidden_channels" -> (v as? Set<*>)?.forEach { if (it is String) out += it }
+                "custom_groups" -> decodeCustomGroups(v as? String).forEach { out += it.channelKeys }
+                in keyListMaps -> decodeListMap(v as? String).values.forEach { out += it }
+                "reminders" -> decodeReminders(v as? String).forEach { out += it.channelKey }
+                in keyMaps -> out += decodeStringMap(v as? String).keys
+            }
+        }
+        collect(store.data.first())
+        collect(deviceStore.data.first())
+        return out
+    }
+
+    /**
+     * Moves everything saved for each old key ([moves]: old → new) to the new key, in every
+     * profile, in one save. Where the new key already has its own value, that one is kept.
+     */
+    suspend fun moveChannelKeys(moves: Map<String, String>) {
+        if (moves.isEmpty()) return
+        fun m(k: String) = moves[k] ?: k
+        fun <V> moveMap(map: Map<String, V>): Map<String, V> {
+            val out = LinkedHashMap<String, V>()
+            map.forEach { (k, v) -> if (k !in moves) out[k] = v }
+            map.forEach { (k, v) -> moves[k]?.let { nk -> if (nk !in out) out[nk] = v } }
+            return out
+        }
+        fun moveIn(p: MutablePreferences) {
+            p.asMap().toList().forEach { (k, v) ->
+                val base = k.name.replace(PROFILE_SUFFIX, "")
+                if (v is Set<*>) {
+                    if (base != "hidden_channels") return@forEach
+                    val set = v.filterIsInstance<String>()
+                    if (set.none { it in moves }) return@forEach
+                    p[stringSetPreferencesKey(k.name)] = set.mapTo(LinkedHashSet(), ::m)
+                    return@forEach
+                }
+                val raw = v as? String ?: return@forEach
+                // Only saved again when one of the moved keys is really in it.
+                val moved: String? = when (base) {
+                    in keyLists -> decodeStringList(raw).takeIf { l -> l.any { it in moves } }
+                        ?.let { l -> encodeStringList(l.map(::m).distinct()) }
+                    in keySingles -> moves[raw]
+                    "custom_groups" -> decodeCustomGroups(raw).takeIf { l -> l.any { g -> g.channelKeys.any { it in moves } } }
+                        ?.let { l -> encodeCustomGroups(l.map { g -> g.copy(channelKeys = g.channelKeys.map(::m).distinct()) }) }
+                    in keyListMaps -> decodeListMap(raw).takeIf { mp -> mp.values.any { l -> l.any { it in moves } } }
+                        ?.let { mp -> encodeListMap(mp.mapValues { (_, l) -> l.map(::m).distinct() }) }
+                    "reminders" -> decodeReminders(raw).takeIf { l -> l.any { it.channelKey in moves } }
+                        ?.let { l -> encodeReminders(l.map { it.copy(channelKey = m(it.channelKey)) }) }
+                    in keyMaps -> decodeStringMap(raw).takeIf { mp -> mp.keys.any { it in moves } }
+                        ?.let { mp -> encodeStringMap(moveMap(mp)) }
+                    else -> null
+                }
+                if (moved != null) p[stringPreferencesKey(k.name)] = moved
+            }
+        }
+        store.edit { moveIn(it) }
+        deviceStore.edit { moveIn(it) }
     }
 
     suspend fun clearRecent() {
