@@ -137,6 +137,8 @@ class LiveTvRepository @Inject constructor(
         // Not before the start-up check (the saved channels may not be read yet).
         if (!firstCheckDone) return
         if (mutex.isLocked) return // an update is already running
+        // Just checked (the start-up check, or Live TV opened a moment ago): nothing can be due yet.
+        if (System.currentTimeMillis() - lastAutoCheckAt < RECHECK_GAP_MS) return
         scope.launch { runCatching { refreshStale() } }
     }
 
@@ -476,6 +478,9 @@ class LiveTvRepository @Inject constructor(
         mutex.withLock { refreshLocked(forcePlaylists, forceEpg, forceIds, automatic) }
     }
 
+    /** When the last automatic check finished (see [refreshIfStale]). */
+    @Volatile private var lastAutoCheckAt = 0L
+
     /** An update you asked for is waiting: automatic checks stop waiting for Nuvio's player. */
     private val manualQueued = MutableStateFlow(false)
 
@@ -489,7 +494,10 @@ class LiveTvRepository @Inject constructor(
         val t0Update = System.currentTimeMillis()
         LIVE_REPORT.add(if (automatic) "Update check started" else "Update started")
         try { refreshBody(forcePlaylists, forceEpg, forceIds, automatic) }
-        finally { LIVE_REPORT.add("Update finished in ${(System.currentTimeMillis() - t0Update) / 1000} s") }
+        finally {
+            if (automatic) lastAutoCheckAt = System.currentTimeMillis()
+            LIVE_REPORT.add("Update finished in ${(System.currentTimeMillis() - t0Update) / 1000} s")
+        }
         runCatching { sweepLeftoverFiles() }.onFailure { Log.w(TAG, "Leftover file sweep failed", it) }
     }
 
@@ -2756,6 +2764,8 @@ class LiveTvRepository @Inject constructor(
         private const val HOUR = 60L * 60L * 1000L
         /** How often to look for playlists and guides past their update time while the app is open. */
         private const val STALE_CHECK_MS = 30L * 60L * 1000L
+        /** Opening Live TV doesn't check again this soon after the last automatic check. */
+        private const val RECHECK_GAP_MS = 5L * 60L * 1000L
         /** Extra guide hours read ahead, so the window moves along a few times a day, not constantly. */
         /** The most channels of one group whose listings are loaded for every day ahead. */
         private const val MAX_FULL_RANGE_CHANNELS = 400

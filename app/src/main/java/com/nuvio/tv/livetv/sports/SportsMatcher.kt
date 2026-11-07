@@ -197,6 +197,21 @@ internal class SportsMatcher(
         val leagueWordUse = HashMap<String, Int>()
         multiEvents.forEach { ev -> terms[ev.id]?.leagueWords.orEmpty().toSet().forEach { leagueWordUse[it] = (leagueWordUse[it] ?: 0) + 1 } }
         fun specificHits(evId: String, text: String) = specific[evId].orEmpty().count { hasWord(text, it) }
+        // A word usually too common to tell events apart ("Finals", "Masters") that only one event
+        // running now has in its name picks that one out ("WTA Finals" while five other WTA events
+        // are on), when the show also names that event's own competition ("WTA", not just "Tennis").
+        val ownLeague: Map<String, Set<String>> = multiEvents.associate { ev ->
+            ev.id to terms[ev.id]?.leagueWords.orEmpty().filter { w ->
+                multiEvents.none { o -> o.leagueId != ev.leagueId && w in terms[o.id]?.leagueWords.orEmpty() }
+            }.toSet()
+        }
+        val titleWordUse = HashMap<String, Int>()
+        multiEvents.forEach { ev -> norm(ev.title).trim().split(' ').toSet().forEach { titleWordUse[it] = (titleWordUse[it] ?: 0) + 1 } }
+        val rare: Map<String, Set<String>> = multiEvents.associate { ev ->
+            ev.id to norm(ev.title).trim().split(' ').filter { it in RARE_TOURNAMENT_WORDS && titleWordUse[it] == 1 }.toSet()
+        }
+        fun rareHit(evId: String, text: String) =
+            rare[evId].orEmpty().any { hasWord(text, it) } && ownLeague[evId].orEmpty().any { hasWord(text, it) }
         /** The competition named by a word only this event uses ("pga tour" while the DP World Tour is on too). */
         fun distinctLeague(evId: String, text: String) = terms[evId]?.leagueWords.orEmpty()
             .any { it != "grand prix" && (leagueWordUse[it] ?: 0) <= 1 && hasWord(text, it) }
@@ -311,6 +326,7 @@ internal class SportsMatcher(
                             score > 0 -> Unit
                             hits >= 1 -> score = 88
                             namesOther(ev.id, nt) || namesOther(ev.id, nd) -> continue
+                            rareHit(ev.id, nt) -> score = 75
                             distinctLeague(ev.id, nt) || distinctLeague(ev.id, nd) -> score = 70
                             else -> continue
                         }
@@ -351,6 +367,7 @@ internal class SportsMatcher(
                     val hits = specificHits(ev.id, nn)
                     when {
                         (hits >= 1 && t.leagueInName(nn)) || hits >= 2 -> { add(ev.id, ch.key, 90, "Channel name", null); byName++ }
+                        !namesOther(ev.id, nn) && rareHit(ev.id, nn) -> { add(ev.id, ch.key, 85, "Channel name", null); byName++ }
                         !namesOther(ev.id, nn) && distinctLeague(ev.id, nn) -> { add(ev.id, ch.key, 78, "Channel name", null); byName++ }
                     }
                 }
@@ -468,7 +485,7 @@ internal class SportsMatcher(
         val multi = teamEvents.filter { it.id in noStart }.joinToString(" | ") { ev ->
             val t = terms[ev.id]
             "${ev.title.take(32)}: looked for ${t?.leagueWords?.joinToString("/")}, " +
-                "channels named like that ${names.count { (_, nn) -> t?.leagueInName(nn) == true }}, matched ${out[ev.id]?.size ?: 0}"
+                "channels named like that ${names.count { (_, nn) -> t?.leagueInName(nn) == true }}, channels found (names + guide) ${out[ev.id]?.size ?: 0}"
         }
         val tEnd = System.currentTimeMillis()
         val summary = "Sports: ${wanted.size} games and events in the next day or so · channels found for ${out.size} " +
@@ -1250,6 +1267,12 @@ internal class SportsMatcher(
             "classic", "international", "invitational", "presented", "the", "for", "and", "ladies", "mens", "womens",
             "grand", "prix", "race", "series", "world", "trophy", "tournament", "challenger", "final", "finals",
             "round", "qualifying", "practice", "sprint", "week", "weekend", "live", "season", "formula", "edition"
+        )
+
+        /** Of those, the ones that pick out one event when no other event running now has them in its name (see `rareHit`). */
+        private val RARE_TOURNAMENT_WORDS = setOf(
+            "final", "finals", "masters", "championship", "championships", "classic", "invitational",
+            "cup", "trophy", "challenger", "international", "open"
         )
 
         private val BANNER_RUN = Regex("([#=*~_▬━─•■◆★|\\-])\\1{2,}")

@@ -371,7 +371,7 @@ object SportsCatalog {
             regions = EVERYWHERE, minutes = 360, color = 0xFF003865),
         League("golf/eur", Sport.GOLF, "DP World Tour", "DPWT", "golf/eur", LeagueKind.EVENT, guideWords = listOf("DP World Tour", "Golf"),
             regions = setOf("UK", "IE", "OTHER"), minutes = 360, color = 0xFF0A1F44),
-        League("golf/lpga", Sport.GOLF, "LPGA Tour", "LPGA", "golf/lpga", LeagueKind.EVENT, guideWords = listOf("LPGA"),
+        League("golf/lpga", Sport.GOLF, "LPGA Tour", "LPGA", "golf/lpga", LeagueKind.EVENT, guideWords = listOf("LPGA", "Golf"),
             regions = US, minutes = 300, color = 0xFF00205B),
         League("tennis/atp", Sport.TENNIS, "ATP Tour", "ATP", "tennis/atp", LeagueKind.EVENT, guideWords = listOf("ATP", "Tennis"),
             regions = EVERYWHERE, minutes = 600, color = 0xFF003A70),
