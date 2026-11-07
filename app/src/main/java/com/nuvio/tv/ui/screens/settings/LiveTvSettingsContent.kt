@@ -203,6 +203,7 @@ private sealed interface LiveDialog {
     data object SortChoice : LiveDialog
     data object HighlightChoice : LiveDialog
     data object CustomGroups : LiveDialog
+    data object ChannelRow : LiveDialog
     data object ConfirmRestore : LiveDialog
     data object PinCheck : LiveDialog
     data object PinNew : LiveDialog
@@ -1038,14 +1039,13 @@ internal fun LiveTvSettingsContent(
                         { update { it.copy(reverseZap = !it.reverseZap) } }
                     )
                     SettingsActionRow(
-                        title = "Channel Row in the Info Panel",
-                        subtitle = "Pressing OK while watching shows a row of channels to jump to: the ones you watched recently (adult channels are never listed), or your favorites",
-                        value = when (s.panelRow) { "FAVORITES" -> "Favorites"; "OFF" -> "Off"; else -> "Recently Watched" },
-                        onClick = {
-                            update {
-                                it.copy(panelRow = when (it.panelRow) { "RECENT" -> "FAVORITES"; "FAVORITES" -> "OFF"; else -> "RECENT" })
-                            }
-                        }
+                        title = "Channel Row",
+                        subtitle = "A row of channels tucked under the play bar: press OK while watching, then Down. Pick its lists: Recently Watched (adult channels are never listed), Favorites and any of your groups",
+                        value = if (!com.nuvio.tv.livetv.model.PanelRowLists.shown(s)) "Off" else {
+                            val n = com.nuvio.tv.livetv.model.PanelRowLists.parse(s).count { it.on }
+                            if (n == 1) "1 list" else "$n lists"
+                        },
+                        onClick = { dialog = LiveDialog.ChannelRow }
                     )
                     SettingsActionRow(
                         title = "Play Bar Background",
@@ -2041,6 +2041,12 @@ internal fun LiveTvSettingsContent(
             allLabel = "Delete all",
             emptyText = "You haven't made any groups yet. Long-press a channel in the guide and choose \"Add to group\".",
             hintText = "Select a group to delete it. The channels stay in your playlist."
+        )
+        LiveDialog.ChannelRow -> ChannelRowDialog(
+            settings = s,
+            groups = remember(playlists, user.customGroups, user.groupNames) { viewModel.rowGroupOptions() },
+            onUpdate = { t -> update(t) },
+            onDismiss = close
         )
         LiveDialog.PastHours -> SettingsSingleChoiceDialog(
             title = "Past guide kept",

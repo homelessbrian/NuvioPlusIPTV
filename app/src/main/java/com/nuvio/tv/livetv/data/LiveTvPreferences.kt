@@ -192,6 +192,9 @@ class LiveTvPreferences @Inject constructor(
         val guideBackdrop = stringPreferencesKey("guide_backdrop")
         val recentInPanel = booleanPreferencesKey("recent_in_panel")
         val panelRow = stringPreferencesKey("panel_row")
+        val panelRowLists = stringPreferencesKey("panel_row_lists")
+        val panelRowLast = stringPreferencesKey("panel_row_last")
+        val panelRowOpens = stringPreferencesKey("panel_row_opens")
         val channelSurf = booleanPreferencesKey("channel_surf")
         val barHidden = stringPreferencesKey("bar_hidden")
         val guideInfoHidden = stringPreferencesKey("guide_info_hidden")
@@ -495,6 +498,9 @@ class LiveTvPreferences @Inject constructor(
             recentInPanel = p[Keys.recentInPanel] ?: d.recentInPanel,
             // Before the choice existed it was an on / off switch for Recent.
             panelRow = p[Keys.panelRow] ?: if (p[Keys.recentInPanel] == false) "OFF" else d.panelRow,
+            panelRowLists = p[Keys.panelRowLists] ?: d.panelRowLists,
+            panelRowLast = p[Keys.panelRowLast] ?: d.panelRowLast,
+            panelRowOpens = p[Keys.panelRowOpens] ?: d.panelRowOpens,
             channelSurf = p[Keys.channelSurf] ?: d.channelSurf,
             barHidden = p[Keys.barHidden] ?: d.barHidden,
             guideInfoHidden = p[Keys.guideInfoHidden] ?: d.guideInfoHidden,
@@ -784,6 +790,9 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.guideBackdrop] = s.guideBackdrop
         p[Keys.recentInPanel] = s.recentInPanel
         p[Keys.panelRow] = s.panelRow
+        p[Keys.panelRowLists] = s.panelRowLists
+        p[Keys.panelRowLast] = s.panelRowLast
+        p[Keys.panelRowOpens] = s.panelRowOpens
         p[Keys.channelSurf] = s.channelSurf
         p[Keys.barHidden] = s.barHidden
         p[Keys.guideInfoHidden] = s.guideInfoHidden

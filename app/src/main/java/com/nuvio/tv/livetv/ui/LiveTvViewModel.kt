@@ -431,22 +431,23 @@ class LiveTvViewModel @Inject constructor(
     fun clearRecent() { viewModelScope.launch { prefs.clearRecent() } }
 
     /**
-     * The channels in the info panel's row, as set in Settings: recently watched, or your
-     * favorites (in your favorites order). Never the channel playing, or a locked group's.
+     * The channels in one of the Channel Row's lists (under the full play bar): recently watched
+     * (never the channel playing), your favorites (in your favorites order), or one of your
+     * playlist or own groups (in the guide's order). Locked groups' channels are never listed.
      */
-    fun panelRowChannels(currentKey: String?): List<LiveChannel> = when (settings.value.panelRow) {
-        "FAVORITES" -> {
-            val user = userState.value
-            val s = settings.value
-            user.favorites.asSequence()
-                .filter { it != currentKey }
+    fun rowListChannels(listId: String, currentKey: String?): List<LiveChannel> {
+        val user = userState.value
+        val s = settings.value
+        return when (listId) {
+            com.nuvio.tv.livetv.model.PanelRowLists.RECENT -> recentForPanel(currentKey)
+            com.nuvio.tv.livetv.model.PanelRowLists.FAVORITES -> user.favorites.asSequence()
                 .mapNotNull { channelByKey(it) }
                 .filter { ch -> !com.nuvio.tv.livetv.parental.ParentalControls.isLocked(ch.groupId, ch.group, s, user.lockedGroups) }
-                .take(60)
+                .take(ROW_LIST_MAX)
                 .toList()
+            else -> buildUi(displayChannels.value, user, s, listId, "", true, exactGroup = true)
+                .channels.distinctBy { it.key }.take(ROW_LIST_MAX)
         }
-        "OFF" -> emptyList()
-        else -> recentForPanel(currentKey)
     }
 
     /** Every channel in the current group, hidden ones included, for Manage visibility. */
@@ -1328,6 +1329,9 @@ class LiveTvViewModel @Inject constructor(
             ?.let { c -> displayChannels.value.firstOrNull { it.key == c.key } ?: c }
     }
 }
+
+/** The most channels one Channel Row list shows (a huge group would otherwise mean thousands of tiles). */
+private const val ROW_LIST_MAX = 300
 
 /** How far past the end of a show a catch-up replay keeps going (into the next shows). */
 private const val CONTINUE_MS = 3L * 60 * 60 * 1000

@@ -492,8 +492,17 @@ data class LiveTvSettings(
     val guideBackdrop: String = "auto",
     /** The row of recently watched channels at the bottom of the full info panel (OK). */
     val recentInPanel: Boolean = true,
-    /** The row at the bottom of the full info panel: "RECENT", "FAVORITES" or "OFF". */
+    /**
+     * The Channel Row under the full play bar: "OFF" hides it; anything else shows it. (Older
+     * builds also used "RECENT" / "FAVORITES" for which list it showed; see [PanelRowLists].)
+     */
     val panelRow: String = "RECENT",
+    /** The Channel Row's lists, one per line, in order: "1|id" (on) or "0|id" (off). Empty = from [panelRow]. */
+    val panelRowLists: String = "",
+    /** The Channel Row's list used last, so it opens there again. */
+    val panelRowLast: String = "",
+    /** Which list the Channel Row opens on: "last" (the one used last) or "first". */
+    val panelRowOpens: String = "last",
     /** Channel surfing: Up / Down show other channels on the info bar; OK switches. */
     val channelSurf: Boolean = false,
     /** Parts of the full-screen bar switched off (⚙ → Play bar layout), comma separated. */
@@ -600,6 +609,43 @@ data class ChannelGroup(
     }
 }
 
+
+/** One list in the play bar's Channel Row: Recently watched, Favorites, or one of your groups. */
+data class PanelRowList(val id: String, val on: Boolean)
+
+/** Reading and writing [LiveTvSettings.panelRowLists]. */
+object PanelRowLists {
+    const val RECENT = ChannelGroup.RECENT
+    const val FAVORITES = ChannelGroup.FAVORITES
+
+    /** Every list, on or off, in order. Recently watched and Favorites are always there. */
+    fun parse(s: LiveTvSettings): List<PanelRowList> {
+        if (s.panelRowLists.isBlank()) {
+            // Before lists could be picked: the one list the old setting chose.
+            return if (s.panelRow == "FAVORITES") listOf(PanelRowList(FAVORITES, true), PanelRowList(RECENT, false))
+            else listOf(PanelRowList(RECENT, true), PanelRowList(FAVORITES, false))
+        }
+        val out = s.panelRowLists.split('\n').mapNotNull { line ->
+            val bar = line.indexOf('|')
+            if (bar < 1 || bar == line.lastIndex) null else PanelRowList(line.substring(bar + 1), line.substring(0, bar) == "1")
+        }.distinctBy { it.id }.toMutableList()
+        if (out.none { it.id == RECENT }) out += PanelRowList(RECENT, false)
+        if (out.none { it.id == FAVORITES }) out += PanelRowList(FAVORITES, false)
+        return out
+    }
+
+    fun encode(lists: List<PanelRowList>): String =
+        lists.joinToString("\n") { (if (it.on) "1|" else "0|") + it.id }
+
+    fun shown(s: LiveTvSettings): Boolean = s.panelRow != "OFF"
+
+    /** The row on or off, keeping its lists as they are. */
+    fun setShown(s: LiveTvSettings, on: Boolean): LiveTvSettings =
+        s.copy(panelRow = if (on) "RECENT" else "OFF", panelRowLists = encode(parse(s)))
+
+    fun withLists(s: LiveTvSettings, lists: List<PanelRowList>): LiveTvSettings =
+        s.copy(panelRowLists = encode(lists))
+}
 
 /** The start page, including the older "Open Live TV when Nuvio starts" switch. */
 val LiveTvSettings.effectiveStartPage: String
@@ -756,7 +802,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-07 21:40"
+    const val KIT_STAMP = "2026-11-07 22:30"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String
