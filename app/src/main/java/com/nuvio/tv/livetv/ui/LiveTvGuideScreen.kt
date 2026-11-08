@@ -1010,7 +1010,7 @@ private fun LiveTvGuideScreenBody(
                 playbackBuffering = playback.isBuffering,
                 playbackError = playback.error,
                 catchupTitle = playback.catchupTitle,
-                status = status.message.takeIf { status.loading }
+                status = status.message.takeIf { settings.showImportProgress && status.loading }
             )
 
             // ---------------------------------------------------------------- groups + guide
@@ -1727,7 +1727,7 @@ private fun LiveTvGuideScreenBody(
                 }
             }
         }
-        if (!fullscreen && (settings.showProgramDetails || settings.showPreview) && status.loading) {
+        if (settings.showImportProgress && !fullscreen && (settings.showProgramDetails || settings.showPreview) && status.loading) {
             status.message?.let {
                 LiveText(
                     it,
