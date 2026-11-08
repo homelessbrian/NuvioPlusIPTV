@@ -554,6 +554,8 @@ data class LiveUserState(
     val hiddenGroups: Set<String> = emptySet(),
     val favorites: List<String> = emptyList(),
     val recent: List<String> = emptyList(),
+    /** Recently watched channel key -> the group it was last opened from (your own group, Favorites…). */
+    val recentGroups: Map<String, String> = emptyMap(),
     val lastChannelKey: String? = null,
     val previousChannelKey: String? = null,
     val lastGroupId: String? = null,
@@ -840,7 +842,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-08 19:45"
+    const val KIT_STAMP = "2026-11-08 19:55"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

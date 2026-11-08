@@ -396,10 +396,16 @@ class LiveTvViewModel @Inject constructor(
         // replaces it with the channel's own group or the default one.
         val shown = (watchedIn ?: session.currentGroupId.value)?.takeIf { it != ChannelGroup.SEARCH }
         viewModelScope.launch {
-            prefs.recordWatched(channel.key, addToRecent = !isAdultChannel(channel))
+            val addToRecent = !isAdultChannel(channel)
+            prefs.recordWatched(channel.key, addToRecent = addToRecent)
             val user = prefs.userState.first()
             if (shown != null) {
-                if (channelInGroup(channel, shown, user)) prefs.setLastGroup(shown)
+                if (channelInGroup(channel, shown, user)) {
+                    prefs.setLastGroup(shown)
+                    // Recently Watched brings you back to this group later (not to Recently
+                    // Watched itself, which would replace the group it really lives in).
+                    if (addToRecent && shown != ChannelGroup.RECENT) prefs.setRecentGroup(channel.key, shown)
+                }
             } else if (user.lastGroupId == null) {
                 prefs.setLastGroup(uiState.value.selectedGroupId)
             }

@@ -218,6 +218,8 @@ class LiveTvPreferences @Inject constructor(
         val hiddenGroups = stringSetPreferencesKey("hidden_groups")
         val favorites = stringPreferencesKey("favorites")
         val recent = stringPreferencesKey("recent")
+        /** Recently watched channel -> the group it was opened from, as JSON. */
+        val recentGroups = stringPreferencesKey("recent_groups")
         val lastChannel = stringPreferencesKey("last_channel")
         val previousChannel = stringPreferencesKey("previous_channel")
         val lastGroup = stringPreferencesKey("last_group")
@@ -246,7 +248,7 @@ class LiveTvPreferences @Inject constructor(
     private val currentProfile: Int get() = profileManager.activeProfileId.value
 
     private val personalStringKeys: List<Preferences.Key<String>> = listOf(
-        Keys.favorites, Keys.recent, Keys.lastChannel, Keys.previousChannel, Keys.lastGroup,
+        Keys.favorites, Keys.recent, Keys.recentGroups, Keys.lastChannel, Keys.previousChannel, Keys.lastGroup,
         Keys.groupOrder, Keys.customGroups, Keys.channelOrder, Keys.channelCopies, Keys.reminders,
         Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine
     )
@@ -552,6 +554,7 @@ class LiveTvPreferences @Inject constructor(
             hiddenGroups = p[Keys.hiddenGroups] ?: emptySet(),
             favorites = decodeStringList(p[Keys.favorites]),
             recent = decodeStringList(p[Keys.recent]),
+            recentGroups = decodeStringMap(p[Keys.recentGroups]),
             lastChannelKey = p[Keys.lastChannel],
             previousChannelKey = p[Keys.previousChannel],
             lastGroupId = p[Keys.lastGroup],
@@ -1357,7 +1360,19 @@ class LiveTvPreferences @Inject constructor(
     }
 
     suspend fun clearRecent() {
-        store.edit { it[my(Keys.recent)] = encodeStringList(emptyList()) }
+        store.edit {
+            it[my(Keys.recent)] = encodeStringList(emptyList())
+            it[my(Keys.recentGroups)] = encodeStringMap(emptyMap())
+        }
+    }
+
+    /** Remembers the group [key] was opened from, for Recently Watched (only channels still in it are kept). */
+    suspend fun setRecentGroup(key: String, groupId: String) {
+        store.edit { p ->
+            val recent = decodeStringList(p[my(Keys.recent)]).toSet()
+            val map = decodeStringMap(p[my(Keys.recentGroups)]).filterKeys { it in recent && it != key }
+            p[my(Keys.recentGroups)] = encodeStringMap(map + (key to groupId))
+        }
     }
 
     /** [addToRecent] false: adult channels, which never go in Recently watched. */

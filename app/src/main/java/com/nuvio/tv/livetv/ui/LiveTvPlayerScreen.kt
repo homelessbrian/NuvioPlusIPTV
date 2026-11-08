@@ -511,8 +511,9 @@ fun LiveTvPlayerScreen(
                                 // Already watching it: just close the bar.
                                 if (ch.key != playback.channelKey) {
                                     // Picked from Favorites or a group: the guide comes back to that
-                                    // list, not the channel's own playlist group.
-                                    viewModel.preview(ch, watchedIn = rowId?.takeIf { it != PanelRowLists.RECENT })
+                                    // list, not the channel's own playlist group. From Recently
+                                    // Watched: the group it was opened from before.
+                                    viewModel.preview(ch, watchedIn = if (rowId == PanelRowLists.RECENT) user.recentGroups[ch.key] else rowId)
                                     showBanner()
                                 } else bannerVisible = false
                             }
