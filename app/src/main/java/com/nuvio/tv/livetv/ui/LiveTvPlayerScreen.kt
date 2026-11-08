@@ -1148,6 +1148,8 @@ fun LiveTvPlayerScreen(
         }
     }
 
+    // Menus over the video are as dark as the play bar (Settings › Play Bar Background).
+    androidx.compose.runtime.CompositionLocalProvider(LocalLiveDialogGlass provides settings.panelBackground) {
     when (dialog) {
         PlayerDialog.OPTIONS -> current?.let { ch ->
             val archive = playback.catchupTitle != null
@@ -1319,6 +1321,7 @@ fun LiveTvPlayerScreen(
         )
         PlayerDialog.BACKUP_FLYOUT -> if (backups.isEmpty()) dialog = PlayerDialog.NONE
         PlayerDialog.NONE -> Unit
+    }
     }
     }
 }

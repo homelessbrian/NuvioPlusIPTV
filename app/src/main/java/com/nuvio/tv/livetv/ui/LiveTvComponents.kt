@@ -539,6 +539,12 @@ internal fun LiveTag(text: String, background: Color, color: Color, modifier: Mo
     }
 }
 
+/**
+ * How dark [LiveDialog] panels are ("standard", "darker" or "solid", as [glassColor] takes them).
+ * The player sets it to the play bar's darkness, so menus over the video match the bar.
+ */
+internal val LocalLiveDialogGlass = androidx.compose.runtime.staticCompositionLocalOf { "darker" }
+
 /** Centered modal panel used by the context menu, program info and text input dialogs. */
 @Composable
 internal fun LiveDialog(
@@ -558,6 +564,7 @@ internal fun LiveDialog(
     // press (its repeats and its release) so it can't click the first menu item and close the menu.
     var sawKeyDown by remember { mutableStateOf(false) }
     val openedAt = remember { android.os.SystemClock.uptimeMillis() }
+    val glassLevel = LocalLiveDialogGlass.current
     val body: @Composable () -> Unit = {
         Column(
             modifier = Modifier
@@ -584,7 +591,7 @@ internal fun LiveDialog(
                 .widthIn(min = minWidth, max = width)
                 .heightIn(max = 620.dp)
                 // The same dark glass as the play bar and the ⚙ panels.
-                .glass(glassColor("darker"), RoundedCornerShape(corner))
+                .glass(glassColor(glassLevel), RoundedCornerShape(corner))
                 .padding(pad)
         ) {
             content()

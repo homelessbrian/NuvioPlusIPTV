@@ -145,7 +145,7 @@ internal fun GearPanel(
                 .align(Alignment.BottomEnd)
                 .padding(end = 36.dp, bottom = bottom)
                 .width(470.dp)
-                .glass(glassColor(if (background == "standard") "darker" else background), RoundedCornerShape(20.dp))
+                .glass(glassColor(background), RoundedCornerShape(20.dp))
                 .padding(12.dp)
         ) {
             if (page == "quick" || page == "quickAdd") {
