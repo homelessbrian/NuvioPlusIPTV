@@ -132,20 +132,28 @@ object CatchupUrlBuilder {
         }
         // timeshift.php form (some panels only answer this).
         out += "$host/streaming/timeshift.php?username=$user&password=$pass&stream=$id&start=$stamp&duration=$minutes"
-        // Same request with the time written in the other clock (server vs device).
-        val fmt = SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US)
+        // Same request with the time written in the other clock (server vs device). Only a guess
+        // for when the server's time zone isn't known: once it is known the first link already
+        // has the right time, and this one could only land on a show from hours earlier or later.
         val serverZone = serverTimezone?.takeIf { it.isNotBlank() }?.let { java.util.TimeZone.getTimeZone(it) }
-        fmt.timeZone = serverZone ?: java.util.TimeZone.getDefault()
-        val startMs = runCatching { fmt.parse(stamp)?.time }.getOrNull()
-        if (startMs != null) {
-            val other = SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US).apply {
-                timeZone = if (serverZone != null) java.util.TimeZone.getDefault() else java.util.TimeZone.getTimeZone("UTC")
-            }.format(Date(startMs))
-            if (other != stamp) out += "$host/timeshift/$user/$pass/$minutes/$other/$id${ext.ifEmpty { ".ts" }}$query"
+        if (serverZone == null) {
+            val fmt = SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US)
+            fmt.timeZone = java.util.TimeZone.getDefault()
+            val startMs = runCatching { fmt.parse(stamp)?.time }.getOrNull()
+            if (startMs != null) {
+                val other = SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }.format(Date(startMs))
+                if (other != stamp) out += "$host/timeshift/$user/$pass/$minutes/$other/$id${ext.ifEmpty { ".ts" }}$query"
+            }
         }
         out.remove(url)
         return out.toList()
     }
+
+    /** The start time written in a catch-up link (Xtream timeshift or timeshift.php), or null for other kinds. */
+    fun askedStamp(url: String): String? =
+        Regex("""\d{4}-\d{2}-\d{2}:\d{2}-\d{2}""").find(url)?.value
 
     /**
      * Xtream replay links name a whole minute (9:10, never 9:10:45): the replay really starts

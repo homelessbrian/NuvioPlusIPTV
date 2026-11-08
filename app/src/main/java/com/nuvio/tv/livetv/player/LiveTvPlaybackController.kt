@@ -642,7 +642,9 @@ class LiveTvPlaybackController @Inject constructor(
         /** Catch-up: how far the replay begins before [catchupStartMs] (whole-minute links); skipped once it's in. */
         catchupLeadMs: Long = 0L,
         /** Catch-up: the link the app built first (the others are other kinds of the same request). */
-        catchupPrimaryUrl: String? = null
+        catchupPrimaryUrl: String? = null,
+        /** Catch-up: the real time the link asks for, to check against the stream's own clock (null: don't check). */
+        catchupExpectWallMs: Long? = null
     ) {
         // Something chosen to play (back from the background through a launcher row, say):
         // that wins over picking up what was on before.
@@ -656,6 +658,9 @@ class LiveTvPlaybackController @Inject constructor(
         if (_recordingPlayback.value != null) { _recordingPlayback.value = null; shiftJob?.cancel() }
         archiveStartWallMs = if (catchupTitle != null) catchupStartMs else null
         archiveWallMapped = false
+        archiveExpectWallMs = if (catchupTitle != null) catchupExpectWallMs else null
+        wrongShowSkips = 0
+        wallCheckedFor = null
         if (currentChannel?.key != channel.key) {
             neverStartedCount = 0
             audioHandled = false
@@ -747,6 +752,58 @@ class LiveTvPlaybackController @Inject constructor(
 
     /** The real time the replay should start at, when known. */
     @Volatile private var archiveStartWallMs: Long? = null
+
+    /** The time the catch-up link asked for, to compare with the stream's own clock; null = no check. */
+    @Volatile private var archiveExpectWallMs: Long? = null
+    private var wrongShowSkips = 0
+    private var wallCheckedFor: String? = null
+
+    /**
+     * Some providers answer a catch-up link written in the wrong clock with a different show
+     * (hours earlier or later), and nothing says so. When the stream carries its own clock and
+     * it doesn't cover the time asked for, the link is dropped and the next one with a
+     * different time is tried. With no other time to try, the replay carries on as before.
+     */
+    private fun checkCatchupClock(timeline: androidx.media3.common.Timeline) {
+        val expect = archiveExpectWallMs ?: return
+        val url = currentUrl ?: return
+        if (_state.value.catchupTitle == null || wallCheckedFor == url || timeline.isEmpty) return
+        val p = _player ?: return
+        val w = timeline.getWindow(p.currentMediaItemIndex.coerceIn(0, timeline.windowCount - 1), androidx.media3.common.Timeline.Window())
+        if (w.isPlaceholder || w.windowStartTimeMs == C.TIME_UNSET) return
+        wallCheckedFor = url
+        val from = w.windowStartTimeMs
+        val to = if (w.durationMs != C.TIME_UNSET && w.durationMs > 0) from + w.durationMs else System.currentTimeMillis()
+        if (expect >= from - WRONG_SHOW_SLACK_MS && expect <= to + WRONG_SHOW_SLACK_MS) return
+        val minutesOff = (from - expect) / 60_000
+        val stamp = com.nuvio.tv.livetv.data.CatchupUrlBuilder.askedStamp(url)
+        val other = fallbackUrls.filter { com.nuvio.tv.livetv.data.CatchupUrlBuilder.askedStamp(it) != stamp }
+        val ch = currentChannel
+        if (ch == null || wrongShowSkips >= 2 || other.isEmpty()) {
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
+                "Catch-up: the stream's clock is $minutesOff min away from the show asked for; no other time to try, playing it"
+            )
+            return
+        }
+        wrongShowSkips++
+        com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
+            "Catch-up: the provider sent a show $minutesOff min away from the one asked for; trying ${redact(other.first())}"
+        )
+        scope.launch {
+            if (currentUrl != url) return@launch
+            val pl = _player ?: return@launch
+            fallbackUrls.clear()
+            fallbackUrls.addAll(other)
+            val fb = fallbackUrls.removeFirst()
+            pl.stop()
+            currentUrl = fb
+            if (saveFallback(ch, fb)) return@launch
+            archiveStartPending = true
+            pl.setMediaSource(buildMediaSource(fb, ch.headers, isLive = false))
+            pl.prepare()
+            pl.playWhenReady = true
+        }
+    }
 
     /**
      * The provider sent its live stream with a long rewind window instead of the show itself:
@@ -1590,6 +1647,7 @@ class LiveTvPlaybackController @Inject constructor(
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
             updateOwnTimeline()
+            checkCatchupClock(timeline)
             if (shiftStartPending && !timeline.isEmpty) {
                 val pl = _player
                 if (pl != null) {
@@ -2210,6 +2268,8 @@ class LiveTvPlaybackController @Inject constructor(
         private const val MAX_RECONNECTS = 8
         /** No progress for this long while it should be playing = stalled. */
         private const val STALL_MS = 15_000L
+        /** How far a replay's own clock may be from the time asked for before it counts as a different show. */
+        private const val WRONG_SHOW_SLACK_MS = 10 * 60_000L
         /** Two freezes within this long: the channel counts as failing (live games only). */
         private const val FREEZE_WINDOW_MS = 3 * 60_000L
         private val FORMAT_GUESSES = listOf(MimeTypes.APPLICATION_M3U8, MimeTypes.APPLICATION_MPD)

@@ -590,7 +590,10 @@ class LiveTvViewModel @Inject constructor(
             fallbacks = links.drop(1),
             catchupStartMs = start,
             catchupLeadMs = lead,
-            catchupPrimaryUrl = url
+            catchupPrimaryUrl = url,
+            // Only checked against the stream's own clock when no time shift is set (a shift
+            // makes the stream's clock differ from the guide on purpose).
+            catchupExpectWallMs = if (shift == 0L && correctionMs == 0L) from else null
         )
         _catchup.value = CatchupSession(channel, program, offsetMs.coerceAtLeast(0) - lead)
         // Load this channel's full schedule, so catch-up can follow on into later shows.
