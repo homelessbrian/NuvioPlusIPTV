@@ -91,13 +91,21 @@ class LiveTvChannelStore @Inject constructor(
             val currentKeys = channels.mapTo(HashSet()) { it.key }
             val namesById = stableIndex(user.channelNames.filterKeys { it !in currentKeys })
             val numbersById = stableIndex(user.channelNumbers.filterKeys { it !in currentKeys })
+            // Group names get the same cleaning when that's switched on. Worked out once per
+            // distinct group name; a group you renamed yourself keeps your name.
+            val cleanedGroups: Map<String, String> =
+                if (s.cleanGroupNames && terms.isNotEmpty()) {
+                    channels.mapTo(HashSet()) { it.group }.associateWith {
+                        com.nuvio.tv.livetv.model.ChannelNameEditor.clean(it, terms)
+                    }
+                } else emptyMap()
             channels.map { c ->
                 val id = stableId(c.key)
                 c.copy(
                     name = user.channelNames[c.key] ?: id?.let { namesById[it] }
                         ?: cleaned[c.key] ?: c.name,
                     number = user.channelNumbers[c.key] ?: id?.let { numbersById[it] } ?: c.number,
-                    group = user.groupNames[c.groupId] ?: c.group
+                    group = user.groupNames[c.groupId] ?: cleanedGroups[c.group] ?: c.group
                 )
             }
         }

@@ -133,4 +133,13 @@ class ChannelDisplayChangesTest {
         assertSame(changed, output[1])
         assertSame(cleared, output[2])
     }
+
+    @Test
+    fun `switching group name cleanup on or off is delivered`() = runBlocking {
+        val initial = LiveTvSettings(nameRemovals = "NL")
+        val on = initial.copy(cleanGroupNames = true)
+        val output = listOf(initial, initial.copy(infoBannerSeconds = 10), on,
+            on.copy(audioPassthrough = true), initial).asFlow().displayChannelSettingsChanges().toList()
+        assertEquals(listOf(initial, on, initial), output)
+    }
 }

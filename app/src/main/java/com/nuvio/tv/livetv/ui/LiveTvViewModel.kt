@@ -536,23 +536,20 @@ class LiveTvViewModel @Inject constructor(
         val catchup = channel.catchup ?: return false
         val now = System.currentTimeMillis()
         if (!CatchupUrlBuilder.isAvailable(catchup, program.startMs, now)) return false
-        // Server time zone not known yet (M3U from an Xtream server): learn it first (a second
-        // at most, once), then play, so the replay starts at the right time.
-        if (playlistZones.value[channel.sourceId].isNullOrBlank() && channel.sourceId !in zoneAsked &&
+        // Server time zone not known yet (M3U from an Xtream server): learn it first (a few
+        // seconds at most), then play, so the replay starts at the right time. Asked again on
+        // later replays until the server answers (a slow answer is still saved for next time).
+        if (playlistZones.value[channel.sourceId].isNullOrBlank() &&
             Regex("""/(?:live/)?[^/]+/[^/]+/\d+(\.[a-z0-9]+)?(\?.*)?$""", RegexOption.IGNORE_CASE).containsMatchIn(channel.url)
         ) {
-            zoneAsked += channel.sourceId
             viewModelScope.launch {
-                val tz = kotlinx.coroutines.withTimeoutOrNull(4_000) { repository.learnServerZone(channel) }
-                startCatchup(channel, catchup, program, offsetMs, tz)
+                val tz = kotlinx.coroutines.withTimeoutOrNull(ZONE_WAIT_MS) { repository.learnServerZone(channel) }
+                startCatchup(channel, catchup, program, offsetMs, tz ?: playlistZones.value[channel.sourceId]?.takeIf { it.isNotBlank() })
             }
             return true
         }
         return startCatchup(channel, catchup, program, offsetMs, playlistZones.value[channel.sourceId])
     }
-
-    /** Playlists whose server time zone has been asked for (once per session). */
-    private val zoneAsked = java.util.Collections.synchronizedSet(HashSet<String>())
 
     private fun startCatchup(
         channel: LiveChannel,
@@ -1346,6 +1343,9 @@ private const val ROW_LIST_MAX = 300
 
 /** How far past the end of a show a catch-up replay keeps going (into the next shows). */
 private const val CONTINUE_MS = 3L * 60 * 60 * 1000
+
+/** How long a replay waits for the server's time zone before playing without it. */
+private const val ZONE_WAIT_MS = 5_000L
 
 /** A TMDB 24/7 match as the show info the guide's panels already know how to show. */
 private fun com.nuvio.tv.livetv.data.LiveTv247Matcher.Match.toMeta() = com.nuvio.tv.domain.model.MetaPreview(

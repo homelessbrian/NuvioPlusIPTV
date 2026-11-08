@@ -420,6 +420,8 @@ data class LiveTvSettings(
     val groupPlaylistHeadings: Boolean = true,
     /** Channel name editor (TiviMate style): prefixes/suffixes to remove, comma-separated. */
     val nameRemovals: String = "",
+    /** Also take those prefixes/suffixes off group names (off by default). */
+    val cleanGroupNames: Boolean = false,
     /** Hidden developer tools (Test poster lookup). Turned on with a secret word. */
     val developerTools: Boolean = false,
     /** Satellite-box style: picking a group lands on the channel names (OK plays, Right opens the schedule). */
@@ -810,7 +812,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-08 14:55"
+    const val KIT_STAMP = "2026-11-08 15:45"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String
