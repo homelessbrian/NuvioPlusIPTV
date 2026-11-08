@@ -8,7 +8,9 @@ import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.player.LiveTvPlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +53,24 @@ class SportsViewModel @Inject constructor(
 
     private val _now = MutableStateFlow(System.currentTimeMillis())
     val now: StateFlow<Long> = _now
+
+    // ---- the page's lists (games of the day, sections, My Teams' rows), built in the background
+
+    private val pageQuery = MutableStateFlow<SportsPageQuery?>(null)
+
+    /** The screen's day and filter (see [SportsPageQuery]). */
+    internal fun setPageQuery(q: SportsPageQuery) { pageQuery.value = q }
+
+    /** The page's lists, rebuilt in the background when games, channels, follows or the minute change. */
+    internal val pageData: StateFlow<SportsPageData?> = kotlinx.coroutines.flow.combine(
+        kotlinx.coroutines.flow.combine(pageQuery.filterNotNull(), events, known, matches) { q, ev, kn, m -> PageInputs(q, ev, kn, m) },
+        kotlinx.coroutines.flow.combine(follows, settings, hasChannels, _now.map { it / 60_000L }.distinctUntilChanged()) { f, s, h, _ -> Triple(f, s, h) }
+    ) { a, b -> a to b }
+        .prepareSportsPages { (a, b) -> SportsPageLists.build(repo, a.q, a.events, a.known, a.matches, b.first, b.second, b.third, System.currentTimeMillis()) }
+        // Only while the page is on screen.
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private class PageInputs(val q: SportsPageQuery, val events: List<SportsEvent>, val known: List<SportsEvent>, val matches: Map<String, List<ChannelMatch>>)
 
     /** Live TV's "record early" and "record late" minutes (Settings → Live TV → Recordings). */
     val recordPadding: StateFlow<Pair<Int, Int>> = livePrefs.settings.map { it.recordPreMinutes to it.recordPostMinutes }

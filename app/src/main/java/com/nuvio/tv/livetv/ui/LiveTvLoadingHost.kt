@@ -62,6 +62,10 @@ fun LiveTvLoadingHost(navController: NavController) {
     PauseLiveTvInBackground(entry.liveTvPlayback())
     val live by entry.liveTvRepository().status.collectAsState()
     val vod by entry.onDemandRepository().status.collectAsState()
+    // Wait for the saved preference before showing progress, so an opted-out TV never flashes it.
+    val showImportProgress by remember(entry) {
+        entry.liveTvPreferences().settings.map { it.showImportProgress }.distinctUntilChanged()
+    }.collectAsState(false)
     val route = navController.currentBackStackEntryAsState().value?.destination?.route.orEmpty()
     val liveFullscreen by LiveTvFullscreen.active.collectAsState()
     val playing = route == Screen.LiveTvPlayer.route || route.startsWith("player/") || liveFullscreen
@@ -99,7 +103,7 @@ fun LiveTvLoadingHost(navController: NavController) {
         else -> null
     }
     // How long it's been working, so a long first load reads as busy rather than stuck.
-    val busy = message != null
+    val busy = showImportProgress && message != null
     val startedAt = androidx.compose.runtime.remember(busy) { System.currentTimeMillis() }
     val elapsedSec by androidx.compose.runtime.produceState(0L, busy) {
         value = 0L
@@ -134,7 +138,7 @@ fun LiveTvLoadingHost(navController: NavController) {
                 maxLines = 3
             )
         }
-        AnimatedVisibility(visible = message != null && !playing, enter = fadeIn(), exit = fadeOut()) {
+        AnimatedVisibility(visible = busy && !playing, enter = fadeIn(), exit = fadeOut()) {
             Row(
                 modifier = Modifier
                     .padding(end = 28.dp, bottom = 22.dp)

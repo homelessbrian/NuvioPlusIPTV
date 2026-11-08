@@ -57,8 +57,8 @@ import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.livetv.ui.LiveTextField
 import com.nuvio.tv.livetv.ui.TextInputDialog
 import com.nuvio.tv.ui.theme.NuvioTheme
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import java.util.Locale
 
 /**
@@ -135,30 +135,14 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
         val q = SportsCatalog.norm(query).trim()
         if (q.length < 2) { value = null; return@produceState }
         delay(350)
-        val all = ArrayList<TeamInfo>()
         // Your region's leagues first, then every other league (MLS from the UK, the Premier
         // League from the US…): a team can be found wherever it plays.
         fun teamLeague(l: League) = l.espnPath != null && l.kind == LeagueKind.TEAMS && !l.national
         val searchIn = (viewModel.repo.activeLeagues().filter(::teamLeague) +
             SportsCatalog.ordered(settings).filter(::teamLeague) +
             SportsCatalog.leagues.filter { it.national }.distinctBy { it.nationalGroup } + SportsCatalog.extra).distinctBy { it.id }
-        // Eight leagues at a time (there are well over a hundred; each list is saved for a week
-        // after the first look), keeping the order: a club in more than one competition
-        // (Arsenal: Premier League and Champions League) shows once, under its own league.
-        for (batch in searchIn.chunked(8)) {
-            val found = kotlinx.coroutines.coroutineScope {
-                batch.map { l ->
-                    async {
-                        runCatching { viewModel.teams(l) }.getOrDefault(emptyList()).filter { t ->
-                            listOfNotNull(t.fullName, t.name, t.location, t.abbr).any { SportsCatalog.norm(it).contains(q) }
-                        }
-                    }
-                }.map { it.await() }
-            }
-            found.forEach { all += it }
-            value = all.distinctBy { SportsCatalog.teamFamily(it.leagueId) + "|" + it.id }
-        }
-        value = all.distinctBy { SportsCatalog.teamFamily(it.leagueId) + "|" + it.id }
+        // Filtering and duplicate removal stay on a worker after teams() returns from I/O.
+        teamPickerSearchResults(searchIn, q, viewModel::teams).collect { value = it }
     }
     LaunchedEffect(Unit) { delay(150); runCatching { firstSport.requestFocus() } }
 

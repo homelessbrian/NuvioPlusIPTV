@@ -306,7 +306,7 @@ fun SideMenuSettingsContent(initialFocusRequester: FocusRequester? = null) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ArrowButton(up: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun ArrowButton(up: Boolean, enabled: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val colors = liveCellColors(focused, Color.White.copy(alpha = 0.08f))
     val shape = RoundedCornerShape(12.dp)

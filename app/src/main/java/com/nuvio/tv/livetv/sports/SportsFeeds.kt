@@ -9,6 +9,7 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
+import com.nuvio.tv.livetv.data.ForkHttp
 
 /** A goal, touchdown or basket worth listing on the game page. */
 data class ScoringPlay(val clock: String, val teamAbbr: String?, val text: String, val awayScore: String?, val homeScore: String?)
@@ -19,7 +20,7 @@ data class ScoringPlay(val clock: String, val teamAbbr: String?, val text: Strin
  */
 internal class SportsFeeds {
 
-    private val http: OkHttpClient = OkHttpClient.Builder()
+    private val http: OkHttpClient = ForkHttp.builder()
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(40, TimeUnit.SECONDS)
@@ -162,6 +163,148 @@ internal class SportsFeeds {
             out
         }.getOrDefault(emptyMap())
     }
+
+    /** What [espnSharedRead] found: the days' scoreboards, or [unchanged] when it's the same as last time. */
+    class SharedDays(val raws: Map<String, String>, val unchanged: Boolean)
+
+    /** The last full read of a league's shared file, per window ("day" / "week"). */
+    private class SharedMemo(val etag: String, val stamps: Map<String, Long>, val days: List<String>)
+    private val sharedMemo = java.util.concurrent.ConcurrentHashMap<String, SharedMemo>()
+
+    /**
+     * Like [espnSharedDays], but asks GitHub first whether the file has changed since this window
+     * last read it. Most rounds it hasn't (the shared job runs far less often than the app looks),
+     * and then nothing is downloaded or read at all: [SharedDays.unchanged] is true as long as
+     * the same [days] are wanted and all of them are still fresh enough. Otherwise the file is read
+     * as before. Null when the file can't be had.
+     */
+    fun espnSharedRead(leagueId: String, window: String, days: List<String>, now: Long, maxAgeFor: (Int) -> Long): SharedDays? {
+        val key = "$window|$leagueId"
+        val memo = sharedMemo[key]
+        val url = DATA_URL + "espn/" + safeFileId(leagueId) + ".json"
+        if (memo != null && memo.days == days &&
+            days.withIndex().all { (i, d) -> memo.stamps[d]?.let { now - it <= maxAgeFor(i) } == true }
+        ) {
+            val notModified = runCatching {
+                val req = Request.Builder().url(url)
+                    .header("Accept", "application/json")
+                    .header("If-None-Match", memo.etag)
+                    .build()
+                http.newCall(req).execute().use { r -> r.code == 304 }
+            }.getOrDefault(false)
+            if (notModified) return SharedDays(emptyMap(), unchanged = true)
+        }
+        return runCatching {
+            val req = Request.Builder().url(url).header("Accept", "application/json").build()
+            http.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@runCatching null
+                val body = r.body?.string() ?: return@runCatching null
+                val all = runCatching { JSONObject(body).optJSONObject("days") }.getOrNull()
+                if (all == null) { sharedMemo.remove(key); return@runCatching SharedDays(emptyMap(), false) }
+                val stamps = HashMap<String, Long>()
+                all.keys().forEach { d -> all.optJSONObject(d)?.let { stamps[d] = it.optLong("fetchedAt", 0L) } }
+                val out = HashMap<String, String>()
+                days.forEachIndexed { i, day ->
+                    val d = all.optJSONObject(day) ?: return@forEachIndexed
+                    if (now - d.optLong("fetchedAt", 0L) > maxAgeFor(i)) return@forEachIndexed
+                    d.optString("raw").ifBlank { null }?.let { out[day] = it }
+                }
+                val etag = r.header("ETag")
+                // Only remembered when every day wanted was there: otherwise next time reads it again.
+                if (etag != null && out.size == days.size) sharedMemo[key] = SharedMemo(etag, stamps, days)
+                else sharedMemo.remove(key)
+                SharedDays(out, false)
+            }
+        }.getOrNull()
+    }
+
+    /** Forget what [espnSharedRead] remembered for this league, so the next read is a full one. */
+    fun forgetShared(leagueId: String, window: String) { sharedMemo.remove("$window|$leagueId") }
+
+    // ------------------------------------------------------------------ ready-made score files
+
+    /**
+     * nuvio-data's list of its ready-made score files (espn/compact): per league, a fingerprint of
+     * its yesterday-to-tomorrow file ("d") and its week-ahead file ("w"), and when each day was
+     * last asked of ESPN. [day] and [week] are the days the files cover.
+     */
+    class CompactIndex(val day: List<String>, val week: List<String>, val leagues: Map<String, Entry>) {
+        class Entry(val dayHash: String?, val dayStamps: List<Long>, val weekHash: String?, val weekStamps: List<Long>)
+    }
+
+    /** One ready-made file: its games, the league's logo, and the fingerprint of what came. */
+    class CompactFile(val games: List<SportsEvent>, val logo: String?, val hash: String)
+
+    @Volatile private var compactIndexKept: CompactIndex? = null
+    @Volatile private var compactIndexEtag: String? = null
+    @Volatile private var compactIndexAt = 0L
+
+    /**
+     * The index, asked again at most once a minute (one small request for every league in a
+     * round), and only downloaded when it changed. The last copy when it can't be reached for a
+     * little while; null when there is none, or it's old (the caller then reads the old way).
+     */
+    fun compactIndex(now: Long): CompactIndex? {
+        val kept = compactIndexKept
+        if (kept != null && now - compactIndexAt < 60_000L) return kept
+        synchronized(this) {
+            val again = compactIndexKept
+            if (again != null && now - compactIndexAt < 60_000L) return again
+            val fresh = runCatching {
+                val b = Request.Builder().url(DATA_URL + "espn/compact/index.json").header("Accept", "application/json")
+                val tag = compactIndexEtag
+                if (again != null && tag != null) b.header("If-None-Match", tag)
+                http.newCall(b.build()).execute().use { r ->
+                    when {
+                        r.code == 304 && again != null -> again
+                        !r.isSuccessful -> null
+                        else -> {
+                            val parsed = parseCompactIndex(r.body?.string() ?: return@use null)
+                            compactIndexEtag = if (parsed != null) r.header("ETag") else null
+                            parsed
+                        }
+                    }
+                }
+            }.getOrNull()
+            if (fresh != null) {
+                compactIndexKept = fresh
+                compactIndexAt = now
+                return fresh
+            }
+            // Couldn't be had: the last copy is still fine for a few minutes (its stamps say how fresh).
+            return again?.takeIf { now - compactIndexAt < 20 * 60_000L }
+        }
+    }
+
+    /** One league's ready-made file ("day" or "week"); null when it can't be had or read. */
+    fun compactFile(leagueId: String, window: String): CompactFile? = runCatching {
+        val text = get(DATA_URL + "espn/compact/$window/" + safeFileId(leagueId) + ".json")
+        val o = JSONObject(text)
+        if (o.optInt("v") != 1) return@runCatching null
+        val games = SportsEventCodec.decode(o.optJSONArray("g")?.toString() ?: return@runCatching null) ?: return@runCatching null
+        CompactFile(games, o.optString("lg").takeIf { it.startsWith("http") }, compactHash(text))
+    }.getOrNull()
+
+    /** The fingerprint nuvio-data gives a ready-made file (the start of its SHA-256). */
+    private fun compactHash(text: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }.take(16)
+
+    private fun parseCompactIndex(text: String): CompactIndex? = runCatching {
+        val o = JSONObject(text)
+        if (o.optInt("v") != 1) return@runCatching null
+        fun days(a: JSONArray?) = if (a == null) emptyList() else (0 until a.length()).map { a.optString(it) }
+        fun stamps(a: JSONArray?) = if (a == null) emptyList() else (0 until a.length()).map { a.optLong(it) * 1000 }
+        val all = o.optJSONObject("leagues") ?: return@runCatching null
+        val map = HashMap<String, CompactIndex.Entry>()
+        all.keys().forEach { id ->
+            val e = all.optJSONObject(id) ?: return@forEach
+            map[id] = CompactIndex.Entry(
+                e.optString("d").ifBlank { null }, stamps(e.optJSONArray("ds")),
+                e.optString("w").ifBlank { null }, stamps(e.optJSONArray("ws"))
+            )
+        }
+        CompactIndex(days(o.optJSONArray("day")), days(o.optJSONArray("week")), map)
+    }.getOrNull()
 
     companion object {
         private const val ESPN = "https://site.api.espn.com/apis/site/v2/sports/"
@@ -666,6 +809,13 @@ internal class SportsFeeds {
             val week = ev.optJSONObject("week")?.optInt("number", 0)?.takeIf { it > 0 }?.let { "Week $it" }
             val headline = comp?.optJSONArray("notes")?.optJSONObject(0)?.str("headline")
 
+            // A race weekend (practice, qualifying, the race): go by its sessions, each with its own
+            // time and its own state, not by the weekend as a whole.
+            if (league.kind == LeagueKind.EVENT && league.sport == Sport.RACING) {
+                raceWeekend(league, ev, espnId, state, broadcasts.toList(), listOfNotNull(headline, venue).joinToString(" · ").ifBlank { null })
+                    ?.let { return it }
+            }
+
             if (league.kind == LeagueKind.EVENT) {
                 val multiDay = end != null && end - start > 20 * 3_600_000L
                 // A tournament that runs for days: the feed says "final" once a day's play is
@@ -761,6 +911,88 @@ internal class SportsFeeds {
                 situation = situation,
                 progress = progress,
                 espnId = espnId
+            )
+        }
+
+        private class RaceSession(val label: String, val start: Long, val state: String, val minutes: Int, val race: Boolean)
+
+        /** A session's name as people say it: "Practice 1", "Qualifying", "Sprint", "Race". */
+        private fun sessionOf(c: JSONObject, raceMinutes: Int): RaceSession? {
+            val at = parseIso(c.str("date")) ?: return null
+            val t = c.optJSONObject("type")
+            val abbr = t?.str("abbreviation").orEmpty()
+            val words = listOfNotNull(abbr, t?.str("text"), t?.str("name")).joinToString(" ").lowercase(Locale.ROOT)
+            val practice = Regex("""\bfp\s?(\d)|practice\s?(\d)?""").find(words)
+            val (label, minutes) = when {
+                Regex("""\b(ss|sq)\b|sprint (shootout|qual)""").containsMatchIn(words) -> "Sprint Qualifying" to 45
+                Regex("""\bsprint\b""").containsMatchIn(words) -> "Sprint" to 45
+                Regex("""\bqual""").containsMatchIn(words) || words.trim() == "q" -> "Qualifying" to 60
+                practice != null -> {
+                    val n = practice.groupValues.drop(1).firstOrNull { it.isNotBlank() }
+                    (if (n != null) "Practice $n" else "Practice") to 60
+                }
+                Regex("""\brace\b""").containsMatchIn(words) || words.trim() == "r" -> "Race" to raceMinutes
+                else -> (t?.str("text") ?: abbr.ifBlank { "Session" }) to 60
+            }
+            val state = c.optJSONObject("status")?.optJSONObject("type")?.str("state") ?: "pre"
+            return RaceSession(label, at, state, minutes, label == "Race")
+        }
+
+        /**
+         * A race weekend from its sessions: live only while one is on (and named), otherwise the
+         * next session's time, and finished once the race is over. Null when the feed doesn't list
+         * its sessions with times; the weekend as a whole is used then.
+         */
+        private fun raceWeekend(
+            league: League, ev: JSONObject, espnId: String, weekendState: GameState,
+            broadcasts: List<String>, subtitle: String?
+        ): SportsEvent? {
+            if (weekendState == GameState.OFF) return null
+            val comps = ev.optJSONArray("competitions") ?: return null
+            val sessions = (0 until comps.length()).mapNotNull { comps.optJSONObject(it)?.let { c -> sessionOf(c, league.minutes) } }
+                .sortedBy { it.start }
+            if (sessions.isEmpty()) return null
+            val race = sessions.lastOrNull { it.race } ?: sessions.last()
+            val now = System.currentTimeMillis()
+            fun endOf(s: RaceSession) = s.start + s.minutes * 60_000L
+            // The feed can leave a session "on" for hours after it ended: past twice its length, it's over.
+            fun on(s: RaceSession) = s.state == "in" && now < s.start + s.minutes * 2 * 60_000L
+            fun over(s: RaceSession) = s.state == "post" || (s.state == "in" && !on(s)) ||
+                (s.state != "in" && now > s.start + s.minutes * 3 * 60_000L)
+            val live = sessions.lastOrNull { on(it) }
+            val raceDone = over(race)
+            val next = sessions.firstOrNull { !over(it) && !on(it) && it.start + 30 * 60_000L > now }
+            val dayFormat = SimpleDateFormat("EEEE", Locale.getDefault())
+            val (state, at, session) = when {
+                live != null -> Triple(GameState.LIVE, live.start, live)
+                raceDone -> Triple(GameState.POST, race.start, race)
+                next != null -> Triple(GameState.PRE, next.start, next)
+                else -> Triple(GameState.PRE, race.start, race)
+            }
+            val note = when (state) {
+                GameState.LIVE -> if (session.race) "Race · Live" else "${session.label} · Live"
+                GameState.PRE -> when {
+                    session.race -> "Race"
+                    else -> "Next: ${session.label} · Race ${dayFormat.format(java.util.Date(race.start))}"
+                }
+                else -> null
+            }
+            return SportsEvent(
+                id = "espn:${league.id}:$espnId",
+                leagueId = league.id,
+                startMs = at,
+                hasTime = true,
+                state = state,
+                title = ev.str("name") ?: ev.str("shortName") ?: league.name,
+                subtitle = subtitle,
+                status = if (state == GameState.POST) "Final" else null,
+                away = null, home = null,
+                broadcasts = broadcasts,
+                espnId = espnId,
+                endMs = endOf(session),
+                note = note,
+                standings = runCatching { if (state == GameState.PRE && sessions.none { it.state != "pre" }) emptyList() else standingsOf(ev) }
+                    .getOrDefault(emptyList())
             )
         }
 
@@ -1046,15 +1278,10 @@ internal object OtherFeeds {
     /** Whether a game page can be had (international cricket: ESPN has none behind its score panel). */
     fun espnExtras(path: String?): Boolean = path != null && path != "cricket/panel"
 
-    private class Kept(val at: Long, val value: Any)
-    private val kept = java.util.concurrent.ConcurrentHashMap<String, Kept>()
+    private val kept = SportsFeedCache()
 
-    private fun <T : Any> keep(key: String, maxAgeMs: Long, load: () -> T): T {
-        val k = kept[key]
-        @Suppress("UNCHECKED_CAST")
-        if (k != null && System.currentTimeMillis() - k.at < maxAgeMs) return k.value as T
-        return load().also { kept[key] = Kept(System.currentTimeMillis(), it) }
-    }
+    private fun <T : Any> keep(key: String, maxAgeMs: Long, retainMs: Long = maxAgeMs, load: () -> T): T =
+        kept.getOrLoad(key, maxAgeMs, retainMs, load)
 
     // ------------------------------------------------------------------ days asked for
 
@@ -1339,7 +1566,8 @@ internal object OtherFeeds {
         val live = today >= span.first && today <= span.second
         val url = "${MLB}schedule?sportId=$sportId&startDate=${d(span.first)}&endDate=${d(span.second)}&hydrate=team,venue,linescore,broadcasts(all)" +
             (teamId?.let { "&teamId=$it" } ?: "")
-        val root = runCatching { keep("milb:$url", if (live) 60_000L else 30 * 60_000L) { JSONObject(get(url)) } }.getOrNull() ?: return emptyList()
+        // This URL is also reused for up to 30 minutes outside the live-score window.
+        val root = runCatching { keep("milb:$url", if (live) 60_000L else 30 * 60_000L, retainMs = 30 * 60_000L) { JSONObject(get(url)) } }.getOrNull() ?: return emptyList()
         val out = ArrayList<JSONObject>()
         val dates = root.optJSONArray("dates") ?: return out
         for (i in 0 until dates.length()) {

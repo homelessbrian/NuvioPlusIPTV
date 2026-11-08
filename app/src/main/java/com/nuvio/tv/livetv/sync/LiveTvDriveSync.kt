@@ -25,7 +25,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -34,6 +33,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.nuvio.tv.livetv.data.ForkHttp
 
 /** What the settings screen shows. */
 data class DriveSyncState(
@@ -69,7 +69,7 @@ class LiveTvDriveSync @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val store = context.applicationContext.getSharedPreferences("livetv_drive_sync", Context.MODE_PRIVATE)
     private val mutex = Mutex()
-    private val http = OkHttpClient.Builder()
+    private val http = ForkHttp.builder()
         // IPv4 first, like Nuvio's own connections: many VPNs (and some routers) leave IPv6
         // half working, and each Google address then hung until it timed out.
         .dns(com.nuvio.tv.core.network.IPv4FirstDns())

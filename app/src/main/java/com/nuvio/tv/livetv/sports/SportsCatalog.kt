@@ -371,7 +371,7 @@ object SportsCatalog {
             regions = EVERYWHERE, minutes = 360, color = 0xFF003865),
         League("golf/eur", Sport.GOLF, "DP World Tour", "DPWT", "golf/eur", LeagueKind.EVENT, guideWords = listOf("DP World Tour", "Golf"),
             regions = setOf("UK", "IE", "OTHER"), minutes = 360, color = 0xFF0A1F44),
-        League("golf/lpga", Sport.GOLF, "LPGA Tour", "LPGA", "golf/lpga", LeagueKind.EVENT, guideWords = listOf("LPGA"),
+        League("golf/lpga", Sport.GOLF, "LPGA Tour", "LPGA", "golf/lpga", LeagueKind.EVENT, guideWords = listOf("LPGA", "Golf"),
             regions = US, minutes = 300, color = 0xFF00205B),
         League("tennis/atp", Sport.TENNIS, "ATP Tour", "ATP", "tennis/atp", LeagueKind.EVENT, guideWords = listOf("ATP", "Tennis"),
             regions = EVERYWHERE, minutes = 600, color = 0xFF003A70),
@@ -586,8 +586,28 @@ object SportsCatalog {
             .replace(Regex("\\s+"), " ").trim()
 
     fun norm(s: String): String {
+        // Plain English text (nearly every guide title and description): the same result in one
+        // quick pass. The full way below, for letters with accents and the like, is much slower,
+        // and Sports runs this for every show in the guide.
+        if (s.all { it.code < 128 }) return asciiNorm(s)
         val plain = Normalizer.normalize(plainSmall(s), Normalizer.Form.NFD).replace(MARKS, "")
         return " " + plain.lowercase(Locale.ROOT).replace("&", " and ").replace(NOT_WORD, " ").trim().replace(SPACES, " ") + " "
+    }
+
+    /** [norm] for text with no letters outside plain ASCII: the same result, without the slow steps. */
+    private fun asciiNorm(s: String): String {
+        val sb = StringBuilder(s.length + 8).append(' ')
+        var space = true
+        for (c0 in s) {
+            val c = if (c0 in 'A'..'Z') c0 + 32 else c0
+            when {
+                c in 'a'..'z' || c in '0'..'9' -> { sb.append(c); space = false }
+                c == '&' -> { if (!space) sb.append(' '); sb.append("and "); space = true }
+                !space -> { sb.append(' '); space = true }
+            }
+        }
+        if (!space || sb.length == 1) sb.append(' ')
+        return sb.toString()
     }
 
     /**

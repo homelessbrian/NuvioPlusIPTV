@@ -12,6 +12,7 @@ import com.nuvio.tv.livetv.model.LiveTvLoadReport as LIVE_REPORT
 import com.nuvio.tv.livetv.model.CatchupInfo
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.PlaylistSource
+import com.nuvio.tv.livetv.model.PlaylistGroupOrder
 import com.nuvio.tv.livetv.model.PlaylistAccount
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -60,9 +61,19 @@ class LiveTvRepository @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // Declared before anything that starts work on [scope] (a playlist update reads them).
+    /** Server time zone lookups in progress, per playlist (shared, so a second replay doesn't ask again). */
+    private val zoneLookups = HashMap<String, kotlinx.coroutines.Deferred<String?>>()
+
+    /** Playlist id -> when its server time zone lookup last failed (asked again after [ZONE_RETRY_MS]). */
+    private val zoneFailedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Playlist id -> when its time zone was last found (this session), for the background re-check. */
+    private val zoneCheckedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     private val mutex = Mutex()
 
-    private val http: OkHttpClient = OkHttpClient.Builder()
+    private val http: OkHttpClient = ForkHttp.builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
         // A provider that trickles data forever would otherwise hold up every other update
@@ -137,6 +148,8 @@ class LiveTvRepository @Inject constructor(
         // Not before the start-up check (the saved channels may not be read yet).
         if (!firstCheckDone) return
         if (mutex.isLocked) return // an update is already running
+        // Just checked (the start-up check, or Live TV opened a moment ago): nothing can be due yet.
+        if (System.currentTimeMillis() - lastAutoCheckAt < RECHECK_GAP_MS) return
         scope.launch { runCatching { refreshStale() } }
     }
 
@@ -158,7 +171,7 @@ class LiveTvRepository @Inject constructor(
     }
 
     // Automatic updates run at low priority, so the screen and video stay smooth meanwhile.
-    private suspend fun refreshStale() = withContext(BackgroundWork.quiet) { refreshInternal(forcePlaylists = false, forceEpg = false) }
+    private suspend fun refreshStale() = withContext(BackgroundWork.quietUpdate) { refreshInternal(forcePlaylists = false, forceEpg = false) }
 
     // ---------------------------------------------------------------- sources CRUD
 
@@ -223,6 +236,7 @@ class LiveTvRepository @Inject constructor(
     suspend fun removePlaylist(id: String) {
         prefs.updatePlaylists { list -> list.filterNot { it.id == id } }
         File(playlistDir, "$id.m3u").delete()
+        groupOrderFile(id).delete()
         embeddedEpgUrls.remove(id)
         dropPlaylistNow(id)
         scope.launch { rebuild() }
@@ -451,9 +465,41 @@ class LiveTvRepository @Inject constructor(
         }
     }
 
+    /** Catch-up time zone picked for one playlist ("" = Automatic): only replay links change, nothing reloads. */
+    suspend fun setPlaylistCatchupZone(id: String, zone: String) {
+        prefs.updatePlaylists { list -> list.map { if (it.id == id) it.copy(catchupTimezone = zone) else it } }
+    }
+
     /** "Prefer logos from playlist / EPG" for one playlist: only the logos change, nothing reloads. */
     suspend fun setPlaylistLogoSource(id: String, logoSource: String) {
         prefs.updatePlaylists { list -> list.map { if (it.id == id) it.copy(logoSource = logoSource) else it } }
+    }
+
+    /** A playlist's built-in guide time shift: the guide is matched and stored again with it. */
+    suspend fun setPlaylistGuideShift(id: String, minutes: Int) {
+        val before = prefs.currentPlaylists().firstOrNull { it.id == id }?.guideShiftMinutes ?: return
+        if (before == minutes) return
+        prefs.updatePlaylists { list -> list.map { if (it.id == id) it.copy(guideShiftMinutes = minutes) else it } }
+        restoreShiftedGuide()
+    }
+
+    /** A playlist's catch-up time shift: only the next catch-up link changes, nothing reloads. */
+    suspend fun setPlaylistCatchupShift(id: String, minutes: Int) {
+        prefs.updatePlaylists { list -> list.map { if (it.id == id) it.copy(catchupShiftMinutes = minutes) else it } }
+    }
+
+    /** A guide source's time shift: the guide is matched and stored again with it. */
+    suspend fun setEpgShift(id: String, minutes: Int) {
+        val before = prefs.currentEpgSources().firstOrNull { it.id == id }?.shiftMinutes ?: return
+        if (before == minutes) return
+        prefs.updateEpgSources { list -> list.map { if (it.id == id) it.copy(shiftMinutes = minutes) else it } }
+        restoreShiftedGuide()
+    }
+
+    private fun restoreShiftedGuide() {
+        // Past listings from the Xtream API are fetched again (with the new shift) as you browse.
+        archiveFetched.clear()
+        rematchEpg()
     }
 
     private suspend fun rebuild() {
@@ -476,6 +522,9 @@ class LiveTvRepository @Inject constructor(
         mutex.withLock { refreshLocked(forcePlaylists, forceEpg, forceIds, automatic) }
     }
 
+    /** When the last automatic check finished (see [refreshIfStale]). */
+    @Volatile private var lastAutoCheckAt = 0L
+
     /** An update you asked for is waiting: automatic checks stop waiting for Nuvio's player. */
     private val manualQueued = MutableStateFlow(false)
 
@@ -489,7 +538,10 @@ class LiveTvRepository @Inject constructor(
         val t0Update = System.currentTimeMillis()
         LIVE_REPORT.add(if (automatic) "Update check started" else "Update started")
         try { refreshBody(forcePlaylists, forceEpg, forceIds, automatic) }
-        finally { LIVE_REPORT.add("Update finished in ${(System.currentTimeMillis() - t0Update) / 1000} s") }
+        finally {
+            if (automatic) lastAutoCheckAt = System.currentTimeMillis()
+            LIVE_REPORT.add("Update finished in ${(System.currentTimeMillis() - t0Update) / 1000} s")
+        }
         runCatching { sweepLeftoverFiles() }.onFailure { Log.w(TAG, "Leftover file sweep failed", it) }
     }
 
@@ -662,6 +714,7 @@ class LiveTvRepository @Inject constructor(
             LIVE_REPORT.add("Channels re-read from playlists: ${_channels.value.size} in ${System.currentTimeMillis() - t0} ms")
         } else {
             LIVE_REPORT.add("Saved channel list used: ${_channels.value.size} channels in ${System.currentTimeMillis() - t0} ms")
+            carryOverRenamedChannels(null, _channels.value)
         }
         val targets = collectEpgTargets()
         val settings = prefs.currentSettings()
@@ -721,10 +774,14 @@ class LiveTvRepository @Inject constructor(
         runCatching {
             java.io.DataInputStream(java.io.BufferedInputStream(file.inputStream(), 256 * 1024)).use { input ->
                 val stored = input.readUTF()
-                if (stored != expected) {
+                // Out of date: the playlists get read again. Its stream links are still read
+                // (same format only) so channels renamed in the playlist keep their favorites etc.
+                val outdated = stored != expected
+                if (outdated) {
                     LIVE_REPORT.add("Saved channel list out of date: ${fingerprintDiff(stored, expected)}")
-                    return@withContext false
+                    if (stored.substringBefore('|') != expected.substringBefore('|')) return@withContext false
                 }
+                val links = HashMap<String, String>()
                 val epg = HashMap<String, List<String>>()
                 repeat(input.readInt()) {
                     val id = input.readUTF()
@@ -734,7 +791,7 @@ class LiveTvRepository @Inject constructor(
                 fun shared(): String = table[input.readInt()]
                 fun opt(): String? = if (input.readBoolean()) input.readUTF() else null
                 val count = input.readInt()
-                val list = ArrayList<LiveChannel>(count)
+                val list = ArrayList<LiveChannel>(if (outdated) 0 else count)
                 repeat(count) {
                     val key = input.readUTF()
                     val sourceId = shared()
@@ -757,10 +814,17 @@ class LiveTvRepository @Inject constructor(
                         val lh = HashMap<String, String>().apply { repeat(input.readInt()) { put(input.readUTF(), input.readUTF()) } }
                         com.nuvio.tv.livetv.model.DrmInfo(scheme, license, lh, opt())
                     } else null
-                    list += LiveChannel(key, sourceId, sourceName, name, tvgId, tvgName, logo, groupId, group, number, url, headers, catchup, drm)
+                    val tvgShift = input.readInt()
+                    if (outdated) links[key] = url
+                    else list += LiveChannel(key, sourceId, sourceName, name, tvgId, tvgName, logo, groupId, group, number, url, headers, catchup, drm, tvgShift)
+                }
+                if (outdated) {
+                    previousLinks = links
+                    return@withContext false
                 }
                 embeddedEpgUrls.clear()
                 embeddedEpgUrls.putAll(epg)
+                loadGroupOrder()
                 _channels.value = list
                 true
             }
@@ -770,7 +834,7 @@ class LiveTvRepository @Inject constructor(
         }
     }
 
-    private suspend fun saveChannels() = withContext(Dispatchers.IO) {
+    private suspend fun saveChannels() = withContext(BackgroundWork.cpu()) {
         val fingerprint = channelsFingerprint()
         runCatching {
             val list = _channels.value
@@ -810,6 +874,7 @@ class LiveTvRepository @Inject constructor(
                         out.writeInt(d.licenseHeaders.size); d.licenseHeaders.forEach { (k, v) -> out.writeUTF(k); out.writeUTF(v) }
                         opt(d.manifestType)
                     }
+                    out.writeInt(c.tvgShiftMinutes)
                 }
             }
             if (!tmp.renameTo(savedChannelsFile)) { tmp.copyTo(savedChannelsFile, overwrite = true); tmp.delete() }
@@ -1266,6 +1331,7 @@ class LiveTvRepository @Inject constructor(
         scope.launch {
             val playlists = prefs.currentPlaylists().associateBy { it.id }
             val settings = prefs.currentSettings()
+            val overrides = runCatching { prefs.userState.first().epgOverrides }.getOrDefault(emptyMap())
             wanted.forEach { ch ->
                 val pl = playlists[ch.sourceId]?.takeIf { it.isXtream } ?: return@forEach
                 val streamId = Regex("""/(\d+)(?:\.[a-z0-9]+)?(?:\?.*)?$""", RegexOption.IGNORE_CASE)
@@ -1302,6 +1368,9 @@ class LiveTvRepository @Inject constructor(
                         }
                         if (list.isEmpty()) return@runCatching
                         list.sortBy { it.startMs }
+                        // Moved like the rest of this channel's listings (its guide's time shift).
+                        val shift = guideShiftMs(ch, overrides)
+                        if (shift != 0L) for (i in list.indices) list[i] = list[i].let { it.copy(startMs = it.startMs + shift, stopMs = it.stopMs + shift) }
                         val now = System.currentTimeMillis()
                         // Keep what the guide file already has from about now on; the archive
                         // fills in the past.
@@ -1372,17 +1441,28 @@ class LiveTvRepository @Inject constructor(
         sb.append(settings.epgPastHours).append('|').append(settings.epgFutureDays).append('|')
         targets.forEach { t ->
             val f = epgFile(t.fileId)
-            sb.append(t.fileId).append(':').append(f.length()).append(':').append(contentStamp(f)).append(',')
+            sb.append(t.fileId).append(':').append(f.length()).append(':').append(contentStamp(f))
+            if (t.shiftMs != 0L) sb.append(":s=").append(t.shiftMs / 60_000L)
+            sb.append(',')
         }
         sb.append('|').append(overrides.hashCode())
         sb.append('|').append(_channels.value.size).append(':').append(_channels.value.sumOf { it.key.hashCode().toLong() })
+        tvgShiftStamp()?.let { sb.append("|tvg=").append(it) }
         return sb.toString()
     }
 
     /** One guide file as the fingerprint sees it (also the format of the Assign EPG lists' stamp). */
     private fun targetStamp(t: EpgTarget): String {
         val f = epgFile(t.fileId)
-        return t.fileId + ":" + f.length() + ":" + contentStamp(f)
+        return t.fileId + ":" + f.length() + ":" + contentStamp(f) + (if (t.shiftMs != 0L) ":s=${t.shiftMs / 60_000L}" else "")
+    }
+
+    /** The channels' tvg-shifts as the fingerprint sees them (null when no channel has one: older stamps stay valid). */
+    private fun tvgShiftStamp(): String? {
+        var h = 0L
+        var any = false
+        for (c in _channels.value) if (c.tvgShiftMinutes != 0) { any = true; h = h * 31 + c.key.hashCode() * 7L + c.tvgShiftMinutes }
+        return if (any) h.toString() else null
     }
 
     /**
@@ -1399,7 +1479,8 @@ class LiveTvRepository @Inject constructor(
         }
         return JSONObject()
             .put("fp", fingerprint)
-            .put("base", "$GUIDE_CACHE_VERSION|${settings.epgPastHours}|${settings.epgFutureDays}|${overrides.hashCode()}")
+            .put("base", "$GUIDE_CACHE_VERSION|${settings.epgPastHours}|${settings.epgFutureDays}|${overrides.hashCode()}" +
+                (tvgShiftStamp()?.let { "|tvg=$it" } ?: ""))
             .put("targets", org.json.JSONArray(targets.map { targetStamp(it) }))
             .put("playlists", playlists)
             .toString()
@@ -1598,11 +1679,35 @@ class LiveTvRepository @Inject constructor(
         val url: String,
         val userAgent: String,
         /** A playlist's own (built-in) guide: that playlist. */
-        val playlistId: String? = null
+        val playlistId: String? = null,
+        /** How far this guide's listings are moved (its own time shift), in ms. */
+        val shiftMs: Long = 0L
     )
+
+    /** Each guide file's time shift (ms), and each playlist's built-in guide shift, as last collected. */
+    @Volatile private var targetShifts: Map<String, Long> = emptyMap()
+    @Volatile private var playlistGuideShifts: Map<String, Long> = emptyMap()
+
+    /**
+     * How far a channel's stored listings were moved: the time shift of the guide it's matched to
+     * (or given in Assign EPG; its playlist's own guide when it has none) plus the playlist's
+     * tvg-shift for it. Catch-up takes this back off: the archive goes by the guide's own times.
+     */
+    fun guideShiftMs(channel: LiveChannel, overrides: Map<String, EpgAssignment>): Long {
+        val a = overrides[channel.key]?.takeUnless { it.isNone } ?: _autoMatches.value[channel.key]
+        val source = a?.let { targetShifts[it.sourceId] } ?: playlistGuideShifts[channel.sourceId] ?: 0L
+        return source + channel.tvgShiftMinutes * 60_000L
+    }
+
+    private fun List<EpgProgram>.shiftedBy(ms: Long): List<EpgProgram> =
+        if (ms == 0L || isEmpty()) this else map { it.copy(startMs = it.startMs + ms, stopMs = it.stopMs + ms) }
 
     /** Named EPG sources first (they win on conflicts), then EPG URLs embedded in playlists. */
     private suspend fun collectEpgTargets(): List<EpgTarget> {
+        // The old one-for-everything time shifts, moved onto each playlist and guide (once).
+        if (runCatching { prefs.moveTimeShiftsToSources() }.getOrDefault(false)) {
+            LIVE_REPORT.add("Time shifts: the old Guide / Catch-Up Time Shift moved onto each playlist and guide")
+        }
         val targets = mutableListOf<EpgTarget>()
         // A guide added on its own from the same server as a playlist (often that playlist's own
         // guide link) is asked for with that playlist's user agent, like the playlist itself:
@@ -1615,7 +1720,7 @@ class LiveTvRepository @Inject constructor(
                 pl.userAgent.isNotBlank() && host != null &&
                     hostOf(if (pl.isXtream) pl.xtreamBase() else pl.url) == host
             }?.userAgent.orEmpty()
-            targets += EpgTarget(src.id, src.id, src.name, src.url, ua)
+            targets += EpgTarget(src.id, src.id, src.name, src.url, ua, shiftMs = src.shiftMinutes * 60_000L)
         }
         val playlists = prefs.currentPlaylists().filter { it.liveEnabled && it.useEmbeddedEpg }
         for (pl in playlists) {
@@ -1624,16 +1729,50 @@ class LiveTvRepository @Inject constructor(
             urls += embeddedEpgUrls[pl.id].orEmpty()
             urls.distinct().forEach { url ->
                 if (targets.none { it.url == url }) {
-                    targets += EpgTarget("auto_" + sha1(url), null, "${pl.name} (built-in)", url, pl.userAgent, playlistId = pl.id)
+                    targets += EpgTarget(
+                        "auto_" + sha1(url), null, "${pl.name} (built-in)", url, pl.userAgent,
+                        playlistId = pl.id, shiftMs = pl.guideShiftMinutes * 60_000L
+                    )
                 }
             }
         }
+        targetShifts = targets.associate { it.fileId to it.shiftMs }
+        playlistGuideShifts = allPlaylists.associate { it.id to it.guideShiftMinutes * 60_000L }
         return targets
     }
 
     private val embeddedEpgUrls = HashMap<String, List<String>>()
 
-    private suspend fun buildChannels() = withContext(Dispatchers.IO) {
+    /** Channel key → stream link from an out-of-date saved channel list (see [loadSavedChannels]). */
+    private var previousLinks: Map<String, String> = emptyMap()
+
+    /**
+     * A channel renamed in the playlist (by the provider or a playlist editor) gets a new key.
+     * This moves favorites, hidden channels, groups you made, renames, guide choices and so on
+     * over to it (see [RenamedChannels]). [before]: each channel's stream link before the
+     * playlists were read again, null when there's no earlier list. Without one, any channel can
+     * be the match, so that's only done once per TV (for channels renamed before this existed).
+     */
+    private suspend fun carryOverRenamedChannels(before: Map<String, String>?, now: List<LiveChannel>) {
+        runCatching {
+            if (now.isEmpty()) return
+            val firstTime = !prefs.renamedChannelsChecked()
+            if (before == null && !firstTime) return
+            val current = now.mapTo(HashSet(now.size * 2)) { it.key }
+            val lost = prefs.channelKeysInUse().filter { it !in current }
+            val moves = RenamedChannels.match(lost, now, before.orEmpty(), onlyNew = !firstTime)
+            if (moves.isNotEmpty()) {
+                prefs.moveChannelKeys(moves)
+                LIVE_REPORT.add("Renamed channels: settings moved over for ${moves.size}")
+            }
+            if (firstTime) prefs.setRenamedChannelsChecked()
+        }.onFailure { Log.w(TAG, "Carrying settings over to renamed channels failed", it) }
+    }
+
+    private suspend fun buildChannels() = withContext(BackgroundWork.cpu()) {
+        val before = (_channels.value.takeIf { it.isNotEmpty() }?.associate { it.key to it.url } ?: previousLinks)
+            .takeIf { it.isNotEmpty() }
+        previousLinks = emptyMap()
         val playlists = prefs.currentPlaylists().filter { it.liveEnabled }
         val multi = playlists.size > 1
         val out = ArrayList<LiveChannel>()
@@ -1678,12 +1817,15 @@ class LiveTvRepository @Inject constructor(
                     url = pl.m3uStreamLink(e.url),
                     headers = headers,
                     catchup = e.catchup,
-                    drm = e.drm
+                    drm = e.drm,
+                    tvgShiftMinutes = e.tvgShiftMinutes
                 )
             }
             prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(channelCount = parsed.entries.size) else it } }
         }
+        loadGroupOrder()
         _channels.value = out
+        carryOverRenamedChannels(before, out)
     }
 
     private suspend fun buildPrograms(settings: LiveTvSettings, targets: List<EpgTarget>) {
@@ -1693,7 +1835,7 @@ class LiveTvRepository @Inject constructor(
         LIVE_REPORT.add("Guide matched and stored: ${_programs.value.size} channels in ${System.currentTimeMillis() - t0} ms")
     }
 
-    private suspend fun buildProgramsInner(settings: LiveTvSettings, targets: List<EpgTarget>) = withContext(Dispatchers.IO) {
+    private suspend fun buildProgramsInner(settings: LiveTvSettings, targets: List<EpgTarget>) = withContext(BackgroundWork.cpu()) {
         val all = _channels.value
         if (all.isEmpty()) {
             _programs.value = emptyMap()
@@ -1752,13 +1894,30 @@ class LiveTvRepository @Inject constructor(
         // The hours shown first, kept as they're read (short form): the rest of each guide goes
         // straight to the database instead of into memory.
         val (winFrom, winTo) = defaultWindow()
-        val windowCopies = HashMap<String, List<EpgProgram>>()
+        val windowCopies = HashMap<String, ArrayList<EpgProgram>>()
+        var pendingWindowSource: String? = null
+        fun trimPendingWindowCopies() {
+            val src = pendingWindowSource ?: return
+            val prefix = "$src\u0000"
+            for ((key, buffer) in windowCopies) {
+                if (key.startsWith(prefix)) buffer.trimToSize()
+            }
+            pendingWindowSource = null
+        }
         fun keepWindow(src: String, xid: String, list: List<EpgProgram>) {
-            val w = list.filter { it.stopMs > winFrom && it.startMs < winTo }
-                .map { EpgProgram(startMs = it.startMs, stopMs = it.stopMs, title = it.title, episode = it.episode, icon = it.icon) }
-            if (w.isEmpty()) return
-            val k = "$src\u0000$xid"
-            windowCopies[k] = windowCopies[k].orEmpty() + w
+            var buffer: ArrayList<EpgProgram>? = null
+            for (program in list) {
+                if (program.stopMs > winFrom && program.startMs < winTo) {
+                    val owned = buffer ?: windowCopies.getOrPut("$src\u0000$xid") { ArrayList() }.also {
+                        buffer = it
+                        pendingWindowSource = src
+                    }
+                    owned.add(EpgProgram(
+                        startMs = program.startMs, stopMs = program.stopMs, title = program.title,
+                        episode = program.episode, icon = program.icon
+                    ))
+                }
+            }
         }
         // What a guide's stored copy depends on besides the file: the channels it was matched for,
         // hand-picked guides and the hours kept. Unchanged, a guide file isn't read again.
@@ -1769,6 +1928,8 @@ class LiveTvRepository @Inject constructor(
         }
 
         for ((order, target) in targets.withIndex()) {
+            // Release the completed source's growth slack before the next source's heap guard.
+            trimPendingWindowCopies()
             val file = epgFile(target.fileId)
             if (!file.exists()) { LIVE_REPORT.add("Guide \"${target.name}\": no file downloaded yet"); continue }
             val src = target.fileId
@@ -1836,7 +1997,8 @@ class LiveTvRepository @Inject constructor(
                             },
                             // Each channel's shows go to the database as soon as they're read.
                             onPrograms = { xid, list ->
-                                val cleaned = cleanListings(list)
+                                // This guide's own time shift, applied as it's stored.
+                                val cleaned = cleanListings(list).shiftedBy(target.shiftMs)
                                 writer.add(xid, cleaned) { isPlaceholder(it) }
                                 keepWindow(src, xid, cleaned)
                             },
@@ -1957,6 +2119,7 @@ class LiveTvRepository @Inject constructor(
             }
         }
 
+        trimPendingWindowCopies()
         val auto = HashMap<String, EpgAssignment>()
         best.forEach { (key, c) -> auto[key] = EpgAssignment(c.sourceId, c.xmltvId) }
         // Unassigned in Assign EPG: no guide for these channels, automatic match included.
@@ -1985,18 +2148,30 @@ class LiveTvRepository @Inject constructor(
         // The guide shown: from the staged guides, the chosen one for each channel (hand-picked
         // ones as given), all in one step.
         val choice = auto.filterKeys { it !in pinned }
+        // Channels with a tvg-shift in the playlist: their listings moved by that too.
+        val tvgShifts = channels.filter { it.tvgShiftMinutes != 0 }.associate { it.key to it.tvgShiftMinutes * 60_000L }
+        if (tvgShifts.isNotEmpty()) {
+            LIVE_REPORT.add("Guide: ${tvgShifts.size} channels moved by the playlist's tvg-shift")
+            tvgShifts.forEach { (key, ms) -> pinned[key]?.let { pinned[key] = it.shiftedBy(ms) } }
+        }
         val storeStart = System.currentTimeMillis()
         val stored = runCatching {
             val fp = guideFingerprint(settings, targets)
-            guideDb.replaceAllFromStage(fp, choice, pinned, auto, guideParts(settings, targets, fp), windowStart, windowEnd)
+            guideDb.replaceAllFromStage(fp, choice, pinned, auto, guideParts(settings, targets, fp), windowStart, windowEnd, tvgShifts)
         }.onFailure { Log.w(TAG, "Couldn't store the guide", it) }.isSuccess
         LIVE_REPORT.add("Guide: best guide per channel stored in ${(System.currentTimeMillis() - storeStart) / 1000} s")
         // The guides' working copies aren't kept once the guide is built (they'd double the storage).
         runCatching { guideDb.dropStagesExcept(emptyList()) }
         // The hours around now, in memory (short form: details come from the database).
         val window = HashMap<String, List<EpgProgram>>()
+        // Make one sorted copy per selected guide channel, then share it with aliases.
+        val orderedWindows = HashMap<String, List<EpgProgram>>()
         choice.forEach { (key, a) ->
-            windowCopies["${a.sourceId}\u0000${a.xmltvId}"]?.sortedBy { it.startMs }?.let { window[key] = it }
+            val id = "${a.sourceId}\u0000${a.xmltvId}"
+            val list = orderedWindows.getOrPut(id) {
+                windowCopies[id]?.sortedBy { it.startMs } ?: emptyList()
+            }
+            if (list.isNotEmpty()) window[key] = tvgShifts[key]?.let { list.shiftedBy(it) } ?: list
         }
         pinned.forEach { (key, list) ->
             val w = list.filter { it.stopMs > winFrom && it.startMs < winTo }
@@ -2173,14 +2348,17 @@ class LiveTvRepository @Inject constructor(
             val parsed = openMaybeGzip(file).use { input ->
                 XmltvParser.parse(input, windowStart, windowEnd) { wanted }
             }
-            programsBySource[sourceId] = parsed.programs
+            programsBySource[sourceId] = if (target.shiftMs == 0L) parsed.programs
+                else parsed.programs.mapValues { (_, l) -> l.shiftedBy(target.shiftMs) }
             iconsBySource[sourceId] = parsed.channels.mapNotNull { (id, ch) -> ch.icon?.takeIf { it.isNotBlank() }?.let { id to it } }.toMap()
         }
 
         val newPrograms = HashMap<String, List<EpgProgram>>()
         val newIcons = HashMap<String, String>()
+        val tvgShiftOf = _channels.value.filter { it.key in changes.keys && it.tvgShiftMinutes != 0 }
+            .associate { it.key to it.tvgShiftMinutes * 60_000L }
         assigned.forEach { (key, a) ->
-            newPrograms[key] = cleanListings(programsBySource[a.sourceId]?.get(a.xmltvId).orEmpty())
+            newPrograms[key] = cleanListings(programsBySource[a.sourceId]?.get(a.xmltvId).orEmpty()).shiftedBy(tvgShiftOf[key] ?: 0L)
             iconsBySource[a.sourceId]?.get(a.xmltvId)?.let { newIcons[key] = it }
         }
         // Automatic: the same choice a full update makes (real listings first, then a tvg-id
@@ -2196,7 +2374,7 @@ class LiveTvRepository @Inject constructor(
                 if (score > bestScore) { bestScore = score; best = c to listings }
             }
             best?.let { (c, listings) ->
-                newPrograms[key] = listings
+                newPrograms[key] = listings.shiftedBy(tvgShiftOf[key] ?: 0L)
                 newAuto[key] = EpgAssignment(c.sourceId, c.xmltvId)
                 iconsBySource[c.sourceId]?.get(c.xmltvId)?.let { newIcons[key] = it }
             }
@@ -2247,6 +2425,25 @@ class LiveTvRepository @Inject constructor(
     // ---------------------------------------------------------------- IO helpers
 
     private fun playlistFile(id: String) = File(playlistDir, "$id.m3u")
+    /** An Xtream login's group names in the provider's order (see [PlaylistGroupOrder]). */
+    private fun groupOrderFile(id: String) = File(playlistDir, "$id.groups")
+
+    /** The providers' own group order, for the guide's group list. */
+    private suspend fun loadGroupOrder() {
+        PlaylistGroupOrder.ranks = runCatching {
+            val playlists = prefs.currentPlaylists().filter { it.liveEnabled }
+            val multi = playlists.size > 1
+            val ranks = HashMap<String, Int>()
+            for (pl in playlists) {
+                val f = groupOrderFile(pl.id)
+                if (!f.exists()) continue
+                f.readLines().filter { it.isNotBlank() }.forEachIndexed { i, name ->
+                    ranks.putIfAbsent(if (multi) "${pl.id}::$name" else name, i)
+                }
+            }
+            ranks
+        }.getOrDefault(emptyMap())
+    }
     private fun epgFile(id: String) = File(epgDir, "$id.xml")
 
     /**
@@ -2426,10 +2623,12 @@ class LiveTvRepository @Inject constructor(
             // Catch-up links are in the server's local time. When the server's time zone differs
             // from the TV's (say the server runs on UTC and the TV is in London in summer),
             // every replay started an hour off. Remember the server's zone for catch-up.
-            info.optJSONObject("server_info")?.optString("timezone")?.takeIf { it.isNotBlank() }?.let { tz ->
+            // A server that names no time zone: worked out from its clock instead.
+            ZoneFinder.fromServerInfo(info.optJSONObject("server_info"))?.let { (tz, _) ->
                 if (tz != pl.serverTimezone) {
                     prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(serverTimezone = tz) else it } }
                 }
+                zoneCheckedAt[pl.id] = System.currentTimeMillis()
             }
             info.optJSONObject("user_info")?.let { ui ->
                 accountOf(ui)?.let { saveAccount(pl, it) }
@@ -2446,14 +2645,19 @@ class LiveTvRepository @Inject constructor(
                 }
             } ?: if (info.has("user_info")) Unit else error("Not an Xtream API response")
 
-            // 2. Categories
+            // 2. Categories (in the provider's order, kept for the guide's group list)
             val categories = HashMap<String, String>()
+            val categoryOrder = ArrayList<String>()
             runCatching {
                 val arr = org.json.JSONArray(getText("$api&action=get_live_categories", pl.userAgent))
                 for (i in 0 until arr.length()) {
                     val c = arr.optJSONObject(i) ?: continue
                     categories[c.optString("category_id")] = c.optString("category_name")
+                    c.optString("category_name").ifBlank { null }?.let { categoryOrder += it }
                 }
+            }
+            if (categoryOrder.isNotEmpty()) runCatching {
+                groupOrderFile(pl.id).writeText(categoryOrder.joinToString("\n") { it.replace("\n", " ").replace("\"", "'").trim() })
             }
 
             // 3. Live streams, streamed straight into an M3U file
@@ -2554,31 +2758,153 @@ class LiveTvRepository @Inject constructor(
         }
     }
 
-    /** Playlists whose server time zone was already looked up this session. */
-    private val zoneTried = java.util.Collections.synchronizedSet(HashSet<String>())
+    /**
+     * The server's time zone for catch-up, for playlists that don't know it yet. Tried in turn:
+     * the zone the server reports (player_api.php), the gap between the server's clock and the
+     * real time (same answer, for servers that don't name a zone), and the time zone written in
+     * the provider's own guide (xmltv.php on the same server). The first answer is saved with
+     * the playlist, so later replays don't ask again.
+     *
+     * The lookup runs on its own, so a caller that stops waiting (slow server) doesn't stop it:
+     * the zone is still saved when the answer comes. A lookup that failed is tried again after
+     * [ZONE_RETRY_MS].
+     */
+    suspend fun learnServerZone(channel: LiveChannel): String? {
+        val pl = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId } ?: return null
+        pl.serverTimezone.takeIf { it.isNotBlank() }?.let { return it }
+        val failed = zoneFailedAt[pl.id]
+        if (failed != null && System.currentTimeMillis() - failed < ZONE_RETRY_MS) return null
+        return startZoneLookup(pl, channel.url).await()
+    }
 
     /**
-     * M3U playlists from Xtream servers: the server's time zone, learned from the server the
-     * channel links point to (its player_api.php, with the username and password in the link),
-     * once. Catch-up links are in server time; without it, replays could start hours off or be
-     * refused. Xtream logins already learn it when they load.
+     * A time zone worked out from the server's clock or guide is a fixed offset, which goes wrong
+     * when the clocks change: looked up again in the background, at most every [ZONE_RECHECK_MS].
+     * Zones the server names (Europe/Amsterdam) follow the clock changes themselves; Xtream
+     * logins re-read theirs on every playlist update anyway.
      */
-    suspend fun learnServerZone(channel: LiveChannel): String? = withContext(Dispatchers.IO) {
-        val pl = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId } ?: return@withContext null
-        pl.serverTimezone.takeIf { it.isNotBlank() }?.let { return@withContext it }
-        if (!zoneTried.add(pl.id)) return@withContext null
-        val m = Regex("""^(https?://[^/]+)/(?:live/)?([^/]+)/([^/]+)/(\d+)(\.[a-z0-9]+)?(\?.*)?$""", RegexOption.IGNORE_CASE)
-            .find(channel.url) ?: return@withContext null
-        val (host, user, pass) = m.destructured
-        val tz = runCatching {
-            val url = "$host/player_api.php?username=" + java.net.URLEncoder.encode(user, "UTF-8") +
-                "&password=" + java.net.URLEncoder.encode(pass, "UTF-8")
-            JSONObject(getText(url, pl.userAgent.ifBlank { DEFAULT_UA }))
-                .optJSONObject("server_info")?.optString("timezone")?.takeIf { it.isNotBlank() }
-        }.getOrNull()
-        LIVE_REPORT.add(if (tz != null) "Server time zone for \"${pl.name}\": $tz" else "Server time zone for \"${pl.name}\": unknown")
-        if (tz != null) prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(serverTimezone = tz) else it } }
-        tz
+    fun recheckServerZone(channel: LiveChannel) {
+        scope.launch {
+            val pl = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId } ?: return@launch
+            if (!ZoneFinder.isWorkedOut(pl.serverTimezone)) return@launch
+            val now = System.currentTimeMillis()
+            val last = zoneCheckedAt.putIfAbsent(pl.id, now) ?: return@launch // first replay this session: just found or loaded
+            if (now - last < ZONE_RECHECK_MS) return@launch
+            zoneCheckedAt[pl.id] = now
+            startZoneLookup(pl, channel.url)
+        }
+    }
+
+    private fun startZoneLookup(pl: PlaylistSource, channelUrl: String): kotlinx.coroutines.Deferred<String?> =
+        synchronized(zoneLookups) {
+            zoneLookups[pl.id] ?: scope.async {
+                try {
+                    lookupServerZone(pl, channelUrl)
+                } finally {
+                    synchronized(zoneLookups) { zoneLookups.remove(pl.id) }
+                }
+            }.also { zoneLookups[pl.id] = it }
+        }
+
+    private suspend fun lookupServerZone(pl: PlaylistSource, channelUrl: String): String? {
+        // Where to ask: an Xtream login's own server; for an M3U, the server its channel links point to.
+        val (host, user, pass) = if (pl.isXtream) {
+            Triple(pl.xtreamBase(), pl.xtreamUsername.trim(), pl.xtreamPassword.trim())
+        } else {
+            val m = Regex("""^(https?://[^/]+)/(?:live/)?([^/]+)/([^/]+)/(\d+)(\.[a-z0-9]+)?(\?.*)?$""", RegexOption.IGNORE_CASE)
+                .find(channelUrl) ?: return null
+            Triple(m.groupValues[1], m.groupValues[2], m.groupValues[3])
+        }
+        val ua = pl.userAgent.ifBlank { DEFAULT_UA }
+        val login = "username=" + java.net.URLEncoder.encode(user, "UTF-8") + "&password=" + java.net.URLEncoder.encode(pass, "UTF-8")
+        val notes = ArrayList<String>()
+        // 1 and 2: the server's account info (its time zone, else its clock).
+        var found: Pair<String, String>? = runCatching {
+            val info = JSONObject(getText("$host/player_api.php?$login", ua)).optJSONObject("server_info")
+            ZoneFinder.fromServerInfo(info).also {
+                if (it == null) notes += if (info == null) "server: no server details in its reply" else "server: names no time zone or clock"
+            }
+        }.getOrElse { notes += "server: " + zoneError(it); null }
+        // 3: the provider's own guide, on the same server.
+        if (found == null) {
+            found = runCatching {
+                ZoneFinder.fromGuide(firstBytes("$host/xmltv.php?$login", ua, GUIDE_PROBE_BYTES)).also {
+                    if (it == null) notes += "guide: no times in the first part of it"
+                }
+            }.getOrElse { notes += "guide: " + zoneError(it); null }
+        }
+        // 4: a guide already downloaded for this provider (its file is on this box, so the server
+        // can't refuse it): one on the provider's own site, an Xtream panel guide, or one named
+        // after the playlist. Other guides (third-party sites) are written in their own zone.
+        if (found == null) {
+            found = runCatching { zoneFromAddedGuides(pl, listOf(host, pl.url, channelUrl)) }.getOrNull()
+            if (found == null) notes += "added guides: none from this provider with a time zone in it"
+        }
+        if (found != null) {
+            val (tz, how) = found
+            LIVE_REPORT.add("Server time zone for \"${pl.name}\": $tz ($how)")
+            zoneFailedAt.remove(pl.id)
+            zoneCheckedAt[pl.id] = System.currentTimeMillis()
+            prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(serverTimezone = tz) else it } }
+            return tz
+        }
+        LIVE_REPORT.add("Server time zone for \"${pl.name}\": unknown (${notes.joinToString("; ")})")
+        zoneFailedAt[pl.id] = System.currentTimeMillis()
+        return null
+    }
+
+    /** Step 4 of [lookupServerZone]: the time zone written in a guide of this provider's already on this box. */
+    private suspend fun zoneFromAddedGuides(pl: PlaylistSource, links: List<String>): Pair<String, String>? {
+        fun site(link: String): String? = runCatching {
+            java.net.URI(link.trim()).host?.lowercase()?.split('.')?.filter { it.isNotEmpty() }?.takeLast(2)?.joinToString(".")
+        }.getOrNull()?.takeIf { it.contains('.') }
+        val sites = links.mapNotNull { site(it) }.toSet()
+        val name = normalize(pl.name)
+        val guides = prefs.currentEpgSources().filter { it.enabled && it.url.isNotBlank() }.filter { g ->
+            site(g.url) in sites || g.url.contains("xmltv.php", ignoreCase = true) ||
+                (name.length >= 3 && normalize(g.name).contains(name))
+        }
+        for (g in guides) {
+            val file = epgFile(g.id)
+            if (!file.isFile) continue
+            val text = withContext(Dispatchers.IO) {
+                openMaybeGzip(file).use { String(it.readNBytesCompat(GUIDE_PROBE_BYTES), Charsets.UTF_8) }
+            }
+            ZoneFinder.fromGuide(text)?.let { (tz, _) -> return tz to "from the guide \"${g.name}\"" }
+        }
+        return null
+    }
+
+    /** Why a time zone lookup failed, in a few words for the Start-Up Report. */
+    private fun zoneError(e: Throwable): String = when (e) {
+        is org.json.JSONException -> "its reply wasn't the usual account details"
+        is java.net.SocketTimeoutException -> "no answer in time"
+        is java.net.UnknownHostException -> "server not found"
+        is javax.net.ssl.SSLException -> "secure connection failed"
+        is java.io.IOException -> e.message?.takeIf { it.isNotBlank() } ?: "connection failed"
+        else -> e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+    }
+
+    /** The start of a (possibly gzipped) download, as text: enough to read a guide's first times. */
+    private fun firstBytes(url: String, userAgent: String, max: Int): String {
+        val request = Request.Builder().url(url).header("User-Agent", userAgent).build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error(httpError(response.code))
+            val body = response.body ?: error("Empty response")
+            var input: java.io.InputStream = java.io.BufferedInputStream(body.byteStream())
+            input.mark(2)
+            val b0 = input.read(); val b1 = input.read()
+            input.reset()
+            if (b0 == 0x1f && b1 == 0x8b) input = java.util.zip.GZIPInputStream(input)
+            val buf = ByteArray(max)
+            var n = 0
+            while (n < max) {
+                val r = input.read(buf, n, max - n)
+                if (r < 0) break
+                n += r
+            }
+            return String(buf, 0, n, Charsets.UTF_8)
+        }
     }
 
     /** Xtream user_info → the account details worth showing. */
@@ -2714,8 +3040,16 @@ class LiveTvRepository @Inject constructor(
     companion object {
         private const val TAG = "LiveTvRepository"
         private const val HOUR = 60L * 60L * 1000L
+        /** A server time zone lookup that failed is tried again after this long. */
+        private const val ZONE_RETRY_MS = 2L * 60L * 1000L
+        /** A worked-out time zone (fixed offset) is looked up again after this long, in the background. */
+        private const val ZONE_RECHECK_MS = 12L * 60L * 60L * 1000L
+        /** How much of the provider's guide is read to find its time zone. */
+        private const val GUIDE_PROBE_BYTES = 64 * 1024
         /** How often to look for playlists and guides past their update time while the app is open. */
         private const val STALE_CHECK_MS = 30L * 60L * 1000L
+        /** Opening Live TV doesn't check again this soon after the last automatic check. */
+        private const val RECHECK_GAP_MS = 5L * 60L * 1000L
         /** Extra guide hours read ahead, so the window moves along a few times a day, not constantly. */
         /** The most channels of one group whose listings are loaded for every day ahead. */
         private const val MAX_FULL_RANGE_CHANNELS = 400
@@ -2723,7 +3057,7 @@ class LiveTvRepository @Inject constructor(
         private const val RANGE_SLACK_MS = 6 * HOUR
         // 2: guides compared by how far ahead they go (matched again once after updating).
         private const val GUIDE_CACHE_VERSION = 2
-        private const val CHANNELS_CACHE_VERSION = 6
+        private const val CHANNELS_CACHE_VERSION = 7
         private const val MAX_SAVED_LISTINGS = 300_000
         /** Titles guides use when they have no real listing. */
         private val PLACEHOLDER_TITLES = Regex(

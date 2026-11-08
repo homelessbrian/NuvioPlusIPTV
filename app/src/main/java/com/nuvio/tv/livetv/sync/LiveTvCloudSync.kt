@@ -24,7 +24,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -34,6 +33,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.nuvio.tv.livetv.data.ForkHttp
 
 /** What the settings screen and the first-time question show for Setup Sync. */
 data class CloudSyncState(
@@ -89,7 +89,7 @@ class LiveTvCloudSync @Inject constructor(
     private val store = context.applicationContext.getSharedPreferences("livetv_cloud_sync", Context.MODE_PRIVATE)
     private val parts = SyncParts(store)
     private val mutex = Mutex()
-    private val http = OkHttpClient.Builder()
+    private val http = ForkHttp.builder()
         .dns(com.nuvio.tv.core.network.IPv4FirstDns())
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)

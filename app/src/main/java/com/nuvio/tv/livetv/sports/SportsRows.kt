@@ -73,20 +73,44 @@ internal object SportsRows {
             .take(24)
         if (soon.isNotEmpty()) rows += SportsRow("up", "Live & Upcoming", SportsRow.Kind.UPCOMING, events = soon)
 
+        // Only the followed rows, for this build. The same team id in unrelated sports stays separate.
+        val teamGames = if (follows.teams.isEmpty()) emptyMap()
+            else HashMap<String, MutableMap<String, ArrayList<SportsEvent>>>().apply {
+                follows.teams.forEach { t ->
+                    getOrPut(t.teamId) { HashMap() }
+                        .getOrPut(SportsCatalog.teamFamily(t.leagueId)) { ArrayList() }
+                }
+            }
+        val leagueIds = LinkedHashSet<String>().apply { addAll(follows.pins); addAll(follows.leagues) }
+        val leagueGames = if (leagueIds.isEmpty()) emptyMap() else leagueIds.associateWith { ArrayList<SportsEvent>() }
+        val wordGames = if (follows.words.isEmpty()) emptyMap() else follows.words.associateWith { ArrayList<SportsEvent>() }
+
+        if (teamGames.isNotEmpty() || leagueGames.isNotEmpty() || wordGames.isNotEmpty()) for (ev in known) {
+            if (teamGames.isNotEmpty()) {
+                val away = ev.away?.team?.id
+                val home = ev.home?.team?.id
+                if (away != null) teamGames[away]?.get(SportsCatalog.teamFamily(ev.leagueId))?.add(ev)
+                // The old sides.any predicate adds a game only once when both sides have the same id.
+                if (home != null && home != away) teamGames[home]?.get(SportsCatalog.teamFamily(ev.leagueId))?.add(ev)
+            }
+            leagueGames[ev.leagueId]?.add(ev)
+            val word = ev.word
+            if (word != null && wordGames.isNotEmpty()) {
+                // Keep String.equals(ignoreCase = true), including its Unicode behavior.
+                for ((w, games) in wordGames) if (word.equals(w, ignoreCase = true)) games += ev
+            }
+        }
+
         // ---- a row per team or country
         for (t in follows.teams) {
-            val family = SportsCatalog.teamFamily(t.leagueId)
-            val games = known.filter { ev ->
-                ev.sides.any { s -> s.team.id == t.teamId && (ev.leagueId == t.leagueId || SportsCatalog.teamFamily(ev.leagueId) == family) }
-            }
+            val games = teamGames[t.teamId]?.get(SportsCatalog.teamFamily(t.leagueId)).orEmpty()
             rows += timeline("t:${t.key}", t.name, SportsRow.Kind.TEAM, games, now, team = t)
         }
 
         // ---- a row per top-bar league, then whole leagues and sports you follow
-        val leagueIds = LinkedHashSet<String>().apply { addAll(follows.pins); addAll(follows.leagues) }
         for (id in leagueIds) {
             val l = SportsCatalog.league(id) ?: continue
-            val all = known.filter { it.leagueId == id }
+            val all = leagueGames[id].orEmpty()
             // This week (with the last two days' results); a league between rounds: its next games.
             // The last couple of days' results, then every game ahead we have (up to five weeks;
             // capped so a busy league like MLB stays a row you can get through).
@@ -100,7 +124,7 @@ internal object SportsRows {
 
         // ---- names you follow
         for (w in follows.words) {
-            val games = known.filter { it.word.equals(w, ignoreCase = true) }
+            val games = wordGames[w].orEmpty()
             if (games.isEmpty()) continue
             rows += timeline("w:$w", "“$w”", SportsRow.Kind.WORD, games, now)
         }

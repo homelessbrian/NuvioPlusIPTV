@@ -28,8 +28,16 @@ data class PlaylistSource(
      * switched (Xtream-style ".../123.ts" links, and Dispatcharr's own stream links).
      */
     val streamFormat: String = "auto",
-    /** Xtream: the server's time zone (from its account info), used for catch-up times. */
+    /**
+     * The server's time zone, used for catch-up times: as the server reports it, or worked out
+     * (a fixed offset like "GMT+01:00") from the server's clock or its own guide. Per TV.
+     */
     val serverTimezone: String = "",
+    /**
+     * The catch-up time zone picked for this playlist in its settings ("" = Automatic, which uses
+     * [serverTimezone]). For providers whose time zone can't be found or is reported wrong.
+     */
+    val catchupTimezone: String = "",
     /**
      * Xtream: when catch-up as HLS (.m3u8) last failed on this provider while TS worked (0: HLS
      * fine). For a week after, catch-up asks for TS straight away (saves a failed try on every
@@ -40,9 +48,22 @@ data class PlaylistSource(
      * Where channel logos come from: "playlist" (the playlist's own, the guide's when the
      * playlist has none) or "epg" (the guide's, the playlist's when the guide has none).
      */
-    val logoSource: String = "playlist"
+    val logoSource: String = "playlist",
+    /**
+     * Minutes to move this playlist's own (built-in) guide by: later (+) or earlier (−), for a
+     * guide that's out of step with what's playing. Applied when the guide is stored.
+     */
+    val guideShiftMinutes: Int = 0,
+    /**
+     * Minutes to move the time asked for in this playlist's catch-up (and catch-up saves): for
+     * providers whose archive runs on a different clock than their guide.
+     */
+    val catchupShiftMinutes: Int = 0
 ) {
     val isXtream: Boolean get() = xtreamServer.isNotBlank()
+
+    /** The time zone catch-up links are written in: the one picked in settings, else the server's. */
+    val catchupZone: String get() = catchupTimezone.ifBlank { serverTimezone }
 
     /** Whether this source's live channels (and their guide) are loaded. */
     val liveEnabled: Boolean get() = enabled && (!isXtream || importLive)
@@ -156,7 +177,9 @@ data class EpgSource(
     val enabled: Boolean = true,
     val lastUpdatedMs: Long = 0L,
     val lastError: String? = null,
-    val programCount: Int = 0
+    val programCount: Int = 0,
+    /** Minutes to move this guide's listings by: later (+) or earlier (−). Applied when the guide is stored. */
+    val shiftMinutes: Int = 0
 )
 
 data class CatchupInfo(
@@ -184,7 +207,9 @@ data class LiveChannel(
     val headers: Map<String, String> = emptyMap(),
     val catchup: CatchupInfo? = null,
     /** Protected (DRM) stream details from the playlist, e.g. MPEG-DASH with a license. */
-    val drm: DrmInfo? = null
+    val drm: DrmInfo? = null,
+    /** The playlist's "tvg-shift" for this channel, in minutes: moves its guide listings. */
+    val tvgShiftMinutes: Int = 0
 )
 
 /**
@@ -278,6 +303,12 @@ data class LiveTvSettings(
     val showEpisodeNumbers: Boolean = true,
     /** Guide Size: COMPACT, STANDARD, LARGE or XLARGE (blank = from the old Slimmer Rows switch). */
     val guideSize: String = "",
+    /**
+     * The old Guide Time Shift for every guide. No longer offered: on loading it's moved onto
+     * each playlist's built-in guide and each guide source (see LiveTvPreferences.moveTimeShiftsToSources),
+     * then set back to 0. Still read where listings are shown, so a value synced from an older
+     * version until it's moved changes nothing.
+     */
     val epgOffsetMinutes: Int = 0,
     val reverseZap: Boolean = false,
     val zapMode: ZapMode = ZapMode.GROUP,
@@ -323,6 +354,10 @@ data class LiveTvSettings(
     val sequentialNumbers: Boolean = false,
     /** Left while watching opens overlay mode; off: Left returns to the guide's group list. */
     val overlayMode: Boolean = true,
+    /** Overlay mode: OK on another channel switches to it and keeps the list open (OK on the playing one closes it). */
+    val overlayKeepOpen: Boolean = false,
+    /** Overlay mode: the highlighted channel's upcoming shows and show details beside the list. Off: only on Right. */
+    val overlayShowDetails: Boolean = true,
     /** Open Live TV instead of Nuvio's home screen when the app starts (older setting). */
     val startOnLiveTv: Boolean = false,
     /** The page Nuvio opens on: HOME, LIVE_TV, ON_DEMAND, SEARCH, LIBRARY or DISCOVER. */
@@ -339,9 +374,8 @@ data class LiveTvSettings(
     /** Xtream catch-up: ask for HLS (.m3u8) first, which gives replays a length for seeking. */
     val catchupPreferHls: Boolean = true,
     /**
-     * Moves the time asked for in catch-up (and catch-up saves) later (+) or earlier (−), for
-     * providers whose archive runs on a different clock than their guide: replays that start
-     * the show before (or after) the one picked.
+     * The old Catch-Up Time Shift for every playlist. No longer offered: moved onto each playlist
+     * on loading (see LiveTvPreferences.moveTimeShiftsToSources), then set back to 0.
      */
     val catchupShiftMinutes: Int = 0,
     /** Parental controls: a 4-digit PIN; empty = parental controls off. */
@@ -416,6 +450,8 @@ data class LiveTvSettings(
     val groupPlaylistHeadings: Boolean = true,
     /** Channel name editor (TiviMate style): prefixes/suffixes to remove, comma-separated. */
     val nameRemovals: String = "",
+    /** Also take those prefixes/suffixes off group names (off by default). */
+    val cleanGroupNames: Boolean = false,
     /** Hidden developer tools (Test poster lookup). Turned on with a secret word. */
     val developerTools: Boolean = false,
     /** Satellite-box style: picking a group lands on the channel names (OK plays, Right opens the schedule). */
@@ -492,8 +528,17 @@ data class LiveTvSettings(
     val guideBackdrop: String = "auto",
     /** The row of recently watched channels at the bottom of the full info panel (OK). */
     val recentInPanel: Boolean = true,
-    /** The row at the bottom of the full info panel: "RECENT", "FAVORITES" or "OFF". */
+    /**
+     * The Channel Row under the full play bar: "OFF" hides it; anything else shows it. (Older
+     * builds also used "RECENT" / "FAVORITES" for which list it showed; see [PanelRowLists].)
+     */
     val panelRow: String = "RECENT",
+    /** The Channel Row's lists, one per line, in order: "1|id" (on) or "0|id" (off). Empty = from [panelRow]. */
+    val panelRowLists: String = "",
+    /** The Channel Row's list used last, so it opens there again. */
+    val panelRowLast: String = "",
+    /** Which list the Channel Row opens on: "last" (the one used last) or "first". */
+    val panelRowOpens: String = "last",
     /** Channel surfing: Up / Down show other channels on the info bar; OK switches. */
     val channelSurf: Boolean = false,
     /** Parts of the full-screen bar switched off (⚙ → Play bar layout), comma separated. */
@@ -501,7 +546,9 @@ data class LiveTvSettings(
     /** Parts of the guide's info panel that are switched off (see GuideInfoPart), comma separated. */
     val guideInfoHidden: String = "",
     /** Rows on the launcher home screen: "sports", "favorites", "recent" (comma separated; empty = none). */
-    val launcherRows: String = ""
+    val launcherRows: String = "",
+    /** Passive progress banners for playlist, TV guide and On Demand imports. */
+    val showImportProgress: Boolean = true
 )
 
 data class LiveUserState(
@@ -509,6 +556,8 @@ data class LiveUserState(
     val hiddenGroups: Set<String> = emptySet(),
     val favorites: List<String> = emptyList(),
     val recent: List<String> = emptyList(),
+    /** Recently watched channel key -> the group it was last opened from (your own group, Favorites…). */
+    val recentGroups: Map<String, String> = emptyMap(),
     val lastChannelKey: String? = null,
     val previousChannelKey: String? = null,
     val lastGroupId: String? = null,
@@ -533,6 +582,8 @@ data class LiveUserState(
     val channelQuality: Map<String, String> = emptyMap(),
     /** Channel key -> the audio track you picked there ("language|label|channels"). */
     val channelAudio: Map<String, String> = emptyMap(),
+    /** Channel key -> your caption choice there: "off", "on|cc" (closed captions) or "on|sub|<label>". */
+    val channelCaptions: Map<String, String> = emptyMap(),
     /** On Demand categories you hid ("movie:<playlist>:<category>" / "series:…"). */
     val vodHiddenCategories: Set<String> = emptySet(),
     /** On Demand page: your order of the provider's groups (category uids), and your names for them. */
@@ -581,6 +632,14 @@ data class EpgChannelEntry(
 }
 
 /** A row in the TiviMate-style group panel. */
+/**
+ * The provider's own group order (Xtream logins list their categories in the order the provider
+ * set). Group id -> place; groups it doesn't name keep the order their channels come in.
+ */
+object PlaylistGroupOrder {
+    @Volatile var ranks: Map<String, Int> = emptyMap()
+}
+
 data class ChannelGroup(
     val id: String,
     val title: String,
@@ -600,6 +659,43 @@ data class ChannelGroup(
     }
 }
 
+
+/** One list in the play bar's Channel Row: Recently watched, Favorites, or one of your groups. */
+data class PanelRowList(val id: String, val on: Boolean)
+
+/** Reading and writing [LiveTvSettings.panelRowLists]. */
+object PanelRowLists {
+    const val RECENT = ChannelGroup.RECENT
+    const val FAVORITES = ChannelGroup.FAVORITES
+
+    /** Every list, on or off, in order. Recently watched and Favorites are always there. */
+    fun parse(s: LiveTvSettings): List<PanelRowList> {
+        if (s.panelRowLists.isBlank()) {
+            // Before lists could be picked: the one list the old setting chose.
+            return if (s.panelRow == "FAVORITES") listOf(PanelRowList(FAVORITES, true), PanelRowList(RECENT, false))
+            else listOf(PanelRowList(RECENT, true), PanelRowList(FAVORITES, false))
+        }
+        val out = s.panelRowLists.split('\n').mapNotNull { line ->
+            val bar = line.indexOf('|')
+            if (bar < 1 || bar == line.lastIndex) null else PanelRowList(line.substring(bar + 1), line.substring(0, bar) == "1")
+        }.distinctBy { it.id }.toMutableList()
+        if (out.none { it.id == RECENT }) out += PanelRowList(RECENT, false)
+        if (out.none { it.id == FAVORITES }) out += PanelRowList(FAVORITES, false)
+        return out
+    }
+
+    fun encode(lists: List<PanelRowList>): String =
+        lists.joinToString("\n") { (if (it.on) "1|" else "0|") + it.id }
+
+    fun shown(s: LiveTvSettings): Boolean = s.panelRow != "OFF"
+
+    /** The row on or off, keeping its lists as they are. */
+    fun setShown(s: LiveTvSettings, on: Boolean): LiveTvSettings =
+        s.copy(panelRow = if (on) "RECENT" else "OFF", panelRowLists = encode(parse(s)))
+
+    fun withLists(s: LiveTvSettings, lists: List<PanelRowList>): LiveTvSettings =
+        s.copy(panelRowLists = encode(lists))
+}
 
 /** The start page, including the older "Open Live TV when Nuvio starts" switch. */
 val LiveTvSettings.effectiveStartPage: String
@@ -756,7 +852,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-05 20:45"
+    const val KIT_STAMP = "2026-11-08 21:50"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

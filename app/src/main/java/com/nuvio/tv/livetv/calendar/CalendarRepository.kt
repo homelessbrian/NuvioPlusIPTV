@@ -56,7 +56,8 @@ class CalendarRepository @Inject constructor(
     private val guideDb: EpgDatabase,
     private val scheduler: LiveTvRecordingScheduler,
     private val sports: com.nuvio.tv.livetv.sports.SportsRepository,
-    private val recorder: com.nuvio.tv.livetv.record.LiveTvRecorder
+    private val recorder: com.nuvio.tv.livetv.record.LiveTvRecorder,
+    private val profileManager: com.nuvio.tv.core.profile.ProfileManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val sources = CalendarSources(context)
@@ -107,8 +108,10 @@ class CalendarRepository @Inject constructor(
         if (started) return
         started = true
         scope.launch {
-            // What's kept on the TV first (quick), then a fresh look.
-            delay(8_000)
+            // What's kept on the TV first (quick, a few seconds after Home is drawn), then a
+            // fresh look once Home has settled, so neither lands while Home is still loading.
+            com.nuvio.tv.livetv.startup.AppSettled.awaitDrawn(maxWaitMs = 15_000)
+            delay(3_000)
             // Movie airings from Live TV, two weeks after they aired: gone.
             runCatching {
                 val cutoff = System.currentTimeMillis() - 14 * CalendarSources.DAY
@@ -117,11 +120,27 @@ class CalendarRepository @Inject constructor(
                 }
             }
             build(fetch = false)
-            delay(20_000)
+            while (!com.nuvio.tv.livetv.startup.AppSettled.settledFor(afterMs = 30_000, fallbackMs = 45_000)) delay(1_000)
             refresh(force = false)
             // Then every few hours while the app is open.
             while (true) {
                 delay(3 * CalendarSources.HOUR)
+                refresh(force = false)
+            }
+        }
+        // Another Nuvio profile picked: the Calendar and Home's upcoming row held the last
+        // profile's shows. Clear them and look again from this profile's own history, Library
+        // and bells.
+        scope.launch {
+            profileManager.activeProfileId.drop(1).distinctUntilChanged().collect {
+                mutex.withLock {
+                    baseEntries = emptyList()
+                    _state.value = CalendarState()
+                    CalendarHomeFeed.publish(emptyList(), emptyList())
+                }
+                // Let this profile's bells and hidden shows load first.
+                delay(500)
+                build(fetch = false)
                 refresh(force = false)
             }
         }
@@ -141,7 +160,13 @@ class CalendarRepository @Inject constructor(
         scope.launch {
             kotlinx.coroutines.flow.combine(sports.known, sports.matches, sports.follows, sports.settings, settings.map { it.calendarSports }) { _, _, _, _, _ -> Unit }
                 .drop(1).debounce(5_000).collect {
-                    mutex.withLock { if (!isOff) _state.value = _state.value.copy(entries = withGames(baseEntries)) }
+                    // Sports changes all day (every score in every league); the Calendar is only
+                    // rebuilt when something about your teams' games it shows has changed.
+                    val fp = runCatching { gamesFingerprint() }.getOrNull()
+                    if (fp == null || fp != lastGamesFingerprint) {
+                        lastGamesFingerprint = fp
+                        mutex.withLock { if (!isOff) _state.value = _state.value.copy(entries = withGames(baseEntries)) }
+                    }
                 }
         }
         // A plan made or dropped: carry it out now if its episode is already in the guide.
@@ -396,6 +421,28 @@ class CalendarRepository @Inject constructor(
     @Volatile private var baseEntries: List<CalendarEntry> = emptyList()
 
     /** [base] with the games of the teams you follow in Sports, in date order. */
+    @Volatile private var lastGamesFingerprint: Int? = null
+
+    /** Everything [gameEntries] shows, boiled down to one number: same number, same games on the Calendar. */
+    private fun gamesFingerprint(): Int {
+        val s = settings.value
+        val ss = sports.settings.value
+        if (!s.calendarSports || !ss.showInSidebar) return 0
+        val f = sports.follows.value
+        if (f.teams.isEmpty()) return 0
+        val matches = sports.matches.value
+        var h = 31 * LocalDate.now().toEpochDay().toInt() + (if (ss.hideScores) 1 else 2)
+        for (ev in sports.known.value) {
+            val mine = ev.sides.firstOrNull { f.followsTeam(ev.leagueId, it.team.id) } ?: continue
+            h = 31 * h + java.util.Objects.hash(
+                ev.id, ev.startMs, ev.endMs, ev.hasTime, ev.state, ev.status, ev.title, ev.broadcasts.firstOrNull(), mine.team.logo,
+                ev.sides.map { listOf(it.team.name, it.team.logo, it.team.color, it.team.altColor, it.score) },
+                matches[ev.id]?.firstOrNull()?.channel?.let { listOf(it.key, it.name, it.logo) }
+            )
+        }
+        return h
+    }
+
     private fun withGames(base: List<CalendarEntry>): List<CalendarEntry> {
         val games = runCatching { gameEntries() }.getOrDefault(emptyList())
         if (games.isEmpty()) return base
@@ -679,20 +726,27 @@ class CalendarRepository @Inject constructor(
 
     // ------------------------------------------------------------------ the guide
 
+    private val guideWork = CalendarGuideWork(
+        scope,
+        onFailure = { error -> LiveTvLoadReport.add("Calendar: guide refresh failed (${error.javaClass.simpleName})") }
+    ) { matchGuideNow() }
+
     private fun matchGuide() {
-        scope.launch {
-            mutex.withLock {
-                val s = settings.value
-                val cur = _state.value
-                if (baseEntries.isNotEmpty()) {
-                    baseEntries = byTime(withGuide(baseEntries.map { if (it.kind == CalendarKind.EPISODE) it.copy(guide = null, guideOptions = emptyList()) else it }, s))
-                    _state.value = cur.copy(entries = withGames(baseEntries))
-                }
+        guideWork.request()
+    }
+
+    private suspend fun matchGuideNow() {
+        mutex.withLock {
+            val s = settings.value
+            val cur = _state.value
+            if (baseEntries.isNotEmpty()) {
+                baseEntries = byTime(withGuide(baseEntries.map { if (it.kind == CalendarKind.EPISODE) it.copy(guide = null, guideOptions = emptyList()) else it }, s))
+                _state.value = cur.copy(entries = withGames(baseEntries))
             }
-            val a = _airing.value
-            if (a.entries.isNotEmpty()) _airing.value = a.copy(entries = withGuide(a.entries.map { it.copy(guide = null, guideOptions = emptyList()) }, settings.value))
-            applyPlans()
         }
+        val a = _airing.value
+        if (a.entries.isNotEmpty()) _airing.value = a.copy(entries = withGuide(a.entries.map { it.copy(guide = null, guideOptions = emptyList()) }, settings.value))
+        applyPlans()
     }
 
     /** The channel picked for a network ("Always use the channel I pick for FX"): network -> channel key. */

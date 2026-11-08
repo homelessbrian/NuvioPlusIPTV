@@ -88,7 +88,7 @@ object LiveTvRecordingServer {
         // player's own resume position still applies), so say so in the playlist.
         if (type.contains("mpegurl")) {
             val text = runCatching { file.readText() }.getOrDefault("")
-            if (!text.contains("#EXT-X-ENDLIST") && !text.contains("#EXT-X-START")) {
+            if (!text.contains("#EXT-X-ENDLIST") && !text.contains("#EXT-X-START") && !text.contains("#EXT-X-STREAM-INF")) {
                 val body = text.replaceFirst("#EXTM3U", "#EXTM3U\n#EXT-X-START:TIME-OFFSET=0,PRECISE=YES").toByteArray()
                 out.write(("HTTP/1.1 200 OK\r\nContent-Type: $type\r\nContent-Length: ${body.size}\r\n" +
                     "Cache-Control: no-cache\r\nConnection: close\r\n\r\n").toByteArray())

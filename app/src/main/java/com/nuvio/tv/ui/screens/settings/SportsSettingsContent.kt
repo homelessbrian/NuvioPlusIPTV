@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +40,7 @@ import com.nuvio.tv.livetv.sports.ChannelLink
 import com.nuvio.tv.livetv.sports.ChannelRegions
 import com.nuvio.tv.livetv.sports.League
 import com.nuvio.tv.livetv.sports.SportsCatalog
+import com.nuvio.tv.livetv.sports.SportsScoreDelay
 import com.nuvio.tv.livetv.sports.SportsSettings
 import com.nuvio.tv.livetv.sports.SportsViewModel
 import com.nuvio.tv.livetv.ui.LiveDialog
@@ -127,6 +129,15 @@ fun SportsSettingsContent(
                         s.hideScores,
                         { update { it.copy(hideScores = !it.hideScores) } }
                     )
+                    if (!s.hideScores) {
+                        SettingsActionRow(
+                            title = "Score Delay",
+                            subtitle = "IPTV runs behind the live game. Scores, game clocks, results and scoring alerts wait this long so they don't show before you see it",
+                            value = SportsScoreDelay.label(s.scoreDelaySeconds),
+                            leadingIcon = Icons.Default.Timer,
+                            onClick = { dialog = "scoreDelay" }
+                        )
+                    }
                     SettingsToggleRow(
                         "Score on the Info Bar",
                         "Shows the live score on Live TV's info bar while you watch a game",
@@ -257,6 +268,13 @@ fun SportsSettingsContent(
             options = ChannelRegions.all.map { SettingsPickerOption(it.first, it.second) },
             selectedValue = s.channelRegion,
             onOptionSelected = { v -> update { it.copy(channelRegion = v) }; close() },
+            onDismiss = close
+        )
+        "scoreDelay" -> SettingsSingleChoiceDialog(
+            title = "Score Delay",
+            options = SportsScoreDelay.CHOICES.map { SettingsPickerOption(it, SportsScoreDelay.label(it)) },
+            selectedValue = s.scoreDelaySeconds,
+            onOptionSelected = { v -> update { it.copy(scoreDelaySeconds = v) }; close() },
             onDismiss = close
         )
         "remind" -> SettingsSingleChoiceDialog(

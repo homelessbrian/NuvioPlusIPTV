@@ -240,7 +240,7 @@ private fun LiveTvHomeRowContent(
     startPadding: androidx.compose.ui.unit.Dp,
     titleStyle: androidx.compose.ui.text.TextStyle?,
     hideUnlessFocused: Boolean,
-    viewModel: LiveTvViewModel = hiltViewModel()
+    viewModel: LiveTvHomeRowViewModel = hiltViewModel()
 ) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val scope = androidx.compose.runtime.rememberCoroutineScope()

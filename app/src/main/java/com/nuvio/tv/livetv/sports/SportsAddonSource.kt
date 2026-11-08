@@ -36,7 +36,12 @@ class SportsAddonSource @Inject constructor(
     private val addons: AddonRepository
 ) {
     /** What one game has: streams to watch it now, and (finished games) replays and highlights. */
-    data class Found(val live: List<ChannelMatch>, val vod: List<ChannelMatch>)
+    data class Found(
+        val live: List<ChannelMatch>,
+        val vod: List<ChannelMatch>,
+        /** Names of your installed addons that offer replays or highlights at all (empty: none do). */
+        val vodAddons: List<String> = emptyList()
+    )
 
     /** One game as an addon lists it. */
     internal data class AddonGame(
@@ -57,7 +62,9 @@ class SportsAddonSource @Inject constructor(
     suspend fun find(ev: SportsEvent): Found = coroutineScope {
         val installed = runCatching { addons.getInstalledAddons().first().enabledAddons() }.getOrDefault(emptyList())
         val parts = installed.map { a -> async { runCatching { forAddon(a, ev) }.getOrDefault(NO_RESULT) } }.map { it.await() }
-        Found(parts.flatMap { it.live }, parts.flatMap { it.vod })
+        val vodAddons = installed.filter { a -> a.catalogs.any { isVodCatalog(it) && usableForVod(it) } }
+            .map { it.displayName }.distinct()
+        Found(parts.flatMap { it.live }, parts.flatMap { it.vod }, vodAddons)
     }
 
     private suspend fun forAddon(a: Addon, ev: SportsEvent): Found {
@@ -125,12 +132,13 @@ class SportsAddonSource @Inject constructor(
                     if (found.isNotEmpty()) break
                 }
             }
-            // A recaps list with no search (HighFly's "Sport Recaps"): look a few pages further back.
+            // A recaps list with no search (HighFly's "Sport Recaps"): look further back, page by page,
+            // until the list reaches games from before this one (newest come first).
             if (found.isEmpty() && !supportsSearch(c)) {
                 var skip = 0
                 var page = gamesOf(a, c, extra, VOD_TTL)
-                repeat(3) {
-                    if (found.isNotEmpty() || page.isEmpty()) return@repeat
+                repeat(MAX_VOD_PAGES) {
+                    if (found.isNotEmpty() || page.isEmpty() || olderThan(page, ev)) return@repeat
                     skip += page.size
                     page = gamesOf(a, c, extra + ("skip" to skip.toString()), VOD_TTL)
                     found = page.filter { gameScore(ev, it, true) > 0 }
@@ -155,6 +163,13 @@ class SportsAddonSource @Inject constructor(
             }
         }
         return out
+    }
+
+    /** Every dated game on this page is from well before [ev]: older pages won't have it either. */
+    private fun olderThan(page: List<AddonGame>, ev: SportsEvent): Boolean {
+        if (!ev.hasTime) return false
+        val times = page.mapNotNull { it.timeMs }
+        return times.isNotEmpty() && times.all { it < ev.startMs - 2 * 24 * 3_600_000L }
     }
 
     // ------------------------------------------------------------------ talking to the addon
@@ -275,6 +290,8 @@ class SportsAddonSource @Inject constructor(
         private const val LIVE_TTL = 90_000L
         private const val VOD_TTL = 10 * 60_000L
         private const val MAX_CATALOGS = 6
+        /** Extra pages read back through a recaps list that can't be searched. */
+        private const val MAX_VOD_PAGES = 10
         private const val MAX_STREAMS = 12
 
         private val NOT_SPORTS_TYPES = setOf("movie", "series", "anime")

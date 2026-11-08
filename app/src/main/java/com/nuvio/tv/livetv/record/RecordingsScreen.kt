@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -86,6 +87,8 @@ class RecordingsViewModel @Inject constructor(
     private val livePrefs: com.nuvio.tv.livetv.data.LiveTvPreferences
 ) : ViewModel() {
     val recordings = recorder.recordings
+    /** How far a move between drives has got (null when nothing is moving). */
+    val move = recorder.move
 
     /** New Recording's channel list: favorites, then channels watched recently. */
     val pickerChannels: kotlinx.coroutines.flow.StateFlow<List<com.nuvio.tv.livetv.model.LiveChannel>> =
@@ -205,11 +208,16 @@ class RecordingsViewModel @Inject constructor(
         runCatching { artPrefs.edit().remove(rec.id).apply() }
     }
     fun freeBytes(): Long = recorder.freeBytes()
+    fun isWatched(rec: LiveTvRecording): Boolean = RecordingResume.isWatched(recorder.appContext, rec.id)
+    fun markWatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.markWatched(recorder.appContext, it.id) }
+    fun markUnwatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.clear(recorder.appContext, it.id) }
+    fun moveTo(recs: List<LiveTvRecording>, target: RecordingStorage.Choice) = recorder.moveTo(recs.map { it.id }, target)
+    fun storageIdOf(rec: LiveTvRecording): String? = recorder.storageIdOf(rec)
 }
 
 /**
  * Recordings: what's recording now across the top, then three columns: Scheduled, Series and
- * Recorded. OK plays (in Nuvio's player, with its seek bar); the menu button or a long press
+ * Recorded. OK plays (full screen in Live TV's player, with its seek bar); the menu button or a long press
  * offers Resume / Play from Beginning, Stop and Delete. Same background as the guide (the
  * theme's glow at the top), not plain black.
  */
@@ -262,6 +270,22 @@ fun RecordingsScreen(
 
     val now = recordings.filter { it.isRecording }
     val done = recordings.filter { !it.isRecording }
+    val entries = remember(done) { groupRecorded(done) }
+    val recContext = androidx.compose.ui.platform.LocalContext.current
+    // A folder that's open, a move being chosen, and a whole folder being deleted.
+    var openShowKey by remember { mutableStateOf<String?>(null) }
+    val openShow = entries.firstOrNull { it.key == openShowKey } as? RecordedShow
+    LaunchedEffect(openShow == null) {
+        if (openShow == null) {
+            openShowKey = null
+            // Back from a folder: the highlight returns to the top of the Recorded list.
+            kotlinx.coroutines.delay(120)
+            runCatching { first.requestFocus() }
+        }
+    }
+    var movePick by remember { mutableStateOf<List<LiveTvRecording>?>(null) }
+    var confirmDeleteShow by remember { mutableStateOf<RecordedShow?>(null) }
+    val moving by viewModel.move.collectAsStateWithLifecycle()
     val playNow: (LiveTvRecording) -> Unit = { rec ->
         // Nothing saved yet (it's still connecting): say so instead of an error.
         if (rec.durationSec <= 0) LiveTvNotice.show(
@@ -273,7 +297,7 @@ fun RecordingsScreen(
     val firstNowId = now.firstOrNull()?.id
     val firstScheduleId = if (now.isEmpty()) schedules.firstOrNull()?.id else null
     val firstSeriesId = if (now.isEmpty() && schedules.isEmpty()) seriesRules.firstOrNull()?.id else null
-    val firstDoneId = if (now.isEmpty() && schedules.isEmpty() && seriesRules.isEmpty()) done.firstOrNull()?.id else null
+    val firstDoneId = if (now.isEmpty() && schedules.isEmpty() && seriesRules.isEmpty()) entries.firstOrNull()?.key else null
 
     androidx.compose.runtime.CompositionLocalProvider(
         com.nuvio.tv.livetv.ui.LocalLiveSolidHighlight provides look.solidHighlight,
@@ -290,6 +314,8 @@ fun RecordingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // While a folder is open on top, nothing underneath can take the highlight.
+                .then(if (openShow != null) Modifier.focusProperties { canFocus = false } else Modifier)
                 .padding(start = 56.dp, end = 48.dp, top = 32.dp)
         ) {
             Row(verticalAlignment = Alignment.Bottom) {
@@ -397,23 +423,79 @@ fun RecordingsScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         contentPadding = PaddingValues(bottom = 40.dp)
                     ) {
-                        gridItems(done, key = { it.id }) { rec ->
-                            RecordedCard(
-                                rec = rec,
-                                art = art[rec.id],
-                                resumeFraction = resumeTick.let { viewModel.resume(rec) }?.let { ms ->
-                                    if (rec.durationSec > 0) (ms / 1000.0 / rec.durationSec).toFloat().coerceIn(0f, 1f) else null
-                                },
-                                modifier = if (rec.id == firstDoneId) Modifier.focusRequester(first) else Modifier,
-                                onClick = {
-                                    if (rec.status != RecordingStatus.FAILED) onPlay(viewModel.playUrl(rec), rec.title, posters[rec.id], rec.id, false)
-                                    else menuFor = rec
-                                },
-                                onMenu = { menuFor = rec }
-                            )
+                        gridItems(entries, key = { it.key }) { entry ->
+                            when (entry) {
+                                is RecordedShow -> {
+                                    val counts = remember(entry, resumeTick) {
+                                        val st = entry.episodes.map { viewModel.isWatched(it) to viewModel.resume(it) }
+                                        st.count { it.first } to st.count { !it.first && it.second == null }
+                                    }
+                                    RecordedFolderCard(
+                                        show = entry,
+                                        art = entry.episodes.maxByOrNull { it.startedAtMs }?.let { art[it.id] },
+                                        watched = counts.first,
+                                        fresh = counts.second,
+                                        modifier = if (entry.key == firstDoneId) Modifier.focusRequester(first) else Modifier,
+                                        onClick = { openShowKey = entry.key },
+                                        onMenu = { openShowKey = entry.key }
+                                    )
+                                }
+                                is SingleRecording -> {
+                                    val rec = entry.rec
+                                    RecordedCard(
+                                        rec = rec,
+                                        art = art[rec.id],
+                                        resumeFraction = resumeTick.let { viewModel.resume(rec) }?.let { ms ->
+                                            if (rec.durationSec > 0) (ms / 1000.0 / rec.durationSec).toFloat().coerceIn(0f, 1f) else null
+                                        },
+                                        modifier = if (rec.id == firstDoneId) Modifier.focusRequester(first) else Modifier,
+                                        onClick = {
+                                            if (rec.status != RecordingStatus.FAILED) onPlay(viewModel.playUrl(rec), rec.title, posters[rec.id], rec.id, false)
+                                            else menuFor = rec
+                                        },
+                                        onMenu = { menuFor = rec }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
+            }
+        }
+        // An open folder: the show's page, over the three columns.
+        openShow?.let { show ->
+            RecordedShowPage(
+                show = show,
+                art = art,
+                resumeTick = resumeTick,
+                resumeOf = { viewModel.resume(it) },
+                isWatched = { viewModel.isWatched(it) },
+                onPlay = { playNow(it) },
+                onMenu = { menuFor = it },
+                onMarkAllWatched = { viewModel.markWatched(show.episodes); resumeTick++ },
+                onMoveAll = if (RecordingStorage.choices(recContext).size > 1) ({ movePick = show.episodes }) else null,
+                onDeleteAll = { confirmDeleteShow = show },
+                onClose = { openShowKey = null },
+                backdrop = look.guideBackdrop
+            )
+        }
+        // A move between drives: what's moving and how far along.
+        moving?.let { m ->
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 48.dp, bottom = 28.dp)
+                    .width(340.dp)
+                    .clip(RoundedCornerShape(liveCorner()))
+                    .background(com.nuvio.tv.livetv.ui.guideSurface())
+                    .border(1.dp, com.nuvio.tv.livetv.ui.GuideGlassEdge, RoundedCornerShape(liveCorner()))
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                LiveText("Moving recordings" + if (m.count > 1) " (${m.index} of ${m.count})" else "", size = 14.sp, weight = FontWeight.Bold)
+                LiveText(m.title, size = 13.sp, color = colors.TextSecondary)
+                ProgressLine(if (m.totalBytes > 0) m.doneBytes.toFloat() / m.totalBytes else 0f, colors.Secondary, Modifier.fillMaxWidth())
+                LiveText(sizeLabel(m.doneBytes) + " of " + sizeLabel(m.totalBytes), size = 12.sp, color = colors.TextTertiary)
             }
         }
     }
@@ -471,10 +553,41 @@ fun RecordingsScreen(
                 if (resumeAt != null) add("Play from Beginning" to { menuFor = null; onPlay(viewModel.playUrl(rec), rec.title, posters[rec.id], rec.id, true) })
             }
             if (rec.isRecording) add("Stop Recording" to { menuFor = null; viewModel.stop(rec) })
+            if (!rec.isRecording && rec.status != RecordingStatus.FAILED) {
+                if (viewModel.isWatched(rec)) add("Mark as Unwatched" to { menuFor = null; viewModel.markUnwatched(listOf(rec)); resumeTick++ })
+                else add("Mark as Watched" to { menuFor = null; viewModel.markWatched(listOf(rec)); resumeTick++ })
+                if (RecordingStorage.choices(recContext).size > 1) add("Move To…" to { menuFor = null; movePick = listOf(rec) })
+            }
             add("Information" to { menuFor = null; infoFor = rec })
             add("Delete" to { menuFor = null; confirmDelete = rec })
         }
         RecordingActionDialog(title = rec.title, detail = rec.problem, actions = actions, onDismiss = { menuFor = null })
+    }
+    movePick?.let { recs ->
+        val here = recs.mapNotNull { viewModel.storageIdOf(it) }.distinct()
+        val places = RecordingStorage.choices(recContext).filter { c -> recs.any { viewModel.storageIdOf(it) != c.id } }
+        RecordingActionDialog(
+            title = if (recs.size == 1) "Move \"${recs.first().title}\"" else "Move ${recs.size} recordings",
+            detail = "Copies to the place you choose, checks the copy, then removes it from where it was. " +
+                "Leave the app open until it finishes.",
+            actions = places.map { c ->
+                val label = c.label + " · " + RecordingStorage.sizeLabel(c.freeBytes) + " free" +
+                    if (here.size == 1 && here.first() == c.id) "  (already here)" else ""
+                label to { movePick = null; viewModel.moveTo(recs, c) }
+            } + listOf("Cancel" to { movePick = null }),
+            onDismiss = { movePick = null }
+        )
+    }
+    confirmDeleteShow?.let { show ->
+        RecordingActionDialog(
+            title = "Delete all of \"${show.title}\"?",
+            detail = "This deletes all ${show.episodes.size} episodes. It can't be undone.",
+            actions = listOf(
+                "Cancel" to { confirmDeleteShow = null },
+                "Delete All" to { confirmDeleteShow = null; show.episodes.forEach { viewModel.delete(it) } }
+            ),
+            onDismiss = { confirmDeleteShow = null }
+        )
     }
     if (pickingChannel) ManualRecordingChannelPicker(
         channels = pickerChannels,
@@ -509,7 +622,7 @@ fun RecordingsScreen(
 }
 
 @Composable
-private fun SectionTitle(text: String, color: Color = NuvioTheme.colors.TextSecondary) {
+internal fun SectionTitle(text: String, color: Color = NuvioTheme.colors.TextSecondary) {
     LiveText(
         text.uppercase(),
         size = 13.sp,
@@ -526,7 +639,7 @@ private fun EmptyNote(text: String) {
 
 /** A card's look: the guide's tile color, the theme's focus color and ring when highlighted. */
 @Composable
-private fun cardColors(focused: Boolean): Pair<Color, Color> {
+internal fun cardColors(focused: Boolean): Pair<Color, Color> {
     val colors = NuvioTheme.colors
     return (if (focused) colors.FocusBackground else com.nuvio.tv.livetv.ui.guideSurface()) to
         (if (focused) colors.FocusRing else com.nuvio.tv.livetv.ui.GuideGlassEdge)
@@ -538,7 +651,7 @@ private fun cardColors(focused: Boolean): Pair<Color, Color> {
  * channel's logo on the tile color, with the title under it.
  */
 @Composable
-private fun ArtThumb(
+internal fun ArtThumb(
     art: RecordingArt?,
     channelLogo: String?,
     title: String,
@@ -635,7 +748,7 @@ private fun RecTag() {
 }
 
 @Composable
-private fun ProgressLine(fraction: Float, color: Color, modifier: Modifier) {
+internal fun ProgressLine(fraction: Float, color: Color, modifier: Modifier) {
     Box(modifier.height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.18f))) {
         Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)).background(color))
     }
@@ -700,7 +813,7 @@ private fun RecordingNowCard(
 }
 
 @Composable
-private fun PillButton(
+internal fun PillButton(
     label: String,
     primary: Boolean,
     modifier: Modifier = Modifier,
@@ -777,7 +890,7 @@ private fun InfoCard(
 
 /** A finished recording: art with how much you've watched, then title, day and length. */
 @Composable
-private fun RecordedCard(
+internal fun RecordedCard(
     rec: LiveTvRecording,
     art: RecordingArt?,
     resumeFraction: Float?,
@@ -839,7 +952,7 @@ private fun RecordedCard(
 }
 
 @Composable
-private fun RecordingActionDialog(
+internal fun RecordingActionDialog(
     title: String,
     detail: String?,
     actions: List<Pair<String, () -> Unit>>,
@@ -920,13 +1033,13 @@ private fun savedOnLabel(context: android.content.Context, dir: String): String 
     return choice?.label ?: if (dir.startsWith("/storage/emulated") || dir.startsWith("/data/")) "This Device" else "A drive that isn't plugged in"
 }
 
-private fun dateLabel(ms: Long): String {
+internal fun dateLabel(ms: Long): String {
     val day = shortDayLabel(ms)
     return day + ", " + SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(ms))
 }
 
 /** "Today", "Tomorrow", "Yesterday", the weekday within a week, else the date. */
-private fun shortDayLabel(ms: Long): String {
+internal fun shortDayLabel(ms: Long): String {
     val cal = java.util.Calendar.getInstance()
     fun dayIndex(t: Long): Long {
         cal.timeInMillis = t
@@ -942,12 +1055,12 @@ private fun shortDayLabel(ms: Long): String {
     }
 }
 
-private fun durationLabel(sec: Double): String {
+internal fun durationLabel(sec: Double): String {
     val m = (sec / 60).toInt()
     return if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min"
 }
 
-private fun sizeLabel(bytes: Long): String = when {
+internal fun sizeLabel(bytes: Long): String = when {
     bytes >= 1024L * 1024 * 1024 -> String.format(Locale.US, "%.1f GB", bytes / (1024.0 * 1024 * 1024))
     bytes >= 1024L * 1024 -> String.format(Locale.US, "%.0f MB", bytes / (1024.0 * 1024))
     else -> "${bytes / 1024} KB"

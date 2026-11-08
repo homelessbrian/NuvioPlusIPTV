@@ -4,6 +4,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Keeps Live TV and On Demand's heavy background jobs (playlist, guide and catalog downloads,
@@ -34,6 +35,23 @@ object BackgroundWork {
             }, "nuvio-quiet-${count.incrementAndGet()}").apply { isDaemon = true }
         }.asCoroutineDispatcher()
     }
+
+    /** Marks work started by an automatic update (see [quietUpdate] and [cpu]). */
+    private class QuietMark : kotlin.coroutines.AbstractCoroutineContextElement(QuietMark) {
+        companion object Key : kotlin.coroutines.CoroutineContext.Key<QuietMark>
+    }
+
+    /** Where an automatic update runs: the [quiet] threads, and everything it calls knows it (see [cpu]). */
+    val quietUpdate: kotlin.coroutines.CoroutineContext get() = quiet + QuietMark()
+
+    /**
+     * Where the heavy reading in an update (playlists into channels, guide files into the guide)
+     * runs: on the [quiet] threads when an automatic update asked for it, otherwise the usual ones.
+     * These steps used to switch to the usual threads themselves, so an automatic update ran at
+     * full priority after all, right alongside the video.
+     */
+    suspend fun cpu(): kotlinx.coroutines.CoroutineDispatcher =
+        if (kotlinx.coroutines.currentCoroutineContext()[QuietMark] != null) quiet else kotlinx.coroutines.Dispatchers.IO
 
     /**
      * Reading listings out of the guide database for the channels (all of them, once the guide
@@ -84,9 +102,17 @@ object BackgroundWork {
     /** The guide is being built from the guide files right now. */
     val guideBuilding = MutableStateFlow(false)
 
+    /** One heavy job at a time: the next one waits for the one under way, instead of both running together. */
+    private val oneAtATime = kotlinx.coroutines.sync.Mutex()
+
     suspend fun <T> heavy(block: suspend () -> T): T {
         heavyJobs.update { it + 1 }
-        try { return block() } finally { heavyJobs.update { (it - 1).coerceAtLeast(0) } }
+        try {
+            // At start-up the guide and Sports' channel search both started within moments of
+            // each other (often with the scores update too), and together they kept a slower box
+            // busy for minutes. One after the other they take the same work, but never pile up.
+            return oneAtATime.withLock { block() }
+        } finally { heavyJobs.update { (it - 1).coerceAtLeast(0) } }
     }
 
     /** Waits (up to 10 minutes) until no heavy job is running. */

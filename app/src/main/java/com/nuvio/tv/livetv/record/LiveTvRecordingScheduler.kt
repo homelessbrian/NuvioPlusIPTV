@@ -464,9 +464,15 @@ class LiveTvRecordingScheduler @Inject constructor(
             val channel = freshChannel(s.channel)
             val catchup = channel.catchup ?: s.channel.catchup
             val settings = prefs.currentSettings()
-            val zone = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId }?.serverTimezone
-            // As when watching catch-up: the guide's shift off, the catch-up shift on.
-            val shift = settings.epgOffsetMinutes * 60_000L - settings.catchupShiftMinutes * 60_000L
+            val playlist = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId }
+            // Not known yet: look it up first (as when watching), so the saved show is the right one.
+            val zone = playlist?.catchupZone?.takeIf { it.isNotBlank() }
+                ?: kotlinx.coroutines.withTimeoutOrNull(10_000L) { repository.learnServerZone(channel) }
+            // As when watching catch-up: the guide's shift off, the playlist's catch-up shift on.
+            val overrides = runCatching { prefs.userState.first().epgOverrides }.getOrDefault(emptyMap())
+            val shift = repository.guideShiftMs(channel, overrides) +
+                settings.epgOffsetMinutes * 60_000L - settings.catchupShiftMinutes * 60_000L -
+                (playlist?.catchupShiftMinutes ?: 0) * 60_000L
             val url = catchup?.let {
                 CatchupUrlBuilder.build(channel.url, it, s.startMs - s.pre - shift, s.stopMs + s.post - shift, now,
                     preferHls = false, serverTimezone = zone)

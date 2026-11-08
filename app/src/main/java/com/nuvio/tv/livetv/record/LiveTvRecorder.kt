@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -46,6 +45,8 @@ class LiveTvRecorder @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
     private val stopRequested = ConcurrentHashMap.newKeySet<String>()
+    /** Ended here because the job didn't stop in time: when the job does end, it just goes quietly. */
+    private val forced = ConcurrentHashMap.newKeySet<String>()
 
     private val _recordings = MutableStateFlow<List<LiveTvRecording>>(emptyList())
     /** Every recording, newest first. */
@@ -188,6 +189,7 @@ class LiveTvRecorder @Inject constructor(
             sizeBytes = dirSize(dir),
             problem = if (hasPieces) null else "Stopped before anything was recorded"
         )
+        forced += id
         save(done); update(done)
         jobs.remove(id)?.cancel()
         stopRequested.remove(id)
@@ -203,6 +205,98 @@ class LiveTvRecorder @Inject constructor(
         _recordings.value = _recordings.value.filterNot { it.id == id }
         rec?.let { r -> scope.launch { runCatching { File(r.dir).deleteRecursively() } } }
         stopServiceIfIdle()
+    }
+
+    /** How far a move between drives has got (null when nothing is being moved). */
+    data class MoveProgress(val title: String, val doneBytes: Long, val totalBytes: Long, val index: Int, val count: Int)
+
+    private val _move = MutableStateFlow<MoveProgress?>(null)
+    val move: StateFlow<MoveProgress?> = _move.asStateFlow()
+
+    /** The drive id a recording is on ("" for this device), or null if its drive isn't plugged in. */
+    fun storageIdOf(rec: LiveTvRecording): String? =
+        RecordingStorage.choices(context)
+            .filter { rec.dir.startsWith(it.dir.absolutePath + File.separator) }
+            .maxByOrNull { it.dir.absolutePath.length }?.id
+
+    /**
+     * Moves finished recordings to [target] (this device or a plugged-in drive): each folder is
+     * copied across, checked, and only then removed from where it was. One move at a time.
+     * A recording still being recorded is left where it is.
+     */
+    fun moveTo(ids: List<String>, target: RecordingStorage.Choice) {
+        if (_move.value != null) { LiveTvNotice.show("Already moving recordings: wait for it to finish"); return }
+        val list = ids.mapNotNull { id -> _recordings.value.firstOrNull { it.id == id } }
+            .filter { !it.isRecording && !it.dir.startsWith(target.dir.absolutePath + File.separator) }
+        if (list.isEmpty()) { LiveTvNotice.show("Nothing to move: already on ${target.label}"); return }
+        val total = list.sumOf { dirSize(File(it.dir)) }
+        if (total + MOVE_MARGIN > target.freeBytes) {
+            LiveTvNotice.show("Not enough room on ${target.label}: needs ${RecordingStorage.sizeLabel(total)}, has ${RecordingStorage.sizeLabel(target.freeBytes)} free")
+            return
+        }
+        _move.value = MoveProgress(list.first().title, 0, total, 1, list.size)
+        scope.launch {
+            var done = 0L
+            var moved = 0
+            var failure: String? = null
+            try {
+                for ((i, rec) in list.withIndex()) {
+                    val sizeBefore = done
+                    val ok = runCatching {
+                        moveOne(rec, target) { copied -> _move.value = MoveProgress(rec.title, sizeBefore + copied, total, i + 1, list.size) }
+                    }.getOrElse { failure = it.message ?: "something went wrong"; false }
+                    if (!ok) { if (failure == null) failure = "\"${rec.title}\" couldn't be moved"; break }
+                    moved++
+                    done += dirSize(File(_recordings.value.firstOrNull { it.id == rec.id }?.dir ?: rec.dir))
+                }
+            } finally {
+                _move.value = null
+            }
+            LiveTvNotice.show(
+                when {
+                    failure != null && moved == 0 -> "Couldn't move: $failure. Nothing was lost."
+                    failure != null -> "Moved $moved of ${list.size} to ${target.label}. Stopped: $failure"
+                    moved == 1 -> "Moved \"${list.first().title}\" to ${target.label}"
+                    else -> "Moved $moved recordings to ${target.label}"
+                }
+            )
+        }
+    }
+
+    private fun moveOne(rec: LiveTvRecording, target: RecordingStorage.Choice, onCopied: (Long) -> Unit): Boolean {
+        val src = File(rec.dir)
+        if (!src.isDirectory) return false
+        val root = target.dir.apply { mkdirs() }
+        val dst = File(root, src.name)
+        if (dst.exists()) throw IllegalStateException("\"${rec.title}\" is already on ${target.label}")
+        // Copied into a hidden folder first (info.json last), so a half-copy is never taken for a recording.
+        val tmp = File(root, ".moving-" + src.name)
+        tmp.deleteRecursively()
+        tmp.mkdirs()
+        var copied = 0L
+        val files = src.walkTopDown().filter { it.isFile }.toList()
+        val ordered = files.filter { it.name != "info.json" } + files.filter { it.name == "info.json" }
+        for (f in ordered) {
+            val out = File(tmp, f.relativeTo(src).path)
+            out.parentFile?.mkdirs()
+            f.inputStream().use { input -> out.outputStream().use { o ->
+                val buf = ByteArray(256 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    o.write(buf, 0, n)
+                    copied += n
+                    onCopied(copied)
+                }
+            } }
+            if (out.length() != f.length()) { tmp.deleteRecursively(); throw IllegalStateException("the copy of \"${rec.title}\" came out the wrong size") }
+        }
+        if (!tmp.renameTo(dst)) { tmp.deleteRecursively(); throw IllegalStateException("couldn't finish copying to ${target.label}") }
+        // The copy is complete: the list points at it, then the old one goes.
+        val moved = rec.copy(dir = dst.absolutePath)
+        update(moved)
+        runCatching { src.deleteRecursively() }
+        return true
     }
 
     /** Changes when a running recording stops. */
@@ -234,12 +328,31 @@ class LiveTvRecorder @Inject constructor(
         val dir = File(start.dir)
         var rec = start
         var problem: String? = null
-        val isHls = url.lowercase().substringBefore('?').endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true) ||
-            com.nuvio.tv.livetv.model.PlaylistSource.asksForHls(url)
+        fun looksHls(link: String) = link.lowercase().substringBefore('?').endsWith(".m3u8") || link.contains("m3u8", ignoreCase = true) ||
+            com.nuvio.tv.livetv.model.PlaylistSource.asksForHls(link)
+        var isHls = looksHls(url)
+        // Catch-up saved as HLS: the plain (TS) form to switch to if the HLS one sends nothing,
+        // as the player does when watching (some providers' HLS replays never deliver).
+        val tsLink = if (finite && isHls) links.firstOrNull { !looksHls(it) } else null
         try {
             if (isHls) {
-                problem = recordHls(rec, url, headers, dir, finite, { dropped(it) }) { d, size -> rec = progress(rec, d, size) }
-            } else {
+                problem = try {
+                    recordHls(rec, url, headers, dir, finite, tsLink != null, { dropped(it) }) { d, size -> rec = progress(rec, d, size) }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (tsLink == null) throw e
+                    HLS_SENT_NOTHING
+                }
+                if (problem == HLS_SENT_NOTHING && tsLink != null && rec.id !in stopRequested) {
+                    com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording \"${rec.title}\": the HLS replay sent nothing in ${HLS_GIVE_UP_MS / 1000} s; saving the TS one instead")
+                    links.remove(tsLink)
+                    url = tsLink
+                    isHls = false
+                    problem = null
+                }
+            }
+            if (!isHls) {
                 val segmenter = TsSegmenter(dir) { _ -> }
                 var first = true
                 var tries = 0
@@ -311,6 +424,13 @@ class LiveTvRecorder @Inject constructor(
             problem = e.message ?: e.javaClass.simpleName
         } finally {
             run {
+                // Already ended by [forceFinish] (and maybe deleted since): nothing more to do.
+                if (forced.remove(rec.id)) {
+                    stopRequested.remove(rec.id)
+                    stopServiceIfIdle()
+                    return@run
+                }
+                val byHand = rec.id in stopRequested
                 val latest = _recordings.value.firstOrNull { it.id == rec.id } ?: rec
                 val hasPieces = playlistFileOf(dir).exists()
                 if (hasPieces) ensureEnded(playlistFileOf(dir))
@@ -319,6 +439,7 @@ class LiveTvRecorder @Inject constructor(
                     endedAtMs = System.currentTimeMillis(),
                     sizeBytes = dirSize(dir),
                     problem = if (hasPieces) problem?.takeIf { latest.durationSec < (latest.stopAtMs - latest.startedAtMs) / 1000.0 * 0.9 }
+                    else if (byHand) "Stopped before anything was recorded"
                     else (problem ?: "Nothing could be recorded from this channel")
                 )
                 if (_recordings.value.any { it.id == done.id }) { save(done); update(done) }
@@ -326,7 +447,8 @@ class LiveTvRecorder @Inject constructor(
                 stopRequested.remove(rec.id)
                 stopServiceIfIdle()
                 com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording \"${done.title}\" finished: ${done.status}" + (done.problem?.let { " ($it)" } ?: ""))
-                runCatching { onFinished(done) }
+                // Stopped by hand before anything came in: not a failure to try again later.
+                if (!(byHand && done.status == RecordingStatus.FAILED)) runCatching { onFinished(done) }
             }
         }
     }
@@ -348,106 +470,81 @@ class LiveTvRecorder @Inject constructor(
         return r
     }
 
-    /** HLS channel: saves each piece as it appears. Returns a problem, or null. */
+    /**
+     * HLS channel: saves each piece as it appears ([com.nuvio.tv.livetv.player.HlsPieces]): a live
+     * channel from its newest pieces (a short lead-in, not its whole look-back window), a catch-up
+     * show all of it; a separate sound stream too. Returns a problem, or null.
+     */
     private suspend fun recordHls(
         rec: LiveTvRecording,
         url: String,
         headers: Map<String, String>,
         dir: File,
         finite: Boolean,
+        /** There's another (TS) link to switch to: give up on HLS if it sends nothing in a while. */
+        canGiveUp: Boolean,
         dropped: (String) -> String,
         onProgress: (Double, Long) -> Unit
     ): String? {
-        var mediaUrl = url
-        var text = com.nuvio.tv.livetv.player.LiveHttp.fetch(mediaUrl, headers).let { (t, u) -> mediaUrl = u; t }
-        if (text.contains("#EXT-X-STREAM-INF")) {
-            val lines = text.lines()
-            var best = -1L
-            var bestUri: String? = null
-            lines.forEachIndexed { i, l ->
-                if (l.startsWith("#EXT-X-STREAM-INF")) {
-                    val bw = Regex("""BANDWIDTH=(\d+)""").find(l)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
-                    val uri = lines.drop(i + 1).firstOrNull { it.isNotBlank() && !it.startsWith("#") }
-                    if (uri != null && bw >= best) { best = bw; bestUri = uri }
-                }
-            }
-            mediaUrl = resolve(mediaUrl, bestUri ?: return "This channel's stream couldn't be read")
-            text = com.nuvio.tv.livetv.player.LiveHttp.fetch(mediaUrl, headers).let { (t, u) -> mediaUrl = u; t }
+        val began = System.currentTimeMillis()
+        val hls = com.nuvio.tv.livetv.player.HlsPieces
+        val (firstText, firstUrl) = com.nuvio.tv.livetv.player.LiveHttp.fetch(url, headers)
+        val choice = if (hls.isMaster(firstText)) {
+            hls.pick(firstUrl, firstText, null) ?: return "This channel's stream couldn't be read"
+        } else null
+        val videoUrl = choice?.videoUrl ?: firstUrl
+        val audioUrl = choice?.audioUrl
+        val video = com.nuvio.tv.livetv.player.HlsPieces.Track(videoUrl, dir, if (audioUrl != null) "v" else "", headers, ::open)
+        val audio = audioUrl?.let { com.nuvio.tv.livetv.player.HlsPieces.Track(it, dir, "a", headers, ::open) }
+        fun nothingYet() = canGiveUp && video.saved.isEmpty() && System.currentTimeMillis() - began > HLS_GIVE_UP_MS
+        // A stop (or an HLS replay that's sent nothing) cuts a piece part way instead of waiting
+        // for it: some providers send a whole show as one long piece, at viewing speed.
+        listOfNotNull(video, audio).forEach { t ->
+            t.stopNow = { rec.id in stopRequested || nothingYet() }
+            t.keepCut = { rec.id in stopRequested }
         }
-        if (text.contains("#EXT-X-KEY") && !text.contains("METHOD=NONE")) return "This channel is encrypted and can't be recorded"
-        data class Seg(val seq: Long, val dur: Double, val name: String, val disc: Boolean)
-        val saved = ArrayList<Seg>()
-        var lastSeq = -1L
-        var mapLine: String? = null
-        var target = 6
-        var total = 0.0
-        var gap = false
         val playlist = playlistFileOf(dir)
-        fun writePlaylist(ended: Boolean) {
-            if (saved.isEmpty()) return
-            val sb = StringBuilder("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:").append(target + 1).append('\n')
-            sb.append("#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n")
-            mapLine?.let { sb.append(it).append('\n') }
-            saved.forEach { s ->
-                if (s.disc) sb.append("#EXT-X-DISCONTINUITY\n")
-                sb.append("#EXTINF:").append(String.format(java.util.Locale.US, "%.3f", s.dur)).append(",\n").append(s.name).append('\n')
-            }
-            if (ended) sb.append("#EXT-X-ENDLIST\n")
-            val tmp = File(dir, "index.m3u8.tmp")
-            tmp.writeText(sb.toString())
-            if (!tmp.renameTo(playlist)) { tmp.copyTo(playlist, overwrite = true); tmp.delete() }
+        val videoFile = if (audio != null) File(dir, "video.m3u8") else playlist
+        val audioFile = File(dir, "audio.m3u8")
+        var vm = if (choice == null) hls.parseMedia(firstText) else video.fetch()
+        var am = audio?.fetch()
+        if (vm.encrypted || am?.encrypted == true) return "This channel is encrypted and can't be recorded"
+        var masterWritten = false
+        fun writePlaylists(ended: Boolean) {
+            if (audio == null) { video.write(playlist, ended); return }
+            if (video.saved.isEmpty() || audio.saved.isEmpty()) return
+            audio.write(audioFile, ended)
+            video.write(videoFile, ended)
+            if (!masterWritten) { hls.writeMaster(playlist, choice!!, videoFile.name, audioFile.name); masterWritten = true }
         }
         var problem: String? = null
-        var n = 0L
         while (scope.isActive && rec.id !in stopRequested && System.currentTimeMillis() < currentStop(rec.id)) {
-            val lines = text.lines()
-            var seq = Regex("""#EXT-X-MEDIA-SEQUENCE:(\d+)""").find(text)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
-            target = Regex("""#EXT-X-TARGETDURATION:(\d+)""").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: target
-            if (mapLine == null) {
-                Regex("""#EXT-X-MAP:URI="([^"]+)"""").find(text)?.groupValues?.get(1)?.let { m ->
-                    download(resolve(mediaUrl, m), headers, File(dir, "init.mp4"))
-                    mapLine = "#EXT-X-MAP:URI=\"init.mp4\""
-                }
-            }
-            var dur = 0.0
-            for (l in lines) {
-                when {
-                    l.startsWith("#EXTINF:") -> dur = l.removePrefix("#EXTINF:").substringBefore(',').toDoubleOrNull() ?: target.toDouble()
-                    l.isNotBlank() && !l.startsWith("#") -> {
-                        if (seq > lastSeq) {
-                            val ext = if (mapLine != null) "m4s" else "ts"
-                            val name = "seg$n.$ext"
-                            if (download(resolve(mediaUrl, l), headers, File(dir, name))) {
-                                saved += Seg(n, dur, name, gap)
-                                gap = false
-                                n++
-                                total += dur
-                                lastSeq = seq
-                            }
-                        }
-                        seq++
-                    }
-                }
-            }
-            writePlaylist(ended = false)
-            onProgress(total, dirSize(dir))
+            if (nothingYet()) return HLS_SENT_NOTHING
+            // A live channel starts with a short lead-in before now; a catch-up show from its start.
+            video.saveNew(vm) { m -> if (finite) 0 else hls.startIndex(m.pieces, LIVE_LEAD_MS) }
+            if (audio != null && am != null) audio.saveNew(am!!) { a -> if (finite) 0 else hls.matchingStart(a.pieces, video) }
+            writePlaylists(ended = false)
+            onProgress(video.totalSec, dirSize(dir))
             // A finished playlist (a catch-up show): everything's saved.
-            if (finite && text.contains("#EXT-X-ENDLIST")) break
-            delay((target * 1000L / 2).coerceIn(1_000L, 6_000L))
-            text = try {
-                com.nuvio.tv.livetv.player.LiveHttp.fetch(mediaUrl, headers).let { (t, u) -> mediaUrl = u; t }
+            if (finite && vm.ended) break
+            delay((vm.target * 1000L / 2).coerceIn(1_000L, 6_000L))
+            try {
+                vm = video.fetch()
+                if (audio != null) am = audio.fetch()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 problem = dropped("The connection dropped (${e.message ?: e.javaClass.simpleName})") + "; it reconnected where it could"
-                gap = saved.isNotEmpty()
                 // A live channel's list moves on while it's away, so it starts again at the newest
                 // pieces. A catch-up show's list is the same one: carry on from the last piece
                 // saved (starting over saved the start of the show twice).
-                if (!finite) lastSeq = -1L
+                if (!finite) { video.restart(); audio?.restart() } else { video.markGap(); audio?.markGap() }
                 delay(3_000)
-                continue
             }
         }
-        writePlaylist(ended = true)
+        if (nothingYet()) return HLS_SENT_NOTHING
+        // The folder can be gone by now (the recording deleted while it was stopping).
+        if (dir.exists()) writePlaylists(ended = true)
         return problem
     }
 
@@ -457,8 +554,11 @@ class LiveTvRecorder @Inject constructor(
 
     /** Adds the "finished" mark to a playlist if it hasn't got one. */
     private fun ensureEnded(playlist: File) = runCatching {
-        val text = playlist.readText()
-        if (!text.contains("#EXT-X-ENDLIST")) playlist.appendText("#EXT-X-ENDLIST\n")
+        // Picture and sound saved separately: the end mark goes in each of their playlists.
+        com.nuvio.tv.livetv.player.HlsPieces.mediaPlaylists(playlist).forEach { f ->
+            val text = f.readText()
+            if (!text.contains("#EXT-X-ENDLIST")) f.appendText("#EXT-X-ENDLIST\n")
+        }
     }
 
     private fun dirSize(dir: File): Long = runCatching { dir.listFiles()?.sumOf { it.length() } ?: 0L }.getOrDefault(0L)
@@ -534,17 +634,17 @@ class LiveTvRecorder @Inject constructor(
     private fun fetchText(url: String, headers: Map<String, String>): String =
         open(url, headers).inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
 
-    private fun download(url: String, headers: Map<String, String>, to: File): Boolean = runCatching {
-        val tmp = File(to.parentFile, to.name + ".part")
-        open(url, headers).inputStream.use { input -> tmp.outputStream().use { input.copyTo(it, 64 * 1024) } }
-        tmp.renameTo(to)
-    }.getOrDefault(false)
-
-    private fun resolve(base: String, ref: String): String = runCatching { URL(URL(base), ref).toString() }.getOrDefault(ref)
 
     private companion object {
         const val TAG = "LiveTvRecorder"
         /** Below this much free space, recording stops (or the oldest recordings make room). */
         const val MIN_FREE = 500L * 1024 * 1024
+        /** Room to leave free on the drive being moved to. */
+        const val MOVE_MARGIN = 200L * 1024 * 1024
+        /** A live HLS recording starts this far before now (the newest pieces), not at the channel's look-back start. */
+        const val LIVE_LEAD_MS = 30_000L
+        /** A catch-up HLS replay that's saved nothing after this long: switch to the TS link. */
+        const val HLS_GIVE_UP_MS = 20_000L
+        const val HLS_SENT_NOTHING = "The HLS replay sent nothing"
     }
 }

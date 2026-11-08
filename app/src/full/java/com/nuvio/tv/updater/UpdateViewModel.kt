@@ -1,7 +1,9 @@
 package com.nuvio.tv.updater
 
 import android.content.Context
+import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -315,13 +317,16 @@ class UpdateViewModel @Inject constructor(
         }
 
         _uiState.update { it.copy(showUnknownSourcesDialog = false) }
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { ApkInstaller.install(context, apkFile, background = false) }
-                .onFailure {
-                    Log.w(TAG, "Session install failed, falling back to the system installer", it)
-                    ApkInstaller.launchSystemInstaller(context, apkFile)
+        // An install the user starts opens the system installer screen right away, with its own progress and
+        // Done/Open steps. Only automatic idle installs use the silent session install.
+        runCatching { ApkInstaller.launchSystemInstaller(context, apkFile) }
+            .onFailure {
+                Log.w(TAG, "System installer unavailable, falling back to a session install", it)
+                viewModelScope.launch(Dispatchers.IO) {
+                    runCatching { ApkInstaller.install(context, apkFile, background = false, withDexMetadata = false) }
+                        .onFailure { e -> Log.w(TAG, "Session install failed", e) }
                 }
-        }
+            }
     }
 
     // Shows the "updated" banner once after the idle job installed a release, then forgets it.
@@ -373,6 +378,9 @@ class UpdateViewModel @Inject constructor(
     }
 
     fun openUnknownSourcesSettings() {
-        ApkInstaller.buildUnknownSourcesSettingsIntent(context)?.let(context::startActivity)
+        listOfNotNull(
+            ApkInstaller.buildUnknownSourcesSettingsIntent(context),
+            Intent(Settings.ACTION_SECURITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        ).any { runCatching { context.startActivity(it) }.isSuccess }
     }
 }

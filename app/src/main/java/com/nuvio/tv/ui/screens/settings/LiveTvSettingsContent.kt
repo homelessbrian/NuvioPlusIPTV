@@ -180,13 +180,15 @@ private sealed interface LiveDialog {
     data object AddXtream : LiveDialog
     data object AddEpg : LiveDialog
     data class PlaylistActions(val source: PlaylistSource) : LiveDialog
+    data class CatchupZone(val source: PlaylistSource) : LiveDialog
     data class EditPlaylist(val source: PlaylistSource) : LiveDialog
     data class EpgActions(val source: EpgSource) : LiveDialog
     data class EditEpg(val source: EpgSource) : LiveDialog
     data object HiddenChannels : LiveDialog
     data object HiddenGroups : LiveDialog
-    data object EpgShift : LiveDialog
-    data object CatchupShift : LiveDialog
+    data class PlaylistGuideShift(val source: PlaylistSource) : LiveDialog
+    data class PlaylistCatchupShift(val source: PlaylistSource) : LiveDialog
+    data class EpgSourceShift(val source: EpgSource) : LiveDialog
     data object ClockMode : LiveDialog
     data object FrameRate : LiveDialog
     data object RecordPre : LiveDialog
@@ -203,6 +205,7 @@ private sealed interface LiveDialog {
     data object SortChoice : LiveDialog
     data object HighlightChoice : LiveDialog
     data object CustomGroups : LiveDialog
+    data object ChannelRow : LiveDialog
     data object ConfirmRestore : LiveDialog
     data object PinCheck : LiveDialog
     data object PinNew : LiveDialog
@@ -226,6 +229,38 @@ private val REFRESH_HOURS = listOf(3, 6, 12, 24, 48, 72, 168)
 private val BANNER_SECONDS = listOf(3, 5, 8, 10, 15)
 private val FUTURE_DAYS = listOf(1, 2, 3, 5, 7, 10, 14)
 private val PAST_HOURS = listOf(6, 12, 24, 48, 72, 168)
+
+/** Time zones offered for a playlist's catch-up (the common ones IPTV servers run on). */
+private val CATCHUP_ZONES = listOf(
+    "UTC" to "UTC",
+    "Europe/London" to "UK & Ireland (London)",
+    "Europe/Amsterdam" to "Central Europe (Amsterdam, Paris, Berlin)",
+    "Europe/Athens" to "Eastern Europe (Athens, Bucharest)",
+    "Europe/Istanbul" to "Turkey (Istanbul)",
+    "Europe/Moscow" to "Moscow",
+    "Asia/Dubai" to "Gulf (Dubai)",
+    "Asia/Kolkata" to "India",
+    "America/New_York" to "US Eastern (New York)",
+    "America/Chicago" to "US Central (Chicago)",
+    "America/Denver" to "US Mountain (Denver)",
+    "America/Los_Angeles" to "US Pacific (Los Angeles)"
+)
+
+/** A zone id in words: one of the list's names, else as found (e.g. "GMT+01:00"). */
+private fun zoneName(id: String): String =
+    CATCHUP_ZONES.firstOrNull { it.first == id }?.second ?: id
+
+/** The time on that zone's clock now, to match against the provider's. */
+private fun zoneClock(id: String): String =
+    java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
+        .apply { timeZone = java.util.TimeZone.getTimeZone(id) }
+        .format(java.util.Date())
+
+private fun catchupZoneLabel(p: PlaylistSource): String = when {
+    p.catchupTimezone.isNotBlank() -> zoneName(p.catchupTimezone)
+    p.serverTimezone.isNotBlank() -> "Automatic (${zoneName(p.serverTimezone)})"
+    else -> "Automatic"
+}
 
 private fun offsetLabel(min: Int): String {
     if (min == 0) return "None"
@@ -490,6 +525,12 @@ internal fun LiveTvSettingsContent(
                         "Check Guides for Updates Every", "How often TV listings are downloaded again",
                         hoursLabel(s.epgRefreshHours), onClick = { dialog = LiveDialog.EpgRefresh }
                     )
+                    SettingsToggleRow(
+                        "Show update banners",
+                        "Show playlist, EPG and On Demand update progress. Updates continue in the background when hidden.",
+                        s.showImportProgress,
+                        { update { it.copy(showImportProgress = !it.showImportProgress) } }
+                    )
                 }
             }
 
@@ -514,6 +555,12 @@ internal fun LiveTvSettingsContent(
                         subtitle = "Words to take off the start or end of channel names, like USA, 24/7 or FHD, separated by commas",
                         value = com.nuvio.tv.livetv.model.ChannelNameEditor.terms(s.nameRemovals).size.let { if (it == 0) "Off" else "$it removed" },
                         onClick = { dialog = LiveDialog.NameEditor }
+                    )
+                    SettingsToggleRow(
+                        "Also Clean Group Names",
+                        "Take the same words off group names too, like \"| NL | Sports\"",
+                        s.cleanGroupNames,
+                        { update { it.copy(cleanGroupNames = !it.cleanGroupNames) } }
                     )
                     if (s.nameRemovals.isBlank()) {
                         SettingsActionRow(
@@ -1019,6 +1066,20 @@ internal fun LiveTvSettingsContent(
                         s.overlayMode,
                         { update { it.copy(overlayMode = !it.overlayMode) } }
                     )
+                    if (s.overlayMode) {
+                        SettingsToggleRow(
+                            "Overlay: Keep List Open When Changing Channel",
+                            "OK on another channel switches to it and the list stays open, so you can keep flicking through. OK on the playing channel or Back closes it.",
+                            s.overlayKeepOpen,
+                            { update { it.copy(overlayKeepOpen = !it.overlayKeepOpen) } }
+                        )
+                        SettingsToggleRow(
+                            "Overlay: Show Schedule and Details Beside the List",
+                            "The highlighted channel's upcoming shows and what's on now, next to the channel list. Off: just the list; Right still opens them.",
+                            s.overlayShowDetails,
+                            { update { it.copy(overlayShowDetails = !it.overlayShowDetails) } }
+                        )
+                    }
                     SettingsActionRow(
                         title = "Channel Up / Down Moves Within",
                         subtitle = "Which channels Up and Down (or CH+ and CH−) step through while watching",
@@ -1038,14 +1099,13 @@ internal fun LiveTvSettingsContent(
                         { update { it.copy(reverseZap = !it.reverseZap) } }
                     )
                     SettingsActionRow(
-                        title = "Channel Row in the Info Panel",
-                        subtitle = "Pressing OK while watching shows a row of channels to jump to: the ones you watched recently (adult channels are never listed), or your favorites",
-                        value = when (s.panelRow) { "FAVORITES" -> "Favorites"; "OFF" -> "Off"; else -> "Recently Watched" },
-                        onClick = {
-                            update {
-                                it.copy(panelRow = when (it.panelRow) { "RECENT" -> "FAVORITES"; "FAVORITES" -> "OFF"; else -> "RECENT" })
-                            }
-                        }
+                        title = "Quick Channels",
+                        subtitle = "Shortcuts under the play bar: press OK while watching, then Down. Pick its lists: Recently Watched (adult channels are never listed), Favorites and any of your groups. Also on the play bar: gear › Play bar layout.",
+                        value = if (!com.nuvio.tv.livetv.model.PanelRowLists.shown(s)) "Off" else {
+                            val n = com.nuvio.tv.livetv.model.PanelRowLists.parse(s).count { it.on }
+                            if (n == 1) "1 list" else "$n lists"
+                        },
+                        onClick = { dialog = LiveDialog.ChannelRow }
                     )
                     SettingsActionRow(
                         title = "Play Bar Background",
@@ -1169,12 +1229,7 @@ internal fun LiveTvSettingsContent(
                         s.catchupPreferHls,
                         { update { it.copy(catchupPreferHls = !it.catchupPreferHls) } }
                     )
-                    SettingsActionRow(
-                        title = "Catch-Up Time Shift",
-                        subtitle = "If replays start the show before (or after) the one you picked, move the time asked for by that much. Example: it plays the show an hour earlier, set +1 h.",
-                        value = offsetLabel(s.catchupShiftMinutes),
-                        onClick = { dialog = LiveDialog.CatchupShift }
-                    )
+                    SettingsNote("Catch-up time shift is set for each playlist: Playlists, then choose one.")
                     SubHeading("Connection")
                     SettingsActionRow(
                         title = "Buffer Size",
@@ -1204,7 +1259,7 @@ internal fun LiveTvSettingsContent(
             if (show(LiveTvPage.GUIDE)) item(key = "listings") {
                 LiveSection(
                     title = "Guide Listings",
-                    summary = "How far the guide reaches, timing fixes",
+                    summary = "How far the guide reaches",
                     icon = Icons.Default.Schedule,
                     open = "listings" in open,
                     onToggle = { toggle("listings") }
@@ -1217,12 +1272,7 @@ internal fun LiveTvSettingsContent(
                         "Past Shows Kept", "How far back the guide keeps shows, for catch-up",
                         hoursLabel(s.epgPastHours), onClick = { dialog = LiveDialog.PastHours }
                     )
-                    SettingsActionRow(
-                        title = "Guide Time Shift",
-                        subtitle = "Moves all listings earlier or later, for a guide that's out of step with what's playing",
-                        value = offsetLabel(s.epgOffsetMinutes),
-                        onClick = { dialog = LiveDialog.EpgShift }
-                    )
+                    SettingsNote("Guide time shift is set for each guide: choose a playlist (its built-in guide) or an EPG source.")
                     val clearContext = androidx.compose.ui.platform.LocalContext.current
                     SettingsActionRow(
                         "Clear Posters and Show Info",
@@ -1510,7 +1560,7 @@ internal fun LiveTvSettingsContent(
                         title = "Save Recordings To",
                         subtitle = if (chosen == null && s.recordingStorage.isNotEmpty())
                             "The chosen drive isn't plugged in: recordings go to this device until it's back"
-                        else "Where new recordings go. Ones already recorded stay where they are.",
+                        else "Where new recordings go. To move ones already recorded, hold OK on one in Recordings and choose Move To.",
                         value = chosen?.label ?: "This Device",
                         onClick = { pickingDrive = true }
                     )
@@ -1687,10 +1737,35 @@ internal fun LiveTvSettingsContent(
                     viewModel.savePlaylist(d.source.copy(streamFormat = next))
                     close()
                 },
+                // Which clock replay links are written in. Automatic: the one the provider's
+                // server reports (or that the app worked out); pick one when that's wrong.
+                "Catch-up time zone: " + catchupZoneLabel(d.source) to { dialog = LiveDialog.CatchupZone(d.source) },
+                // Time shifts for this playlist: its built-in guide, and its catch-up.
+                ("Guide time shift: " + offsetLabel(d.source.guideShiftMinutes)).takeIf { d.source.liveEnabled }?.let {
+                    it to { dialog = LiveDialog.PlaylistGuideShift(d.source) }
+                },
+                ("Catch-up time shift: " + offsetLabel(d.source.catchupShiftMinutes)).takeIf { d.source.liveEnabled }?.let {
+                    it to { dialog = LiveDialog.PlaylistCatchupShift(d.source) }
+                },
                 "Move up" to { viewModel.movePlaylist(d.source.id, -1); close() },
                 "Move down" to { viewModel.movePlaylist(d.source.id, 1); close() }
             ),
             onDismiss = close
+        )
+        is LiveDialog.CatchupZone -> SettingsSingleChoiceDialog(
+            title = "Catch-up time zone",
+            subtitle = "The clock ${d.source.name} keeps its replays on. Automatic finds it from the provider. " +
+                "If replays play a different show, pick the time zone whose clock matches the provider's.",
+            options = listOf(
+                SettingsPickerOption(
+                    "", "Automatic",
+                    description = d.source.serverTimezone.takeIf { it.isNotBlank() }?.let { "Found: ${zoneName(it)}" } ?: "Not found yet"
+                )
+            ) + CATCHUP_ZONES.map { (id, name) -> SettingsPickerOption(id, name, trailing = zoneClock(id)) },
+            selectedValue = d.source.catchupTimezone,
+            onOptionSelected = { v -> viewModel.setPlaylistCatchupZone(d.source.id, v); close() },
+            onDismiss = close,
+            maxHeight = 420.dp
         )
         is LiveDialog.EditPlaylist -> {
             val src = d.source
@@ -1744,6 +1819,7 @@ internal fun LiveTvSettingsContent(
             actions = listOf(
                 "Edit" to { dialog = LiveDialog.EditEpg(d.source) },
                 "Update now" to { viewModel.saveEpg(d.source); close() },
+                ("Time shift: " + offsetLabel(d.source.shiftMinutes)) to { dialog = LiveDialog.EpgSourceShift(d.source) },
                 (if (d.source.enabled) "Disable" else "Enable") to { viewModel.setEpgEnabled(d.source.id, !d.source.enabled); close() },
                 "Delete EPG source" to { dialog = LiveDialog.ConfirmDeleteEpg(d.source) }
             ),
@@ -1909,11 +1985,20 @@ internal fun LiveTvSettingsContent(
             onUnhideAll = { viewModel.unhideAllGroups(); close() },
             onDismiss = close
         )
-        LiveDialog.EpgShift -> SettingsSingleChoiceDialog(
-            title = "EPG time shift",
+        is LiveDialog.PlaylistGuideShift -> SettingsSingleChoiceDialog(
+            title = "Guide time shift: ${d.source.name}",
+            subtitle = "Moves this playlist's built-in guide earlier or later, for listings out of step with what's playing",
             options = EPG_OFFSETS.map { SettingsPickerOption(it, offsetLabel(it)) },
-            selectedValue = s.epgOffsetMinutes,
-            onOptionSelected = { v -> update { it.copy(epgOffsetMinutes = v) }; close() },
+            selectedValue = d.source.guideShiftMinutes,
+            onOptionSelected = { v -> viewModel.setPlaylistGuideShift(d.source.id, v); close() },
+            onDismiss = close
+        )
+        is LiveDialog.EpgSourceShift -> SettingsSingleChoiceDialog(
+            title = "Time shift: ${d.source.name}",
+            subtitle = "Moves this guide's listings earlier or later, for listings out of step with what's playing",
+            options = EPG_OFFSETS.map { SettingsPickerOption(it, offsetLabel(it)) },
+            selectedValue = d.source.shiftMinutes,
+            onOptionSelected = { v -> viewModel.setEpgShift(d.source.id, v); close() },
             onDismiss = close
         )
         LiveDialog.RecordPre -> SettingsSingleChoiceDialog(
@@ -1965,11 +2050,12 @@ internal fun LiveTvSettingsContent(
             onOptionSelected = { v -> update { it.copy(clockOpacity = v) }; close() },
             onDismiss = close
         )
-        LiveDialog.CatchupShift -> SettingsSingleChoiceDialog(
-            title = "Catch-up time shift",
+        is LiveDialog.PlaylistCatchupShift -> SettingsSingleChoiceDialog(
+            title = "Catch-up time shift: ${d.source.name}",
+            subtitle = "If replays start the show before (or after) the one you picked, move the time asked for by that much. Example: it plays the show an hour earlier, set +1 h.",
             options = EPG_OFFSETS.map { SettingsPickerOption(it, offsetLabel(it)) },
-            selectedValue = s.catchupShiftMinutes,
-            onOptionSelected = { v -> update { it.copy(catchupShiftMinutes = v) }; close() },
+            selectedValue = d.source.catchupShiftMinutes,
+            onOptionSelected = { v -> viewModel.setPlaylistCatchupShift(d.source.id, v); close() },
             onDismiss = close
         )
         LiveDialog.ZapModeChoice -> SettingsSingleChoiceDialog(
@@ -2041,6 +2127,12 @@ internal fun LiveTvSettingsContent(
             allLabel = "Delete all",
             emptyText = "You haven't made any groups yet. Long-press a channel in the guide and choose \"Add to group\".",
             hintText = "Select a group to delete it. The channels stay in your playlist."
+        )
+        LiveDialog.ChannelRow -> ChannelRowDialog(
+            settings = s,
+            groups = remember(playlists, user.customGroups, user.groupNames) { viewModel.rowGroupOptions() },
+            onUpdate = { t -> update(t) },
+            onDismiss = close
         )
         LiveDialog.PastHours -> SettingsSingleChoiceDialog(
             title = "Past guide kept",

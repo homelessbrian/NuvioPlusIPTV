@@ -98,7 +98,6 @@ import java.time.temporal.ChronoUnit
 
 private enum class CalTab { UPCOMING, RECENT, AIRING, FOLLOWING, HIDDEN }
 private enum class CalKind { ALL, SHOWS, MOVIES, SPORTS, ON_TV }
-private enum class AirFilter { ALL, PRIME, STREAMING, FOLLOWING }
 
 private val CARD_W = 208.dp
 /** Holding Up/Down in the List view moves one row this often (ms). */
@@ -238,26 +237,20 @@ fun CalendarScreen(
 
     val today = LocalDate.now()
     val all = state.entries
-    val filtered = all.filter {
-        when (kind) {
-            CalKind.ALL -> true
-            CalKind.SHOWS -> it.kind == CalendarKind.EPISODE
-            CalKind.MOVIES -> it.kind == CalendarKind.MOVIE
-            CalKind.SPORTS -> it.kind == CalendarKind.GAME
-            CalKind.ON_TV -> it.guide != null || viewModel.status(it).let { st -> st.waitRecord || st.waitRemind || st.series || st.recordedId != null }
-        }
+    val zone = ZoneId.systemDefault()
+    val filtered = if (kind == CalKind.ON_TV) {
+        // Live status also reads scheduler and recorder state; keep it fresh on every redraw.
+        all.filter { it.guide != null || viewModel.status(it).let { st -> st.waitRecord || st.waitRemind || st.series || st.recordedId != null } }
+    } else {
+        rememberCalendarKindEntries(all, when (kind) {
+            CalKind.SHOWS -> CalendarKind.EPISODE
+            CalKind.MOVIES -> CalendarKind.MOVIE
+            CalKind.SPORTS -> CalendarKind.GAME
+            else -> null
+        })
     }
-    val upcoming = filtered.filter { !it.day.isBefore(today) && (it.day == today || whenOf(it) + (it.runtimeMin ?: 30) * 60_000L > now) }
-    val recent = filtered.filter { !it.day.isAfter(today) && whenOf(it) <= now && !(settings.calendarHideWatched && it.watched) }
-        .sortedWith(compareByDescending<CalendarEntry> { it.day }.thenByDescending { it.airMs ?: 0L })
-    val airingShown = airing.entries.filter {
-        when (airFilter) {
-            AirFilter.ALL -> true
-            AirFilter.PRIME -> it.airMs?.let { ms -> java.time.Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).hour in 19..22 } == true
-            AirFilter.STREAMING -> it.streaming
-            AirFilter.FOLLOWING -> it.followed || follows.any { f -> f.id == it.contentId || f.imdbId == it.contentId }
-        }
-    }
+    val (upcoming, recent) = rememberCalendarPeriods(filtered, today, now, settings.calendarHideWatched, zone)
+    val airingShown = rememberCalendarAiring(airing.entries, airFilter, follows, zone)
     val pool = when (tab) {
         CalTab.UPCOMING -> upcoming
         CalTab.RECENT -> recent
@@ -1222,7 +1215,7 @@ private fun GameHubCard(e: CalendarEntry, use24h: Boolean, live: Boolean, st: Ca
                 ) {
                     Box(Modifier.size(logo), contentAlignment = Alignment.Center) {
                         if (t?.logo != null) {
-                            coil3.compose.AsyncImage(model = t.logo, contentDescription = t.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                            com.nuvio.tv.livetv.sports.SportsLogoImage(t.logo, logo, t.name, Modifier.fillMaxSize())
                         } else {
                             Box(Modifier.fillMaxSize().clip(RoundedCornerShape(50)).background(t?.color?.let { Color(it).copy(alpha = 1f) } ?: Color(0xFF3A4150)), contentAlignment = Alignment.Center) {
                                 LiveText((t?.abbr ?: t?.name?.take(3)?.uppercase()).orEmpty(), size = 8.sp, weight = FontWeight.ExtraBold, color = Color.White)
@@ -1259,7 +1252,7 @@ private fun TeamMark(t: CalendarTeam?, size: Dp, big: Boolean, compact: Boolean,
     ) {
         Box(Modifier.size(size), contentAlignment = Alignment.Center) {
             if (t?.logo != null) {
-                coil3.compose.AsyncImage(model = t.logo, contentDescription = t.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                com.nuvio.tv.livetv.sports.SportsLogoImage(t.logo, size, t.name, Modifier.fillMaxSize())
             } else {
                 // No logo: the team's colour with its letters.
                 Box(
@@ -1300,14 +1293,14 @@ private fun WeekView(
     val today = LocalDate.now()
     val thisWeek = today.minusDays((today.dayOfWeek.value % 7).toLong())
     fun weekOf(day: LocalDate) = day.minusDays((day.dayOfWeek.value % 7).toLong())
-    fun sortedDay(list: List<CalendarEntry>) = list.sortedWith(compareBy<CalendarEntry> { it.kind == CalendarKind.GAME }.thenBy { it.airMs ?: Long.MAX_VALUE })
     val restored = remember { restore?.let { k -> entries.firstOrNull { it.key == k } } }
     // The week you were looking at stays when you go to a game or a show and come back.
     var start by rememberSaveable { mutableStateOf(restored?.let { weekOf(it.day) } ?: thisWeek) }
+    val byDay = rememberCalendarWeekDays(entries, start)
     val columnStates = remember {
         List(7) { d ->
             val at = restored?.takeIf { weekOf(it.day) == start && (it.day.dayOfWeek.value % 7) == d }
-                ?.let { r -> sortedDay(entries.distinctBy { it.key }.filter { it.day == r.day }).indexOfFirst { it.key == r.key } }
+                ?.let { r -> byDay[r.day].orEmpty().indexOfFirst { it.key == r.key } }
             LazyListState((at ?: 0).coerceAtLeast(0))
         }
     }
@@ -1320,7 +1313,6 @@ private fun WeekView(
         delay(80)
         runCatching { firstFocus.requestFocus() }
     }
-    val byDay = remember(entries) { entries.distinctBy { it.key }.groupBy { it.day } }
     var focusedEntry by remember { mutableStateOf(restored) }
     Column(Modifier.fillMaxSize().padding(start = 64.dp, end = 32.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1348,7 +1340,7 @@ private fun WeekView(
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             for (d in 0 until 7) {
                 val day = start.plusDays(d.toLong())
-                val list = sortedDay(byDay[day].orEmpty())
+                val list = byDay[day].orEmpty()
                 val isToday = day == today
                 Column(
                     Modifier.weight(1f).fillMaxHeight()
@@ -2011,7 +2003,7 @@ private fun EmptyNote(text: String, headline: String? = null, action: String? = 
 }
 
 private fun whenOf(e: CalendarEntry): Long =
-    e.airMs ?: e.day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    calendarWhenOf(e, ZoneId.systemDefault())
 
 private fun cardTime(e: CalendarEntry, use24h: Boolean): String {
     val airMs = e.airMs

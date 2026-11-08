@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -25,7 +26,7 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
-	"golang.zx2c4.com/wireguard/tun/netstack"
+	"nuvio-vpn-http/internal/netstack"
 )
 
 const testToken = "a-temporary-test-token-not-a-vpn-key"
@@ -223,7 +224,11 @@ func TestHTTPTraversesRealWireGuardHandshakeAndNetstack(t *testing.T) {
 	if err != nil {
 		t.Fatal("test peer HTTP listener")
 	}
-	payload := bytes.Repeat([]byte("data"), 16*1024)
+	payload := make([]byte, 32<<20)
+	if _, err := rand.Read(payload); err != nil {
+		t.Fatal("test media generation")
+	}
+	copy(payload, "data")
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, "video.mkv", time.Time{}, bytes.NewReader(payload))
 	})}
@@ -293,6 +298,19 @@ func TestHTTPTraversesRealWireGuardHandshakeAndNetstack(t *testing.T) {
 		if err != nil || part.StatusCode != http.StatusPartialContent || !bytes.Equal(got, payload[bounds[0]:bounds[1]+1]) {
 			t.Fatal("protected range bytes changed")
 		}
+	}
+	// Repeated packet buffer reuse must preserve a sustained media response.
+	clientHTTP.Timeout = 20 * time.Second
+	full, err := clientHTTP.Get("http://playback.test:8080/video")
+	if err != nil {
+		t.Fatalf("protected media transfer: %v", err)
+	}
+	hash := sha256.New()
+	n, err := io.Copy(hash, full.Body)
+	_ = full.Body.Close()
+	wantHash := sha256.Sum256(payload)
+	if err != nil || full.StatusCode != http.StatusOK || n != int64(len(payload)) || !bytes.Equal(hash.Sum(nil), wantHash[:]) {
+		t.Fatalf("protected media transfer changed bytes: n=%d, err=%v", n, err)
 	}
 	// CONNECT must dial the same private peer through WireGuard in HTTP + HTTPS mode.
 	// The opaque payload stands in for TLS; the proxy must never inspect or rewrite it.

@@ -58,6 +58,9 @@ interface SportsEntryPoint {
 
 /** Opens Live TV full screen on whatever it's now playing (or about to replay). */
 fun openLiveTvFullscreen(navController: NavController) {
+    // Said before the guide comes up, so a guide with its preview window off doesn't stop the
+    // game on its way to full screen.
+    com.nuvio.tv.livetv.ui.LiveTvFullscreen.request()
     navController.navigate(Screen.LiveTv.route) {
         popUpTo(navController.graph.startDestinationId) { saveState = true }
         launchSingleTop = true

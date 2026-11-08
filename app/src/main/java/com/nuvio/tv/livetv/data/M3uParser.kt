@@ -14,7 +14,9 @@ data class M3uEntry(
     val url: String,
     val headers: Map<String, String>,
     val catchup: CatchupInfo?,
-    val drm: com.nuvio.tv.livetv.model.DrmInfo? = null
+    val drm: com.nuvio.tv.livetv.model.DrmInfo? = null,
+    /** "tvg-shift" (hours in the playlist), in minutes. */
+    val tvgShiftMinutes: Int = 0
 )
 
 data class M3uPlaylist(
@@ -51,7 +53,7 @@ object M3uParser {
             when {
                 line.startsWith("#EXTM3U", ignoreCase = true) -> {
                     val attrs = attributes(line)
-                    listOf("catchup", "catchup-type", "catchup-source", "catchup-days", "catchup-correction", "tvg-rec", "timeshift")
+                    listOf("catchup", "catchup-type", "catchup-source", "catchup-days", "catchup-correction", "tvg-rec", "timeshift", "tvg-shift")
                         .forEach { k -> attrs[k]?.takeIf { it.isNotBlank() }?.let { headerCatchup[k] = it } }
                     listOf("url-tvg", "x-tvg-url", "tvg-url").forEach { key ->
                         attrs[key]?.split(',')?.map { it.trim() }?.filter { it.startsWith("http") }
@@ -201,7 +203,10 @@ object M3uParser {
             chno = (attrs["tvg-chno"] ?: attrs["channel-number"] ?: attrs["tvg-num"])?.trim()?.toIntOrNull(),
             url = url.trim(),
             headers = headers,
-            catchup = catchup
+            catchup = catchup,
+            // Hours ("+2", "-1.5"); set on the #EXTM3U line, it's every channel's unless a channel has its own.
+            tvgShiftMinutes = attrs["tvg-shift"]?.trim()?.removePrefix("+")?.replace(',', '.')?.toDoubleOrNull()
+                ?.takeIf { it.isFinite() && kotlin.math.abs(it) <= 24 }?.let { Math.round(it * 60).toInt() } ?: 0
         )
     }
 
