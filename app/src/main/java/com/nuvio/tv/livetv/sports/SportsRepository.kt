@@ -340,6 +340,9 @@ class SportsRepository @Inject constructor(
     private val _addonVod = MutableStateFlow<Map<String, List<ChannelMatch>>>(emptyMap())
     /** Finished games: event id -> their replays and highlights from your sports addons. */
     val vodMatches: StateFlow<Map<String, List<ChannelMatch>>> = _addonVod.asStateFlow()
+    private val _vodAddons = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    /** Finished games, once looked for: event id -> names of your addons that offer replays at all (empty: none). */
+    val vodAddons: StateFlow<Map<String, List<String>>> = _vodAddons.asStateFlow()
     private val addonJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
 
     /**
@@ -356,6 +359,10 @@ class SportsRepository @Inject constructor(
                 if (found != null) {
                     _addonLive.update { it + (ev.id to found.live) }
                     _addonVod.update { it + (ev.id to found.vod) }
+                    _vodAddons.update { it + (ev.id to found.vodAddons) }
+                } else if (ev.state == GameState.POST) {
+                    // Couldn't ask: show the "nothing found" text rather than "looking" forever.
+                    _addonVod.update { it + (ev.id to emptyList()) }
                 }
                 val got = found != null && (found.live.isNotEmpty() || found.vod.isNotEmpty())
                 if (ev.state == GameState.POST || got || ++round >= 20) break

@@ -1292,7 +1292,18 @@ private fun GamePage(
         viewModel.repo.openGame(ev)
         onDispose { viewModel.repo.closeGame(ev.id) }
     }
-    val replays = viewModel.repo.vodMatches.collectAsStateWithLifecycle().value[ev.id].orEmpty()
+    val vodLooked = viewModel.repo.vodMatches.collectAsStateWithLifecycle().value[ev.id]
+    val replays = vodLooked.orEmpty()
+    val vodAddons = viewModel.repo.vodAddons.collectAsStateWithLifecycle().value[ev.id]
+    // A finished game: once replays turn up, put the highlight on the first one (once per visit).
+    val firstReplay = remember(ev.id) { FocusRequester() }
+    var replayFocused by remember(ev.id) { mutableStateOf(false) }
+    LaunchedEffect(ev.id, replays.isNotEmpty()) {
+        if (ev.state == GameState.POST && replays.isNotEmpty() && !replayFocused) {
+            delay(150)
+            if (runCatching { firstReplay.requestFocus() }.isSuccess) replayFocused = true
+        }
+    }
     val plays = rememberScoringPlays(ev, settings.hideScores, viewModel)
     LaunchedEffect(ev.id) {
         delay(120)
@@ -1354,7 +1365,39 @@ private fun GamePage(
             onDismiss = { pickRegion = false }
         )
     }
+    // Finished games: replays and highlights come only from sports addons, so this list goes first
+    // and says where they come from when there are none.
+    val replaysBlock: @Composable () -> Unit = {
+        SectionHeader("REPLAYS & HIGHLIGHTS")
+        when {
+            replays.isNotEmpty() -> LazyColumn(
+                Modifier.heightIn(max = 126.dp).keepFocusWhileHeld(horizontal = false),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+            ) {
+                itemsIndexed(replays, key = { _, m -> m.channel.key }) { i, m ->
+                    ChannelLine(m.channel, m.how, modifier = if (i == 0) Modifier.focusRequester(firstReplay) else Modifier,
+                        onClick = { onPlayReplay(m) })
+                }
+            }
+            vodLooked == null -> LiveText("Looking in your sports add-ons…", color = SportsLook.Dim, size = 12.sp,
+                modifier = Modifier.padding(start = 6.dp, bottom = 4.dp))
+            vodAddons != null && vodAddons.isEmpty() -> LiveText(
+                "Replays and highlights come from sports add-ons that offer them (HighFly Premium, StremVerse…). " +
+                    "None of your add-ons do yet: install one in Add-ons and they'll show here.",
+                color = SportsLook.Dim, size = 12.sp, maxLines = 3, modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
+            )
+            else -> LiveText(
+                (vodAddons?.takeIf { it.isNotEmpty() }?.let { "No replay of this game in ${it.joinToString(", ")} yet. " }
+                    ?: "No replay of this game in your sports add-ons yet. ") +
+                    "They're often added a few hours after the game ends.",
+                color = SportsLook.Dim, size = 12.sp, maxLines = 3, modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+    }
     val channels: @Composable () -> Unit = {
+        if (ev.state == GameState.POST) replaysBlock()
         Row(verticalAlignment = Alignment.CenterVertically) {
             SectionHeader("WATCH ON YOUR CHANNELS", modifier = Modifier.weight(1f))
             if (regionButton) RegionButton(
@@ -1410,19 +1453,6 @@ private fun GamePage(
                     "Know where it's on? Pick a channel and it's remembered.",
                 color = SportsLook.Dim, size = 12.sp, maxLines = 3
             )
-        }
-        if (ev.state == GameState.POST && replays.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            SectionHeader("REPLAYS & HIGHLIGHTS")
-            LazyColumn(
-                Modifier.heightIn(max = 126.dp).keepFocusWhileHeld(horizontal = false),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
-            ) {
-                itemsIndexed(replays, key = { _, m -> m.channel.key }) { _, m ->
-                    ChannelLine(m.channel, m.how, onClick = { onPlayReplay(m) })
-                }
-            }
         }
         Spacer(Modifier.height(10.dp))
         // One line (short labels; any that don't fit scroll into view as the highlight moves).
