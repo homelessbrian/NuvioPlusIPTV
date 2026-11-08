@@ -317,8 +317,10 @@ internal fun LiveTvPlayerPanel(
                         Spacer(Modifier.height(2.dp))
                         ScrollingDescription(line.ifEmpty { " " }, size = 12.sp, color = colors.TextSecondary, maxLines = if (full) 2 else 1)
                     }
+                    // The seek hint sits above the bar, so the bar's row makes room for it.
+                    val seekHint = full && showProgress && timeline != null && PanelControl.TIMELINE in controls
                     if (full || showProgress) {
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(if (seekHint) 22.dp else 6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (full) {
                                 listOf(PanelControl.BACK, PanelControl.PLAY, PanelControl.FORWARD).filter { it in controls }.forEach { c ->
@@ -337,7 +339,7 @@ internal fun LiveTvPlayerPanel(
                             }
                             Box(Modifier.weight(1f)) {
                                 when {
-                                    showProgress && timeline != null -> GlassTimeline(timeline, grabbed = focused == PanelControl.TIMELINE)
+                                    showProgress && timeline != null -> GlassTimeline(timeline, grabbed = focused == PanelControl.TIMELINE, hint = seekHint)
                                     // Progress bar off: the times, as words.
                                     timeline != null -> LiveText(
                                         timeline.leftLabel + " – " + timeline.rightLabel + "  ·  " + timeline.status,
@@ -440,7 +442,7 @@ private fun RoundButton(icon: ImageVector, focused: Boolean, big: Boolean) {
  * or replay, a handle with the time you're at, and a red line where live is.
  */
 @Composable
-private fun GlassTimeline(t: PanelTimeline, grabbed: Boolean) {
+private fun GlassTimeline(t: PanelTimeline, grabbed: Boolean, hint: Boolean = false) {
     val colors = NuvioTheme.colors
     val span = (t.endMs - t.startMs).coerceAtLeast(1L).toFloat()
     fun frac(ms: Long) = ((ms - t.startMs) / span).coerceIn(0f, 1f)
@@ -452,6 +454,17 @@ private fun GlassTimeline(t: PanelTimeline, grabbed: Boolean) {
         Spacer(Modifier.width(10.dp))
         BoxWithConstraints(modifier = Modifier.weight(1f).height(20.dp)) {
             val w = maxWidth
+            if (hint) {
+                // What the remote does with the bar: Up to select it, then ◀ ▶ (and OK) once selected.
+                LiveText(
+                    if (grabbed) "◀ ▶ seek · OK play/pause" else "▲ Up to seek",
+                    size = 11.sp, color = Color.White,
+                    modifier = Modifier.align(Alignment.TopStart).offset(y = (-22).dp)
+                        .wrapContentSize(unbounded = true)
+                        .clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.14f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
             Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color.White.copy(alpha = 0.18f)))
             t.recordedUntilMs?.let { r ->
                 Box(Modifier.align(Alignment.CenterStart).width(w * frac(r)).height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color.White.copy(alpha = 0.36f)))
@@ -473,9 +486,9 @@ private fun GlassTimeline(t: PanelTimeline, grabbed: Boolean) {
         LiveText(right, size = 11.sp, color = if (t.liveMs != null) LIVE_RED else colors.TextSecondary)
         Spacer(Modifier.width(10.dp))
         LiveText(
-            if (grabbed) "◀ ▶ move · OK play/pause" else t.status,
+            t.status,
             size = 11.sp,
-            color = if (t.statusLive && !grabbed) LIVE_RED else colors.TextTertiary
+            color = if (t.statusLive) LIVE_RED else colors.TextTertiary
         )
     }
 }
