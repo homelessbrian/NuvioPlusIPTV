@@ -516,6 +516,12 @@ internal fun LiveTvSettingsContent(
                         value = com.nuvio.tv.livetv.model.ChannelNameEditor.terms(s.nameRemovals).size.let { if (it == 0) "Off" else "$it removed" },
                         onClick = { dialog = LiveDialog.NameEditor }
                     )
+                    SettingsToggleRow(
+                        "Also Clean Group Names",
+                        "Take the same words off group names too, like \"| NL | Sports\"",
+                        s.cleanGroupNames,
+                        { update { it.copy(cleanGroupNames = !it.cleanGroupNames) } }
+                    )
                     if (s.nameRemovals.isBlank()) {
                         SettingsActionRow(
                             "Add Common Prefixes & Suffixes",

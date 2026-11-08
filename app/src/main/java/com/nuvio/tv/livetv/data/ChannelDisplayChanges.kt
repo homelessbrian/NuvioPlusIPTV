@@ -14,4 +14,4 @@ internal fun Flow<LiveUserState>.displayChannelUserChanges(): Flow<LiveUserState
 
 /** Other settings are consumed separately by the guide and player. */
 internal fun Flow<LiveTvSettings>.displayChannelSettingsChanges(): Flow<LiveTvSettings> =
-    distinctUntilChanged { a, b -> a.nameRemovals == b.nameRemovals }
+    distinctUntilChanged { a, b -> a.nameRemovals == b.nameRemovals && a.cleanGroupNames == b.cleanGroupNames }

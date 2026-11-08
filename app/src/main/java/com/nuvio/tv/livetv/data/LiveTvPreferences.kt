@@ -153,6 +153,7 @@ class LiveTvPreferences @Inject constructor(
         /** This TV only: ids of playlists and guides removed here, not yet passed on by sync. */
         val removedSources = stringSetPreferencesKey("removed_sources")
         val nameRemovals = stringPreferencesKey("name_removals")
+        val cleanGroupNames = booleanPreferencesKey("clean_group_names")
         val developerTools = booleanPreferencesKey("developer_tools")
         val browseByChannelName = booleanPreferencesKey("browse_by_channel_name")
         val showPlaylistInInfo = booleanPreferencesKey("show_playlist_in_info")
@@ -460,6 +461,7 @@ class LiveTvPreferences @Inject constructor(
             onDemandAddonPosters = p[Keys.onDemandAddonPosters] ?: d.onDemandAddonPosters,
             groupPlaylistHeadings = p[Keys.groupPlaylistHeadings] ?: d.groupPlaylistHeadings,
             nameRemovals = p[Keys.nameRemovals] ?: d.nameRemovals,
+            cleanGroupNames = p[Keys.cleanGroupNames] ?: d.cleanGroupNames,
             developerTools = p[Keys.developerTools] ?: d.developerTools,
             browseByChannelName = p[Keys.browseByChannelName] ?: d.browseByChannelName,
             showPlaylistInInfo = p[Keys.showPlaylistInInfo] ?: d.showPlaylistInInfo,
@@ -759,6 +761,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.onDemandAddonPosters] = s.onDemandAddonPosters
         p[Keys.groupPlaylistHeadings] = s.groupPlaylistHeadings
         p[Keys.nameRemovals] = s.nameRemovals
+        p[Keys.cleanGroupNames] = s.cleanGroupNames
         p[Keys.developerTools] = s.developerTools
         p[Keys.browseByChannelName] = s.browseByChannelName
         p[Keys.showPlaylistInInfo] = s.showPlaylistInInfo
