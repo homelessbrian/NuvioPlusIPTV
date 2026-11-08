@@ -632,6 +632,14 @@ data class EpgChannelEntry(
 }
 
 /** A row in the TiviMate-style group panel. */
+/**
+ * The provider's own group order (Xtream logins list their categories in the order the provider
+ * set). Group id -> place; groups it doesn't name keep the order their channels come in.
+ */
+object PlaylistGroupOrder {
+    @Volatile var ranks: Map<String, Int> = emptyMap()
+}
+
 data class ChannelGroup(
     val id: String,
     val title: String,
@@ -844,7 +852,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-08 21:40"
+    const val KIT_STAMP = "2026-11-08 21:50"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

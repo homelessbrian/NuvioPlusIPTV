@@ -12,6 +12,7 @@ import com.nuvio.tv.livetv.model.LiveTvLoadReport as LIVE_REPORT
 import com.nuvio.tv.livetv.model.CatchupInfo
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.PlaylistSource
+import com.nuvio.tv.livetv.model.PlaylistGroupOrder
 import com.nuvio.tv.livetv.model.PlaylistAccount
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -235,6 +236,7 @@ class LiveTvRepository @Inject constructor(
     suspend fun removePlaylist(id: String) {
         prefs.updatePlaylists { list -> list.filterNot { it.id == id } }
         File(playlistDir, "$id.m3u").delete()
+        groupOrderFile(id).delete()
         embeddedEpgUrls.remove(id)
         dropPlaylistNow(id)
         scope.launch { rebuild() }
@@ -822,6 +824,7 @@ class LiveTvRepository @Inject constructor(
                 }
                 embeddedEpgUrls.clear()
                 embeddedEpgUrls.putAll(epg)
+                loadGroupOrder()
                 _channels.value = list
                 true
             }
@@ -1820,6 +1823,7 @@ class LiveTvRepository @Inject constructor(
             }
             prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(channelCount = parsed.entries.size) else it } }
         }
+        loadGroupOrder()
         _channels.value = out
         carryOverRenamedChannels(before, out)
     }
@@ -2421,6 +2425,25 @@ class LiveTvRepository @Inject constructor(
     // ---------------------------------------------------------------- IO helpers
 
     private fun playlistFile(id: String) = File(playlistDir, "$id.m3u")
+    /** An Xtream login's group names in the provider's order (see [PlaylistGroupOrder]). */
+    private fun groupOrderFile(id: String) = File(playlistDir, "$id.groups")
+
+    /** The providers' own group order, for the guide's group list. */
+    private suspend fun loadGroupOrder() {
+        PlaylistGroupOrder.ranks = runCatching {
+            val playlists = prefs.currentPlaylists().filter { it.liveEnabled }
+            val multi = playlists.size > 1
+            val ranks = HashMap<String, Int>()
+            for (pl in playlists) {
+                val f = groupOrderFile(pl.id)
+                if (!f.exists()) continue
+                f.readLines().filter { it.isNotBlank() }.forEachIndexed { i, name ->
+                    ranks.putIfAbsent(if (multi) "${pl.id}::$name" else name, i)
+                }
+            }
+            ranks
+        }.getOrDefault(emptyMap())
+    }
     private fun epgFile(id: String) = File(epgDir, "$id.xml")
 
     /**
@@ -2622,14 +2645,19 @@ class LiveTvRepository @Inject constructor(
                 }
             } ?: if (info.has("user_info")) Unit else error("Not an Xtream API response")
 
-            // 2. Categories
+            // 2. Categories (in the provider's order, kept for the guide's group list)
             val categories = HashMap<String, String>()
+            val categoryOrder = ArrayList<String>()
             runCatching {
                 val arr = org.json.JSONArray(getText("$api&action=get_live_categories", pl.userAgent))
                 for (i in 0 until arr.length()) {
                     val c = arr.optJSONObject(i) ?: continue
                     categories[c.optString("category_id")] = c.optString("category_name")
+                    c.optString("category_name").ifBlank { null }?.let { categoryOrder += it }
                 }
+            }
+            if (categoryOrder.isNotEmpty()) runCatching {
+                groupOrderFile(pl.id).writeText(categoryOrder.joinToString("\n") { it.replace("\n", " ").replace("\"", "'").trim() })
             }
 
             // 3. Live streams, streamed straight into an M3U file

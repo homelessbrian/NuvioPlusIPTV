@@ -1620,7 +1620,15 @@ internal fun buildUi(
     }
     val groupSource = HashMap<String, String>()
     shown.forEach { c -> groupSource.putIfAbsent(c.groupId, c.sourceId) }
-    playlistGroups.forEach { (id, v) ->
+    // Each playlist's groups in the provider's own order where it gave one (Xtream logins),
+    // not the order their channels happen to come in. Groups it didn't name follow.
+    val providerRanks = com.nuvio.tv.livetv.model.PlaylistGroupOrder.ranks
+    val sourceIndex = HashMap<String, Int>().also { m -> shown.forEach { c -> m.putIfAbsent(c.sourceId, m.size) } }
+    val playlistGroupList = if (providerRanks.isEmpty()) playlistGroups.entries.toList()
+    else playlistGroups.entries.sortedWith(
+        compareBy({ sourceIndex[groupSource[it.key]] ?: Int.MAX_VALUE }, { providerRanks[it.key] ?: Int.MAX_VALUE })
+    )
+    playlistGroupList.forEach { (id, v) ->
         val copied = user.channelCopies[id].orEmpty().count { k -> byKey[k]?.let { it.groupId != id } == true }
         regular += ChannelGroup(id, v.first, v.second + copied, sourceId = groupSource[id], locked = id in lockedIds)
     }
