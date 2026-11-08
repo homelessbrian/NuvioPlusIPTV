@@ -40,20 +40,25 @@ object CatchupUrlBuilder {
         // Xtream-style links (server/user/pass/id) whose playlist doesn't say which kind of
         // catch-up: they use Xtream's /timeshift/ links, like TiviMate assumes.
         val xtreamGuess = { xtream(liveUrl, startMsC, duration, preferHls, serverTimezone) }
+        // Playlists with their own catch-up link (catchup-source): the times written in it go
+        // by the server's clock when it's known, like the links built here (before, they always
+        // went by this TV's clock, so a server in another time zone replayed a show hours off).
+        val zone = serverTimezone?.takeIf { it.isNotBlank() }?.let { TimeZone.getTimeZone(it) }
+        val fillIn = { t: String -> fill(t, start, end, now, duration, zone) }
         return when (catchup.type) {
-            "append" -> catchup.source?.let { liveUrl + fill(it, start, end, now, duration) }
+            "append" -> catchup.source?.let { liveUrl + fillIn(it) }
             "default" -> {
                 val src = catchup.source
                 when {
                     src.isNullOrBlank() -> xtreamGuess() ?: shift(liveUrl, start, now)
-                    src.startsWith("http", ignoreCase = true) -> fill(src, start, end, now, duration)
-                    else -> liveUrl + fill(src, start, end, now, duration)
+                    src.startsWith("http", ignoreCase = true) -> fillIn(src)
+                    else -> liveUrl + fillIn(src)
                 }
             }
             "shift", "timeshift" -> if (catchup.source.isNullOrBlank()) xtreamGuess() ?: shift(liveUrl, start, now) else shift(liveUrl, start, now)
             "flussonic", "flussonic-hls", "flussonic-ts", "fs" -> flussonic(liveUrl, start, duration)
             "xc", "xtream" -> xtream(liveUrl, startMsC, duration, preferHls, serverTimezone)
-            else -> catchup.source?.let { fill(it, start, end, now, duration) }
+            else -> catchup.source?.let { fillIn(it) }
         }
     }
 
@@ -206,8 +211,16 @@ object CatchupUrlBuilder {
         return path.dropLast(".m3u8".length) + ".ts" + url.substring(path.length)
     }
 
-    internal fun fill(template: String, start: Long, end: Long, now: Long, duration: Long): String {
+    internal fun fill(
+        template: String, start: Long, end: Long, now: Long, duration: Long,
+        /** The server's time zone, when known (Xtream servers). */
+        serverZone: TimeZone? = null
+    ): String {
         var out = template
+        // Xtream replay links (/timeshift/…, timeshift.php) name the start in the server's own
+        // time, so their formatted dates are written in it. Other links keep UTC, as before.
+        val xtreamLink = template.contains("/timeshift/", ignoreCase = true) || template.contains("timeshift.php", ignoreCase = true)
+        val formatZone = if (serverZone != null && xtreamLink) serverZone else TimeZone.getTimeZone("UTC")
         // {utc:YmdHMS} / ${start:Y-m-d} style formatted dates. (Every "}" escaped: Android's regex
         // engine rejects a bare one, which closed the app, though desktop Java accepts it.)
         out = Regex("""\$?\{(utc|start|utcend|end|lutc|now|timestamp):([^}]+)\}""").replace(out) { m ->
@@ -216,7 +229,7 @@ object CatchupUrlBuilder {
                 "lutc", "now", "timestamp" -> now
                 else -> start
             }
-            formatPattern(m.groupValues[2], epoch)
+            formatPattern(m.groupValues[2], epoch, formatZone)
         }
         out = Regex("""\$?\{duration:(\d+)\}""").replace(out) { m ->
             val divisor = m.groupValues[1].toLongOrNull()?.coerceAtLeast(1) ?: 1
@@ -235,8 +248,9 @@ object CatchupUrlBuilder {
         simple.forEach { (k, v) ->
             out = out.replace("\${$k}", v.toString()).replace("{$k}", v.toString())
         }
-        // Bare {Y}{m}{d}{H}{M}{S} refer to the program start in local time.
-        val cal = java.util.Calendar.getInstance().apply { timeInMillis = start * 1000 }
+        // Bare {Y}{m}{d}{H}{M}{S} refer to the program start in local time: the server's, when
+        // known (that's the clock the server reads them in), otherwise this TV's.
+        val cal = java.util.Calendar.getInstance(serverZone ?: TimeZone.getDefault()).apply { timeInMillis = start * 1000 }
         out = out
             .replace("{Y}", "%04d".format(cal.get(java.util.Calendar.YEAR)))
             .replace("{m}", "%02d".format(cal.get(java.util.Calendar.MONTH) + 1))
@@ -247,7 +261,7 @@ object CatchupUrlBuilder {
         return out
     }
 
-    private fun formatPattern(pattern: String, epochSec: Long): String {
+    private fun formatPattern(pattern: String, epochSec: Long, zone: TimeZone): String {
         val javaPattern = buildString {
             pattern.forEach { c ->
                 append(
@@ -260,7 +274,7 @@ object CatchupUrlBuilder {
             }
         }
         return runCatching {
-            SimpleDateFormat(javaPattern, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+            SimpleDateFormat(javaPattern, Locale.US).apply { timeZone = zone }
                 .format(Date(epochSec * 1000))
         }.getOrDefault(epochSec.toString())
     }

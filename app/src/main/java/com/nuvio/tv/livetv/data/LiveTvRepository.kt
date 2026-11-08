@@ -2628,21 +2628,43 @@ class LiveTvRepository @Inject constructor(
         }
     }
 
-    /** Playlists whose server time zone was already looked up this session. */
-    private val zoneTried = java.util.Collections.synchronizedSet(HashSet<String>())
+    /** Server time zone lookups in progress, per playlist (shared, so a second replay doesn't ask again). */
+    private val zoneLookups = HashMap<String, kotlinx.coroutines.Deferred<String?>>()
+
+    /** Playlist id -> when its server time zone lookup last failed (asked again after [ZONE_RETRY_MS]). */
+    private val zoneFailedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /**
      * M3U playlists from Xtream servers: the server's time zone, learned from the server the
-     * channel links point to (its player_api.php, with the username and password in the link),
-     * once. Catch-up links are in server time; without it, replays could start hours off or be
+     * channel links point to (its player_api.php, with the username and password in the link).
+     * Catch-up links are in server time; without it, replays could start hours off or be
      * refused. Xtream logins already learn it when they load.
+     *
+     * The lookup runs on its own, so a caller that stops waiting (slow server) doesn't stop it:
+     * the zone is still saved when the answer comes, and the next replay uses it. A lookup that
+     * failed is tried again after [ZONE_RETRY_MS] (before, it was tried once per session, and a
+     * slow answer was thrown away, so every replay that session was hours off).
      */
-    suspend fun learnServerZone(channel: LiveChannel): String? = withContext(Dispatchers.IO) {
-        val pl = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId } ?: return@withContext null
-        pl.serverTimezone.takeIf { it.isNotBlank() }?.let { return@withContext it }
-        if (!zoneTried.add(pl.id)) return@withContext null
+    suspend fun learnServerZone(channel: LiveChannel): String? {
+        val pl = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId } ?: return null
+        pl.serverTimezone.takeIf { it.isNotBlank() }?.let { return it }
+        val failed = zoneFailedAt[pl.id]
+        if (failed != null && System.currentTimeMillis() - failed < ZONE_RETRY_MS) return null
+        val lookup = synchronized(zoneLookups) {
+            zoneLookups[pl.id] ?: scope.async {
+                try {
+                    lookupServerZone(pl, channel.url)
+                } finally {
+                    synchronized(zoneLookups) { zoneLookups.remove(pl.id) }
+                }
+            }.also { zoneLookups[pl.id] = it }
+        }
+        return lookup.await()
+    }
+
+    private suspend fun lookupServerZone(pl: PlaylistSource, channelUrl: String): String? {
         val m = Regex("""^(https?://[^/]+)/(?:live/)?([^/]+)/([^/]+)/(\d+)(\.[a-z0-9]+)?(\?.*)?$""", RegexOption.IGNORE_CASE)
-            .find(channel.url) ?: return@withContext null
+            .find(channelUrl) ?: return null
         val (host, user, pass) = m.destructured
         val tz = runCatching {
             val url = "$host/player_api.php?username=" + java.net.URLEncoder.encode(user, "UTF-8") +
@@ -2651,8 +2673,13 @@ class LiveTvRepository @Inject constructor(
                 .optJSONObject("server_info")?.optString("timezone")?.takeIf { it.isNotBlank() }
         }.getOrNull()
         LIVE_REPORT.add(if (tz != null) "Server time zone for \"${pl.name}\": $tz" else "Server time zone for \"${pl.name}\": unknown")
-        if (tz != null) prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(serverTimezone = tz) else it } }
-        tz
+        if (tz != null) {
+            zoneFailedAt.remove(pl.id)
+            prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(serverTimezone = tz) else it } }
+        } else {
+            zoneFailedAt[pl.id] = System.currentTimeMillis()
+        }
+        return tz
     }
 
     /** Xtream user_info → the account details worth showing. */
@@ -2788,6 +2815,8 @@ class LiveTvRepository @Inject constructor(
     companion object {
         private const val TAG = "LiveTvRepository"
         private const val HOUR = 60L * 60L * 1000L
+        /** A server time zone lookup that failed is tried again after this long. */
+        private const val ZONE_RETRY_MS = 2L * 60L * 1000L
         /** How often to look for playlists and guides past their update time while the app is open. */
         private const val STALE_CHECK_MS = 30L * 60L * 1000L
         /** Opening Live TV doesn't check again this soon after the last automatic check. */
