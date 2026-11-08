@@ -62,6 +62,8 @@ class LiveTvPlayerHooks @Inject constructor(
         playback.onCatchupStalled = { newestOwner()?.onCatchupStalled() ?: false }
         // The audio track picked on each channel, remembered and used every time it plays.
         playback.onAudioChosen = { key, audio -> scope.launch { prefs.setChannelAudio(key, audio) } }
+        // Same for captions: on or off, as you left them on that channel.
+        playback.onCaptionsChosen = { key, captions -> scope.launch { prefs.setChannelCaptions(key, captions) } }
         // A provider whose catch-up only works as TS: ask for TS for a week (saves a failed
         // HLS try, about a second, on every replay), then try HLS again.
         playback.onCatchupHlsUnsupported = { sourceId ->
@@ -89,7 +91,7 @@ class LiveTvPlayerHooks @Inject constructor(
         scope.launch(Dispatchers.Default) {
             repository.channels.collectLatest { list -> backupIndex = list.groupBy { backupName(it.name) } }
         }
-        scope.launch { prefs.userState.collect { playback.channelAudio = it.channelAudio } }
+        scope.launch { prefs.userState.collect { playback.channelAudio = it.channelAudio; playback.channelCaptions = it.channelCaptions } }
         scope.launch {
             prefs.settings.collect {
                 playback.autoReconnect = it.autoReconnect

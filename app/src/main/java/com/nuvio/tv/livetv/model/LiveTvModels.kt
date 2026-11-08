@@ -542,6 +542,8 @@ data class LiveUserState(
     val channelQuality: Map<String, String> = emptyMap(),
     /** Channel key -> the audio track you picked there ("language|label|channels"). */
     val channelAudio: Map<String, String> = emptyMap(),
+    /** Channel key -> your caption choice there: "off", "on|cc" (closed captions) or "on|sub|<label>". */
+    val channelCaptions: Map<String, String> = emptyMap(),
     /** On Demand categories you hid ("movie:<playlist>:<category>" / "series:…"). */
     val vodHiddenCategories: Set<String> = emptySet(),
     /** On Demand page: your order of the provider's groups (category uids), and your names for them. */

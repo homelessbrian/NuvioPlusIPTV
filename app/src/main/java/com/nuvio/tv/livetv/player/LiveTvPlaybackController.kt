@@ -492,7 +492,17 @@ class LiveTvPlaybackController @Inject constructor(
                     .setTargetOffsetMs(offsetMs).build()
             )
             .build()
+        // Closed captions are inside the recorded video too: look for them as for the live stream
+        // (without this, full screen with Rewind Anytime lost the captions).
         return androidx.media3.exoplayer.hls.HlsMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(context))
+            .setExtractorFactory(
+                LiveCaptions.Hls(
+                    androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory(
+                        androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES,
+                        /* exposeCea608WhenMissingDeclarations = */ true
+                    )
+                )
+            )
             .createMediaSource(item)
     }
 
@@ -683,9 +693,11 @@ class LiveTvPlaybackController @Inject constructor(
                 .build()
         }
         if (!captionsHandled) {
+            // A choice you made on this channel (on or off) wins over the setting.
+            val textOff = channelCaptions[channel.key]?.let { it.startsWith("off") } ?: !captionsByDefault
             p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !captionsByDefault)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, textOff)
                 .build()
         }
         if (currentChannel?.key == channel.key && currentUrl == url && _state.value.error == null &&
@@ -1094,11 +1106,45 @@ class LiveTvPlaybackController @Inject constructor(
     /** Captions were already switched on (or you chose) for the channel now playing. */
     private var captionsHandled = false
 
+    /** Saved caption choices: channel key -> "off" / "on|cc" / "on|sub|label" (kept up to date by Live TV). */
+    var channelCaptions: Map<String, String> = emptyMap()
+    /** Called when you switch captions on or off, to remember it for that channel. */
+    var onCaptionsChosen: ((channelKey: String, captions: String) -> Unit)? = null
+
+    private fun saveCaptionChoice(option: LiveTrackOption?) {
+        val key = currentChannel?.key ?: return
+        val saved = when {
+            option == null -> "off"
+            option.kind != null -> "on|cc"
+            else -> "on|sub|" + option.label
+        }
+        channelCaptions = channelCaptions + (key to saved)
+        onCaptionsChosen?.invoke(key, saved)
+    }
+
+    /** Puts the saved choice back once the channel's tracks are known (see [saveCaptionChoice]). */
+    private fun applySavedCaptions(saved: String) {
+        if (saved.startsWith("off")) {
+            if (captionsOn()) selectTrack(C.TRACK_TYPE_TEXT, null)
+            return
+        }
+        val all = tracksOf(C.TRACK_TYPE_TEXT)
+        val wantsCc = saved.startsWith("on|cc")
+        val label = saved.removePrefix("on|sub|")
+        val now = if (captionsOn()) all.firstOrNull { it.selected } else null
+        // Already showing the right kind (the other copy of the captions counts too).
+        if (now != null && (if (wantsCc) now.kind != null else now.kind == null && now.label == label)) return
+        val pick = if (wantsCc) primaryCaption(all) else all.firstOrNull { it.kind == null && it.label == label }
+        if (pick == null) return
+        selectTrack(C.TRACK_TYPE_TEXT, pick)
+        if (pick.kind != null) watchCaptions()
+    }
+
     /** One press: captions off if on; otherwise on, with the first available track. */
     fun toggleCaptions(): Boolean {
         captionsHandled = true // your choice for this channel stands
         captionWatch?.cancel()
-        return if (captionsOn()) { selectTrack(C.TRACK_TYPE_TEXT, null); false }
+        return if (captionsOn()) { selectTrack(C.TRACK_TYPE_TEXT, null); saveCaptionChoice(null); false }
         else {
             val all = tracksOf(C.TRACK_TYPE_TEXT)
             val pick = subtitleTracks().firstOrNull()
@@ -1110,6 +1156,7 @@ class LiveTvPlaybackController @Inject constructor(
             )
             pick ?: return false
             selectTrack(C.TRACK_TYPE_TEXT, pick)
+            saveCaptionChoice(pick)
             if (pick.kind != null) watchCaptions()
             true
         }
@@ -1120,6 +1167,7 @@ class LiveTvPlaybackController @Inject constructor(
         captionsHandled = true
         captionWatch?.cancel()
         selectTrack(C.TRACK_TYPE_TEXT, option)
+        saveCaptionChoice(option)
     }
 
     private var captionWatch: Job? = null
@@ -1488,8 +1536,13 @@ class LiveTvPlaybackController @Inject constructor(
             applySavedAudio()
             // "Captions on by default": once the channel's caption tracks are known, switch them
             // on (once per channel, and not if you've turned them off yourself).
-            if (!captionsByDefault || captionsHandled) return
             if (tracks.groups.none { it.type == C.TRACK_TYPE_TEXT && it.length > 0 }) return
+            // What you chose on this channel last time (or earlier in this watch) comes first.
+            // Checked on every track change, not once: a reconnect or the full-screen switch
+            // to the rewind buffer brings new tracks and the choice would otherwise be lost.
+            val saved = currentChannel?.key?.let { channelCaptions[it] }
+            if (saved != null) { captionsHandled = true; applySavedCaptions(saved); return }
+            if (!captionsByDefault) return
             captionsHandled = true
             if (!captionsOn()) subtitleTracks().firstOrNull()?.let {
                 selectTrack(C.TRACK_TYPE_TEXT, it)

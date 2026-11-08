@@ -203,6 +203,7 @@ class LiveTvPreferences @Inject constructor(
         val reminders = stringPreferencesKey("reminders")
         val channelQuality = stringPreferencesKey("channel_quality")
         val channelAudio = stringPreferencesKey("channel_audio")
+        val channelCaptions = stringPreferencesKey("channel_captions")
         val vodHiddenCategories = stringSetPreferencesKey("vod_hidden_categories")
         val vodGroupOrder = stringPreferencesKey("vod_group_order")
         val vodGroupNames = stringPreferencesKey("vod_group_names")
@@ -564,6 +565,7 @@ class LiveTvPreferences @Inject constructor(
             reminders = decodeReminders(p[Keys.reminders]),
             channelQuality = decodeStringMap(d[Keys.channelQuality] ?: p[Keys.channelQuality]),
             channelAudio = decodeStringMap(p[Keys.channelAudio]),
+            channelCaptions = decodeStringMap(p[Keys.channelCaptions]),
             vodHiddenCategories = p[Keys.vodHiddenCategories] ?: emptySet(),
             vodGroupOrder = decodeStringList(p[Keys.vodGroupOrder]),
             vodGroupNames = decodeStringMap(p[Keys.vodGroupNames]),
@@ -960,6 +962,15 @@ class LiveTvPreferences @Inject constructor(
             val m = decodeStringMap(p[Keys.channelAudio]).toMutableMap()
             if (audio == null) m.remove(key) else m[key] = audio
             p[Keys.channelAudio] = encodeStringMap(m)
+        }
+    }
+
+    /** The caption choice made on a channel, used every time it plays (null forgets it). */
+    suspend fun setChannelCaptions(key: String, captions: String?) {
+        store.edit { p ->
+            val m = decodeStringMap(p[Keys.channelCaptions]).toMutableMap()
+            if (captions == null) m.remove(key) else m[key] = captions
+            p[Keys.channelCaptions] = encodeStringMap(m)
         }
     }
 
