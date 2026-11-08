@@ -362,10 +362,7 @@ class LiveTvPlaybackController @Inject constructor(
             var waited = 0
             // Wait until about 15 s are saved: playing right behind the newest piece stalls
             // whenever a piece comes in late (the freezes while watching a channel you record).
-            fun savedSec(): Double = runCatching {
-                playlist.readLines().filter { it.startsWith("#EXTINF:") }
-                    .sumOf { it.removePrefix("#EXTINF:").substringBefore(',').toDoubleOrNull() ?: 0.0 }
-            }.getOrDefault(0.0)
+            fun savedSec(): Double = HlsPieces.savedSec(playlist)
             while (waited < 20_000 && !(playlist.exists() && playlist.length() > 0)) { delay(250); waited += 250 }
             while (!fromStart && waited < 20_000 && savedSec() < 15.0) { delay(250); waited += 250 }
             if (_recordingPlayback.value != playlist) return@launch
@@ -415,8 +412,15 @@ class LiveTvPlaybackController @Inject constructor(
         com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: pausing; recording started")
         val url = currentUrl ?: ch.url
         p.pause()
+        // HLS: save from where you paused (how far behind live the player was), in the language
+        // you're listening to if the sound comes separately.
+        val behindLive = runCatching { p.currentLiveOffset }.getOrNull()?.takeIf { it != C.TIME_UNSET && it > 0 }
+        val audioLanguage = runCatching {
+            p.currentTracks.groups.firstOrNull { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
+                ?.let { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it).language } }
+        }.getOrNull()
         p.stop() // hand the provider connection over to the recording
-        val session = timeshift.start(url, ch.headers, timeshiftMinutes)
+        val session = timeshift.start(url, ch.headers, timeshiftMinutes, leadMs = behindLive, audioLanguage = audioLanguage)
         if (session == null) {
             // Couldn't record: back to the live stream, paused.
             com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: couldn't start recording (no room, or provider refused); paused live instead")
