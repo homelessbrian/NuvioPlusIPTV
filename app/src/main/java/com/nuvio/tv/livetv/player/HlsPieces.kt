@@ -207,6 +207,11 @@ internal object HlsPieces {
 
         val totalSec: Double get() = saved.sumOf { it.dur }
 
+        /** Checked while a piece downloads: true stops it part way (a long piece can take minutes). */
+        var stopNow: () -> Boolean = { false }
+        /** When [stopNow] cuts a piece: true keeps what came in (stopped by hand), false drops it. */
+        var keepCut: () -> Boolean = { false }
+
         fun fetch(): Media {
             val (t, u) = LiveHttp.fetch(url, headers)
             url = u
@@ -243,16 +248,19 @@ internal object HlsPieces {
             }
             var added = 0.0
             for (i in from until m.pieces.size) {
+                if (stopNow()) break
                 val p = m.pieces[i]
                 if (p.seq <= lastSeq) continue
                 val name = "${prefix}seg$named.${if (mapLine != null) "m4s" else "ts"}"
-                if (download(HlsPieces.resolve(url, p.uri), File(dir, name))) {
-                    saved += Saved(p.dur, name, saved.isNotEmpty() && (gap || (p.disc && i > from)))
-                    gap = false
-                    named++
-                    lastSeq = p.seq
-                    added += p.dur
-                }
+                // 1.0 = the whole piece; less = cut part way by a stop (its share of the length).
+                val got = download(HlsPieces.resolve(url, p.uri), File(dir, name)) ?: continue
+                val dur = p.dur * got
+                saved += Saved(dur, name, saved.isNotEmpty() && (gap || (p.disc && i > from)))
+                gap = false
+                named++
+                lastSeq = p.seq
+                added += dur
+                if (got < 1.0) break
             }
             return added
         }
@@ -288,10 +296,38 @@ internal object HlsPieces {
             writeAtomically(file, sb.toString())
         }
 
-        private fun download(url: String, to: File): Boolean = runCatching {
+        /**
+         * Downloads one piece. Returns 1.0 when it all came in, the share that came in when a stop
+         * cut it and the cut part is kept, or null (failed, or cut and dropped).
+         */
+        private fun download(url: String, to: File): Double? {
             val tmp = File(to.parentFile, to.name + ".part")
-            connect(url, headers).inputStream.use { input -> tmp.outputStream().use { input.copyTo(it, 64 * 1024) } }
-            tmp.renameTo(to)
-        }.getOrDefault(false)
+            return runCatching {
+                val c = connect(url, headers)
+                val length = c.contentLengthLong
+                var got = 0L
+                var cut = false
+                c.inputStream.use { input ->
+                    tmp.outputStream().use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            if (stopNow()) { cut = true; break }
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            got += n
+                        }
+                    }
+                }
+                if (cut) runCatching { c.disconnect() }
+                val share = when {
+                    !cut -> 1.0
+                    got > 0 && length > 0 && keepCut() -> (got.toDouble() / length).coerceIn(0.01, 0.99)
+                    else -> null
+                }
+                if (share == null) { tmp.delete(); null }
+                else if (tmp.renameTo(to)) share else null
+            }.getOrElse { tmp.delete(); null }
+        }
     }
 }

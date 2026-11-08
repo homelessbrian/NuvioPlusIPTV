@@ -45,6 +45,8 @@ class LiveTvRecorder @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
     private val stopRequested = ConcurrentHashMap.newKeySet<String>()
+    /** Ended here because the job didn't stop in time: when the job does end, it just goes quietly. */
+    private val forced = ConcurrentHashMap.newKeySet<String>()
 
     private val _recordings = MutableStateFlow<List<LiveTvRecording>>(emptyList())
     /** Every recording, newest first. */
@@ -187,6 +189,7 @@ class LiveTvRecorder @Inject constructor(
             sizeBytes = dirSize(dir),
             problem = if (hasPieces) null else "Stopped before anything was recorded"
         )
+        forced += id
         save(done); update(done)
         jobs.remove(id)?.cancel()
         stopRequested.remove(id)
@@ -325,12 +328,31 @@ class LiveTvRecorder @Inject constructor(
         val dir = File(start.dir)
         var rec = start
         var problem: String? = null
-        val isHls = url.lowercase().substringBefore('?').endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true) ||
-            com.nuvio.tv.livetv.model.PlaylistSource.asksForHls(url)
+        fun looksHls(link: String) = link.lowercase().substringBefore('?').endsWith(".m3u8") || link.contains("m3u8", ignoreCase = true) ||
+            com.nuvio.tv.livetv.model.PlaylistSource.asksForHls(link)
+        var isHls = looksHls(url)
+        // Catch-up saved as HLS: the plain (TS) form to switch to if the HLS one sends nothing,
+        // as the player does when watching (some providers' HLS replays never deliver).
+        val tsLink = if (finite && isHls) links.firstOrNull { !looksHls(it) } else null
         try {
             if (isHls) {
-                problem = recordHls(rec, url, headers, dir, finite, { dropped(it) }) { d, size -> rec = progress(rec, d, size) }
-            } else {
+                problem = try {
+                    recordHls(rec, url, headers, dir, finite, tsLink != null, { dropped(it) }) { d, size -> rec = progress(rec, d, size) }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (tsLink == null) throw e
+                    HLS_SENT_NOTHING
+                }
+                if (problem == HLS_SENT_NOTHING && tsLink != null && rec.id !in stopRequested) {
+                    com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording \"${rec.title}\": the HLS replay sent nothing in ${HLS_GIVE_UP_MS / 1000} s; saving the TS one instead")
+                    links.remove(tsLink)
+                    url = tsLink
+                    isHls = false
+                    problem = null
+                }
+            }
+            if (!isHls) {
                 val segmenter = TsSegmenter(dir) { _ -> }
                 var first = true
                 var tries = 0
@@ -402,6 +424,13 @@ class LiveTvRecorder @Inject constructor(
             problem = e.message ?: e.javaClass.simpleName
         } finally {
             run {
+                // Already ended by [forceFinish] (and maybe deleted since): nothing more to do.
+                if (forced.remove(rec.id)) {
+                    stopRequested.remove(rec.id)
+                    stopServiceIfIdle()
+                    return@run
+                }
+                val byHand = rec.id in stopRequested
                 val latest = _recordings.value.firstOrNull { it.id == rec.id } ?: rec
                 val hasPieces = playlistFileOf(dir).exists()
                 if (hasPieces) ensureEnded(playlistFileOf(dir))
@@ -410,6 +439,7 @@ class LiveTvRecorder @Inject constructor(
                     endedAtMs = System.currentTimeMillis(),
                     sizeBytes = dirSize(dir),
                     problem = if (hasPieces) problem?.takeIf { latest.durationSec < (latest.stopAtMs - latest.startedAtMs) / 1000.0 * 0.9 }
+                    else if (byHand) "Stopped before anything was recorded"
                     else (problem ?: "Nothing could be recorded from this channel")
                 )
                 if (_recordings.value.any { it.id == done.id }) { save(done); update(done) }
@@ -417,7 +447,8 @@ class LiveTvRecorder @Inject constructor(
                 stopRequested.remove(rec.id)
                 stopServiceIfIdle()
                 com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording \"${done.title}\" finished: ${done.status}" + (done.problem?.let { " ($it)" } ?: ""))
-                runCatching { onFinished(done) }
+                // Stopped by hand before anything came in: not a failure to try again later.
+                if (!(byHand && done.status == RecordingStatus.FAILED)) runCatching { onFinished(done) }
             }
         }
     }
@@ -450,9 +481,12 @@ class LiveTvRecorder @Inject constructor(
         headers: Map<String, String>,
         dir: File,
         finite: Boolean,
+        /** There's another (TS) link to switch to: give up on HLS if it sends nothing in a while. */
+        canGiveUp: Boolean,
         dropped: (String) -> String,
         onProgress: (Double, Long) -> Unit
     ): String? {
+        val began = System.currentTimeMillis()
         val hls = com.nuvio.tv.livetv.player.HlsPieces
         val (firstText, firstUrl) = com.nuvio.tv.livetv.player.LiveHttp.fetch(url, headers)
         val choice = if (hls.isMaster(firstText)) {
@@ -462,6 +496,13 @@ class LiveTvRecorder @Inject constructor(
         val audioUrl = choice?.audioUrl
         val video = com.nuvio.tv.livetv.player.HlsPieces.Track(videoUrl, dir, if (audioUrl != null) "v" else "", headers, ::open)
         val audio = audioUrl?.let { com.nuvio.tv.livetv.player.HlsPieces.Track(it, dir, "a", headers, ::open) }
+        fun nothingYet() = canGiveUp && video.saved.isEmpty() && System.currentTimeMillis() - began > HLS_GIVE_UP_MS
+        // A stop (or an HLS replay that's sent nothing) cuts a piece part way instead of waiting
+        // for it: some providers send a whole show as one long piece, at viewing speed.
+        listOfNotNull(video, audio).forEach { t ->
+            t.stopNow = { rec.id in stopRequested || nothingYet() }
+            t.keepCut = { rec.id in stopRequested }
+        }
         val playlist = playlistFileOf(dir)
         val videoFile = if (audio != null) File(dir, "video.m3u8") else playlist
         val audioFile = File(dir, "audio.m3u8")
@@ -478,6 +519,7 @@ class LiveTvRecorder @Inject constructor(
         }
         var problem: String? = null
         while (scope.isActive && rec.id !in stopRequested && System.currentTimeMillis() < currentStop(rec.id)) {
+            if (nothingYet()) return HLS_SENT_NOTHING
             // A live channel starts with a short lead-in before now; a catch-up show from its start.
             video.saveNew(vm) { m -> if (finite) 0 else hls.startIndex(m.pieces, LIVE_LEAD_MS) }
             if (audio != null && am != null) audio.saveNew(am!!) { a -> if (finite) 0 else hls.matchingStart(a.pieces, video) }
@@ -500,7 +542,9 @@ class LiveTvRecorder @Inject constructor(
                 delay(3_000)
             }
         }
-        writePlaylists(ended = true)
+        if (nothingYet()) return HLS_SENT_NOTHING
+        // The folder can be gone by now (the recording deleted while it was stopping).
+        if (dir.exists()) writePlaylists(ended = true)
         return problem
     }
 
@@ -599,5 +643,8 @@ class LiveTvRecorder @Inject constructor(
         const val MOVE_MARGIN = 200L * 1024 * 1024
         /** A live HLS recording starts this far before now (the newest pieces), not at the channel's look-back start. */
         const val LIVE_LEAD_MS = 30_000L
+        /** A catch-up HLS replay that's saved nothing after this long: switch to the TS link. */
+        const val HLS_GIVE_UP_MS = 20_000L
+        const val HLS_SENT_NOTHING = "The HLS replay sent nothing"
     }
 }
