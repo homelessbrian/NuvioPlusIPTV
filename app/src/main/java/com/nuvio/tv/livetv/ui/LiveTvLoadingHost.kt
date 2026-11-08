@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -22,6 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -68,16 +72,30 @@ fun LiveTvLoadingHost(navController: NavController) {
     }.collectAsState(false)
     val route = navController.currentBackStackEntryAsState().value?.destination?.route.orEmpty()
     val liveFullscreen by LiveTvFullscreen.active.collectAsState()
-    val playing = route == Screen.LiveTvPlayer.route || route.startsWith("player/") || liveFullscreen
+    val multiview = route == Screen.LiveTvMultiview.route
+    val playing = route == Screen.LiveTvPlayer.route || route.startsWith("player/") || liveFullscreen || multiview
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, route) {
+        fun updateWorkHold() {
+            // Multiview releases its streams on pause, so automatic imports may proceed then.
+            val activeMultiview = multiview && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying.value = route.startsWith("player/") || activeMultiview
+        }
+        val observer = LifecycleEventObserver { _, _ -> updateWorkHold() }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        updateWorkHold()
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            if (multiview) com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying.value = false
+        }
+    }
     // Nuvio's own player is opening (a movie, an episode, Watch On Demand): make sure the
     // Live TV player has let go of the audio first, so the two never hold it at once.
     androidx.compose.runtime.LaunchedEffect(route) {
         // Also when the stream list opens: the provider gets a few seconds to close the Live TV
         // connection before the movie asks for one (accounts with one connection otherwise
         // refuse the movie with "too many requests" / HTTP 429).
-        if (route.startsWith("player/") || route.startsWith("stream/")) entry.liveTvPlayback().releaseNow()
-        // Heavy Live TV / On Demand background work waits while Nuvio's player is open.
-        com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying.value = route.startsWith("player/")
+        if (route.startsWith("player/") || route.startsWith("stream/") || multiview) entry.liveTvPlayback().releaseNow()
     }
     // "Start in Full Screen" on: keep the automatic background work away while the last channel
     // starts and plays full screen (otherwise the video stutters on slower boxes).

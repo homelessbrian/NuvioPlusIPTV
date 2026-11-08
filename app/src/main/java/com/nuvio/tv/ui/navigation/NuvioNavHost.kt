@@ -1421,6 +1421,7 @@ private fun PlaybackNavHost(
                 onOpenSettings = { navController.navigate(Screen.LiveTvSettings.route) },
                 // Recordings opens from the guide now (Back comes back to the guide).
                 onOpenRecordings = { navController.navigate(Screen.Recordings.route) { launchSingleTop = true } },
+                onOpenMultiview = { navController.navigate(Screen.LiveTvMultiview.route) { launchSingleTop = true } },
                 onFindInNuvio = {
                     // Back from search returns to the guide.
                     navController.navigate(Screen.Search.route) { launchSingleTop = true }
@@ -1528,6 +1529,7 @@ private fun PlaybackNavHost(
             // Live TV fork: the Sports page (scores, schedules, which of your channels show each game).
             if (sportsShown) com.nuvio.tv.livetv.sports.SportsScreen(
                 onOpenLive = { com.nuvio.tv.livetv.sports.openLiveTvFullscreen(navController) },
+                onOpenMultiview = { navController.navigate(Screen.LiveTvMultiview.route) { launchSingleTop = true } },
                 // Back on a game opened from another page: that page again, as it was (like
                 // picking it in the side menu).
                 onReturnTo = { route ->
@@ -1588,6 +1590,10 @@ private fun PlaybackNavHost(
                     navController.navigate(Screen.Search.route) { launchSingleTop = true }
                 }
             )
+        }
+
+        composable(Screen.LiveTvMultiview.route) {
+            com.nuvio.tv.livetv.multiview.MultiviewScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Screen.LiveTvPlayer.route) {

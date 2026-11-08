@@ -40,6 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -213,6 +215,42 @@ internal fun GuideGearButton(modifier: Modifier = Modifier, onOpen: () -> Unit, 
             tint = focusedTextColor(focused),
             modifier = Modifier.size(18.dp)
         )
+    }
+}
+
+/** Multiview uses the guide's existing TV focus treatment and Down-to-guide behavior. */
+@Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+internal fun GuideMultiviewButton(modifier: Modifier = Modifier, onOpen: () -> Unit, onDown: () -> Unit) {
+    var focused by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val cell = liveCellColors(focused, Color.White.copy(alpha = 0.10f))
+    val shape = RoundedCornerShape(10.dp)
+    val tint = focusedTextColor(focused)
+    Box(
+        modifier.size(34.dp).clip(shape).background(cell.background)
+            .border(if (focused) 2.dp else 1.dp, if (focused) cell.border else GuideGlassEdge, shape)
+            .semantics { contentDescription = "Multiview" }
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                if (event.key == Key.DirectionDown) {
+                    if (event.type == KeyEventType.KeyDown) onDown()
+                    true
+                } else false
+            }
+            .combinedClickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null, onClick = onOpen
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
+            val gap = 2.dp.toPx()
+            val tile = (size.width - gap) / 2f
+            for (row in 0..1) for (column in 0..1) {
+                drawRect(tint, androidx.compose.ui.geometry.Offset(column * (tile + gap), row * (tile + gap)),
+                    androidx.compose.ui.geometry.Size(tile, tile))
+            }
+        }
     }
 }
 

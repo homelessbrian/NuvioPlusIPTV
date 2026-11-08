@@ -163,7 +163,8 @@ fun SportsScreen(
     onOpenLive: () -> Unit,
     /** Back on a game opened from another page (the Calendar): that page's route. */
     onReturnTo: (route: String) -> Unit = {},
-    viewModel: SportsViewModel = hiltViewModel()
+    viewModel: SportsViewModel = hiltViewModel(),
+    onOpenMultiview: () -> Unit = {}
 ) {
     val events by viewModel.events.collectAsStateWithLifecycle()
     val known by viewModel.known.collectAsStateWithLifecycle()
@@ -416,6 +417,7 @@ fun SportsScreen(
                 onOpen = { ev -> fromRoute = null; fromLabel = null; openId = ev.id },
                 onQuickWatch = ::quickWatch,
                 onPick = { picker = true },
+                onOpenMultiview = onOpenMultiview,
                 onWatchChannel = { ch -> viewModel.watchChannel(ch); onOpenLive() }
             )
         }
@@ -523,6 +525,7 @@ private fun SportsHub(
     onOpen: (SportsEvent) -> Unit,
     onQuickWatch: (SportsEvent) -> Unit,
     onPick: () -> Unit,
+    onOpenMultiview: () -> Unit,
     onWatchChannel: (LiveChannel) -> Unit
 ) {
     // Back opens the side menu first, like the guide and On Demand (it used to go straight to
@@ -716,6 +719,7 @@ private fun SportsHub(
             item(key = CHIP_TABLES) { FilterIcon("🏆", "Tables", effectiveChip == CHIP_TABLES, upTo, withLabel = true) { pickChip(CHIP_TABLES) } }
             // Each league's own channel (NFL Network, NBA TV…).
             item(key = CHIP_NETWORKS) { FilterIcon("📡", "League Networks", effectiveChip == CHIP_NETWORKS, upTo, withLabel = true) { pickChip(CHIP_NETWORKS) } }
+            item(key = "multiview") { FilterIcon("▦", "Multiview", false, upTo, withLabel = true, onClick = onOpenMultiview) }
             // Sports you follow: My Teams for that sport only.
             if (followedSports.size > 1) {
                 item(key = "sep1") { ChipGap() }

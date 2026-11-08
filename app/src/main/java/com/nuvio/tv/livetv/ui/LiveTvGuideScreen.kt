@@ -166,7 +166,8 @@ fun LiveTvGuideScreen(
     onReturnToSports: () -> Unit = {},
     /** A recording played here from Recordings or the Calendar: Back goes back to that screen (its route). */
     onReturnTo: (String) -> Unit = {},
-    viewModel: LiveTvViewModel = hiltViewModel()
+    viewModel: LiveTvViewModel = hiltViewModel(),
+    onOpenMultiview: () -> Unit = {}
 ) {
     // Hold the first draw until the saved settings and menu look are read. Before that the guide
     // only has the built-in defaults, and it drew one frame of the old look, then redrew.
@@ -180,6 +181,7 @@ fun LiveTvGuideScreen(
         onOpenFullscreen = onOpenFullscreen,
         onOpenSettings = onOpenSettings,
         onOpenRecordings = onOpenRecordings,
+        onOpenMultiview = onOpenMultiview,
         onFindInNuvio = onFindInNuvio,
         onOpenNuvioSearch = onOpenNuvioSearch,
         onReturnToSports = onReturnToSports,
@@ -194,6 +196,7 @@ private fun LiveTvGuideScreenBody(
     onOpenSettings: () -> Unit,
     /** Opens Recordings (the ● button beside the ⚙). */
     onOpenRecordings: () -> Unit = {},
+    onOpenMultiview: () -> Unit = {},
     onFindInNuvio: () -> Unit = {},
     onOpenNuvioSearch: () -> Unit = onFindInNuvio,
     /** Full screen was opened from the Sports page: Back goes back there. */
@@ -1023,6 +1026,7 @@ private fun LiveTvGuideScreenBody(
                     if (!toSearch) runCatching { gridFocus.requestFocus() }
                 },
                 onRecordings = onOpenRecordings,
+                onMultiview = onOpenMultiview,
                 playlistName = if (settings.showPlaylistInInfo) headerChannel?.sourceId?.let { playlistNames[it] } else null,
                 settings = settings,
                 now = now,
@@ -2337,7 +2341,8 @@ private fun GuideHeader(
     onGear: () -> Unit = {},
     onGearDown: () -> Unit = {},
     /** Opens Recordings (the ● beside the ⚙). */
-    onRecordings: () -> Unit = {}
+    onRecordings: () -> Unit = {},
+    onMultiview: () -> Unit = {}
 ) {
     if (!settings.showProgramDetails && !showPreview) {
         Row(
@@ -2348,6 +2353,8 @@ private fun GuideHeader(
             LiveText("Live TV", size = 16.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
             status?.let { LiveText(it, color = NuvioTheme.colors.TextSecondary, size = 13.sp) }
             Spacer(Modifier.width(16.dp))
+            GuideMultiviewButton(onOpen = onMultiview, onDown = onGearDown)
+            Spacer(Modifier.width(6.dp))
             GuideRecordingsButton(onOpen = onRecordings, onDown = onGearDown)
             Spacer(Modifier.width(6.dp))
             GuideGearButton(Modifier.focusRequester(gearFocus), onOpen = onGear, onDown = onGearDown)
@@ -2499,6 +2506,8 @@ private fun GuideHeader(
         }
         // Recordings (●) and the ⚙ for the guide's display settings, in the corner of the panel.
         Row {
+            GuideMultiviewButton(onOpen = onMultiview, onDown = onGearDown)
+            Spacer(Modifier.width(6.dp))
             GuideRecordingsButton(onOpen = onRecordings, onDown = onGearDown)
             Spacer(Modifier.width(6.dp))
             GuideGearButton(Modifier.focusRequester(gearFocus), onOpen = onGear, onDown = onGearDown)
