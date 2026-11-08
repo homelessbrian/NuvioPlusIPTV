@@ -1431,28 +1431,23 @@ private fun PlaybackNavHost(
                         launchSingleTop = true
                         restoreState = true
                     }
+                },
+                // A recording played full screen: Back goes to the screen it was picked on.
+                onReturnTo = { route ->
+                    if (!navController.popBackStack(route, inclusive = false)) {
+                        navController.navigate(route) { launchSingleTop = true }
+                    }
                 }
             )
         }
 
         composable(Screen.Recordings.route) {
-            // Live TV fork: recorded shows, played in Nuvio's own player.
+            // Live TV fork: recorded shows, played full screen in Live TV's own player (its seek
+            // bar, 30 s skips); Back comes back here.
             com.nuvio.tv.livetv.record.RecordingsScreen(
-                onPlay = { url, title, poster, recordingId, fromStart ->
-                    navController.navigate(
-                        Screen.Player.createRoute(
-                            streamUrl = url,
-                            title = title,
-                            // Its own kind, so the player keeps its place for next time but leaves
-                            // it out of Continue Watching, watch history and Trakt.
-                            contentId = com.nuvio.tv.livetv.record.RecordingResume.contentIdFor(recordingId),
-                            contentType = com.nuvio.tv.livetv.record.RecordingResume.CONTENT_TYPE,
-                            contentName = title,
-                            poster = poster,
-                            startFromBeginning = fromStart,
-                            addonName = "Recordings"
-                        )
-                    )
+                onPlay = { _, _, _, recordingId, fromStart ->
+                    com.nuvio.tv.livetv.record.RecordingLaunch.open(recordingId, fromStart, Screen.Recordings.route)
+                    navController.navigate(Screen.LiveTvPlayer.route) { launchSingleTop = true }
                 }
             )
         }
@@ -1492,20 +1487,10 @@ private fun PlaybackNavHost(
                     }
                 },
                 onOpenLive = { com.nuvio.tv.livetv.sports.openLiveTvFullscreen(navController) },
-                onPlayRecording = { url, title, poster, recordingId ->
-                    // Like Recordings: Nuvio's own player, kept out of Continue Watching and history.
-                    navController.navigate(
-                        Screen.Player.createRoute(
-                            streamUrl = url,
-                            title = title,
-                            contentId = com.nuvio.tv.livetv.record.RecordingResume.contentIdFor(recordingId),
-                            contentType = com.nuvio.tv.livetv.record.RecordingResume.CONTENT_TYPE,
-                            contentName = title,
-                            poster = poster,
-                            startFromBeginning = false,
-                            addonName = "Recordings"
-                        )
-                    )
+                onPlayRecording = { _, _, _, recordingId ->
+                    // Like Recordings: full screen in Live TV's player; Back comes back here.
+                    com.nuvio.tv.livetv.record.RecordingLaunch.open(recordingId, false, Screen.Calendar.route)
+                    navController.navigate(Screen.LiveTvPlayer.route) { launchSingleTop = true }
                 },
                 onOpenGame = { id ->
                     // Back on the game comes back here (the Calendar, where you were), not to the

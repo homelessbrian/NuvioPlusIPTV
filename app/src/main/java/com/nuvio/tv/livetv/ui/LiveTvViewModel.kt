@@ -533,7 +533,65 @@ class LiveTvViewModel @Inject constructor(
         withTimeoutOrNull(10_000) { uiState.first { it.groups.size > 1 } }
 
     /** The catch-up program playing, and where in it the current stream starts. */
-    data class CatchupSession(val channel: LiveChannel, val program: EpgProgram, val baseOffsetMs: Long)
+    data class CatchupSession(
+        val channel: LiveChannel,
+        val program: EpgProgram,
+        val baseOffsetMs: Long,
+        /** A recording from Recordings playing as its own show (the "program" is the recording). */
+        val recordingId: String? = null
+    )
+
+    /**
+     * Plays a recording (picked in Recordings or the Calendar) full screen in this player, with
+     * the catch-up seek bar; from where you left off unless [fromStart]. False if it can't
+     * (gone, or nothing saved).
+     */
+    fun playRecording(recordingId: String, fromStart: Boolean): Boolean {
+        val rec = recorder.recordings.value.firstOrNull { it.id == recordingId } ?: return false
+        val file = recorder.playlistFile(rec)
+        if (!file.isFile) return false
+        val ctx = recorder.appContext
+        val cid = com.nuvio.tv.livetv.record.RecordingResume.contentIdFor(rec.id)
+        val resume = if (fromStart) 0L else com.nuvio.tv.livetv.record.RecordingResume.load(ctx, cid)?.first ?: 0L
+        // Its own channel when it's still in a playlist (logo, name); else one made from what the
+        // recording kept, which is only shown, never tuned to.
+        val channel = channelByKey(rec.channelKey) ?: LiveChannel(
+            key = rec.channelKey, sourceId = "", sourceName = "", name = rec.channelName, tvgId = null, tvgName = null,
+            logo = rec.channelLogo, groupId = "", group = "", number = 0, url = ""
+        )
+        // The seek bar spans the recording itself; its times read as when it was recorded.
+        val base = if (rec.fromCatchup && rec.programStartMs > 0) rec.programStartMs else rec.startedAtMs
+        val lengthMs = (rec.durationSec * 1000).toLong().takeIf { it > 0 }
+            ?: (rec.programStopMs - rec.programStartMs).coerceAtLeast(60_000L)
+        val program = EpgProgram(
+            startMs = base, stopMs = base + lengthMs, title = rec.title,
+            description = rec.description, episode = rec.episode
+        )
+        _catchup.value = CatchupSession(channel, program, 0L, recordingId = rec.id)
+        recordingSavedAt = 0L
+        playback.playSavedRecording(channel, file, rec.title, rec.id, resume)
+        return true
+    }
+
+    /** Leaving a recording played here: keep where you got to (Recordings shows it, Resume uses it), then stop. */
+    fun stopRecordingPlayback() {
+        val s = _catchup.value
+        if (s?.recordingId != null) saveRecordingSpot(s)
+        _catchup.value = null
+        playback.stop()
+    }
+
+    private var recordingSavedAt = 0L
+
+    private fun saveRecordingSpot(s: CatchupSession) {
+        val id = s.recordingId ?: return
+        if (playback.savedRecordingId != id) return
+        val p = playback.player ?: return
+        val dur = p.duration.takeIf { it != androidx.media3.common.C.TIME_UNSET && it > 0 } ?: (s.program.stopMs - s.program.startMs)
+        com.nuvio.tv.livetv.record.RecordingResume.save(
+            recorder.appContext, com.nuvio.tv.livetv.record.RecordingResume.contentIdFor(id), p.currentPosition.coerceAtLeast(0), dur
+        )
+    }
 
     private val _catchup = MutableStateFlow<CatchupSession?>(null)
     val catchup: StateFlow<CatchupSession?> = _catchup
@@ -668,6 +726,12 @@ class LiveTvViewModel @Inject constructor(
      */
     fun followCatchup() {
         val s = _catchup.value ?: return
+        if (s.recordingId != null) {
+            // A recording: no next show, no provider. Its spot is kept every few seconds.
+            val now = System.currentTimeMillis()
+            if (now - recordingSavedAt > 5_000) { recordingSavedAt = now; saveRecordingSpot(s) }
+            return
+        }
         val pos = catchupPositionMs() ?: return
         val absolute = s.program.startMs + pos
         val list = programs.value[s.channel.key].orEmpty()
@@ -728,6 +792,13 @@ class LiveTvViewModel @Inject constructor(
         val s = _catchup.value ?: return
         val now = System.currentTimeMillis()
         val latest = (minOf(s.program.stopMs, now - 15_000) - s.program.startMs).coerceAtLeast(0)
+        if (s.recordingId != null) {
+            // A recording: just move within it (never asks the provider).
+            val p = playback.player ?: return
+            val dur = p.duration.takeIf { it != androidx.media3.common.C.TIME_UNSET && it > 0 } ?: (s.program.stopMs - s.program.startMs)
+            p.seekTo(offsetMs.coerceIn(0, (dur - 1_000).coerceAtLeast(0)))
+            return
+        }
         val target = offsetMs.coerceIn(0, latest)
         playback.cancelCatchupLead()
         if (playback.seekArchiveTo(s.program.startMs, target)) return

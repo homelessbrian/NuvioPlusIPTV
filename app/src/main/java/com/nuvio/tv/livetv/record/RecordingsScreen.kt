@@ -217,7 +217,7 @@ class RecordingsViewModel @Inject constructor(
 
 /**
  * Recordings: what's recording now across the top, then three columns: Scheduled, Series and
- * Recorded. OK plays (in Nuvio's player, with its seek bar); the menu button or a long press
+ * Recorded. OK plays (full screen in Live TV's player, with its seek bar); the menu button or a long press
  * offers Resume / Play from Beginning, Stop and Delete. Same background as the guide (the
  * theme's glow at the top), not plain black.
  */

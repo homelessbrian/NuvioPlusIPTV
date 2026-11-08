@@ -164,6 +164,8 @@ fun LiveTvGuideScreen(
     onFindInNuvio: () -> Unit = {},
     onOpenNuvioSearch: () -> Unit = onFindInNuvio,
     onReturnToSports: () -> Unit = {},
+    /** A recording played here from Recordings or the Calendar: Back goes back to that screen (its route). */
+    onReturnTo: (String) -> Unit = {},
     viewModel: LiveTvViewModel = hiltViewModel()
 ) {
     // Hold the first draw until the saved settings and menu look are read. Before that the guide
@@ -181,6 +183,7 @@ fun LiveTvGuideScreen(
         onFindInNuvio = onFindInNuvio,
         onOpenNuvioSearch = onOpenNuvioSearch,
         onReturnToSports = onReturnToSports,
+        onReturnTo = onReturnTo,
         viewModel = viewModel
     )
 }
@@ -195,6 +198,7 @@ private fun LiveTvGuideScreenBody(
     onOpenNuvioSearch: () -> Unit = onFindInNuvio,
     /** Full screen was opened from the Sports page: Back goes back there. */
     onReturnToSports: () -> Unit = {},
+    onReturnTo: (String) -> Unit = {},
     viewModel: LiveTvViewModel = hiltViewModel()
 ) {
     // Full screen happens right here, TiviMate style: the same video view grows from the
@@ -589,6 +593,15 @@ private fun LiveTvGuideScreenBody(
         if (!LiveTvFullscreen.pending) return@LaunchedEffect
         LiveTvFullscreen.pending = false
         fullscreenComing = true
+        // A recording picked in Recordings or the Calendar.
+        com.nuvio.tv.livetv.record.RecordingLaunch.take()?.let { r ->
+            if (!viewModel.playRecording(r.recordingId, r.fromStart)) {
+                com.nuvio.tv.livetv.record.LiveTvNotice.show("That recording can't be played")
+                com.nuvio.tv.livetv.record.RecordingLaunch.takeReturn()?.let { onReturnTo(it) }
+                fullscreenComing = false
+                return@LaunchedEffect
+            }
+        }
         // Sports: a replay asked for while the guide was already open.
         com.nuvio.tv.livetv.sports.SportsLaunch.takeCatchup()?.let { c ->
             viewModel.channelByKey(c.channelKey)?.let { ch -> viewModel.playCatchup(ch, c.program) }
@@ -2258,7 +2271,13 @@ private fun LiveTvGuideScreenBody(
             LiveTvPlayerScreen(
                 onBack = {
                     fullscreenComing = false
-                    if (com.nuvio.tv.livetv.sports.SportsLaunch.takeReturnToSports()) {
+                    val recordingReturn = com.nuvio.tv.livetv.record.RecordingLaunch.takeReturn()
+                    if (recordingReturn != null || viewModel.catchup.value?.recordingId != null) {
+                        // A recording from Recordings / the Calendar: its spot is kept, and Back goes back there.
+                        viewModel.stopRecordingPlayback()
+                        fullscreen = false
+                        if (recordingReturn != null) onReturnTo(recordingReturn) else exitFullscreenTick++
+                    } else if (com.nuvio.tv.livetv.sports.SportsLaunch.takeReturnToSports()) {
                         // Opened from the Sports page: back to the game you picked there.
                         fullscreen = false
                         onReturnToSports()
@@ -2267,8 +2286,8 @@ private fun LiveTvGuideScreenBody(
                         fullscreen = false; exitFullscreenTick++
                     }
                 },
-                onFindInNuvio = { com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; fullscreen = false; exitFullscreenTick++; onFindInNuvio() },
-                onBackToGroups = { com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; stopIfNoPreview(); fullscreen = false; savedSpot = null; exitFullscreenTick++; focusGroups() },
+                onFindInNuvio = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; fullscreen = false; exitFullscreenTick++; onFindInNuvio() },
+                onBackToGroups = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; stopIfNoPreview(); fullscreen = false; savedSpot = null; exitFullscreenTick++; focusGroups() },
                 embedded = true,
                 onOpenSettings = onOpenSettings,
                 viewModel = viewModel

@@ -195,7 +195,9 @@ fun LiveTvPlayerScreen(
             }
         }
     }
-    val rowOn = settings.panelRow != "OFF" && BarPart.RECENT !in BarPart.parse(settings.barHidden) && rowTabs.isNotEmpty()
+    // A recording from Recordings plays here as its own show: no channel switching, no Quick Channels.
+    val playingRecording = viewModel.catchup.collectAsStateWithLifecycle().value?.recordingId != null
+    val rowOn = !playingRecording && settings.panelRow != "OFF" && BarPart.RECENT !in BarPart.parse(settings.barHidden) && rowTabs.isNotEmpty()
     val rowId: String? = rowListId?.takeIf { id -> rowTabs.any { it.id == id } }
         ?: settings.panelRowLast.takeIf { last -> settings.panelRowOpens != "first" && rowTabs.any { it.id == last } }
         ?: rowTabs.firstOrNull()?.id
@@ -589,7 +591,8 @@ fun LiveTvPlayerScreen(
                                 PanelControl.FORWARD -> if (archive) scrub(forward = true, repeat = 0) else viewModel.playback.shiftSeekBy(30_000)
                                 PanelControl.PLAY -> viewModel.playback.togglePause()
                                 PanelControl.LIVE -> {
-                                    if (archive) current?.let { viewModel.backToLive(it) } else viewModel.playback.goLive()
+                                    if (playingRecording) onBack()
+                                    else if (archive) current?.let { viewModel.backToLive(it) } else viewModel.playback.goLive()
                                     controlFocus = PanelControl.PLAY
                                 }
                                 PanelControl.CC -> {
@@ -650,6 +653,16 @@ fun LiveTvPlayerScreen(
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val code = e.nativeKeyEvent.keyCode
                 when {
+                    // A recording: Up brings up the bar on the seek bar (Up to seek); no channel changes.
+                    playingRecording && (e.key == Key.DirectionUp || e.key == Key.DirectionDown || e.key == Key.ChannelUp || e.key == Key.ChannelDown) -> {
+                        if (e.key == Key.DirectionUp || e.key == Key.DirectionDown) {
+                            panelFull = true
+                            controlFocus = if (e.key == Key.DirectionUp) PanelControl.TIMELINE else PanelControl.PLAY
+                            showBanner()
+                        }
+                        true
+                    }
+                    playingRecording && (code == AndroidKeyEvent.KEYCODE_LAST_CHANNEL || code in AndroidKeyEvent.KEYCODE_0..AndroidKeyEvent.KEYCODE_9) -> true
                     e.key == Key.DirectionUp || e.key == Key.ChannelUp -> {
                         if (settings.channelSurf && current != null) browseStep(1, e) else zap(1); true
                     }
@@ -1175,6 +1188,7 @@ fun LiveTvPlayerScreen(
             val canRestart = !archive && viewModel.canWatchFromStart(ch)
             val shifting = shiftStartedAt != null || (ownTimeline && viewModel.playback.ownTimelineNow()?.live == true && viewModel.playback.shiftIsBehind())
             val timeAction = when {
+                playingRecording -> "Stop watching"
                 archive -> "Back to live"
                 canRestart -> viewModel.restartLabel(ch)
                 shifting -> "Go live"
@@ -1243,6 +1257,7 @@ fun LiveTvPlayerScreen(
                 onTimeAction = {
                     dialog = PlayerDialog.NONE
                     when {
+                        playingRecording -> onBack()
                         archive -> viewModel.backToLive(ch)
                         canRestart -> { viewModel.watchFromStart(ch); showBanner() }
                         shifting -> viewModel.playback.goLive()

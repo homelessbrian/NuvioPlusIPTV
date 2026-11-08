@@ -351,6 +351,36 @@ class LiveTvPlaybackController @Inject constructor(
     fun liveUrlFor(channel: LiveChannel): String =
         currentUrl?.takeIf { currentChannel?.key == channel.key && _state.value.catchupTitle == null } ?: channel.url
 
+    /** The recording playing as a show of its own ([playSavedRecording]), or null. */
+    @Volatile var savedRecordingId: String? = null
+        private set
+
+    /**
+     * Plays a recording from Recordings like a replay that's all on this box: the catch-up seek
+     * bar (Up to seek, 30 s skips), starting [startAtMs] in. Nothing is asked of the provider.
+     */
+    fun playSavedRecording(channel: LiveChannel, playlist: java.io.File, title: String, recordingId: String, startAtMs: Long) {
+        play(channel, overrideUrl = android.net.Uri.fromFile(playlist).toString(), catchupTitle = title)
+        val p = _player ?: return
+        savedRecordingId = recordingId
+        replayLocal = true
+        archiveStartPending = false
+        leadSeekMs = 0L
+        fallbackUrls.clear()
+        p.setMediaSource(localRecordingSource(android.net.Uri.fromFile(playlist), 0L))
+        p.prepare()
+        p.playWhenReady = true
+        com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording \"$title\": playing in the Live TV player" + if (startAtMs > 0) " from ${startAtMs / 1000} s" else "")
+        shiftJob?.cancel()
+        shiftJob = scope.launch {
+            // Once its list is read, go to the spot asked for: one still being recorded opens at
+            // its newest piece, like a live channel, even when asked for the start.
+            var waited = 0
+            while (waited < 8_000 && p.playbackState != Player.STATE_READY) { delay(100); waited += 100 }
+            if (savedRecordingId == recordingId && kotlin.math.abs(p.currentPosition - startAtMs) > 3_000) p.seekTo(startAtMs)
+        }
+    }
+
     /** Plays [playlist] (a recording that's still being made), a few seconds behind live. */
     fun playFromRecording(playlist: java.io.File, fromStart: Boolean = false) {
         val p = _player ?: return
@@ -653,6 +683,7 @@ class LiveTvPlaybackController @Inject constructor(
         if (!switchingForGame) gameTried.clear()
         if (currentChannel?.key != channel.key) recentStalls.clear()
         shiftStartPending = false
+        savedRecordingId = null
         _ownTimeline.value = false
         if (_shiftStartedAt.value != null) stopShift()
         if (_recordingPlayback.value != null) { _recordingPlayback.value = null; shiftJob?.cancel() }
@@ -914,6 +945,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     fun stop() {
+        savedRecordingId = null
         clearStarting()
         reconnectJob?.cancel()
         stopReplayCache()
@@ -956,7 +988,7 @@ class LiveTvPlaybackController @Inject constructor(
 
     private fun checkStall() {
         val p = _player ?: return
-        if (_shiftStartedAt.value != null || _recordingPlayback.value != null) { lastProgressAt = android.os.SystemClock.elapsedRealtime(); return }
+        if (_shiftStartedAt.value != null || _recordingPlayback.value != null || savedRecordingId != null) { lastProgressAt = android.os.SystemClock.elapsedRealtime(); return }
         val now = android.os.SystemClock.elapsedRealtime()
         val ch = currentChannel
         // Paused, in the background, nothing playing, or already showing an error: not a stall.
@@ -1761,6 +1793,12 @@ class LiveTvPlaybackController @Inject constructor(
                 goLive(); return
             }
             if (_recordingPlayback.value != null) { Log.w(TAG, "Playing from the recording failed", error); recordingPlaybackEnded(); return }
+            // A recording from Recordings: there's nothing else to try, so say so.
+            if (savedRecordingId != null) {
+                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording: couldn't be played (${error.errorCodeName})")
+                _state.value = _state.value.copy(error = "This recording couldn't be played", isBuffering = false)
+                return
+            }
             // The saved catch-up couldn't be played: play the replay straight from the provider.
             if (replayLocal) {
                 val ch0 = currentChannel
