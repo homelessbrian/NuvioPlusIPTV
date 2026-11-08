@@ -464,7 +464,7 @@ class LiveTvRecordingScheduler @Inject constructor(
             val channel = freshChannel(s.channel)
             val catchup = channel.catchup ?: s.channel.catchup
             val settings = prefs.currentSettings()
-            val zone = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId }?.serverTimezone
+            val zone = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId }?.catchupZone
             // As when watching catch-up: the guide's shift off, the catch-up shift on.
             val shift = settings.epgOffsetMinutes * 60_000L - settings.catchupShiftMinutes * 60_000L
             val url = catchup?.let {

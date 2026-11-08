@@ -180,6 +180,7 @@ private sealed interface LiveDialog {
     data object AddXtream : LiveDialog
     data object AddEpg : LiveDialog
     data class PlaylistActions(val source: PlaylistSource) : LiveDialog
+    data class CatchupZone(val source: PlaylistSource) : LiveDialog
     data class EditPlaylist(val source: PlaylistSource) : LiveDialog
     data class EpgActions(val source: EpgSource) : LiveDialog
     data class EditEpg(val source: EpgSource) : LiveDialog
@@ -227,6 +228,38 @@ private val REFRESH_HOURS = listOf(3, 6, 12, 24, 48, 72, 168)
 private val BANNER_SECONDS = listOf(3, 5, 8, 10, 15)
 private val FUTURE_DAYS = listOf(1, 2, 3, 5, 7, 10, 14)
 private val PAST_HOURS = listOf(6, 12, 24, 48, 72, 168)
+
+/** Time zones offered for a playlist's catch-up (the common ones IPTV servers run on). */
+private val CATCHUP_ZONES = listOf(
+    "UTC" to "UTC",
+    "Europe/London" to "UK & Ireland (London)",
+    "Europe/Amsterdam" to "Central Europe (Amsterdam, Paris, Berlin)",
+    "Europe/Athens" to "Eastern Europe (Athens, Bucharest)",
+    "Europe/Istanbul" to "Turkey (Istanbul)",
+    "Europe/Moscow" to "Moscow",
+    "Asia/Dubai" to "Gulf (Dubai)",
+    "Asia/Kolkata" to "India",
+    "America/New_York" to "US Eastern (New York)",
+    "America/Chicago" to "US Central (Chicago)",
+    "America/Denver" to "US Mountain (Denver)",
+    "America/Los_Angeles" to "US Pacific (Los Angeles)"
+)
+
+/** A zone id in words: one of the list's names, else as found (e.g. "GMT+01:00"). */
+private fun zoneName(id: String): String =
+    CATCHUP_ZONES.firstOrNull { it.first == id }?.second ?: id
+
+/** The time on that zone's clock now, to match against the provider's. */
+private fun zoneClock(id: String): String =
+    java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
+        .apply { timeZone = java.util.TimeZone.getTimeZone(id) }
+        .format(java.util.Date())
+
+private fun catchupZoneLabel(p: PlaylistSource): String = when {
+    p.catchupTimezone.isNotBlank() -> zoneName(p.catchupTimezone)
+    p.serverTimezone.isNotBlank() -> "Automatic (${zoneName(p.serverTimezone)})"
+    else -> "Automatic"
+}
 
 private fun offsetLabel(min: Int): String {
     if (min == 0) return "None"
@@ -1707,10 +1740,28 @@ internal fun LiveTvSettingsContent(
                     viewModel.savePlaylist(d.source.copy(streamFormat = next))
                     close()
                 },
+                // Which clock replay links are written in. Automatic: the one the provider's
+                // server reports (or that the app worked out); pick one when that's wrong.
+                "Catch-up time zone: " + catchupZoneLabel(d.source) to { dialog = LiveDialog.CatchupZone(d.source) },
                 "Move up" to { viewModel.movePlaylist(d.source.id, -1); close() },
                 "Move down" to { viewModel.movePlaylist(d.source.id, 1); close() }
             ),
             onDismiss = close
+        )
+        is LiveDialog.CatchupZone -> SettingsSingleChoiceDialog(
+            title = "Catch-up time zone",
+            subtitle = "The clock ${d.source.name} keeps its replays on. Automatic finds it from the provider. " +
+                "If replays play a different show, pick the time zone whose clock matches the provider's.",
+            options = listOf(
+                SettingsPickerOption(
+                    "", "Automatic",
+                    description = d.source.serverTimezone.takeIf { it.isNotBlank() }?.let { "Found: ${zoneName(it)}" } ?: "Not found yet"
+                )
+            ) + CATCHUP_ZONES.map { (id, name) -> SettingsPickerOption(id, name, trailing = zoneClock(id)) },
+            selectedValue = d.source.catchupTimezone,
+            onOptionSelected = { v -> viewModel.setPlaylistCatchupZone(d.source.id, v); close() },
+            onDismiss = close,
+            maxHeight = 420.dp
         )
         is LiveDialog.EditPlaylist -> {
             val src = d.source

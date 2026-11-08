@@ -60,6 +60,16 @@ class LiveTvRepository @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // Declared before anything that starts work on [scope] (a playlist update reads them).
+    /** Server time zone lookups in progress, per playlist (shared, so a second replay doesn't ask again). */
+    private val zoneLookups = HashMap<String, kotlinx.coroutines.Deferred<String?>>()
+
+    /** Playlist id -> when its server time zone lookup last failed (asked again after [ZONE_RETRY_MS]). */
+    private val zoneFailedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Playlist id -> when its time zone was last found (this session), for the background re-check. */
+    private val zoneCheckedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     private val mutex = Mutex()
 
     private val http: OkHttpClient = ForkHttp.builder()
@@ -451,6 +461,11 @@ class LiveTvRepository @Inject constructor(
             baseDir.mkdirs()
             epgLogosFile.writeText(o.toString())
         }
+    }
+
+    /** Catch-up time zone picked for one playlist ("" = Automatic): only replay links change, nothing reloads. */
+    suspend fun setPlaylistCatchupZone(id: String, zone: String) {
+        prefs.updatePlaylists { list -> list.map { if (it.id == id) it.copy(catchupTimezone = zone) else it } }
     }
 
     /** "Prefer logos from playlist / EPG" for one playlist: only the logos change, nothing reloads. */
@@ -2500,10 +2515,12 @@ class LiveTvRepository @Inject constructor(
             // Catch-up links are in the server's local time. When the server's time zone differs
             // from the TV's (say the server runs on UTC and the TV is in London in summer),
             // every replay started an hour off. Remember the server's zone for catch-up.
-            info.optJSONObject("server_info")?.optString("timezone")?.takeIf { it.isNotBlank() }?.let { tz ->
+            // A server that names no time zone: worked out from its clock instead.
+            ZoneFinder.fromServerInfo(info.optJSONObject("server_info"))?.let { (tz, _) ->
                 if (tz != pl.serverTimezone) {
                     prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(serverTimezone = tz) else it } }
                 }
+                zoneCheckedAt[pl.id] = System.currentTimeMillis()
             }
             info.optJSONObject("user_info")?.let { ui ->
                 accountOf(ui)?.let { saveAccount(pl, it) }
@@ -2628,58 +2645,124 @@ class LiveTvRepository @Inject constructor(
         }
     }
 
-    /** Server time zone lookups in progress, per playlist (shared, so a second replay doesn't ask again). */
-    private val zoneLookups = HashMap<String, kotlinx.coroutines.Deferred<String?>>()
-
-    /** Playlist id -> when its server time zone lookup last failed (asked again after [ZONE_RETRY_MS]). */
-    private val zoneFailedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
-
     /**
-     * M3U playlists from Xtream servers: the server's time zone, learned from the server the
-     * channel links point to (its player_api.php, with the username and password in the link).
-     * Catch-up links are in server time; without it, replays could start hours off or be
-     * refused. Xtream logins already learn it when they load.
+     * The server's time zone for catch-up, for playlists that don't know it yet. Tried in turn:
+     * the zone the server reports (player_api.php), the gap between the server's clock and the
+     * real time (same answer, for servers that don't name a zone), and the time zone written in
+     * the provider's own guide (xmltv.php on the same server). The first answer is saved with
+     * the playlist, so later replays don't ask again.
      *
      * The lookup runs on its own, so a caller that stops waiting (slow server) doesn't stop it:
-     * the zone is still saved when the answer comes, and the next replay uses it. A lookup that
-     * failed is tried again after [ZONE_RETRY_MS] (before, it was tried once per session, and a
-     * slow answer was thrown away, so every replay that session was hours off).
+     * the zone is still saved when the answer comes. A lookup that failed is tried again after
+     * [ZONE_RETRY_MS].
      */
     suspend fun learnServerZone(channel: LiveChannel): String? {
         val pl = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId } ?: return null
         pl.serverTimezone.takeIf { it.isNotBlank() }?.let { return it }
         val failed = zoneFailedAt[pl.id]
         if (failed != null && System.currentTimeMillis() - failed < ZONE_RETRY_MS) return null
-        val lookup = synchronized(zoneLookups) {
+        return startZoneLookup(pl, channel.url).await()
+    }
+
+    /**
+     * A time zone worked out from the server's clock or guide is a fixed offset, which goes wrong
+     * when the clocks change: looked up again in the background, at most every [ZONE_RECHECK_MS].
+     * Zones the server names (Europe/Amsterdam) follow the clock changes themselves; Xtream
+     * logins re-read theirs on every playlist update anyway.
+     */
+    fun recheckServerZone(channel: LiveChannel) {
+        scope.launch {
+            val pl = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId } ?: return@launch
+            if (!ZoneFinder.isWorkedOut(pl.serverTimezone)) return@launch
+            val now = System.currentTimeMillis()
+            val last = zoneCheckedAt.putIfAbsent(pl.id, now) ?: return@launch // first replay this session: just found or loaded
+            if (now - last < ZONE_RECHECK_MS) return@launch
+            zoneCheckedAt[pl.id] = now
+            startZoneLookup(pl, channel.url)
+        }
+    }
+
+    private fun startZoneLookup(pl: PlaylistSource, channelUrl: String): kotlinx.coroutines.Deferred<String?> =
+        synchronized(zoneLookups) {
             zoneLookups[pl.id] ?: scope.async {
                 try {
-                    lookupServerZone(pl, channel.url)
+                    lookupServerZone(pl, channelUrl)
                 } finally {
                     synchronized(zoneLookups) { zoneLookups.remove(pl.id) }
                 }
             }.also { zoneLookups[pl.id] = it }
         }
-        return lookup.await()
-    }
 
     private suspend fun lookupServerZone(pl: PlaylistSource, channelUrl: String): String? {
-        val m = Regex("""^(https?://[^/]+)/(?:live/)?([^/]+)/([^/]+)/(\d+)(\.[a-z0-9]+)?(\?.*)?$""", RegexOption.IGNORE_CASE)
-            .find(channelUrl) ?: return null
-        val (host, user, pass) = m.destructured
-        val tz = runCatching {
-            val url = "$host/player_api.php?username=" + java.net.URLEncoder.encode(user, "UTF-8") +
-                "&password=" + java.net.URLEncoder.encode(pass, "UTF-8")
-            JSONObject(getText(url, pl.userAgent.ifBlank { DEFAULT_UA }))
-                .optJSONObject("server_info")?.optString("timezone")?.takeIf { it.isNotBlank() }
-        }.getOrNull()
-        LIVE_REPORT.add(if (tz != null) "Server time zone for \"${pl.name}\": $tz" else "Server time zone for \"${pl.name}\": unknown")
-        if (tz != null) {
-            zoneFailedAt.remove(pl.id)
-            prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(serverTimezone = tz) else it } }
+        // Where to ask: an Xtream login's own server; for an M3U, the server its channel links point to.
+        val (host, user, pass) = if (pl.isXtream) {
+            Triple(pl.xtreamBase(), pl.xtreamUsername.trim(), pl.xtreamPassword.trim())
         } else {
-            zoneFailedAt[pl.id] = System.currentTimeMillis()
+            val m = Regex("""^(https?://[^/]+)/(?:live/)?([^/]+)/([^/]+)/(\d+)(\.[a-z0-9]+)?(\?.*)?$""", RegexOption.IGNORE_CASE)
+                .find(channelUrl) ?: return null
+            Triple(m.groupValues[1], m.groupValues[2], m.groupValues[3])
         }
-        return tz
+        val ua = pl.userAgent.ifBlank { DEFAULT_UA }
+        val login = "username=" + java.net.URLEncoder.encode(user, "UTF-8") + "&password=" + java.net.URLEncoder.encode(pass, "UTF-8")
+        val notes = ArrayList<String>()
+        // 1 and 2: the server's account info (its time zone, else its clock).
+        var found: Pair<String, String>? = runCatching {
+            val info = JSONObject(getText("$host/player_api.php?$login", ua)).optJSONObject("server_info")
+            ZoneFinder.fromServerInfo(info).also {
+                if (it == null) notes += if (info == null) "server: no server details in its reply" else "server: names no time zone or clock"
+            }
+        }.getOrElse { notes += "server: " + zoneError(it); null }
+        // 3: the provider's own guide, on the same server.
+        if (found == null) {
+            found = runCatching {
+                ZoneFinder.fromGuide(firstBytes("$host/xmltv.php?$login", ua, GUIDE_PROBE_BYTES)).also {
+                    if (it == null) notes += "guide: no times in the first part of it"
+                }
+            }.getOrElse { notes += "guide: " + zoneError(it); null }
+        }
+        if (found != null) {
+            val (tz, how) = found
+            LIVE_REPORT.add("Server time zone for \"${pl.name}\": $tz ($how)")
+            zoneFailedAt.remove(pl.id)
+            zoneCheckedAt[pl.id] = System.currentTimeMillis()
+            prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(serverTimezone = tz) else it } }
+            return tz
+        }
+        LIVE_REPORT.add("Server time zone for \"${pl.name}\": unknown (${notes.joinToString("; ")})")
+        zoneFailedAt[pl.id] = System.currentTimeMillis()
+        return null
+    }
+
+    /** Why a time zone lookup failed, in a few words for the Start-Up Report. */
+    private fun zoneError(e: Throwable): String = when (e) {
+        is org.json.JSONException -> "its reply wasn't the usual account details"
+        is java.net.SocketTimeoutException -> "no answer in time"
+        is java.net.UnknownHostException -> "server not found"
+        is javax.net.ssl.SSLException -> "secure connection failed"
+        is java.io.IOException -> e.message?.takeIf { it.isNotBlank() } ?: "connection failed"
+        else -> e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+    }
+
+    /** The start of a (possibly gzipped) download, as text: enough to read a guide's first times. */
+    private fun firstBytes(url: String, userAgent: String, max: Int): String {
+        val request = Request.Builder().url(url).header("User-Agent", userAgent).build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error(httpError(response.code))
+            val body = response.body ?: error("Empty response")
+            var input: java.io.InputStream = java.io.BufferedInputStream(body.byteStream())
+            input.mark(2)
+            val b0 = input.read(); val b1 = input.read()
+            input.reset()
+            if (b0 == 0x1f && b1 == 0x8b) input = java.util.zip.GZIPInputStream(input)
+            val buf = ByteArray(max)
+            var n = 0
+            while (n < max) {
+                val r = input.read(buf, n, max - n)
+                if (r < 0) break
+                n += r
+            }
+            return String(buf, 0, n, Charsets.UTF_8)
+        }
     }
 
     /** Xtream user_info → the account details worth showing. */
@@ -2817,6 +2900,10 @@ class LiveTvRepository @Inject constructor(
         private const val HOUR = 60L * 60L * 1000L
         /** A server time zone lookup that failed is tried again after this long. */
         private const val ZONE_RETRY_MS = 2L * 60L * 1000L
+        /** A worked-out time zone (fixed offset) is looked up again after this long, in the background. */
+        private const val ZONE_RECHECK_MS = 12L * 60L * 60L * 1000L
+        /** How much of the provider's guide is read to find its time zone. */
+        private const val GUIDE_PROBE_BYTES = 64 * 1024
         /** How often to look for playlists and guides past their update time while the app is open. */
         private const val STALE_CHECK_MS = 30L * 60L * 1000L
         /** Opening Live TV doesn't check again this soon after the last automatic check. */

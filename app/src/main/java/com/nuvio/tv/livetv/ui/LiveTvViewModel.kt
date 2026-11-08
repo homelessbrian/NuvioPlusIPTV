@@ -536,12 +536,18 @@ class LiveTvViewModel @Inject constructor(
         val catchup = channel.catchup ?: return false
         val now = System.currentTimeMillis()
         if (!CatchupUrlBuilder.isAvailable(catchup, program.startMs, now)) return false
-        // Server time zone not known yet (M3U from an Xtream server): learn it first (a few
-        // seconds at most), then play, so the replay starts at the right time. Asked again on
-        // later replays until the server answers (a slow answer is still saved for next time).
-        if (playlistZones.value[channel.sourceId].isNullOrBlank() &&
-            Regex("""/(?:live/)?[^/]+/[^/]+/\d+(\.[a-z0-9]+)?(\?.*)?$""", RegexOption.IGNORE_CASE).containsMatchIn(channel.url)
-        ) {
+        // The time zone picked for this playlist, else the server's. Not known yet (M3U from an
+        // Xtream server, or a login whose server didn't say): learn it first (a few seconds at
+        // most), then play, so the replay starts at the right time. Once found it's saved with
+        // the playlist; until then it's asked again on later replays.
+        val knownZone = playlistZones.value[channel.sourceId]
+        if (!knownZone.isNullOrBlank()) {
+            // A zone worked out from the server's clock or guide is checked again now and then
+            // in the background (clock changes); never one picked in settings.
+            if (playlistPickedZones.value[channel.sourceId].isNullOrBlank()) repository.recheckServerZone(channel)
+            return startCatchup(channel, catchup, program, offsetMs, knownZone)
+        }
+        if (Regex("""/(?:live/)?[^/]+/[^/]+/\d+(\.[a-z0-9]+)?(\?.*)?$""", RegexOption.IGNORE_CASE).containsMatchIn(channel.url)) {
             viewModelScope.launch {
                 val tz = kotlinx.coroutines.withTimeoutOrNull(ZONE_WAIT_MS) { repository.learnServerZone(channel) }
                 startCatchup(channel, catchup, program, offsetMs, tz ?: playlistZones.value[channel.sourceId]?.takeIf { it.isNotBlank() })
@@ -614,9 +620,14 @@ class LiveTvViewModel @Inject constructor(
         .map { l -> l.associate { it.id to it.catchupNoHlsSince } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    /** Playlist id -> Xtream server time zone (catch-up links are in server time). */
+    /** Playlist id -> the time zone catch-up links are written in (picked in settings, else the server's). */
     private val playlistZones: StateFlow<Map<String, String>> = prefs.playlists
-        .map { l -> l.associate { it.id to it.serverTimezone } }
+        .map { l -> l.associate { it.id to it.catchupZone } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    /** Playlist id -> the catch-up time zone picked in its settings ("" = Automatic). */
+    private val playlistPickedZones: StateFlow<Map<String, String>> = prefs.playlists
+        .map { l -> l.associate { it.id to it.catchupTimezone } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     /**

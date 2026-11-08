@@ -89,6 +89,9 @@ class LiveTvSettingsViewModel @Inject constructor(
         repository.removePlaylist(id)
         onDemand.refreshSoon() // its movies and series go too
     }
+    fun setPlaylistCatchupZone(id: String, zone: String) =
+        viewModelScope.launch { repository.setPlaylistCatchupZone(id, zone) }
+
     fun setPlaylistLogoSource(id: String, logoSource: String) =
         viewModelScope.launch { repository.setPlaylistLogoSource(id, logoSource) }
     fun setPlaylistEnabled(id: String, enabled: Boolean) = viewModelScope.launch {

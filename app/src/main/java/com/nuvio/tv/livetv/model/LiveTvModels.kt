@@ -28,8 +28,16 @@ data class PlaylistSource(
      * switched (Xtream-style ".../123.ts" links, and Dispatcharr's own stream links).
      */
     val streamFormat: String = "auto",
-    /** Xtream: the server's time zone (from its account info), used for catch-up times. */
+    /**
+     * The server's time zone, used for catch-up times: as the server reports it, or worked out
+     * (a fixed offset like "GMT+01:00") from the server's clock or its own guide. Per TV.
+     */
     val serverTimezone: String = "",
+    /**
+     * The catch-up time zone picked for this playlist in its settings ("" = Automatic, which uses
+     * [serverTimezone]). For providers whose time zone can't be found or is reported wrong.
+     */
+    val catchupTimezone: String = "",
     /**
      * Xtream: when catch-up as HLS (.m3u8) last failed on this provider while TS worked (0: HLS
      * fine). For a week after, catch-up asks for TS straight away (saves a failed try on every
@@ -43,6 +51,9 @@ data class PlaylistSource(
     val logoSource: String = "playlist"
 ) {
     val isXtream: Boolean get() = xtreamServer.isNotBlank()
+
+    /** The time zone catch-up links are written in: the one picked in settings, else the server's. */
+    val catchupZone: String get() = catchupTimezone.ifBlank { serverTimezone }
 
     /** Whether this source's live channels (and their guide) are loaded. */
     val liveEnabled: Boolean get() = enabled && (!isXtream || importLive)
@@ -810,7 +821,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-08 15:45"
+    const val KIT_STAMP = "2026-11-08 17:00"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

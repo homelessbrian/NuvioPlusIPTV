@@ -1480,6 +1480,7 @@ class LiveTvPreferences @Inject constructor(
                     importLive = o.optBoolean("importLive", true),
                     streamFormat = o.optString("streamFormat").ifBlank { "auto" },
                     serverTimezone = o.optString("serverTimezone"),
+                    catchupTimezone = o.optString("catchupTimezone"),
                     catchupNoHlsSince = o.optLong("catchupNoHlsSince", 0L),
                     logoSource = o.optString("logoSource").ifBlank { "playlist" }
                 )
@@ -1503,6 +1504,7 @@ class LiveTvPreferences @Inject constructor(
                     .put("importLive", s.importLive)
                     .put("streamFormat", s.streamFormat)
                     .put("serverTimezone", s.serverTimezone)
+                    .put("catchupTimezone", s.catchupTimezone)
                     .put("catchupNoHlsSince", s.catchupNoHlsSince)
                     .put("logoSource", s.logoSource)
             )
