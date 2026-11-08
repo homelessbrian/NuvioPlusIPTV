@@ -121,6 +121,11 @@ fun LiveTvPlayerScreen(
     var bannerToken by remember { mutableIntStateOf(0) }
     var listVisible by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf(PlayerDialog.NONE) }
+    // The backup copy whose long-press menu is open, the copy the bar's list reopens on, and a
+    // tick that rebuilds the backups list after that menu (a rename, a new number).
+    var backupMenuFor by remember { mutableStateOf<LiveChannel?>(null) }
+    var backupMenuLastKey by remember { mutableStateOf<String?>(null) }
+    var backupsTick by remember { mutableIntStateOf(0) }
     // Where the backup button sits, so the backup list can open as a flyout right above it.
     var backupsAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     // Which page the ⚙ panel opens on ("" = the main one; "audio", "subs", "sleep", "size", "info").
@@ -373,7 +378,7 @@ fun LiveTvPlayerScreen(
     val pinGame = com.nuvio.tv.livetv.sports.rememberPinnableGame(current?.key).takeIf { playback.catchupTitle == null }
     val pinList = com.nuvio.tv.livetv.sports.SportsLive.pins.collectAsState().value
     // Other copies of this channel for the bar's backup button (live only; hidden channels included).
-    val backups = remember(current?.key, panelFull, playback.catchupTitle) {
+    val backups = remember(current?.key, panelFull, playback.catchupTitle, backupsTick) {
         current?.takeIf { playback.catchupTitle == null }?.let { viewModel.backupsFor(it) }.orEmpty()
     }
     val poster by androidx.compose.runtime.produceState<String?>(initialValue = null, watchingTitle, current?.key) {
@@ -1082,6 +1087,8 @@ fun LiveTvPlayerScreen(
                 channels = backups,
                 playingKey = playback.channelKey,
                 modifier = Modifier.align(Alignment.CenterEnd),
+                onLongPress = { ch -> backupMenuFor = ch },
+                menuOpen = backupMenuFor != null,
                 onPick = { ch ->
                     dialog = PlayerDialog.NONE
                     if (ch.key != playback.channelKey) {
@@ -1291,13 +1298,17 @@ fun LiveTvPlayerScreen(
             },
             onDismiss = { dialog = PlayerDialog.NONE }
         )
-        PlayerDialog.BACKUPS -> if (backups.isEmpty()) dialog = PlayerDialog.NONE else BackupChannelsDialog(
+        // Hidden while a copy's long-press menu is up; it comes back on that copy afterwards.
+        PlayerDialog.BACKUPS -> if (backups.isEmpty()) dialog = PlayerDialog.NONE else if (backupMenuFor == null) BackupChannelsDialog(
             anchor = backupsAnchor,
             channels = backups,
             playingKey = playback.channelKey,
+            startKey = backupMenuLastKey,
+            onLongPress = { ch -> backupMenuFor = ch; backupMenuLastKey = ch.key },
             nowTitle = { key -> viewModel.currentProgram(key)?.title },
             onPick = { ch ->
                 dialog = PlayerDialog.NONE
+                backupMenuLastKey = null
                 if (ch.key != playback.channelKey) {
                     closeFull()
                     viewModel.preview(ch)
@@ -1305,7 +1316,7 @@ fun LiveTvPlayerScreen(
                 }
                 scope.launch { delay(60); runCatching { rootFocus.requestFocus() } }
             },
-            onDismiss = { dialog = PlayerDialog.NONE; scope.launch { delay(60); runCatching { rootFocus.requestFocus() } } }
+            onDismiss = { dialog = PlayerDialog.NONE; backupMenuLastKey = null; scope.launch { delay(60); runCatching { rootFocus.requestFocus() } } }
         )
         PlayerDialog.SCREEN_SIZE -> ScreenSizeDialog(
             selected = aspectModeOf(settings.aspectMode),
@@ -1321,6 +1332,33 @@ fun LiveTvPlayerScreen(
         )
         PlayerDialog.BACKUP_FLYOUT -> if (backups.isEmpty()) dialog = PlayerDialog.NONE
         PlayerDialog.NONE -> Unit
+    }
+    // Holding OK on a copy in either backups list: its options (record, favorites, rename…).
+    backupMenuFor?.let { ch ->
+        val closeAll = {
+            backupMenuFor = null
+            backupMenuLastKey = null
+            dialog = PlayerDialog.NONE
+            scope.launch { delay(60); runCatching { rootFocus.requestFocus() } }
+            Unit
+        }
+        BackupChannelMenu(
+            channel = ch,
+            viewModel = viewModel,
+            playing = ch.key == playback.channelKey,
+            onSwitch = {
+                val fromBar = dialog == PlayerDialog.BACKUPS
+                closeAll()
+                if (ch.key != playback.channelKey) {
+                    if (fromBar) closeFull()
+                    viewModel.preview(ch)
+                    showBanner()
+                }
+            },
+            onRestarted = { closeAll(); showBanner() },
+            // Back to the list it came from (names or numbers may have changed).
+            onDismiss = { backupMenuFor = null; backupsTick++ }
+        )
     }
     }
     }
@@ -1397,7 +1435,8 @@ private fun TrackDialog(
 
 /**
  * The bar's backup button: this channel's other copies (same name, any quality, any playlist,
- * hidden ones too). The one playing is marked; OK on another switches to it.
+ * hidden ones too). The one playing is marked; OK on another switches to it; holding OK opens
+ * that copy's options ([onLongPress]). [focusKey] is the copy highlighted on opening, if set.
  */
 @Composable
 private fun BackupChannelsDialog(
@@ -1406,11 +1445,14 @@ private fun BackupChannelsDialog(
     nowTitle: (String) -> String?,
     onPick: (LiveChannel) -> Unit,
     onDismiss: () -> Unit,
-    anchor: androidx.compose.ui.geometry.Rect? = null
+    anchor: androidx.compose.ui.geometry.Rect? = null,
+    onLongPress: (LiveChannel) -> Unit = {},
+    startKey: String? = null
 ) {
     val first = remember { FocusRequester() }
     val colors = NuvioTheme.colors
-    val focusKey = channels.firstOrNull { it.key != playingKey }?.key ?: channels.first().key
+    val focusKey = startKey?.takeIf { k -> channels.any { it.key == k } }
+        ?: channels.firstOrNull { it.key != playingKey }?.key ?: channels.first().key
     // A small flyout above the button (a centered panel if the button's spot isn't known yet).
     LiveDialog(onDismiss = onDismiss, width = 260.dp, anchor = anchor, minWidth = 240.dp, corner = 12.dp, pad = 10.dp) {
         LiveText("Backups", size = 13.sp, weight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
@@ -1426,6 +1468,7 @@ private fun BackupChannelsDialog(
                     modifier = Modifier.fillMaxWidth().then(if (ch.key == focusKey) Modifier.focusRequester(first) else Modifier),
                     selected = playing,
                     onClick = { onPick(ch) },
+                    onLongClick = { onLongPress(ch) },
                     horizontalPadding = 10.dp,
                     verticalPadding = 6.dp
                 ) { f ->

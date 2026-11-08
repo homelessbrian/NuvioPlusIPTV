@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +56,7 @@ import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -917,7 +919,8 @@ private fun dayLabel(dayStart: Long, now: Long): String {
 /**
  * Backup channels from the right edge (Right twice in full screen): this channel's other copies,
  * in overlay mode's look and Guide Size, with what's on and where each comes from. OK switches to
- * the highlighted copy; Left or Back closes it.
+ * the highlighted copy; holding OK opens its options ([onLongPress]); Left or Back closes it.
+ * [menuOpen]: that menu is up, so the flyout doesn't close itself and takes the remote back after.
  */
 @Composable
 internal fun LiveTvBackupFlyout(
@@ -926,7 +929,9 @@ internal fun LiveTvBackupFlyout(
     playingKey: String?,
     onPick: (LiveChannel) -> Unit,
     onClose: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLongPress: (LiveChannel) -> Unit = {},
+    menuOpen: Boolean = false
 ) {
     val sizeSettings by viewModel.settings.collectAsStateWithLifecycle()
     val (textScale, rowScale) = when (sizeSettings.effectiveGuideSize) {
@@ -939,7 +944,7 @@ internal fun LiveTvBackupFlyout(
         LocalOverlayScale provides textScale,
         LocalOverlayRowScale provides rowScale
     ) {
-        BackupFlyoutContent(viewModel, channels, playingKey, onPick, onClose, modifier)
+        BackupFlyoutContent(viewModel, channels, playingKey, onPick, onClose, modifier, onLongPress, menuOpen)
     }
 }
 
@@ -950,7 +955,9 @@ private fun BackupFlyoutContent(
     playingKey: String?,
     onPick: (LiveChannel) -> Unit,
     onClose: () -> Unit,
-    modifier: Modifier
+    modifier: Modifier,
+    onLongPress: (LiveChannel) -> Unit,
+    menuOpen: Boolean
 ) {
     val programs by viewModel.programs.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
@@ -962,11 +969,24 @@ private fun BackupFlyoutContent(
     val focus = remember { FocusRequester() }
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (index - 3).coerceAtLeast(0))
     keepVisible(state, index)
-    LaunchedEffect(Unit) { delay(60); runCatching { focus.requestFocus() } }
-    // Closes itself after a while without a key press, like overlay mode.
-    LaunchedEffect(activity) {
+    // On opening, and again when the long-press menu closes.
+    LaunchedEffect(menuOpen) { if (!menuOpen) { delay(60); runCatching { focus.requestFocus() } } }
+    // Closes itself after a while without a key press, like overlay mode (not while its menu is up).
+    LaunchedEffect(activity, menuOpen) {
+        if (menuOpen) return@LaunchedEffect
         delay(15_000)
         onClose()
+    }
+    // Holding OK: the highlighted copy's options. By time held, not only by repeats (some
+    // HDMI-CEC remotes never repeat), as in the guide.
+    val holdScope = rememberCoroutineScope()
+    var okHoldJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var longPressFired by remember { mutableStateOf(false) }
+    // Only a press that started here counts (not the end of one from before the flyout opened).
+    var okDown by remember { mutableStateOf(false) }
+    fun openMenu() {
+        longPressFired = true
+        channels.getOrNull(index)?.let(onLongPress)
     }
     var restingIndex by remember { mutableIntStateOf(-1) }
     LaunchedEffect(index) {
@@ -982,12 +1002,36 @@ private fun BackupFlyoutContent(
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
                 val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                if (isOk && e.type == KeyEventType.KeyUp) {
+                    okHoldJob?.cancel()
+                    if (!okDown) return@onPreviewKeyEvent true
+                    okDown = false
+                    val heldMs = e.nativeKeyEvent.eventTime - e.nativeKeyEvent.downTime
+                    when {
+                        longPressFired -> longPressFired = false
+                        heldMs >= LONG_PRESS_MS -> { openMenu(); longPressFired = false }
+                        else -> channels.getOrNull(index)?.let(onPick)
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent isOk || e.key == Key.Back
                 activity++
                 when {
                     e.key == Key.DirectionUp -> index = (index - 1).let { if (it < 0) channels.lastIndex else it }.coerceAtLeast(0)
                     e.key == Key.DirectionDown -> index = (index + 1).let { if (it > channels.lastIndex) 0 else it }
-                    isOk -> if (e.nativeKeyEvent.repeatCount == 0) channels.getOrNull(index)?.let(onPick)
+                    isOk -> if (e.nativeKeyEvent.repeatCount == 0) {
+                        // A new press: OK is acted on when it's let go, so a hold never switches first.
+                        longPressFired = false
+                        okDown = true
+                        okHoldJob?.cancel()
+                        okHoldJob = holdScope.launch {
+                            delay(LONG_PRESS_MS)
+                            if (!longPressFired) openMenu()
+                        }
+                    } else if (!longPressFired) {
+                        okHoldJob?.cancel()
+                        openMenu()
+                    }
                     e.key == Key.DirectionLeft || e.key == Key.Back -> onClose()
                 }
                 true
