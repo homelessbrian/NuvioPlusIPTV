@@ -525,6 +525,12 @@ internal fun LiveTvSettingsContent(
                         "Check Guides for Updates Every", "How often TV listings are downloaded again",
                         hoursLabel(s.epgRefreshHours), onClick = { dialog = LiveDialog.EpgRefresh }
                     )
+                    SettingsToggleRow(
+                        "Show update banners",
+                        "Show playlist, EPG and On Demand update progress. Updates continue in the background when hidden.",
+                        s.showImportProgress,
+                        { update { it.copy(showImportProgress = !it.showImportProgress) } }
+                    )
                 }
             }
 

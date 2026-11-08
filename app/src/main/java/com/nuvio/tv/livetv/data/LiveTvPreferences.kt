@@ -59,6 +59,7 @@ class LiveTvPreferences @Inject constructor(
         val epgs = stringPreferencesKey("epg_sources")
 
         val showInSidebar = booleanPreferencesKey("show_in_sidebar")
+        val showImportProgress = booleanPreferencesKey("show_import_progress")
         val showNames = booleanPreferencesKey("show_channel_names")
         val showNumbers = booleanPreferencesKey("show_channel_numbers")
         val markPlaying = booleanPreferencesKey("mark_playing_channel")
@@ -513,7 +514,8 @@ class LiveTvPreferences @Inject constructor(
             channelSurf = p[Keys.channelSurf] ?: d.channelSurf,
             barHidden = p[Keys.barHidden] ?: d.barHidden,
             guideInfoHidden = p[Keys.guideInfoHidden] ?: d.guideInfoHidden,
-            launcherRows = p[Keys.launcherRows] ?: d.launcherRows
+            launcherRows = p[Keys.launcherRows] ?: d.launcherRows,
+            showImportProgress = p[Keys.showImportProgress] ?: d.showImportProgress
         )
     }
 
@@ -846,6 +848,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.barHidden] = s.barHidden
         p[Keys.guideInfoHidden] = s.guideInfoHidden
         p[Keys.launcherRows] = s.launcherRows
+        p[Keys.showImportProgress] = s.showImportProgress
     }
 
     // ---------- channel management ----------

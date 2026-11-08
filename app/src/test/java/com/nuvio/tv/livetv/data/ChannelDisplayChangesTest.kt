@@ -115,7 +115,8 @@ class ChannelDisplayChangesTest {
         val initial = LiveTvSettings(nameRemovals = "HD")
         val states = listOf(initial, initial.copy(infoBannerSeconds = 10),
             initial.copy(audioPassthrough = true), initial.copy(epgOffsetMinutes = 60),
-            initial.copy(showChannelNumbers = false), initial.copy(homeRowEnabled = false))
+            initial.copy(showChannelNumbers = false), initial.copy(homeRowEnabled = false),
+            initial.copy(showImportProgress = false))
         val output = states.asFlow().displayChannelSettingsChanges().toList()
         assertEquals(1, output.size)
         assertSame(initial, output.single())
