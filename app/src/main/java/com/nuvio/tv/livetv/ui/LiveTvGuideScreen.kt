@@ -553,8 +553,17 @@ private fun LiveTvGuideScreenBody(
         val playing = playback.channelKey ?: stoppedKey
         stoppedKey = null
         if (playing != null) {
-            // Stay in the group you were in if the channel's there; otherwise its own group.
-            if (channels.none { it.key == playing }) {
+            // The group you watched it in (a Quick Channels list: Favorites, your own group…) if it
+            // was another one; else stay in the group you were in if the channel's there;
+            // otherwise its own group.
+            val u = viewModel.userState.value
+            val watchedIn = u.lastGroupId
+            val playingCh = viewModel.channelByKey(playing)
+            if (watchedIn != null && watchedIn != ui.selectedGroupId && playingCh != null &&
+                ui.groups.any { it.id == watchedIn } && channelInGroup(playingCh, watchedIn, u)
+            ) {
+                viewModel.selectGroup(watchedIn)
+            } else if (channels.none { it.key == playing }) {
                 viewModel.displayChannels.value.firstOrNull { it.key == playing }?.groupId?.let { viewModel.selectGroup(it) }
             }
             highlightKey = playing

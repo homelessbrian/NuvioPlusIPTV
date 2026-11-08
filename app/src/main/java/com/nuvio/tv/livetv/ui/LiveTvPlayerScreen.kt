@@ -486,7 +486,16 @@ fun LiveTvPlayerScreen(
                             recentFocus = null
                             if (rowTabs.size > 1) rowPills = true
                         }
-                        e.key == Key.DirectionDown -> Unit
+                        // Down: the next list (back to the first after the last), on the channel
+                        // playing if it's there, else its first channel.
+                        e.key == Key.DirectionDown -> if (rowTabs.size > 1 && e.nativeKeyEvent.repeatCount == 0) {
+                            val i = rowTabs.indexOfFirst { it.id == rowId }.coerceAtLeast(0)
+                            val next = rowTabs[(i + 1) % rowTabs.size]
+                            val chs = viewModel.rowListChannels(next.id, playback.channelKey)
+                            val at = chs.indexOfFirst { it.key == playback.channelKey }
+                            rowListId = next.id
+                            recentFocus = when { at >= 0 -> at + 1; chs.isNotEmpty() -> 1; else -> 0 }
+                        }
                         // Back: the row tucks away; the bar stays (Back again closes it).
                         e.key == Key.Back -> recentFocus = null
                         isOk && e.nativeKeyEvent.repeatCount == 0 -> when {
@@ -501,7 +510,9 @@ fun LiveTvPlayerScreen(
                                 closeFull()
                                 // Already watching it: just close the bar.
                                 if (ch.key != playback.channelKey) {
-                                    viewModel.preview(ch)
+                                    // Picked from Favorites or a group: the guide comes back to that
+                                    // list, not the channel's own playlist group.
+                                    viewModel.preview(ch, watchedIn = rowId?.takeIf { it != PanelRowLists.RECENT })
                                     showBanner()
                                 } else bannerVisible = false
                             }

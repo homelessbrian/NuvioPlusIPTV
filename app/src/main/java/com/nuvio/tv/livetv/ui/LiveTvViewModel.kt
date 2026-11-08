@@ -374,7 +374,8 @@ class LiveTvViewModel @Inject constructor(
         return if (others.isEmpty()) emptyList() else listOf(ch) + others
     }
 
-    fun preview(channel: LiveChannel) {
+    /** [watchedIn]: the group it was picked from outside the guide (Quick Channels), saved as the group you watched in. */
+    fun preview(channel: LiveChannel, watchedIn: String? = null) {
         if (!switchingToBackup) backupTried.clear()
         _catchup.value = null
         // Another channel from a provider that's recording: the recording holds a connection.
@@ -393,7 +394,7 @@ class LiveTvViewModel @Inject constructor(
         // groups included). Only a group you were really looking at is saved: starting straight
         // in full screen, or playing from Sports / the Calendar / a launcher row, no longer
         // replaces it with the channel's own group or the default one.
-        val shown = session.currentGroupId.value?.takeIf { it != ChannelGroup.SEARCH }
+        val shown = (watchedIn ?: session.currentGroupId.value)?.takeIf { it != ChannelGroup.SEARCH }
         viewModelScope.launch {
             prefs.recordWatched(channel.key, addToRecent = !isAdultChannel(channel))
             val user = prefs.userState.first()

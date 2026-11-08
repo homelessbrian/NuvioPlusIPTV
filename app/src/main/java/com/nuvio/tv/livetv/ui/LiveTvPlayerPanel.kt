@@ -614,6 +614,7 @@ private fun RowHeader(lists: List<PanelRowTab>, selected: PanelRowTab, pillsFocu
         val keys = if (pillsFocused) listOf("◀ ▶" to "switch list", "▼" to "channels", "BACK" to "close row")
         else listOfNotNull(
             if (lists.size > 1) "▲" to "pick a list" else null,
+            if (lists.size > 1) "▼" to "next list" else null,
             "◀ ▶" to "channels", "OK" to "watch", "BACK" to "close row"
         )
         keys.forEach { (k, what) ->

@@ -520,7 +520,9 @@ private fun QuickChannelsPages(
             size = 10.sp, weight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.55f),
             modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 2.dp)
         )
-        lists.forEachIndexed { index, l ->
+        // Keyed by list, so after an arrow moves one, the highlight goes with it (not onto the
+        // list that took its place, where a second press moved that one back).
+        lists.forEachIndexed { index, l -> androidx.compose.runtime.key(l.id) {
             val (title, subtitle) = when (l.id) {
                 PanelRowLists.RECENT -> "Recently Watched" to "Built in"
                 PanelRowLists.FAVORITES -> "Favorites" to "Built in"
@@ -545,7 +547,7 @@ private fun QuickChannelsPages(
                 GearArrow(Icons.Default.KeyboardArrowUp, "Move up", enabled = index > 0) { move(-1) }
                 GearArrow(Icons.Default.KeyboardArrowDown, "Move down", enabled = index < lists.lastIndex) { move(1) }
             }
-        }
+        } }
         GearRow(Modifier.fillMaxWidth(), onClick = onAdd) { focused ->
             Column(Modifier.weight(1f)) {
                 LiveText("+  Add a playlist group…", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused))
