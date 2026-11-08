@@ -127,32 +127,13 @@ private data class MenuTarget(val channel: LiveChannel, val block: GuideBlock?)
 private fun floorSlot(ms: Long) = ms - Math.floorMod(ms, SLOT_MS)
 
 private const val HOUR_BLOCK_MS = 60L * 60L * 1000L
-const val NO_GUIDE_TITLE = "No Program Guide Available"
 
-/**
- * TiviMate style: a channel that offers catch-up but has no (or patchy) guide gets hourly
- * "No Program Guide Available" entries, so you can still step back in time and watch from an hour.
- */
-private fun withHourlyPlaceholders(ch: LiveChannel, list: List<EpgProgram>, nowMs: Long, pastHours: Int): List<EpgProgram> {
-    val cu = ch.catchup ?: return list
-    val from = maxOf(nowMs - cu.days.coerceAtMost(7) * 24L * HOUR_BLOCK_MS, nowMs - pastHours * HOUR_BLOCK_MS)
-    val to = nowMs - Math.floorMod(nowMs, HOUR_BLOCK_MS) + HOUR_BLOCK_MS
-    var t = from - Math.floorMod(from, HOUR_BLOCK_MS)
-    if (list.isEmpty()) {
-        val out = ArrayList<EpgProgram>()
-        while (t < to) { out += EpgProgram(t, t + HOUR_BLOCK_MS, NO_GUIDE_TITLE); t += HOUR_BLOCK_MS }
-        return out
+/** Reuse prepared listings while the channel's guide inputs stay unchanged. */
+@Composable
+private fun rememberGuidePrograms(ch: LiveChannel?, list: List<EpgProgram>, nowMs: Long, pastHours: Int): List<EpgProgram> =
+    remember(ch?.key, ch?.catchup?.days, list, Math.floorDiv(nowMs, HOUR_BLOCK_MS), pastHours) {
+        if (ch == null) emptyList() else prepareGuidePrograms(ch, list, nowMs, pastHours)
     }
-    val sorted = list.sortedBy { it.startMs }
-    val extra = ArrayList<EpgProgram>()
-    var cursor = t
-    for (p in sorted) {
-        while (cursor + HOUR_BLOCK_MS <= p.startMs && cursor < to) { extra += EpgProgram(cursor, cursor + HOUR_BLOCK_MS, NO_GUIDE_TITLE); cursor += HOUR_BLOCK_MS }
-        if (p.stopMs > cursor) cursor = p.stopMs
-    }
-    while (cursor + HOUR_BLOCK_MS <= to) { extra += EpgProgram(cursor, cursor + HOUR_BLOCK_MS, NO_GUIDE_TITLE); cursor += HOUR_BLOCK_MS }
-    return if (extra.isEmpty()) list else (list + extra).sortedBy { it.startMs }
-}
 
 /** "Today", "Tomorrow", "Yesterday", or the day ("Sat, Oct 10") for the guide's time ruler. */
 private fun guideDayLabel(windowStart: Long, now: Long): String {
@@ -705,10 +686,9 @@ private fun LiveTvGuideScreenBody(
     }
 
     val focusedChannel = channels.getOrNull(row)
+    val focusedPrograms = rememberGuidePrograms(focusedChannel, programs[focusedChannel?.key].orEmpty(), now, settings.epgPastHours)
 
-
-    fun blockAt(channel: LiveChannel, at: Long): GuideBlock {
-        val list = withHourlyPlaceholders(channel, programs[channel.key].orEmpty(), now, settings.epgPastHours)
+    fun blockAt(list: List<EpgProgram>, at: Long): GuideBlock {
         list.firstOrNull { at >= it.startMs && at < it.stopMs }?.let { return GuideBlock(it.startMs, it.stopMs, it) }
         // A gap between two listed shows: the whole gap is one block (one highlight, one press
         // of Right to get past it), like a show with no information.
@@ -724,8 +704,8 @@ private fun LiveTvGuideScreenBody(
         return GuideBlock(s, e, null)
     }
 
-    val focusedBlock: GuideBlock? = focusedChannel?.let { ch ->
-        if (column == GuideColumn.PROGRAM) blockAt(ch, cursorMs) else blockAt(ch, now)
+    val focusedBlock: GuideBlock? = focusedChannel?.let {
+        if (column == GuideColumn.PROGRAM) blockAt(focusedPrograms, cursorMs) else blockAt(focusedPrograms, now)
     }
 
     // Poster for the highlighted show in the info panel (what Nuvio's catalogs would show).
@@ -734,7 +714,11 @@ private fun LiveTvGuideScreenBody(
     val browsingGroups = groupsOpen && !gridFocused
     val playingChannel = viewModel.channelByKey(playback.channelKey)
     val headerChannel = if (browsingGroups && playingChannel != null) playingChannel else focusedChannel
-    val headerBlock = if (browsingGroups && playingChannel != null) blockAt(playingChannel, now) else focusedBlock
+    val headerBlock = if (browsingGroups && playingChannel != null) {
+        val headerPrograms = if (playingChannel.key == focusedChannel?.key) focusedPrograms
+        else rememberGuidePrograms(playingChannel, programs[playingChannel.key].orEmpty(), now, settings.epgPastHours)
+        blockAt(headerPrograms, now)
+    } else focusedBlock
     val headerProgramKey = headerChannel?.key to headerBlock?.program?.startMs
     val headerPoster by androidx.compose.runtime.produceState<String?>(initialValue = null, headerProgramKey) {
         value = null
@@ -823,12 +807,12 @@ private fun LiveTvGuideScreenBody(
     // The cursor is always on a program. "CHANNEL" now just means "resting on what's on now"
     // (the guide keeps following the clock); "PROGRAM" means browsing ahead or back in time.
     fun moveRight() {
-        val ch = focusedChannel ?: return
+        if (focusedChannel == null) return
         if (column == GuideColumn.CHANNEL) {
             column = GuideColumn.PROGRAM
             cursorMs = now
         }
-        val block = blockAt(ch, cursorMs)
+        val block = blockAt(focusedPrograms, cursorMs)
         val limit = now + settings.epgFutureDays * 24L * 60 * 60 * 1000
         if (block.stopMs >= limit) return
         cursorMs = block.stopMs
@@ -843,9 +827,9 @@ private fun LiveTvGuideScreenBody(
 
     /** True when the cursor is on what's on now. */
     fun isAtNow(): Boolean {
-        val ch = focusedChannel ?: return true
+        if (focusedChannel == null) return true
         if (column == GuideColumn.CHANNEL) return true
-        val b = blockAt(ch, cursorMs)
+        val b = blockAt(focusedPrograms, cursorMs)
         return now >= b.startMs && now < b.stopMs
     }
 
@@ -856,7 +840,7 @@ private fun LiveTvGuideScreenBody(
     fun moveLeft(held: Boolean = false) {
         val ch = focusedChannel ?: return
         val from = if (column == GuideColumn.CHANNEL) now else cursorMs
-        val block = blockAt(ch, from)
+        val block = blockAt(focusedPrograms, from)
         val atNow = now >= block.startMs && now < block.stopMs
         val earliest = if (ch.catchup != null) {
             floorSlot(now - (ch.catchup.days.coerceAtMost(7) * 24L * 60 * 60 * 1000).coerceAtMost(settings.epgPastHours * 60L * 60 * 1000))
@@ -879,7 +863,7 @@ private fun LiveTvGuideScreenBody(
         cursorMs = block.startMs - 1
         while (cursorMs < windowStart) windowStart -= SLOT_MS
         // Stepping back onto what's on now: rest there, so the next Left opens the groups.
-        val landed = blockAt(ch, cursorMs)
+        val landed = blockAt(focusedPrograms, cursorMs)
         if (now >= landed.startMs && now < landed.stopMs && ch.catchup == null) resetToNow()
     }
 
@@ -1572,7 +1556,7 @@ private fun LiveTvGuideScreenBody(
                                     itemsIndexed(channels, key = { _, c -> c.key }) { index, ch ->
                                         androidx.compose.runtime.CompositionLocalProvider(LocalGuideScale provides guideScale(settings)) { GuideRow(
                                             channel = ch,
-                                            programs = remember(ch.key, programs[ch.key], now / HOUR_BLOCK_MS) { withHourlyPlaceholders(ch, programs[ch.key].orEmpty(), now, settings.epgPastHours) },
+                                            programs = rememberGuidePrograms(ch, programs[ch.key].orEmpty(), now, settings.epgPastHours),
                                             settings = settings,
                                             rowHeight = rowHeight,
                                             channelColWidth = channelColWidth,
