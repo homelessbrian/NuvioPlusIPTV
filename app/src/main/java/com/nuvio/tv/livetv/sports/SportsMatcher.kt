@@ -142,6 +142,10 @@ internal class SportsMatcher(
         // Events that run for days (a golf tournament, an F1 weekend from practice to the race) have
         // no single start time: while they're on, treat them as starting now.
         fun multiDay(ev: SportsEvent) = !ev.hasTime && ev.endMs != null
+        // Race weekends now carry each session's own time, but are still named only by the
+        // competition ("Formula 1", "Grand Prix"), so they're matched the same careful way.
+        fun raceWeekend(ev: SportsEvent) = ev.source == EventSource.ESPN &&
+            SportsCatalog.league(ev.leagueId)?.let { it.kind == LeagueKind.EVENT && it.sport == Sport.RACING } == true
         // Their ids: with no start time of their own, only a show that names the competition ("Formula 1",
         // "Grand Prix"…) counts, not one that merely shares a word or two with the title ("United States").
         val noStart = HashSet<String>()
@@ -153,7 +157,7 @@ internal class SportsMatcher(
                 ev.endMs!! + 24 * HOUR < input.now -> null
                 ev.startMs >= input.now -> ev
                 else -> ev.copy(startMs = input.now)
-            }?.also { if (!ev.hasTime) noStart.add(ev.id) }
+            }?.also { if (!ev.hasTime || raceWeekend(ev)) noStart.add(ev.id) }
         }
         val wanted = events.filter { ev ->
             ev.state != GameState.OFF &&

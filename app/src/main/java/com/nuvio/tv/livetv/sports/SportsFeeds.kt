@@ -809,6 +809,13 @@ internal class SportsFeeds {
             val week = ev.optJSONObject("week")?.optInt("number", 0)?.takeIf { it > 0 }?.let { "Week $it" }
             val headline = comp?.optJSONArray("notes")?.optJSONObject(0)?.str("headline")
 
+            // A race weekend (practice, qualifying, the race): go by its sessions, each with its own
+            // time and its own state, not by the weekend as a whole.
+            if (league.kind == LeagueKind.EVENT && league.sport == Sport.RACING) {
+                raceWeekend(league, ev, espnId, state, broadcasts.toList(), listOfNotNull(headline, venue).joinToString(" · ").ifBlank { null })
+                    ?.let { return it }
+            }
+
             if (league.kind == LeagueKind.EVENT) {
                 val multiDay = end != null && end - start > 20 * 3_600_000L
                 // A tournament that runs for days: the feed says "final" once a day's play is
@@ -904,6 +911,88 @@ internal class SportsFeeds {
                 situation = situation,
                 progress = progress,
                 espnId = espnId
+            )
+        }
+
+        private class RaceSession(val label: String, val start: Long, val state: String, val minutes: Int, val race: Boolean)
+
+        /** A session's name as people say it: "Practice 1", "Qualifying", "Sprint", "Race". */
+        private fun sessionOf(c: JSONObject, raceMinutes: Int): RaceSession? {
+            val at = parseIso(c.str("date")) ?: return null
+            val t = c.optJSONObject("type")
+            val abbr = t?.str("abbreviation").orEmpty()
+            val words = listOfNotNull(abbr, t?.str("text"), t?.str("name")).joinToString(" ").lowercase(Locale.ROOT)
+            val practice = Regex("""\bfp\s?(\d)|practice\s?(\d)?""").find(words)
+            val (label, minutes) = when {
+                Regex("""\b(ss|sq)\b|sprint (shootout|qual)""").containsMatchIn(words) -> "Sprint Qualifying" to 45
+                Regex("""\bsprint\b""").containsMatchIn(words) -> "Sprint" to 45
+                Regex("""\bqual""").containsMatchIn(words) || words.trim() == "q" -> "Qualifying" to 60
+                practice != null -> {
+                    val n = practice.groupValues.drop(1).firstOrNull { it.isNotBlank() }
+                    (if (n != null) "Practice $n" else "Practice") to 60
+                }
+                Regex("""\brace\b""").containsMatchIn(words) || words.trim() == "r" -> "Race" to raceMinutes
+                else -> (t?.str("text") ?: abbr.ifBlank { "Session" }) to 60
+            }
+            val state = c.optJSONObject("status")?.optJSONObject("type")?.str("state") ?: "pre"
+            return RaceSession(label, at, state, minutes, label == "Race")
+        }
+
+        /**
+         * A race weekend from its sessions: live only while one is on (and named), otherwise the
+         * next session's time, and finished once the race is over. Null when the feed doesn't list
+         * its sessions with times; the weekend as a whole is used then.
+         */
+        private fun raceWeekend(
+            league: League, ev: JSONObject, espnId: String, weekendState: GameState,
+            broadcasts: List<String>, subtitle: String?
+        ): SportsEvent? {
+            if (weekendState == GameState.OFF) return null
+            val comps = ev.optJSONArray("competitions") ?: return null
+            val sessions = (0 until comps.length()).mapNotNull { comps.optJSONObject(it)?.let { c -> sessionOf(c, league.minutes) } }
+                .sortedBy { it.start }
+            if (sessions.isEmpty()) return null
+            val race = sessions.lastOrNull { it.race } ?: sessions.last()
+            val now = System.currentTimeMillis()
+            fun endOf(s: RaceSession) = s.start + s.minutes * 60_000L
+            // The feed can leave a session "on" for hours after it ended: past twice its length, it's over.
+            fun on(s: RaceSession) = s.state == "in" && now < s.start + s.minutes * 2 * 60_000L
+            fun over(s: RaceSession) = s.state == "post" || (s.state == "in" && !on(s)) ||
+                (s.state != "in" && now > s.start + s.minutes * 3 * 60_000L)
+            val live = sessions.lastOrNull { on(it) }
+            val raceDone = over(race)
+            val next = sessions.firstOrNull { !over(it) && !on(it) && it.start + 30 * 60_000L > now }
+            val dayFormat = SimpleDateFormat("EEEE", Locale.getDefault())
+            val (state, at, session) = when {
+                live != null -> Triple(GameState.LIVE, live.start, live)
+                raceDone -> Triple(GameState.POST, race.start, race)
+                next != null -> Triple(GameState.PRE, next.start, next)
+                else -> Triple(GameState.PRE, race.start, race)
+            }
+            val note = when (state) {
+                GameState.LIVE -> if (session.race) "Race · Live" else "${session.label} · Live"
+                GameState.PRE -> when {
+                    session.race -> "Race"
+                    else -> "Next: ${session.label} · Race ${dayFormat.format(java.util.Date(race.start))}"
+                }
+                else -> null
+            }
+            return SportsEvent(
+                id = "espn:${league.id}:$espnId",
+                leagueId = league.id,
+                startMs = at,
+                hasTime = true,
+                state = state,
+                title = ev.str("name") ?: ev.str("shortName") ?: league.name,
+                subtitle = subtitle,
+                status = if (state == GameState.POST) "Final" else null,
+                away = null, home = null,
+                broadcasts = broadcasts,
+                espnId = espnId,
+                endMs = endOf(session),
+                note = note,
+                standings = runCatching { if (state == GameState.PRE && sessions.none { it.state != "pre" }) emptyList() else standingsOf(ev) }
+                    .getOrDefault(emptyList())
             )
         }
 
