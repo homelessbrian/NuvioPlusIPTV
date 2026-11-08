@@ -144,6 +144,9 @@ fun LiveTvPlayerScreen(
 
     // The bottom panel's controls (Down while it's showing): which one is highlighted.
     var controlFocus by remember { mutableStateOf<PanelControl?>(null) }
+    // The seek bar is being scrubbed (started with OK on the highlighted bar).
+    var scrubbing by remember { mutableStateOf(false) }
+    LaunchedEffect(controlFocus) { if (controlFocus != PanelControl.TIMELINE) scrubbing = false }
     /** The highlighted tile in the full panel's Channel Row (0 TV Guide, 1… channels, then Clear), or null. */
     var recentFocus by remember { mutableStateOf<Int?>(null) }
     // The Channel Row's list buttons are highlighted (Up from its channels).
@@ -519,9 +522,11 @@ fun LiveTvPlayerScreen(
                     val onTimeline = cf == PanelControl.TIMELINE && PanelControl.TIMELINE in list
                     val i = buttons.indexOf(cf).coerceAtLeast(0)
                     when {
-                        // The timeline, grabbed: ◀ / ▶ move through the recording or show (faster
-                        // the longer you hold), OK plays/pauses, Down back to the buttons.
-                        onTimeline && (e.key == Key.DirectionLeft || e.key == Key.DirectionRight) -> {
+                        // The seek bar highlighted (Right from Forward 30, or Up from the buttons): OK
+                        // starts scrubbing; Left/Right otherwise carry on along the buttons, Down goes to Play.
+                        // Scrubbing: ◀ / ▶ move through the recording or show (faster the longer you
+                        // hold), OK or Back stops, Down back to the buttons.
+                        onTimeline && scrubbing && (e.key == Key.DirectionLeft || e.key == Key.DirectionRight) -> {
                             val forward = e.key == Key.DirectionRight
                             if (archive) scrub(forward = forward, repeat = e.nativeKeyEvent.repeatCount)
                             else {
@@ -540,14 +545,23 @@ fun LiveTvPlayerScreen(
                             }
                             return@onPreviewKeyEvent true
                         }
+                        onTimeline && scrubbing && (isOk || e.key == Key.Back) -> {
+                            if (e.nativeKeyEvent.repeatCount == 0) scrubbing = false
+                            return@onPreviewKeyEvent true
+                        }
                         onTimeline && e.key == Key.DirectionDown -> { controlFocus = PanelControl.PLAY; return@onPreviewKeyEvent true }
                         onTimeline && e.key == Key.DirectionUp -> return@onPreviewKeyEvent true
                         onTimeline && isOk -> {
-                            if (e.nativeKeyEvent.repeatCount == 0) viewModel.playback.togglePause()
+                            if (e.nativeKeyEvent.repeatCount == 0) scrubbing = true
+                            return@onPreviewKeyEvent true
+                        }
+                        onTimeline && e.key == Key.DirectionLeft -> { controlFocus = PanelControl.FORWARD; return@onPreviewKeyEvent true }
+                        onTimeline && e.key == Key.DirectionRight -> {
+                            buttons.getOrNull(buttons.indexOf(PanelControl.FORWARD) + 1)?.let { controlFocus = it }
                             return@onPreviewKeyEvent true
                         }
                         e.key == Key.DirectionLeft -> { controlFocus = buttons[(i - 1).coerceAtLeast(0)]; return@onPreviewKeyEvent true }
-                        // The bar sits right after the skip buttons: Right from Forward 30 grabs it.
+                        // The bar sits right after the skip buttons: Right from Forward 30 highlights it (OK scrubs).
                         e.key == Key.DirectionRight && cf == PanelControl.FORWARD && PanelControl.TIMELINE in list -> {
                             controlFocus = PanelControl.TIMELINE; return@onPreviewKeyEvent true
                         }
@@ -1038,6 +1052,7 @@ fun LiveTvPlayerScreen(
                     paused = paused,
                     controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty()),
                     focused = controlFocus,
+                    scrubbing = scrubbing,
                     captionsOn = captionsOn,
                     audioLabel = remember(playback.channelKey, bannerVisible) { viewModel.playback.audioLabel() },
                     // The same words as the Screen size list (Fit, Crop, Cinema Zoom…).

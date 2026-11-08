@@ -180,6 +180,7 @@ internal fun LiveTvPlayerPanel(
     paused: Boolean,
     controls: List<PanelControl>,
     focused: PanelControl?,
+    scrubbing: Boolean = false,
     captionsOn: Boolean,
     audioLabel: String,
     sizeLabel: String,
@@ -337,7 +338,7 @@ internal fun LiveTvPlayerPanel(
                             }
                             Box(Modifier.weight(1f)) {
                                 when {
-                                    showProgress && timeline != null -> GlassTimeline(timeline, grabbed = focused == PanelControl.TIMELINE)
+                                    showProgress && timeline != null -> GlassTimeline(timeline, highlighted = focused == PanelControl.TIMELINE, scrubbing = scrubbing && focused == PanelControl.TIMELINE)
                                     // Progress bar off: the times, as words.
                                     timeline != null -> LiveText(
                                         timeline.leftLabel + " – " + timeline.rightLabel + "  ·  " + timeline.status,
@@ -440,13 +441,13 @@ private fun RoundButton(icon: ImageVector, focused: Boolean, big: Boolean) {
  * or replay, a handle with the time you're at, and a red line where live is.
  */
 @Composable
-private fun GlassTimeline(t: PanelTimeline, grabbed: Boolean) {
+private fun GlassTimeline(t: PanelTimeline, highlighted: Boolean, scrubbing: Boolean) {
     val colors = NuvioTheme.colors
     val span = (t.endMs - t.startMs).coerceAtLeast(1L).toFloat()
     fun frac(ms: Long) = ((ms - t.startMs) / span).coerceIn(0f, 1f)
     val left = t.leftLabel.removePrefix("From ")
     val right = t.rightLabel.removePrefix("Live ")
-    val scrubber = t.liveMs != null || grabbed
+    val scrubber = t.liveMs != null || highlighted
     Row(verticalAlignment = Alignment.CenterVertically) {
         LiveText(left, size = 11.sp, color = colors.TextSecondary)
         Spacer(Modifier.width(10.dp))
@@ -461,11 +462,11 @@ private fun GlassTimeline(t: PanelTimeline, grabbed: Boolean) {
                 Box(Modifier.align(Alignment.CenterStart).offset(x = (w * frac(l)) - 1.dp).width(2.dp).fillMaxHeight().background(LIVE_RED))
             }
             if (scrubber) {
-                val knob = if (grabbed) 18.dp else 14.dp
+                val knob = if (scrubbing) 20.dp else if (highlighted) 16.dp else 14.dp
                 Box(
                     Modifier.align(Alignment.CenterStart).offset(x = (w * frac(t.positionMs)) - knob / 2).size(knob)
                         .clip(CircleShape).background(Color.White)
-                        .border(if (grabbed) 4.dp else 0.dp, Color.White.copy(alpha = 0.3f), CircleShape)
+                        .border(if (highlighted) 4.dp else 0.dp, Color.White.copy(alpha = 0.3f), CircleShape)
                 )
             }
         }
@@ -473,9 +474,9 @@ private fun GlassTimeline(t: PanelTimeline, grabbed: Boolean) {
         LiveText(right, size = 11.sp, color = if (t.liveMs != null) LIVE_RED else colors.TextSecondary)
         Spacer(Modifier.width(10.dp))
         LiveText(
-            if (grabbed) "◀ ▶ move · OK play/pause" else t.status,
+            if (scrubbing) "◀ ▶ move · OK done" else if (highlighted) "OK to scrub" else t.status,
             size = 11.sp,
-            color = if (t.statusLive && !grabbed) LIVE_RED else colors.TextTertiary
+            color = if (t.statusLive && !highlighted) LIVE_RED else colors.TextTertiary
         )
     }
 }
