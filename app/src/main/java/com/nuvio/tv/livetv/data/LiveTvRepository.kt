@@ -1800,13 +1800,30 @@ class LiveTvRepository @Inject constructor(
         // The hours shown first, kept as they're read (short form): the rest of each guide goes
         // straight to the database instead of into memory.
         val (winFrom, winTo) = defaultWindow()
-        val windowCopies = HashMap<String, List<EpgProgram>>()
+        val windowCopies = HashMap<String, ArrayList<EpgProgram>>()
+        var pendingWindowSource: String? = null
+        fun trimPendingWindowCopies() {
+            val src = pendingWindowSource ?: return
+            val prefix = "$src\u0000"
+            for ((key, buffer) in windowCopies) {
+                if (key.startsWith(prefix)) buffer.trimToSize()
+            }
+            pendingWindowSource = null
+        }
         fun keepWindow(src: String, xid: String, list: List<EpgProgram>) {
-            val w = list.filter { it.stopMs > winFrom && it.startMs < winTo }
-                .map { EpgProgram(startMs = it.startMs, stopMs = it.stopMs, title = it.title, episode = it.episode, icon = it.icon) }
-            if (w.isEmpty()) return
-            val k = "$src\u0000$xid"
-            windowCopies[k] = windowCopies[k].orEmpty() + w
+            var buffer: ArrayList<EpgProgram>? = null
+            for (program in list) {
+                if (program.stopMs > winFrom && program.startMs < winTo) {
+                    val owned = buffer ?: windowCopies.getOrPut("$src\u0000$xid") { ArrayList() }.also {
+                        buffer = it
+                        pendingWindowSource = src
+                    }
+                    owned.add(EpgProgram(
+                        startMs = program.startMs, stopMs = program.stopMs, title = program.title,
+                        episode = program.episode, icon = program.icon
+                    ))
+                }
+            }
         }
         // What a guide's stored copy depends on besides the file: the channels it was matched for,
         // hand-picked guides and the hours kept. Unchanged, a guide file isn't read again.
@@ -1817,6 +1834,8 @@ class LiveTvRepository @Inject constructor(
         }
 
         for ((order, target) in targets.withIndex()) {
+            // Release the completed source's growth slack before the next source's heap guard.
+            trimPendingWindowCopies()
             val file = epgFile(target.fileId)
             if (!file.exists()) { LIVE_REPORT.add("Guide \"${target.name}\": no file downloaded yet"); continue }
             val src = target.fileId
@@ -2005,6 +2024,7 @@ class LiveTvRepository @Inject constructor(
             }
         }
 
+        trimPendingWindowCopies()
         val auto = HashMap<String, EpgAssignment>()
         best.forEach { (key, c) -> auto[key] = EpgAssignment(c.sourceId, c.xmltvId) }
         // Unassigned in Assign EPG: no guide for these channels, automatic match included.
@@ -2043,8 +2063,14 @@ class LiveTvRepository @Inject constructor(
         runCatching { guideDb.dropStagesExcept(emptyList()) }
         // The hours around now, in memory (short form: details come from the database).
         val window = HashMap<String, List<EpgProgram>>()
+        // Make one sorted copy per selected guide channel, then share it with aliases.
+        val orderedWindows = HashMap<String, List<EpgProgram>>()
         choice.forEach { (key, a) ->
-            windowCopies["${a.sourceId}\u0000${a.xmltvId}"]?.sortedBy { it.startMs }?.let { window[key] = it }
+            val id = "${a.sourceId}\u0000${a.xmltvId}"
+            val list = orderedWindows.getOrPut(id) {
+                windowCopies[id]?.sortedBy { it.startMs } ?: emptyList()
+            }
+            if (list.isNotEmpty()) window[key] = list
         }
         pinned.forEach { (key, list) ->
             val w = list.filter { it.stopMs > winFrom && it.startMs < winTo }
