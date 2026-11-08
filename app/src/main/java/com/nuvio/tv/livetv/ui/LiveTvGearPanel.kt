@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.VolumeUp
@@ -49,6 +51,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
+import com.nuvio.tv.livetv.model.PanelRowList
+import com.nuvio.tv.livetv.model.PanelRowLists
 import kotlinx.coroutines.delay
 
 /**
@@ -85,9 +89,11 @@ internal fun GearPanel(
     /** "Watch from the beginning" (live, catch-up channel), "Back to live" (replay) or "Go live" (paused). */
     timeAction: String?,
     hidden: Set<String>,
-    /** The Channel Row (the tab under the bar) is on. */
-    channelRow: Boolean,
-    onChannelRow: () -> Unit,
+    /** Live TV settings now, for the Quick Channels page (the row under the bar) and the info bar's time. */
+    quickSettings: com.nuvio.tv.livetv.model.LiveTvSettings,
+    /** Every group that can be added to Quick Channels (asked when its pages open). */
+    quickGroups: () -> List<RowGroupOption>,
+    onQuickUpdate: ((com.nuvio.tv.livetv.model.LiveTvSettings) -> com.nuvio.tv.livetv.model.LiveTvSettings) -> Unit,
     /** Cycles how dark the play bar is (Standard, Darker, Solid). */
     onBackground: () -> Unit,
     onToggle: (String) -> Unit,
@@ -109,7 +115,15 @@ internal fun GearPanel(
     // "audio", "subs", "sleep" or "info" while one of those pages is open.
     var page by remember { mutableStateOf(startPage.takeIf { it in setOf("audio", "subs", "sleep", "info") } ?: "") }
     val first = remember { FocusRequester() }
-    BackHandler { if (customizing || sizing || page != "") { customizing = false; sizing = false; page = "" } else onDismiss() }
+    BackHandler {
+        when {
+            // Quick Channels' pages sit under Play bar layout: Back goes up one page at a time.
+            page == "quickAdd" -> page = "quick"
+            page == "quick" -> page = ""
+            customizing || sizing || page != "" -> { customizing = false; sizing = false; page = "" }
+            else -> onDismiss()
+        }
+    }
     LaunchedEffect(customizing, sizing, page) { delay(60); runCatching { first.requestFocus() } }
 
     // Opened by holding OK: that press is still down. Its repeats and its release must not
@@ -134,7 +148,16 @@ internal fun GearPanel(
                 .glass(glassColor(if (background == "standard") "darker" else background), RoundedCornerShape(20.dp))
                 .padding(12.dp)
         ) {
-            if (page != "") {
+            if (page == "quick" || page == "quickAdd") {
+                QuickChannelsPages(
+                    adding = page == "quickAdd",
+                    settings = quickSettings,
+                    groups = remember(page) { quickGroups() },
+                    first = first,
+                    onUpdate = onQuickUpdate,
+                    onAdd = { page = "quickAdd" }
+                )
+            } else if (page != "") {
                 // ---- Audio, Subtitles, Sleep timer, Stream info: one page each, like the others
                 val title = when (page) { "audio" -> "Audio"; "subs" -> "Subtitles"; "sleep" -> "Sleep timer"; else -> "Stream info" }
                 val hint = when (page) { "sleep" -> "Stops playback after"; "audio" -> "Applies to this channel"; else -> null }
@@ -312,16 +335,17 @@ internal fun GearPanel(
                         size = 13.sp, weight = FontWeight.Medium, color = gearText(focused)
                     )
                 }
-                // The Channel Row on or off (OK switches it).
-                GearRow(Modifier.fillMaxWidth(), onClick = onChannelRow) { focused ->
+                // Quick Channels (the row under the bar): its own page, the same choices as Settings.
+                GearRow(Modifier.fillMaxWidth(), onClick = { page = "quick" }) { focused ->
                     Column(Modifier.weight(1f)) {
-                        LiveText("Channel row", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused))
-                        LiveText("Its lists are picked in Settings › Live TV", size = 10.sp, color = gearText(focused, dim = true))
+                        LiveText("Quick channels", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused))
+                        LiveText("What it shows and in what order", size = 10.sp, color = gearText(focused, dim = true))
                     }
                     LiveText(
-                        if (channelRow) "On" else "Off",
+                        quickChannelsLabel(quickSettings),
                         size = 13.sp, weight = FontWeight.Medium, color = gearText(focused)
                     )
+                    LiveText("›", size = 15.sp, color = gearText(focused, dim = true))
                 }
             }
         }
@@ -389,6 +413,183 @@ internal fun Switch(on: Boolean, focused: Boolean) {
         Box(
             Modifier.align(if (on) Alignment.CenterEnd else Alignment.CenterStart).padding(2.dp)
                 .size(16.dp).clip(CircleShape).background(Color.White)
+        )
+    }
+}
+
+/** "Off", "1 list" or "N lists": what Quick Channels is set to. */
+internal fun quickChannelsLabel(s: com.nuvio.tv.livetv.model.LiveTvSettings): String {
+    if (!PanelRowLists.shown(s)) return "Off"
+    val n = PanelRowLists.parse(s).count { it.on }
+    return if (n == 1) "1 list" else "$n lists"
+}
+
+/** How long the info bar stays up; OK on the gear panel's row steps through these. */
+private val INFO_BAR_SECONDS = listOf(3, 5, 8, 10, 15)
+
+/**
+ * The gear panel's Quick Channels page (the row under the play bar), with the same choices as
+ * Settings: on or off, which list it opens on, its lists (on/off and their order) and adding
+ * any group. [adding] shows the "Add a playlist group" page instead. Changes save straight away,
+ * so the bar behind the panel shows them.
+ */
+@Composable
+private fun QuickChannelsPages(
+    adding: Boolean,
+    settings: com.nuvio.tv.livetv.model.LiveTvSettings,
+    groups: List<RowGroupOption>,
+    first: FocusRequester,
+    onUpdate: ((com.nuvio.tv.livetv.model.LiveTvSettings) -> com.nuvio.tv.livetv.model.LiveTvSettings) -> Unit,
+    onAdd: () -> Unit
+) {
+    val lists = PanelRowLists.parse(settings)
+    fun save(newLists: List<PanelRowList>) = onUpdate { PanelRowLists.withLists(it, newLists) }
+
+    if (adding) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+            LiveText("‹  Add a playlist group", size = 14.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            LiveText("Ticked = in the row", size = 11.sp, color = Color.White.copy(alpha = 0.55f))
+        }
+        Spacer(Modifier.height(6.dp))
+        if (groups.isEmpty()) {
+            GearRow(Modifier.fillMaxWidth().focusRequester(first), onClick = {}) { focused ->
+                LiveText("No groups yet. Add a playlist first.", size = 13.sp, color = gearText(focused), modifier = Modifier.weight(1f))
+            }
+            return
+        }
+        val chosen = lists.map { it.id }.toSet()
+        Column(
+            Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            var lastHeading: String? = null
+            groups.forEachIndexed { i, g ->
+                val heading = g.playlist ?: "My groups"
+                if (heading != lastHeading) {
+                    lastHeading = heading
+                    LiveText(
+                        heading.uppercase(), size = 10.sp, weight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.padding(start = 10.dp, top = if (i == 0) 0.dp else 8.dp, bottom = 2.dp)
+                    )
+                }
+                val on = g.id in chosen
+                GearRow(
+                    Modifier.fillMaxWidth().then(if (i == 0) Modifier.focusRequester(first) else Modifier),
+                    onClick = {
+                        // Ticking adds the group at the end (switched on); unticking takes it out.
+                        save(if (on) lists.filter { it.id != g.id } else lists + PanelRowList(g.id, true))
+                    }
+                ) { focused ->
+                    Column(Modifier.weight(1f)) {
+                        LiveText(g.name, size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused), maxLines = 1)
+                        LiveText(if (g.count == 1) "1 channel" else "${g.count} channels", size = 10.sp, color = gearText(focused, dim = true))
+                    }
+                    Switch(on, focused)
+                }
+            }
+        }
+        return
+    }
+
+    val names = remember(groups) { groups.associateBy { it.id } }
+    val shown = PanelRowLists.shown(settings)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+        LiveText("‹  Quick channels", size = 14.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        LiveText("Changes show right away", size = 11.sp, color = Color.White.copy(alpha = 0.55f))
+    }
+    Spacer(Modifier.height(6.dp))
+    // Everything under the title scrolls, so a long list never pushes the panel off the top.
+    Column(
+        Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        GearRow(Modifier.fillMaxWidth().focusRequester(first), onClick = { onUpdate { PanelRowLists.setShown(it, !PanelRowLists.shown(it)) } }) { focused ->
+            LiveText("Show quick channels", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
+            Switch(shown, focused)
+        }
+        GearRow(Modifier.fillMaxWidth(), onClick = { onUpdate { it.copy(panelRowOpens = if (it.panelRowOpens == "first") "last" else "first") } }) { focused ->
+            Column(Modifier.weight(1f)) {
+                LiveText("Opens on", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused))
+                LiveText("The list it shows first", size = 10.sp, color = gearText(focused, dim = true))
+            }
+            LiveText(if (settings.panelRowOpens == "first") "First list" else "Last one used", size = 13.sp, weight = FontWeight.Medium, color = gearText(focused))
+        }
+        LiveText(
+            "LISTS · OK turns one on or off, the arrows move it",
+            size = 10.sp, weight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.55f),
+            modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 2.dp)
+        )
+        lists.forEachIndexed { index, l ->
+            val (title, subtitle) = when (l.id) {
+                PanelRowLists.RECENT -> "Recently Watched" to "Built in"
+                PanelRowLists.FAVORITES -> "Favorites" to "Built in"
+                else -> names[l.id]?.let { g -> g.name to (g.playlist?.let { "$it · playlist group" } ?: "Your group") }
+                    ?: ("Group not found" to "Not in your playlists right now")
+            }
+            fun move(by: Int) {
+                val j = index + by
+                if (j !in lists.indices) return
+                val m = lists.toMutableList()
+                m.add(j, m.removeAt(index))
+                save(m)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                GearRow(Modifier.weight(1f), onClick = { save(lists.map { if (it.id == l.id) it.copy(on = !it.on) else it }) }) { focused ->
+                    Column(Modifier.weight(1f)) {
+                        LiveText(title, size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused), maxLines = 1)
+                        LiveText(subtitle, size = 10.sp, color = gearText(focused, dim = true), maxLines = 1)
+                    }
+                    Switch(l.on, focused)
+                }
+                GearArrow(Icons.Default.KeyboardArrowUp, "Move up", enabled = index > 0) { move(-1) }
+                GearArrow(Icons.Default.KeyboardArrowDown, "Move down", enabled = index < lists.lastIndex) { move(1) }
+            }
+        }
+        GearRow(Modifier.fillMaxWidth(), onClick = onAdd) { focused ->
+            Column(Modifier.weight(1f)) {
+                LiveText("+  Add a playlist group…", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused))
+                LiveText("Any group from any playlist, your own too", size = 10.sp, color = gearText(focused, dim = true))
+            }
+            LiveText("›", size = 15.sp, color = gearText(focused, dim = true))
+        }
+        GearRow(
+            Modifier.fillMaxWidth(),
+            onClick = {
+                onUpdate {
+                    val i = INFO_BAR_SECONDS.indexOf(it.infoBannerSeconds)
+                    it.copy(infoBannerSeconds = INFO_BAR_SECONDS[(i + 1) % INFO_BAR_SECONDS.size])
+                }
+            }
+        ) { focused ->
+            Column(Modifier.weight(1f)) {
+                LiveText("Info bar stays for", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused))
+                LiveText("After changing channel or pressing OK", size = 10.sp, color = gearText(focused, dim = true))
+            }
+            LiveText("${settings.infoBannerSeconds} seconds", size = 13.sp, weight = FontWeight.Medium, color = gearText(focused))
+        }
+    }
+}
+
+/** A small ▲ / ▼ button beside a Quick Channels list (dimmed and does nothing at the ends). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GearArrow(icon: ImageVector, desc: String, enabled: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (focused) Color.White else Color.Transparent)
+            .onFocusChanged { focused = it.isFocused }
+            .combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { if (enabled) onClick() }),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = desc,
+            tint = (if (focused) Color(0xFF111111) else Color.White).copy(alpha = if (enabled) 1f else 0.3f),
+            modifier = Modifier.size(20.dp)
         )
     }
 }

@@ -30,7 +30,8 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 
 /**
- * Settings → Live TV → Channel Row: the row tucked under the full play bar (Down opens it).
+ * Settings → Live TV → Playback → Quick Channels: the row tucked under the full play bar (Down
+ * opens it). The play bar's gear panel has the same choices (Play bar layout › Quick channels).
  * Switch it on or off, pick which list it opens on, and choose its lists: Recently Watched,
  * Favorites and any of your groups (playlist groups or your own), in the order you like.
  */
@@ -71,8 +72,8 @@ internal fun ChannelRowDialog(
     LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
     NuvioDialog(
         onDismiss = onDismiss,
-        title = "Channel Row",
-        subtitle = "Tucked under the play bar. Press Down on the bar to open it.",
+        title = "Quick Channels",
+        subtitle = "Shortcuts tucked under the play bar. Press Down on the bar to open them.",
         width = 640.dp
     ) {
         LazyColumn(
@@ -81,7 +82,7 @@ internal fun ChannelRowDialog(
         ) {
             item(key = "shown") {
                 SettingsToggleRow(
-                    title = "Show the Channel Row",
+                    title = "Show Quick Channels",
                     subtitle = null,
                     checked = PanelRowLists.shown(settings),
                     onToggle = { onUpdate { PanelRowLists.setShown(it, !PanelRowLists.shown(it)) } },
@@ -136,7 +137,7 @@ internal fun ChannelRowDialog(
     }
 }
 
-/** Every group, ticked when it's in the Channel Row: your own groups, then each playlist's. */
+/** Every group, ticked when it's in Quick Channels: your own groups, then each playlist's. */
 @Composable
 private fun AddRowGroupsDialog(
     groups: List<RowGroupOption>,
@@ -149,7 +150,7 @@ private fun AddRowGroupsDialog(
     NuvioDialog(
         onDismiss = onDismiss,
         title = "Add Playlist Groups",
-        subtitle = if (groups.isEmpty()) "No groups yet. Add a playlist first." else "Each one you tick becomes its own list in the Channel Row.",
+        subtitle = if (groups.isEmpty()) "No groups yet. Add a playlist first." else "Each one you tick becomes its own list in Quick Channels.",
         width = 600.dp
     ) {
         if (groups.isEmpty()) {

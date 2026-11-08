@@ -144,25 +144,9 @@ class LiveTvSettingsViewModel @Inject constructor(
         return key.substringAfterLast('|').substringBefore('#')
     }
 
-    /**
-     * Every group that can go in the play bar's Channel Row: your own groups first, then each
-     * playlist's groups (in the playlist's order), with the playlist's name and how many channels.
-     */
-    fun rowGroupOptions(): List<RowGroupOption> {
-        val user = userState.value
-        val lists = playlists.value
-        val names = lists.associate { it.id to it.name }
-        val order = lists.withIndex().associate { (i, p) -> p.id to i }
-        val found = LinkedHashMap<String, Triple<String, String, Int>>()
-        repository.channels.value.forEach { c ->
-            val cur = found[c.groupId]
-            found[c.groupId] = Triple(cur?.first ?: c.group, cur?.second ?: c.sourceId, (cur?.third ?: 0) + 1)
-        }
-        val playlistGroups = found.entries
-            .sortedBy { order[it.value.second] ?: Int.MAX_VALUE }
-            .map { (id, v) -> RowGroupOption(id, user.groupNames[id] ?: v.first, names[v.second] ?: "Playlist", v.third) }
-        return user.customGroups.map { RowGroupOption(it.id, it.name, null, it.channelKeys.size) } + playlistGroups
-    }
+    /** Every group that can go in Quick Channels (see [buildRowGroupOptions]). */
+    fun rowGroupOptions(): List<RowGroupOption> =
+        buildRowGroupOptions(userState.value, playlists.value, repository.channels.value)
 
     fun groupLabel(id: String): String {
         userState.value.customGroups.firstOrNull { it.id == id }?.let { return it.name }
@@ -172,5 +156,28 @@ class LiveTvSettingsViewModel @Inject constructor(
     }
 }
 
-/** A group that can be added to the Channel Row: [playlist] is null for your own groups. */
+/** A group that can be added to Quick Channels: [playlist] is null for your own groups. */
 data class RowGroupOption(val id: String, val name: String, val playlist: String?, val count: Int)
+
+/**
+ * Every group that can go in Quick Channels (the row under the play bar): your own groups first,
+ * then each playlist's groups (in the playlist's order), with the playlist's name and how many
+ * channels. Used by Settings and by the play bar's gear panel.
+ */
+internal fun buildRowGroupOptions(
+    user: LiveUserState,
+    lists: List<PlaylistSource>,
+    channels: List<com.nuvio.tv.livetv.model.LiveChannel>
+): List<RowGroupOption> {
+    val names = lists.associate { it.id to it.name }
+    val order = lists.withIndex().associate { (i, p) -> p.id to i }
+    val found = LinkedHashMap<String, Triple<String, String, Int>>()
+    channels.forEach { c ->
+        val cur = found[c.groupId]
+        found[c.groupId] = Triple(cur?.first ?: c.group, cur?.second ?: c.sourceId, (cur?.third ?: 0) + 1)
+    }
+    val playlistGroups = found.entries
+        .sortedBy { order[it.value.second] ?: Int.MAX_VALUE }
+        .map { (id, v) -> RowGroupOption(id, user.groupNames[id] ?: v.first, names[v.second] ?: "Playlist", v.third) }
+    return user.customGroups.map { RowGroupOption(it.id, it.name, null, it.channelKeys.size) } + playlistGroups
+}

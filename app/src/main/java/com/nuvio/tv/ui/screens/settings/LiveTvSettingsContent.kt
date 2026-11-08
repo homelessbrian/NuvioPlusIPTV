@@ -1053,8 +1053,8 @@ internal fun LiveTvSettingsContent(
                         { update { it.copy(reverseZap = !it.reverseZap) } }
                     )
                     SettingsActionRow(
-                        title = "Channel Row",
-                        subtitle = "A row of channels tucked under the play bar: press OK while watching, then Down. Pick its lists: Recently Watched (adult channels are never listed), Favorites and any of your groups",
+                        title = "Quick Channels",
+                        subtitle = "Shortcuts under the play bar: press OK while watching, then Down. Pick its lists: Recently Watched (adult channels are never listed), Favorites and any of your groups. Also on the play bar: gear › Play bar layout.",
                         value = if (!com.nuvio.tv.livetv.model.PanelRowLists.shown(s)) "Off" else {
                             val n = com.nuvio.tv.livetv.model.PanelRowLists.parse(s).count { it.on }
                             if (n == 1) "1 list" else "$n lists"

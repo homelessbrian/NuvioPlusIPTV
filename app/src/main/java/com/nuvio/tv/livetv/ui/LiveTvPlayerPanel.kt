@@ -110,7 +110,7 @@ internal object BarPart {
         Triple(PROGRESS, "Progress bar", "Always shown while paused"),
         Triple(CLOCK, "Clock", null),
         Triple(NEXT, "Up next", null),
-        Triple(RECENT, "Channel row", "The tab under the bar (▼ opens it)"),
+        Triple(RECENT, "Quick channels tab", "The tab under the bar (▼ opens it)"),
         Triple(BELL, "Bell", "Follow the show, or put the movie on your Calendar")
     )
 

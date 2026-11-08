@@ -1198,10 +1198,9 @@ fun LiveTvPlayerScreen(
                 sleepLabel = sleepAt?.let { "${((it - System.currentTimeMillis()) / 60_000 + 1).coerceAtLeast(1)} min left" } ?: "Off",
                 timeAction = timeAction,
                 hidden = BarPart.parse(settings.barHidden),
-                channelRow = PanelRowLists.shown(settings),
-                onChannelRow = {
-                    viewModel.updateSettings { PanelRowLists.setShown(it, !PanelRowLists.shown(it)) }
-                },
+                quickSettings = settings,
+                quickGroups = { viewModel.rowGroupOptions() },
+                onQuickUpdate = { t -> viewModel.updateSettings(t) },
                 onBackground = {
                     viewModel.updateSettings {
                         it.copy(panelBackground = when (it.panelBackground) { "standard" -> "darker"; "darker" -> "solid"; else -> "standard" })

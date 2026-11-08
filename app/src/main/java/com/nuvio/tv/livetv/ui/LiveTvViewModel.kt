@@ -481,6 +481,14 @@ class LiveTvViewModel @Inject constructor(
         viewModelScope.launch { prefs.updateSettings(transform) }
     }
 
+    /** Playlists as they are now, for naming groups in the gear panel's Quick Channels page. */
+    private val playlistList: StateFlow<List<com.nuvio.tv.livetv.model.PlaylistSource>> = prefs.playlists
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Every group that can go in Quick Channels (the same list Settings shows). */
+    fun rowGroupOptions(): List<RowGroupOption> =
+        buildRowGroupOptions(userState.value, playlistList.value, repository.channels.value)
+
     fun requestGroupsOnReturn() {
         session.openGroupsOnReturn = true
     }
