@@ -1189,15 +1189,10 @@ internal object OtherFeeds {
     /** Whether a game page can be had (international cricket: ESPN has none behind its score panel). */
     fun espnExtras(path: String?): Boolean = path != null && path != "cricket/panel"
 
-    private class Kept(val at: Long, val value: Any)
-    private val kept = java.util.concurrent.ConcurrentHashMap<String, Kept>()
+    private val kept = SportsFeedCache()
 
-    private fun <T : Any> keep(key: String, maxAgeMs: Long, load: () -> T): T {
-        val k = kept[key]
-        @Suppress("UNCHECKED_CAST")
-        if (k != null && System.currentTimeMillis() - k.at < maxAgeMs) return k.value as T
-        return load().also { kept[key] = Kept(System.currentTimeMillis(), it) }
-    }
+    private fun <T : Any> keep(key: String, maxAgeMs: Long, retainMs: Long = maxAgeMs, load: () -> T): T =
+        kept.getOrLoad(key, maxAgeMs, retainMs, load)
 
     // ------------------------------------------------------------------ days asked for
 
@@ -1482,7 +1477,8 @@ internal object OtherFeeds {
         val live = today >= span.first && today <= span.second
         val url = "${MLB}schedule?sportId=$sportId&startDate=${d(span.first)}&endDate=${d(span.second)}&hydrate=team,venue,linescore,broadcasts(all)" +
             (teamId?.let { "&teamId=$it" } ?: "")
-        val root = runCatching { keep("milb:$url", if (live) 60_000L else 30 * 60_000L) { JSONObject(get(url)) } }.getOrNull() ?: return emptyList()
+        // This URL is also reused for up to 30 minutes outside the live-score window.
+        val root = runCatching { keep("milb:$url", if (live) 60_000L else 30 * 60_000L, retainMs = 30 * 60_000L) { JSONObject(get(url)) } }.getOrNull() ?: return emptyList()
         val out = ArrayList<JSONObject>()
         val dates = root.optJSONArray("dates") ?: return out
         for (i in 0 until dates.length()) {
