@@ -566,8 +566,11 @@ class LiveTvViewModel @Inject constructor(
     ): Boolean {
         val now = System.currentTimeMillis()
         // The guide's time shift is taken back off (the archive goes by the guide's own times),
-        // then the catch-up time shift added, for providers whose archive is on another clock.
-        val shift = settings.value.epgOffsetMinutes * 60_000L - settings.value.catchupShiftMinutes * 60_000L
+        // then the playlist's catch-up time shift added, for providers whose archive is on
+        // another clock. (The old one-for-everything values are 0 once moved onto each source.)
+        val shift = repository.guideShiftMs(channel, userState.value.epgOverrides) +
+            settings.value.epgOffsetMinutes * 60_000L - settings.value.catchupShiftMinutes * 60_000L -
+            (playlistCatchupShifts.value[channel.sourceId] ?: 0) * 60_000L
         val start = program.startMs + offsetMs.coerceAtLeast(0)
         // Ask for more than the show itself: up to 3 hours past its end (but not past what has
         // aired). Shows that run over keep playing, and the next show follows on seamlessly.
@@ -618,6 +621,11 @@ class LiveTvViewModel @Inject constructor(
     /** Playlist id -> when HLS catch-up last failed there (see [PlaylistSource.catchupNoHlsSince]). */
     private val playlistNoHls: StateFlow<Map<String, Long>> = prefs.playlists
         .map { l -> l.associate { it.id to it.catchupNoHlsSince } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    /** Playlist id -> its catch-up time shift, in minutes. */
+    private val playlistCatchupShifts: StateFlow<Map<String, Int>> = prefs.playlists
+        .map { l -> l.associate { it.id to it.catchupShiftMinutes } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     /** Playlist id -> the time zone catch-up links are written in (picked in settings, else the server's). */

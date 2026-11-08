@@ -101,6 +101,9 @@ class LiveTvSettingsViewModel @Inject constructor(
         if (enabled && pl != null && pl.isXtream && pl.importVod) onDemand.refreshNow(id) else onDemand.refreshSoon()
     }
     fun movePlaylist(id: String, delta: Int) = viewModelScope.launch { repository.movePlaylist(id, delta) }
+    fun setPlaylistGuideShift(id: String, minutes: Int) = viewModelScope.launch { repository.setPlaylistGuideShift(id, minutes) }
+    fun setPlaylistCatchupShift(id: String, minutes: Int) = viewModelScope.launch { repository.setPlaylistCatchupShift(id, minutes) }
+    fun setEpgShift(id: String, minutes: Int) = viewModelScope.launch { repository.setEpgShift(id, minutes) }
 
     fun addEpg(name: String, url: String) = viewModelScope.launch { repository.addEpg(name, url) }
     fun saveEpg(source: EpgSource) = viewModelScope.launch { repository.updateEpg(source) }

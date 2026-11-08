@@ -686,7 +686,9 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         auto: Map<String, EpgAssignment>,
         parts: String?,
         fromMs: Long,
-        toMs: Long
+        toMs: Long,
+        /** Channels whose listings are moved (the playlist's tvg-shift), in ms. */
+        channelShifts: Map<String, Long> = emptyMap()
     ) {
         changes++
         try {
@@ -699,16 +701,17 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                 db.delete("programs", null, null)
                 db.delete("auto", null, null)
                 db.execSQL("DROP TABLE IF EXISTS temp.choice")
-                db.execSQL("CREATE TEMP TABLE choice (src TEXT NOT NULL, xid TEXT NOT NULL, ch TEXT NOT NULL, PRIMARY KEY (src, xid, ch))")
-                val ins = db.compileStatement("INSERT OR IGNORE INTO temp.choice (src, xid, ch) VALUES (?,?,?)")
+                db.execSQL("CREATE TEMP TABLE choice (src TEXT NOT NULL, xid TEXT NOT NULL, ch TEXT NOT NULL, sh INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (src, xid, ch))")
+                val ins = db.compileStatement("INSERT OR IGNORE INTO temp.choice (src, xid, ch, sh) VALUES (?,?,?,?)")
                 choice.forEach { (ch, a) ->
                     ins.clearBindings(); ins.bindString(1, a.sourceId); ins.bindString(2, a.xmltvId); ins.bindString(3, ch)
+                    ins.bindLong(4, channelShifts[ch] ?: 0L)
                     ins.executeInsert()
                 }
                 db.execSQL(
                     "INSERT INTO programs (ch, start, stop, title, descr, cat, ep, icon, year, people) " +
-                        "SELECT c.ch, s.start, s.stop, s.title, s.descr, s.cat, s.ep, s.icon, s.year, s.people " +
-                        "FROM stage s JOIN temp.choice c ON c.src = s.src AND c.xid = s.xid WHERE s.stop > ? AND s.start < ?",
+                        "SELECT c.ch, s.start + c.sh, s.stop + c.sh, s.title, s.descr, s.cat, s.ep, s.icon, s.year, s.people " +
+                        "FROM stage s JOIN temp.choice c ON c.src = s.src AND c.xid = s.xid WHERE s.stop + c.sh > ? AND s.start + c.sh < ?",
                     arrayOf<Any>(fromMs, toMs)
                 )
                 db.execSQL("DROP TABLE IF EXISTS temp.choice")

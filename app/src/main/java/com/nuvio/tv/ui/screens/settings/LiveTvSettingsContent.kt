@@ -186,8 +186,9 @@ private sealed interface LiveDialog {
     data class EditEpg(val source: EpgSource) : LiveDialog
     data object HiddenChannels : LiveDialog
     data object HiddenGroups : LiveDialog
-    data object EpgShift : LiveDialog
-    data object CatchupShift : LiveDialog
+    data class PlaylistGuideShift(val source: PlaylistSource) : LiveDialog
+    data class PlaylistCatchupShift(val source: PlaylistSource) : LiveDialog
+    data class EpgSourceShift(val source: EpgSource) : LiveDialog
     data object ClockMode : LiveDialog
     data object FrameRate : LiveDialog
     data object RecordPre : LiveDialog
@@ -1222,12 +1223,7 @@ internal fun LiveTvSettingsContent(
                         s.catchupPreferHls,
                         { update { it.copy(catchupPreferHls = !it.catchupPreferHls) } }
                     )
-                    SettingsActionRow(
-                        title = "Catch-Up Time Shift",
-                        subtitle = "If replays start the show before (or after) the one you picked, move the time asked for by that much. Example: it plays the show an hour earlier, set +1 h.",
-                        value = offsetLabel(s.catchupShiftMinutes),
-                        onClick = { dialog = LiveDialog.CatchupShift }
-                    )
+                    SettingsNote("Catch-up time shift is set for each playlist: Playlists, then choose one.")
                     SubHeading("Connection")
                     SettingsActionRow(
                         title = "Buffer Size",
@@ -1257,7 +1253,7 @@ internal fun LiveTvSettingsContent(
             if (show(LiveTvPage.GUIDE)) item(key = "listings") {
                 LiveSection(
                     title = "Guide Listings",
-                    summary = "How far the guide reaches, timing fixes",
+                    summary = "How far the guide reaches",
                     icon = Icons.Default.Schedule,
                     open = "listings" in open,
                     onToggle = { toggle("listings") }
@@ -1270,12 +1266,7 @@ internal fun LiveTvSettingsContent(
                         "Past Shows Kept", "How far back the guide keeps shows, for catch-up",
                         hoursLabel(s.epgPastHours), onClick = { dialog = LiveDialog.PastHours }
                     )
-                    SettingsActionRow(
-                        title = "Guide Time Shift",
-                        subtitle = "Moves all listings earlier or later, for a guide that's out of step with what's playing",
-                        value = offsetLabel(s.epgOffsetMinutes),
-                        onClick = { dialog = LiveDialog.EpgShift }
-                    )
+                    SettingsNote("Guide time shift is set for each guide: choose a playlist (its built-in guide) or an EPG source.")
                     val clearContext = androidx.compose.ui.platform.LocalContext.current
                     SettingsActionRow(
                         "Clear Posters and Show Info",
@@ -1743,6 +1734,13 @@ internal fun LiveTvSettingsContent(
                 // Which clock replay links are written in. Automatic: the one the provider's
                 // server reports (or that the app worked out); pick one when that's wrong.
                 "Catch-up time zone: " + catchupZoneLabel(d.source) to { dialog = LiveDialog.CatchupZone(d.source) },
+                // Time shifts for this playlist: its built-in guide, and its catch-up.
+                ("Guide time shift: " + offsetLabel(d.source.guideShiftMinutes)).takeIf { d.source.liveEnabled }?.let {
+                    it to { dialog = LiveDialog.PlaylistGuideShift(d.source) }
+                },
+                ("Catch-up time shift: " + offsetLabel(d.source.catchupShiftMinutes)).takeIf { d.source.liveEnabled }?.let {
+                    it to { dialog = LiveDialog.PlaylistCatchupShift(d.source) }
+                },
                 "Move up" to { viewModel.movePlaylist(d.source.id, -1); close() },
                 "Move down" to { viewModel.movePlaylist(d.source.id, 1); close() }
             ),
@@ -1815,6 +1813,7 @@ internal fun LiveTvSettingsContent(
             actions = listOf(
                 "Edit" to { dialog = LiveDialog.EditEpg(d.source) },
                 "Update now" to { viewModel.saveEpg(d.source); close() },
+                ("Time shift: " + offsetLabel(d.source.shiftMinutes)) to { dialog = LiveDialog.EpgSourceShift(d.source) },
                 (if (d.source.enabled) "Disable" else "Enable") to { viewModel.setEpgEnabled(d.source.id, !d.source.enabled); close() },
                 "Delete EPG source" to { dialog = LiveDialog.ConfirmDeleteEpg(d.source) }
             ),
@@ -1980,11 +1979,20 @@ internal fun LiveTvSettingsContent(
             onUnhideAll = { viewModel.unhideAllGroups(); close() },
             onDismiss = close
         )
-        LiveDialog.EpgShift -> SettingsSingleChoiceDialog(
-            title = "EPG time shift",
+        is LiveDialog.PlaylistGuideShift -> SettingsSingleChoiceDialog(
+            title = "Guide time shift: ${d.source.name}",
+            subtitle = "Moves this playlist's built-in guide earlier or later, for listings out of step with what's playing",
             options = EPG_OFFSETS.map { SettingsPickerOption(it, offsetLabel(it)) },
-            selectedValue = s.epgOffsetMinutes,
-            onOptionSelected = { v -> update { it.copy(epgOffsetMinutes = v) }; close() },
+            selectedValue = d.source.guideShiftMinutes,
+            onOptionSelected = { v -> viewModel.setPlaylistGuideShift(d.source.id, v); close() },
+            onDismiss = close
+        )
+        is LiveDialog.EpgSourceShift -> SettingsSingleChoiceDialog(
+            title = "Time shift: ${d.source.name}",
+            subtitle = "Moves this guide's listings earlier or later, for listings out of step with what's playing",
+            options = EPG_OFFSETS.map { SettingsPickerOption(it, offsetLabel(it)) },
+            selectedValue = d.source.shiftMinutes,
+            onOptionSelected = { v -> viewModel.setEpgShift(d.source.id, v); close() },
             onDismiss = close
         )
         LiveDialog.RecordPre -> SettingsSingleChoiceDialog(
@@ -2036,11 +2044,12 @@ internal fun LiveTvSettingsContent(
             onOptionSelected = { v -> update { it.copy(clockOpacity = v) }; close() },
             onDismiss = close
         )
-        LiveDialog.CatchupShift -> SettingsSingleChoiceDialog(
-            title = "Catch-up time shift",
+        is LiveDialog.PlaylistCatchupShift -> SettingsSingleChoiceDialog(
+            title = "Catch-up time shift: ${d.source.name}",
+            subtitle = "If replays start the show before (or after) the one you picked, move the time asked for by that much. Example: it plays the show an hour earlier, set +1 h.",
             options = EPG_OFFSETS.map { SettingsPickerOption(it, offsetLabel(it)) },
-            selectedValue = s.catchupShiftMinutes,
-            onOptionSelected = { v -> update { it.copy(catchupShiftMinutes = v) }; close() },
+            selectedValue = d.source.catchupShiftMinutes,
+            onOptionSelected = { v -> viewModel.setPlaylistCatchupShift(d.source.id, v); close() },
             onDismiss = close
         )
         LiveDialog.ZapModeChoice -> SettingsSingleChoiceDialog(

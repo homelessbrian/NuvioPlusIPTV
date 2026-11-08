@@ -606,6 +606,41 @@ class LiveTvPreferences @Inject constructor(
         noteRemovedSources(removed)
     }
 
+    /**
+     * The old Guide Time Shift and Catch-Up Time Shift (one value for everything) moved onto each
+     * playlist and guide source, which now have their own. A source that already has its own
+     * shift keeps it. Then the old values go back to 0, so nothing is moved twice. Runs whenever
+     * an old value is found: after updating, and after a setup from an older version is synced
+     * or restored. Returns whether anything changed.
+     */
+    suspend fun moveTimeShiftsToSources(): Boolean {
+        var moved = false
+        store.edit { p -> moved = moveTimeShifts(p) }
+        return moved
+    }
+
+    private fun moveTimeShifts(p: androidx.datastore.preferences.core.MutablePreferences): Boolean {
+        val guide = p[Keys.epgOffset] ?: 0
+        val catchup = p[Keys.catchupShift] ?: 0
+        if (guide == 0 && catchup == 0) return false
+        val playlists = decodePlaylists(p[Keys.playlists])
+        if (playlists.isNotEmpty()) {
+            p[Keys.playlists] = encodePlaylists(playlists.map {
+                it.copy(
+                    guideShiftMinutes = if (it.guideShiftMinutes == 0) guide else it.guideShiftMinutes,
+                    catchupShiftMinutes = if (it.catchupShiftMinutes == 0) catchup else it.catchupShiftMinutes
+                )
+            })
+        }
+        val epgs = decodeEpgs(p[Keys.epgs])
+        if (epgs.isNotEmpty() && guide != 0) {
+            p[Keys.epgs] = encodeEpgs(epgs.map { if (it.shiftMinutes == 0) it.copy(shiftMinutes = guide) else it })
+        }
+        p[Keys.epgOffset] = 0
+        p[Keys.catchupShift] = 0
+        return true
+    }
+
     // Playlists and guides removed on this TV (by you), until Google Drive sync has passed that on.
     // Sync only takes a source out of the saved copy when it's listed here, so a TV that simply
     // never had a playlist (or lost it) can't delete it from your other TVs.
@@ -1450,6 +1485,8 @@ class LiveTvPreferences @Inject constructor(
                     }
                 }
             }
+            // A setup from an older version: its one-for-everything time shifts onto each source.
+            moveTimeShifts(p)
         }
         return changed
     }
@@ -1482,7 +1519,9 @@ class LiveTvPreferences @Inject constructor(
                     serverTimezone = o.optString("serverTimezone"),
                     catchupTimezone = o.optString("catchupTimezone"),
                     catchupNoHlsSince = o.optLong("catchupNoHlsSince", 0L),
-                    logoSource = o.optString("logoSource").ifBlank { "playlist" }
+                    logoSource = o.optString("logoSource").ifBlank { "playlist" },
+                    guideShiftMinutes = o.optInt("guideShiftMinutes", 0),
+                    catchupShiftMinutes = o.optInt("catchupShiftMinutes", 0)
                 )
             }
         }.getOrDefault(emptyList())
@@ -1507,6 +1546,8 @@ class LiveTvPreferences @Inject constructor(
                     .put("catchupTimezone", s.catchupTimezone)
                     .put("catchupNoHlsSince", s.catchupNoHlsSince)
                     .put("logoSource", s.logoSource)
+                    .put("guideShiftMinutes", s.guideShiftMinutes)
+                    .put("catchupShiftMinutes", s.catchupShiftMinutes)
             )
         }
         return arr.toString()
@@ -1525,7 +1566,8 @@ class LiveTvPreferences @Inject constructor(
                     enabled = o.optBoolean("enabled", true),
                     lastUpdatedMs = o.optLong("lastUpdatedMs"),
                     lastError = o.optString("lastError").ifBlank { null },
-                    programCount = o.optInt("programCount")
+                    programCount = o.optInt("programCount"),
+                    shiftMinutes = o.optInt("shiftMinutes", 0)
                 )
             }
         }.getOrDefault(emptyList())
@@ -1539,6 +1581,7 @@ class LiveTvPreferences @Inject constructor(
                     .put("id", s.id).put("name", s.name).put("url", s.url)
                     .put("enabled", s.enabled).put("lastUpdatedMs", s.lastUpdatedMs)
                     .put("lastError", s.lastError ?: "").put("programCount", s.programCount)
+                    .put("shiftMinutes", s.shiftMinutes)
             )
         }
         return arr.toString()

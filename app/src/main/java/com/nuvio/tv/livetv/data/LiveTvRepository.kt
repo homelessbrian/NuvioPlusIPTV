@@ -473,6 +473,33 @@ class LiveTvRepository @Inject constructor(
         prefs.updatePlaylists { list -> list.map { if (it.id == id) it.copy(logoSource = logoSource) else it } }
     }
 
+    /** A playlist's built-in guide time shift: the guide is matched and stored again with it. */
+    suspend fun setPlaylistGuideShift(id: String, minutes: Int) {
+        val before = prefs.currentPlaylists().firstOrNull { it.id == id }?.guideShiftMinutes ?: return
+        if (before == minutes) return
+        prefs.updatePlaylists { list -> list.map { if (it.id == id) it.copy(guideShiftMinutes = minutes) else it } }
+        restoreShiftedGuide()
+    }
+
+    /** A playlist's catch-up time shift: only the next catch-up link changes, nothing reloads. */
+    suspend fun setPlaylistCatchupShift(id: String, minutes: Int) {
+        prefs.updatePlaylists { list -> list.map { if (it.id == id) it.copy(catchupShiftMinutes = minutes) else it } }
+    }
+
+    /** A guide source's time shift: the guide is matched and stored again with it. */
+    suspend fun setEpgShift(id: String, minutes: Int) {
+        val before = prefs.currentEpgSources().firstOrNull { it.id == id }?.shiftMinutes ?: return
+        if (before == minutes) return
+        prefs.updateEpgSources { list -> list.map { if (it.id == id) it.copy(shiftMinutes = minutes) else it } }
+        restoreShiftedGuide()
+    }
+
+    private fun restoreShiftedGuide() {
+        // Past listings from the Xtream API are fetched again (with the new shift) as you browse.
+        archiveFetched.clear()
+        rematchEpg()
+    }
+
     private suspend fun rebuild() {
         mutex.withLock { rebuildLocked() }
     }
@@ -785,8 +812,9 @@ class LiveTvRepository @Inject constructor(
                         val lh = HashMap<String, String>().apply { repeat(input.readInt()) { put(input.readUTF(), input.readUTF()) } }
                         com.nuvio.tv.livetv.model.DrmInfo(scheme, license, lh, opt())
                     } else null
+                    val tvgShift = input.readInt()
                     if (outdated) links[key] = url
-                    else list += LiveChannel(key, sourceId, sourceName, name, tvgId, tvgName, logo, groupId, group, number, url, headers, catchup, drm)
+                    else list += LiveChannel(key, sourceId, sourceName, name, tvgId, tvgName, logo, groupId, group, number, url, headers, catchup, drm, tvgShift)
                 }
                 if (outdated) {
                     previousLinks = links
@@ -843,6 +871,7 @@ class LiveTvRepository @Inject constructor(
                         out.writeInt(d.licenseHeaders.size); d.licenseHeaders.forEach { (k, v) -> out.writeUTF(k); out.writeUTF(v) }
                         opt(d.manifestType)
                     }
+                    out.writeInt(c.tvgShiftMinutes)
                 }
             }
             if (!tmp.renameTo(savedChannelsFile)) { tmp.copyTo(savedChannelsFile, overwrite = true); tmp.delete() }
@@ -1299,6 +1328,7 @@ class LiveTvRepository @Inject constructor(
         scope.launch {
             val playlists = prefs.currentPlaylists().associateBy { it.id }
             val settings = prefs.currentSettings()
+            val overrides = runCatching { prefs.userState.first().epgOverrides }.getOrDefault(emptyMap())
             wanted.forEach { ch ->
                 val pl = playlists[ch.sourceId]?.takeIf { it.isXtream } ?: return@forEach
                 val streamId = Regex("""/(\d+)(?:\.[a-z0-9]+)?(?:\?.*)?$""", RegexOption.IGNORE_CASE)
@@ -1335,6 +1365,9 @@ class LiveTvRepository @Inject constructor(
                         }
                         if (list.isEmpty()) return@runCatching
                         list.sortBy { it.startMs }
+                        // Moved like the rest of this channel's listings (its guide's time shift).
+                        val shift = guideShiftMs(ch, overrides)
+                        if (shift != 0L) for (i in list.indices) list[i] = list[i].let { it.copy(startMs = it.startMs + shift, stopMs = it.stopMs + shift) }
                         val now = System.currentTimeMillis()
                         // Keep what the guide file already has from about now on; the archive
                         // fills in the past.
@@ -1405,17 +1438,28 @@ class LiveTvRepository @Inject constructor(
         sb.append(settings.epgPastHours).append('|').append(settings.epgFutureDays).append('|')
         targets.forEach { t ->
             val f = epgFile(t.fileId)
-            sb.append(t.fileId).append(':').append(f.length()).append(':').append(contentStamp(f)).append(',')
+            sb.append(t.fileId).append(':').append(f.length()).append(':').append(contentStamp(f))
+            if (t.shiftMs != 0L) sb.append(":s=").append(t.shiftMs / 60_000L)
+            sb.append(',')
         }
         sb.append('|').append(overrides.hashCode())
         sb.append('|').append(_channels.value.size).append(':').append(_channels.value.sumOf { it.key.hashCode().toLong() })
+        tvgShiftStamp()?.let { sb.append("|tvg=").append(it) }
         return sb.toString()
     }
 
     /** One guide file as the fingerprint sees it (also the format of the Assign EPG lists' stamp). */
     private fun targetStamp(t: EpgTarget): String {
         val f = epgFile(t.fileId)
-        return t.fileId + ":" + f.length() + ":" + contentStamp(f)
+        return t.fileId + ":" + f.length() + ":" + contentStamp(f) + (if (t.shiftMs != 0L) ":s=${t.shiftMs / 60_000L}" else "")
+    }
+
+    /** The channels' tvg-shifts as the fingerprint sees them (null when no channel has one: older stamps stay valid). */
+    private fun tvgShiftStamp(): String? {
+        var h = 0L
+        var any = false
+        for (c in _channels.value) if (c.tvgShiftMinutes != 0) { any = true; h = h * 31 + c.key.hashCode() * 7L + c.tvgShiftMinutes }
+        return if (any) h.toString() else null
     }
 
     /**
@@ -1432,7 +1476,8 @@ class LiveTvRepository @Inject constructor(
         }
         return JSONObject()
             .put("fp", fingerprint)
-            .put("base", "$GUIDE_CACHE_VERSION|${settings.epgPastHours}|${settings.epgFutureDays}|${overrides.hashCode()}")
+            .put("base", "$GUIDE_CACHE_VERSION|${settings.epgPastHours}|${settings.epgFutureDays}|${overrides.hashCode()}" +
+                (tvgShiftStamp()?.let { "|tvg=$it" } ?: ""))
             .put("targets", org.json.JSONArray(targets.map { targetStamp(it) }))
             .put("playlists", playlists)
             .toString()
@@ -1631,11 +1676,35 @@ class LiveTvRepository @Inject constructor(
         val url: String,
         val userAgent: String,
         /** A playlist's own (built-in) guide: that playlist. */
-        val playlistId: String? = null
+        val playlistId: String? = null,
+        /** How far this guide's listings are moved (its own time shift), in ms. */
+        val shiftMs: Long = 0L
     )
+
+    /** Each guide file's time shift (ms), and each playlist's built-in guide shift, as last collected. */
+    @Volatile private var targetShifts: Map<String, Long> = emptyMap()
+    @Volatile private var playlistGuideShifts: Map<String, Long> = emptyMap()
+
+    /**
+     * How far a channel's stored listings were moved: the time shift of the guide it's matched to
+     * (or given in Assign EPG; its playlist's own guide when it has none) plus the playlist's
+     * tvg-shift for it. Catch-up takes this back off: the archive goes by the guide's own times.
+     */
+    fun guideShiftMs(channel: LiveChannel, overrides: Map<String, EpgAssignment>): Long {
+        val a = overrides[channel.key]?.takeUnless { it.isNone } ?: _autoMatches.value[channel.key]
+        val source = a?.let { targetShifts[it.sourceId] } ?: playlistGuideShifts[channel.sourceId] ?: 0L
+        return source + channel.tvgShiftMinutes * 60_000L
+    }
+
+    private fun List<EpgProgram>.shiftedBy(ms: Long): List<EpgProgram> =
+        if (ms == 0L || isEmpty()) this else map { it.copy(startMs = it.startMs + ms, stopMs = it.stopMs + ms) }
 
     /** Named EPG sources first (they win on conflicts), then EPG URLs embedded in playlists. */
     private suspend fun collectEpgTargets(): List<EpgTarget> {
+        // The old one-for-everything time shifts, moved onto each playlist and guide (once).
+        if (runCatching { prefs.moveTimeShiftsToSources() }.getOrDefault(false)) {
+            LIVE_REPORT.add("Time shifts: the old Guide / Catch-Up Time Shift moved onto each playlist and guide")
+        }
         val targets = mutableListOf<EpgTarget>()
         // A guide added on its own from the same server as a playlist (often that playlist's own
         // guide link) is asked for with that playlist's user agent, like the playlist itself:
@@ -1648,7 +1717,7 @@ class LiveTvRepository @Inject constructor(
                 pl.userAgent.isNotBlank() && host != null &&
                     hostOf(if (pl.isXtream) pl.xtreamBase() else pl.url) == host
             }?.userAgent.orEmpty()
-            targets += EpgTarget(src.id, src.id, src.name, src.url, ua)
+            targets += EpgTarget(src.id, src.id, src.name, src.url, ua, shiftMs = src.shiftMinutes * 60_000L)
         }
         val playlists = prefs.currentPlaylists().filter { it.liveEnabled && it.useEmbeddedEpg }
         for (pl in playlists) {
@@ -1657,10 +1726,15 @@ class LiveTvRepository @Inject constructor(
             urls += embeddedEpgUrls[pl.id].orEmpty()
             urls.distinct().forEach { url ->
                 if (targets.none { it.url == url }) {
-                    targets += EpgTarget("auto_" + sha1(url), null, "${pl.name} (built-in)", url, pl.userAgent, playlistId = pl.id)
+                    targets += EpgTarget(
+                        "auto_" + sha1(url), null, "${pl.name} (built-in)", url, pl.userAgent,
+                        playlistId = pl.id, shiftMs = pl.guideShiftMinutes * 60_000L
+                    )
                 }
             }
         }
+        targetShifts = targets.associate { it.fileId to it.shiftMs }
+        playlistGuideShifts = allPlaylists.associate { it.id to it.guideShiftMinutes * 60_000L }
         return targets
     }
 
@@ -1740,7 +1814,8 @@ class LiveTvRepository @Inject constructor(
                     url = pl.m3uStreamLink(e.url),
                     headers = headers,
                     catchup = e.catchup,
-                    drm = e.drm
+                    drm = e.drm,
+                    tvgShiftMinutes = e.tvgShiftMinutes
                 )
             }
             prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(channelCount = parsed.entries.size) else it } }
@@ -1918,7 +1993,8 @@ class LiveTvRepository @Inject constructor(
                             },
                             // Each channel's shows go to the database as soon as they're read.
                             onPrograms = { xid, list ->
-                                val cleaned = cleanListings(list)
+                                // This guide's own time shift, applied as it's stored.
+                                val cleaned = cleanListings(list).shiftedBy(target.shiftMs)
                                 writer.add(xid, cleaned) { isPlaceholder(it) }
                                 keepWindow(src, xid, cleaned)
                             },
@@ -2068,10 +2144,16 @@ class LiveTvRepository @Inject constructor(
         // The guide shown: from the staged guides, the chosen one for each channel (hand-picked
         // ones as given), all in one step.
         val choice = auto.filterKeys { it !in pinned }
+        // Channels with a tvg-shift in the playlist: their listings moved by that too.
+        val tvgShifts = channels.filter { it.tvgShiftMinutes != 0 }.associate { it.key to it.tvgShiftMinutes * 60_000L }
+        if (tvgShifts.isNotEmpty()) {
+            LIVE_REPORT.add("Guide: ${tvgShifts.size} channels moved by the playlist's tvg-shift")
+            tvgShifts.forEach { (key, ms) -> pinned[key]?.let { pinned[key] = it.shiftedBy(ms) } }
+        }
         val storeStart = System.currentTimeMillis()
         val stored = runCatching {
             val fp = guideFingerprint(settings, targets)
-            guideDb.replaceAllFromStage(fp, choice, pinned, auto, guideParts(settings, targets, fp), windowStart, windowEnd)
+            guideDb.replaceAllFromStage(fp, choice, pinned, auto, guideParts(settings, targets, fp), windowStart, windowEnd, tvgShifts)
         }.onFailure { Log.w(TAG, "Couldn't store the guide", it) }.isSuccess
         LIVE_REPORT.add("Guide: best guide per channel stored in ${(System.currentTimeMillis() - storeStart) / 1000} s")
         // The guides' working copies aren't kept once the guide is built (they'd double the storage).
@@ -2085,7 +2167,7 @@ class LiveTvRepository @Inject constructor(
             val list = orderedWindows.getOrPut(id) {
                 windowCopies[id]?.sortedBy { it.startMs } ?: emptyList()
             }
-            if (list.isNotEmpty()) window[key] = list
+            if (list.isNotEmpty()) window[key] = tvgShifts[key]?.let { list.shiftedBy(it) } ?: list
         }
         pinned.forEach { (key, list) ->
             val w = list.filter { it.stopMs > winFrom && it.startMs < winTo }
@@ -2262,14 +2344,17 @@ class LiveTvRepository @Inject constructor(
             val parsed = openMaybeGzip(file).use { input ->
                 XmltvParser.parse(input, windowStart, windowEnd) { wanted }
             }
-            programsBySource[sourceId] = parsed.programs
+            programsBySource[sourceId] = if (target.shiftMs == 0L) parsed.programs
+                else parsed.programs.mapValues { (_, l) -> l.shiftedBy(target.shiftMs) }
             iconsBySource[sourceId] = parsed.channels.mapNotNull { (id, ch) -> ch.icon?.takeIf { it.isNotBlank() }?.let { id to it } }.toMap()
         }
 
         val newPrograms = HashMap<String, List<EpgProgram>>()
         val newIcons = HashMap<String, String>()
+        val tvgShiftOf = _channels.value.filter { it.key in changes.keys && it.tvgShiftMinutes != 0 }
+            .associate { it.key to it.tvgShiftMinutes * 60_000L }
         assigned.forEach { (key, a) ->
-            newPrograms[key] = cleanListings(programsBySource[a.sourceId]?.get(a.xmltvId).orEmpty())
+            newPrograms[key] = cleanListings(programsBySource[a.sourceId]?.get(a.xmltvId).orEmpty()).shiftedBy(tvgShiftOf[key] ?: 0L)
             iconsBySource[a.sourceId]?.get(a.xmltvId)?.let { newIcons[key] = it }
         }
         // Automatic: the same choice a full update makes (real listings first, then a tvg-id
@@ -2285,7 +2370,7 @@ class LiveTvRepository @Inject constructor(
                 if (score > bestScore) { bestScore = score; best = c to listings }
             }
             best?.let { (c, listings) ->
-                newPrograms[key] = listings
+                newPrograms[key] = listings.shiftedBy(tvgShiftOf[key] ?: 0L)
                 newAuto[key] = EpgAssignment(c.sourceId, c.xmltvId)
                 iconsBySource[c.sourceId]?.get(c.xmltvId)?.let { newIcons[key] = it }
             }
@@ -2915,7 +3000,7 @@ class LiveTvRepository @Inject constructor(
         private const val RANGE_SLACK_MS = 6 * HOUR
         // 2: guides compared by how far ahead they go (matched again once after updating).
         private const val GUIDE_CACHE_VERSION = 2
-        private const val CHANNELS_CACHE_VERSION = 6
+        private const val CHANNELS_CACHE_VERSION = 7
         private const val MAX_SAVED_LISTINGS = 300_000
         /** Titles guides use when they have no real listing. */
         private val PLACEHOLDER_TITLES = Regex(

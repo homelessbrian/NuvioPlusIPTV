@@ -48,7 +48,17 @@ data class PlaylistSource(
      * Where channel logos come from: "playlist" (the playlist's own, the guide's when the
      * playlist has none) or "epg" (the guide's, the playlist's when the guide has none).
      */
-    val logoSource: String = "playlist"
+    val logoSource: String = "playlist",
+    /**
+     * Minutes to move this playlist's own (built-in) guide by: later (+) or earlier (−), for a
+     * guide that's out of step with what's playing. Applied when the guide is stored.
+     */
+    val guideShiftMinutes: Int = 0,
+    /**
+     * Minutes to move the time asked for in this playlist's catch-up (and catch-up saves): for
+     * providers whose archive runs on a different clock than their guide.
+     */
+    val catchupShiftMinutes: Int = 0
 ) {
     val isXtream: Boolean get() = xtreamServer.isNotBlank()
 
@@ -167,7 +177,9 @@ data class EpgSource(
     val enabled: Boolean = true,
     val lastUpdatedMs: Long = 0L,
     val lastError: String? = null,
-    val programCount: Int = 0
+    val programCount: Int = 0,
+    /** Minutes to move this guide's listings by: later (+) or earlier (−). Applied when the guide is stored. */
+    val shiftMinutes: Int = 0
 )
 
 data class CatchupInfo(
@@ -195,7 +207,9 @@ data class LiveChannel(
     val headers: Map<String, String> = emptyMap(),
     val catchup: CatchupInfo? = null,
     /** Protected (DRM) stream details from the playlist, e.g. MPEG-DASH with a license. */
-    val drm: DrmInfo? = null
+    val drm: DrmInfo? = null,
+    /** The playlist's "tvg-shift" for this channel, in minutes: moves its guide listings. */
+    val tvgShiftMinutes: Int = 0
 )
 
 /**
@@ -289,6 +303,12 @@ data class LiveTvSettings(
     val showEpisodeNumbers: Boolean = true,
     /** Guide Size: COMPACT, STANDARD, LARGE or XLARGE (blank = from the old Slimmer Rows switch). */
     val guideSize: String = "",
+    /**
+     * The old Guide Time Shift for every guide. No longer offered: on loading it's moved onto
+     * each playlist's built-in guide and each guide source (see LiveTvPreferences.moveTimeShiftsToSources),
+     * then set back to 0. Still read where listings are shown, so a value synced from an older
+     * version until it's moved changes nothing.
+     */
     val epgOffsetMinutes: Int = 0,
     val reverseZap: Boolean = false,
     val zapMode: ZapMode = ZapMode.GROUP,
@@ -354,9 +374,8 @@ data class LiveTvSettings(
     /** Xtream catch-up: ask for HLS (.m3u8) first, which gives replays a length for seeking. */
     val catchupPreferHls: Boolean = true,
     /**
-     * Moves the time asked for in catch-up (and catch-up saves) later (+) or earlier (−), for
-     * providers whose archive runs on a different clock than their guide: replays that start
-     * the show before (or after) the one picked.
+     * The old Catch-Up Time Shift for every playlist. No longer offered: moved onto each playlist
+     * on loading (see LiveTvPreferences.moveTimeShiftsToSources), then set back to 0.
      */
     val catchupShiftMinutes: Int = 0,
     /** Parental controls: a 4-digit PIN; empty = parental controls off. */
@@ -821,7 +840,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-08 17:00"
+    const val KIT_STAMP = "2026-11-08 17:30"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String
