@@ -170,7 +170,7 @@ class LiveTvViewModel @Inject constructor(
             // made every guide row redraw. Keyed by the list itself (same list = same listings).
             val next = java.util.IdentityHashMap<List<EpgProgram>, List<EpgProgram>>(map.size)
             val out = map.mapValues { (_, list) ->
-                val moved = shiftedLists[list] ?: list.map { it.copy(startMs = it.startMs + shift, stopMs = it.stopMs + shift) }
+                val moved = next[list] ?: shiftedLists[list] ?: list.map { it.copy(startMs = it.startMs + shift, stopMs = it.stopMs + shift) }
                 next[list] = moved
                 moved
             }
