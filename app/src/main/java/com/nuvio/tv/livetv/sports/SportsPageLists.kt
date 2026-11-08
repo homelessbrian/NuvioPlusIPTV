@@ -1,5 +1,19 @@
 package com.nuvio.tv.livetv.sports
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.mapLatest
+
+/** Page preparation stays off the screen thread, including the first day/filter selection. */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+internal fun <T> Flow<T>.prepareSportsPages(build: (T) -> SportsPageData): Flow<SportsPageData> =
+    mapLatest { build(it) }.flowOn(Dispatchers.Default)
+
+/** A previous selection's games must not appear beneath the newly selected day or filter. */
+internal fun sportsPageFor(query: SportsPageQuery, latest: SportsPageData?): SportsPageData? =
+    latest?.takeIf { it.query == query }
+
 /**
  * What the Sports page shows: the day, the filter (My Teams, All Events, a sport…), the sport
  * picked under All Events, and My Teams' sport (null: all of them). Set by the screen.

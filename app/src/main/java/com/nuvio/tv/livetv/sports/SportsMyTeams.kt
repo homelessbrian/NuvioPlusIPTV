@@ -107,6 +107,7 @@ private val ROW_TOP_INSET = 33.dp
 @Composable
 internal fun MyTeamsRows(
     page: MyTeamsPage,
+    loading: Boolean = false,
     /** Team key -> where it stands ("2nd in Premier League"), shown by its row's name. */
     places: Map<String, String> = emptyMap(),
     /** The sport picked on the top bar (null: everything you follow). */
@@ -143,7 +144,8 @@ internal fun MyTeamsRows(
     val hero = heroes.getOrNull(heroAt)
     val heroReq = requesterFor("hero")
     var focusedOnce by remember { mutableStateOf(false) }
-    LaunchedEffect(hero != null, page.rows.isNotEmpty()) {
+    LaunchedEffect(loading, hero != null, page.rows.isNotEmpty()) {
+        if (loading) return@LaunchedEffect
         delay(140)
         if (focusedOnce || !autoFocus) return@LaunchedEffect
         // Still loading your teams' games: wait for them (the highlight would be lost otherwise).
@@ -155,8 +157,8 @@ internal fun MyTeamsRows(
             .onFailure { runCatching { heroReq.requestFocus() } }
     }
 
-    LaunchedEffect(jumpToHero) {
-        if (jumpToHero == 0) return@LaunchedEffect
+    LaunchedEffect(jumpToHero, loading) {
+        if (jumpToHero == 0 || loading) return@LaunchedEffect
         delay(160)
         focusedOnce = true
         runCatching { heroReq.requestFocus() }
@@ -197,7 +199,11 @@ internal fun MyTeamsRows(
         header()
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth().height(168.dp)) {
-            if (hero != null) {
+            if (loading) {
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    com.nuvio.tv.livetv.ui.LoadingSpinner()
+                }
+            } else if (hero != null) {
                 HeroCard(
                     ev = hero,
                     index = heroAt,

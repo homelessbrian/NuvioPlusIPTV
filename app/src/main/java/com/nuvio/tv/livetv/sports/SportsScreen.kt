@@ -574,11 +574,17 @@ private fun SportsHub(
     val pageQuery = SportsPageQuery(day, effectiveChip, allSportPick, rowsSport)
     androidx.compose.runtime.SideEffect { viewModel.setPageQuery(pageQuery) }
     val latestPage by viewModel.pageData.collectAsStateWithLifecycle()
-    val pageData = remember(pageQuery, latestPage) { viewModel.pageDataFor(pageQuery, latestPage) }
-    val dayEvents = pageData.dayEvents
-    val allSports = pageData.allSports
-    val allSport = pageData.allSport
-    val sections = pageData.sections
+    val pageData = sportsPageFor(pageQuery, latestPage)
+    val pageReady = pageData != null
+    val dayEvents = pageData?.dayEvents.orEmpty()
+    // Keep the sport buttons attached while picking one of them; only the games wait. Their
+    // choices don't depend on allSportPick, and a different day's choices must not carry over.
+    val sportChoices = latestPage?.takeIf { it.query.copy(allSportPick = allSportPick) == pageQuery }
+    val allSports = sportChoices?.allSports.orEmpty()
+    val allSport = allSportPick?.takeIf { p -> allSports.any { it.name == p } }
+    val sections = pageData?.sections ?: remember {
+        DaySections(emptyList(), emptyList(), emptyList(), emptyList(), 0)
+    }
     val columns = if (videoOn) 1 else 2
 
     // All Events: a bar above the games says how many leagues show (and how many you've hidden);
@@ -603,7 +609,8 @@ private fun SportsHub(
     val firstChip = remember { FocusRequester() }
     var focusedOnce by remember { mutableStateOf(false) }
     val hasContent = sections.live.isNotEmpty() || sections.upcoming.isNotEmpty() || sections.finished.isNotEmpty() || sections.weekLong.isNotEmpty()
-    LaunchedEffect(hasContent, day, effectiveChip) {
+    LaunchedEffect(hasContent, day, effectiveChip, pageReady) {
+        if (!pageReady) return@LaunchedEffect
         delay(120)
         // My Teams' rows put the highlight where it belongs themselves.
         if (rowsPage) return@LaunchedEffect
@@ -619,9 +626,12 @@ private fun SportsHub(
     // Only a problem is worth a line (scores update quietly in the background), and it sits in
     // the bottom corner so nothing on the page moves when it comes and goes.
     // A filter picked on All Events: down to its first game (LIVE NOW comes first).
-    LaunchedEffect(contentJump) {
-        if (contentJump == 0 || rowsPage) return@LaunchedEffect
+    var handledContentJump by remember { mutableIntStateOf(0) }
+    LaunchedEffect(contentJump, pageReady, rowsPage) {
+        if (rowsPage) { handledContentJump = contentJump; return@LaunchedEffect }
+        if (contentJump == handledContentJump || !pageReady) return@LaunchedEffect
         delay(160)
+        handledContentJump = contentJump
         focusedOnce = true
         runCatching { firstContent.requestFocus() }
     }
@@ -724,7 +734,7 @@ private fun SportsHub(
             settings = settings,
             now = now,
             use24h = use24h,
-            loading = loading && events.isEmpty(),
+            loading = !pageReady || (loading && events.isEmpty()),
             hasChannels = hasChannels,
             playingKey = playingKey,
             listState = listState,
@@ -795,10 +805,11 @@ private fun SportsHub(
     // ---- My Teams: rows (the next big game, Live & Upcoming, a row per team and league)
     if (rowsPage) {
         // Always there on My Teams (the view model builds the rows with the rest of the page).
-        val page = pageData.rows ?: MyTeamsPage(emptyList(), emptyList())
+        val page = pageData?.rows ?: MyTeamsPage(emptyList(), emptyList())
         Box(Modifier.fillMaxSize()) {
             MyTeamsRows(
                 page = page,
+                loading = !pageReady,
                 places = places,
                 sport = rowsSport,
                 follows = follows,
