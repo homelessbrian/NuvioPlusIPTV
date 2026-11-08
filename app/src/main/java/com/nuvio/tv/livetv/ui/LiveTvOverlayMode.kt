@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -326,8 +327,12 @@ private fun OverlayModeContent(
                         }
                         e.key == Key.DirectionRight -> focusedChannel?.let { openSchedule(it) }
                         isOk -> focusedChannel?.let { ch ->
-                            if (ch.key != playback.channelKey) viewModel.preview(ch)
-                            onClose()
+                            // "Keep list open": switch and stay on the list; OK on the playing one closes it.
+                            if (settings.overlayKeepOpen && ch.key != playback.channelKey) viewModel.preview(ch)
+                            else {
+                                if (ch.key != playback.channelKey) viewModel.preview(ch)
+                                onClose()
+                            }
                         }
                         e.key == Key.Back -> onClose()
                     }
@@ -370,7 +375,7 @@ private fun OverlayModeContent(
                 OverlayLevel.CHANNELS -> {
                     ChannelsPanel(ui.groups.firstOrNull { it.id == ui.selectedGroupId }?.title ?: "Channels",
                         channels, chIndex, focused = true, playback.channelKey, programs, now, user.favorites, settings.showChannelNumbers, settings.showChannelLogos)
-                    settledChannel?.let { SchedulePreview(it, programs[it.key].orEmpty(), now, use24h) }
+                    if (settings.overlayShowDetails) settledChannel?.let { SchedulePreview(it, programs[it.key].orEmpty(), now, use24h) }
                 }
                 OverlayLevel.SCHEDULE, OverlayLevel.DATES -> scheduleChannel?.let { ch ->
                     SchedulePanel(ch, schedule, rowIndex, focused = level == OverlayLevel.SCHEDULE, playback.channelKey, now, use24h)
@@ -386,13 +391,15 @@ private fun OverlayModeContent(
         val cardFits = overlayWidthPx > 0 && cardWidth >= 200.dp
         val cardW = if (cardWidth > 360.dp) 360.dp else cardWidth
         val card: EpgProgram? = when (level) {
-            OverlayLevel.CHANNELS -> settledChannel?.let { ch -> programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs } }
+            // "Show schedule and details" off: on the channel list only Right brings the details up.
+            OverlayLevel.CHANNELS -> if (!settings.overlayShowDetails) null
+                else settledChannel?.let { ch -> programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs } }
             OverlayLevel.SCHEDULE, OverlayLevel.DATES -> focusedShow?.program
             OverlayLevel.GROUPS -> null
         }
         val cardChannelKey = if (level == OverlayLevel.CHANNELS) settledChannel?.key else scheduleChannel?.key
         // 24/7 channels with no listing: what the channel plays, as the card.
-        val about = if (level == OverlayLevel.CHANNELS) rememberChannelAbout(settledChannel, card) else null
+        val about = if (level == OverlayLevel.CHANNELS && settings.overlayShowDetails) rememberChannelAbout(settledChannel, card) else null
         if (cardFits && card == null && about != null && !about.description.isNullOrBlank()) {
             Column(
                 modifier = Modifier
@@ -562,6 +569,8 @@ private fun ChannelsPanel(
 ) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (index - 3).coerceAtLeast(0))
     keepVisible(state, index)
+    // Digits in this list's longest channel number: the number column is just that wide (as in the guide).
+    val numberDigits = remember(channels) { channels.maxOfOrNull { it.number.toString().length } ?: 1 }
     var restingIndex by remember { mutableIntStateOf(-1) }
     LaunchedEffect(index) {
         restingIndex = -1
@@ -590,7 +599,12 @@ private fun ChannelsPanel(
                         .padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (showNumbers) LiveText(ch.number.toString(), modifier = Modifier.width(36.dp), color = NuvioTheme.colors.TextSecondary, size = osp(13f))
+                    if (showNumbers) {
+                        // Right-aligned, so every number sits the same short gap from the logo.
+                        LiveText(ch.number.toString(), modifier = Modifier.width(odp(8f * numberDigits + 2f)), align = androidx.compose.ui.text.style.TextAlign.End,
+                            color = NuvioTheme.colors.TextSecondary, size = osp(13f))
+                        Spacer(Modifier.width(8.dp))
+                    }
                     if (showLogos) {
                         ChannelLogo(ch.logo, 32.dp)
                         Spacer(Modifier.width(8.dp))
@@ -749,7 +763,8 @@ private fun SchedulePreview(channel: LiveChannel, list: List<EpgProgram>, now: L
                 else -> NuvioTheme.colors.TextPrimary
             }
             Row(modifier = Modifier.fillMaxWidth().height(orow(36f)).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                LiveText(formatClock(p.startMs, use24h), color = color, size = osp(14f), modifier = Modifier.width(80.dp))
+                LiveText(formatClock(p.startMs, use24h), color = color, size = osp(14f), modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
+                Spacer(Modifier.width(10.dp))
                 LiveText(p.title, color = color, size = osp(14f), modifier = Modifier.weight(1f))
             }
         }
@@ -814,7 +829,8 @@ private fun SchedulePanel(
                                 .padding(horizontal = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            LiveText(formatClock(p.startMs, use24h), color = colors.text, size = osp(14f), modifier = Modifier.width(80.dp))
+                            LiveText(formatClock(p.startMs, use24h), color = colors.text, size = osp(14f), modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
+                            Spacer(Modifier.width(10.dp))
                             LiveText(p.title, color = colors.text, size = osp(14f), modifier = Modifier.weight(1f), marquee = isFocused)
                             if (live && channel.key == playingKey) {
                                 val onSolid = isFocused && focused && LocalLiveSolidHighlight.current

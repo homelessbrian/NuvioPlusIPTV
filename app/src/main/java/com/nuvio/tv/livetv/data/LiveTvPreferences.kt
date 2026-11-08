@@ -102,6 +102,8 @@ class LiveTvPreferences @Inject constructor(
         val aspectMode = stringPreferencesKey("aspect_mode")
         val sequentialNumbers = booleanPreferencesKey("sequential_numbers")
         val overlayMode = booleanPreferencesKey("overlay_mode")
+        val overlayKeepOpen = booleanPreferencesKey("overlay_keep_open")
+        val overlayShowDetails = booleanPreferencesKey("overlay_show_details")
         val startOnLiveTv = booleanPreferencesKey("start_on_live_tv")
         val startPage = stringPreferencesKey("start_page")
         val openOn = stringPreferencesKey("open_on")
@@ -416,6 +418,8 @@ class LiveTvPreferences @Inject constructor(
             aspectMode = p[Keys.aspectMode] ?: d.aspectMode,
             sequentialNumbers = p[Keys.sequentialNumbers] ?: d.sequentialNumbers,
             overlayMode = p[Keys.overlayMode] ?: d.overlayMode,
+            overlayKeepOpen = p[Keys.overlayKeepOpen] ?: d.overlayKeepOpen,
+            overlayShowDetails = p[Keys.overlayShowDetails] ?: d.overlayShowDetails,
             startOnLiveTv = p[Keys.startOnLiveTv] ?: d.startOnLiveTv,
             startPage = p[Keys.startPage] ?: d.startPage,
             openOn = p[Keys.openOn] ?: d.openOn,
@@ -708,6 +712,8 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.aspectMode] = s.aspectMode
         p[Keys.sequentialNumbers] = s.sequentialNumbers
         p[Keys.overlayMode] = s.overlayMode
+        p[Keys.overlayKeepOpen] = s.overlayKeepOpen
+        p[Keys.overlayShowDetails] = s.overlayShowDetails
         p[Keys.startOnLiveTv] = s.startOnLiveTv
         p[Keys.startPage] = s.startPage
         p[Keys.openOn] = s.openOn

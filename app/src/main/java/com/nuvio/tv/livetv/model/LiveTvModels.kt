@@ -323,6 +323,10 @@ data class LiveTvSettings(
     val sequentialNumbers: Boolean = false,
     /** Left while watching opens overlay mode; off: Left returns to the guide's group list. */
     val overlayMode: Boolean = true,
+    /** Overlay mode: OK on another channel switches to it and keeps the list open (OK on the playing one closes it). */
+    val overlayKeepOpen: Boolean = false,
+    /** Overlay mode: the highlighted channel's upcoming shows and show details beside the list. Off: only on Right. */
+    val overlayShowDetails: Boolean = true,
     /** Open Live TV instead of Nuvio's home screen when the app starts (older setting). */
     val startOnLiveTv: Boolean = false,
     /** The page Nuvio opens on: HOME, LIVE_TV, ON_DEMAND, SEARCH, LIBRARY or DISCOVER. */
@@ -804,7 +808,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-08 07:15"
+    const val KIT_STAMP = "2026-11-08 07:40"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

@@ -1020,6 +1020,20 @@ internal fun LiveTvSettingsContent(
                         s.overlayMode,
                         { update { it.copy(overlayMode = !it.overlayMode) } }
                     )
+                    if (s.overlayMode) {
+                        SettingsToggleRow(
+                            "Overlay: Keep List Open When Changing Channel",
+                            "OK on another channel switches to it and the list stays open, so you can keep flicking through. OK on the playing channel or Back closes it.",
+                            s.overlayKeepOpen,
+                            { update { it.copy(overlayKeepOpen = !it.overlayKeepOpen) } }
+                        )
+                        SettingsToggleRow(
+                            "Overlay: Show Schedule and Details Beside the List",
+                            "The highlighted channel's upcoming shows and what's on now, next to the channel list. Off: just the list; Right still opens them.",
+                            s.overlayShowDetails,
+                            { update { it.copy(overlayShowDetails = !it.overlayShowDetails) } }
+                        )
+                    }
                     SettingsActionRow(
                         title = "Channel Up / Down Moves Within",
                         subtitle = "Which channels Up and Down (or CH+ and CH−) step through while watching",
