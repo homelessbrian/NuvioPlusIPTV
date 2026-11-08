@@ -526,7 +526,16 @@ fun LiveTvPlayerScreen(
                             if (archive) scrub(forward = forward, repeat = e.nativeKeyEvent.repeatCount)
                             else {
                                 val r = e.nativeKeyEvent.repeatCount
-                                val step = when { r > 20 -> 120_000L; r > 8 -> 60_000L; r > 2 -> 30_000L; else -> 10_000L }
+                                val longReplay = viewModel.playback.ownTimelineNow()?.let { !it.live && it.durationMs >= 30 * 60_000L } == true
+                                // A long replay (a whole game) gets bigger steps the longer you hold.
+                                val step = when {
+                                    longReplay && r > 60 -> 600_000L
+                                    longReplay && r > 40 -> 300_000L
+                                    r > 20 -> 120_000L
+                                    r > 8 -> 60_000L
+                                    r > 2 -> 30_000L
+                                    else -> 10_000L
+                                }
                                 viewModel.playback.shiftSeekBy(if (forward) step else -step)
                             }
                             return@onPreviewKeyEvent true
@@ -538,6 +547,10 @@ fun LiveTvPlayerScreen(
                             return@onPreviewKeyEvent true
                         }
                         e.key == Key.DirectionLeft -> { controlFocus = buttons[(i - 1).coerceAtLeast(0)]; return@onPreviewKeyEvent true }
+                        // The bar sits right after the skip buttons: Right from Forward 30 grabs it.
+                        e.key == Key.DirectionRight && cf == PanelControl.FORWARD && PanelControl.TIMELINE in list -> {
+                            controlFocus = PanelControl.TIMELINE; return@onPreviewKeyEvent true
+                        }
                         e.key == Key.DirectionRight -> { controlFocus = buttons[(i + 1).coerceAtMost(buttons.lastIndex)]; return@onPreviewKeyEvent true }
                         e.key == Key.DirectionUp -> {
                             // Up from the buttons: grab the timeline (when it can be moved).
