@@ -650,6 +650,19 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     /** Guides no longer used: their staged listings go. */
     fun dropStagesExcept(keep: Collection<String>) {
         val db = writableDatabase
+        if (keep.isEmpty()) {
+            db.beginTransaction()
+            try {
+                db.delete("stage", null, null)
+                db.delete("stage_meta", null, null)
+                db.delete("stage_channels", null, null)
+                db.delete("stage_info", null, null)
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            return
+        }
         val stale = ArrayList<String>()
         db.rawQuery("SELECT src FROM stage_info", null).use { c -> while (c.moveToNext()) stale += c.getString(0) }
         db.rawQuery("SELECT DISTINCT src FROM stage_meta", null).use { c -> while (c.moveToNext()) stale += c.getString(0) }
