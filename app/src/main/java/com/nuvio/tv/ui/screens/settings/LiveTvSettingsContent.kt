@@ -477,12 +477,6 @@ internal fun LiveTvSettingsContent(
                         onClick = { dialog = LiveDialog.AddEpg }
                     )
                     SubHeading("Updates")
-                    SettingsToggleRow(
-                        "Show update banners",
-                        "Show playlist, EPG and On Demand update progress. Updates continue in the background when hidden.",
-                        s.showImportProgress,
-                        { update { it.copy(showImportProgress = !it.showImportProgress) } }
-                    )
                     SettingsActionRow(
                         title = "Update Everything Now",
                         subtitle = "Downloads the latest channels and listings instead of waiting for the next automatic update",
@@ -496,6 +490,12 @@ internal fun LiveTvSettingsContent(
                     SettingsActionRow(
                         "Check Guides for Updates Every", "How often TV listings are downloaded again",
                         hoursLabel(s.epgRefreshHours), onClick = { dialog = LiveDialog.EpgRefresh }
+                    )
+                    SettingsToggleRow(
+                        "Show update banners",
+                        "Show playlist, EPG and On Demand update progress. Updates continue in the background when hidden.",
+                        s.showImportProgress,
+                        { update { it.copy(showImportProgress = !it.showImportProgress) } }
                     )
                 }
             }
