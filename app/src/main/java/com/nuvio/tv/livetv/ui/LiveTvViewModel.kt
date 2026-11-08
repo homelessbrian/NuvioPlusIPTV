@@ -588,6 +588,7 @@ class LiveTvViewModel @Inject constructor(
                 now - (playlistNoHls.value[channel.sourceId] ?: 0L) > HLS_RETRY_MS,
             serverTimezone = zone
         ) ?: return false
+        if (zone.isNullOrBlank()) warnZoneUnknown(channel.sourceId, url)
         // Xtream links only name whole minutes, so the replay begins up to a minute before the
         // point asked for. The player skips that bit once the replay is in, and the seek bar goes
         // by where the replay really begins (before, a 30 s skip could land 20 s further back
@@ -620,6 +621,21 @@ class LiveTvViewModel @Inject constructor(
         // Load this channel's full schedule, so catch-up can follow on into later shows.
         repository.ensureChannelSchedule(channel.key)
         return true
+    }
+
+    /**
+     * The server's time zone couldn't be found, so catch-up times are written in the TV's own
+     * zone and can land on a show hours away: says once per playlist (per app run) where to set it.
+     */
+    private fun warnZoneUnknown(sourceId: String?, url: String) {
+        if (sourceId == null || CatchupUrlBuilder.askedStamp(url) == null) return
+        if (!zoneWarned.add(sourceId)) return
+        viewModelScope.launch {
+            val name = prefs.currentPlaylists().firstOrNull { it.id == sourceId }?.name ?: return@launch
+            com.nuvio.tv.livetv.record.LiveTvNotice.show(
+                "\"$name\" didn't say its time zone, so replays may start at the wrong time. Pick it under Catch-up time zone in the playlist's menu in Settings"
+            )
+        }
     }
 
     /** Playlist id -> the kind of catch-up link that last worked there (this session only, shared by every screen). */
@@ -1372,6 +1388,8 @@ private const val CONTINUE_MS = 3L * 60 * 60 * 1000
 
 /** How long a replay waits for the server's time zone before playing without it. */
 private const val ZONE_WAIT_MS = 5_000L
+/** Playlists already told this run that their server's time zone is unknown (one notice each). */
+private val zoneWarned: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
 /** A TMDB 24/7 match as the show info the guide's panels already know how to show. */
 private fun com.nuvio.tv.livetv.data.LiveTv247Matcher.Match.toMeta() = com.nuvio.tv.domain.model.MetaPreview(

@@ -2805,6 +2805,13 @@ class LiveTvRepository @Inject constructor(
                 }
             }.getOrElse { notes += "guide: " + zoneError(it); null }
         }
+        // 4: a guide already downloaded for this provider (its file is on this box, so the server
+        // can't refuse it): one on the provider's own site, an Xtream panel guide, or one named
+        // after the playlist. Other guides (third-party sites) are written in their own zone.
+        if (found == null) {
+            found = runCatching { zoneFromAddedGuides(pl, listOf(host, pl.url, channelUrl)) }.getOrNull()
+            if (found == null) notes += "added guides: none from this provider with a time zone in it"
+        }
         if (found != null) {
             val (tz, how) = found
             LIVE_REPORT.add("Server time zone for \"${pl.name}\": $tz ($how)")
@@ -2815,6 +2822,28 @@ class LiveTvRepository @Inject constructor(
         }
         LIVE_REPORT.add("Server time zone for \"${pl.name}\": unknown (${notes.joinToString("; ")})")
         zoneFailedAt[pl.id] = System.currentTimeMillis()
+        return null
+    }
+
+    /** Step 4 of [lookupServerZone]: the time zone written in a guide of this provider's already on this box. */
+    private suspend fun zoneFromAddedGuides(pl: PlaylistSource, links: List<String>): Pair<String, String>? {
+        fun site(link: String): String? = runCatching {
+            java.net.URI(link.trim()).host?.lowercase()?.split('.')?.filter { it.isNotEmpty() }?.takeLast(2)?.joinToString(".")
+        }.getOrNull()?.takeIf { it.contains('.') }
+        val sites = links.mapNotNull { site(it) }.toSet()
+        val name = normalize(pl.name)
+        val guides = prefs.currentEpgSources().filter { it.enabled && it.url.isNotBlank() }.filter { g ->
+            site(g.url) in sites || g.url.contains("xmltv.php", ignoreCase = true) ||
+                (name.length >= 3 && normalize(g.name).contains(name))
+        }
+        for (g in guides) {
+            val file = epgFile(g.id)
+            if (!file.isFile) continue
+            val text = withContext(Dispatchers.IO) {
+                openMaybeGzip(file).use { String(it.readNBytesCompat(GUIDE_PROBE_BYTES), Charsets.UTF_8) }
+            }
+            ZoneFinder.fromGuide(text)?.let { (tz, _) -> return tz to "from the guide \"${g.name}\"" }
+        }
         return null
     }
 

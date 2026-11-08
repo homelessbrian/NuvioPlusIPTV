@@ -465,7 +465,9 @@ class LiveTvRecordingScheduler @Inject constructor(
             val catchup = channel.catchup ?: s.channel.catchup
             val settings = prefs.currentSettings()
             val playlist = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId }
-            val zone = playlist?.catchupZone
+            // Not known yet: look it up first (as when watching), so the saved show is the right one.
+            val zone = playlist?.catchupZone?.takeIf { it.isNotBlank() }
+                ?: kotlinx.coroutines.withTimeoutOrNull(10_000L) { repository.learnServerZone(channel) }
             // As when watching catch-up: the guide's shift off, the playlist's catch-up shift on.
             val overrides = runCatching { prefs.userState.first().epgOverrides }.getOrDefault(emptyMap())
             val shift = repository.guideShiftMs(channel, overrides) +
