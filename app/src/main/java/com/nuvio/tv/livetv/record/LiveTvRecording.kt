@@ -35,7 +35,9 @@ data class LiveTvRecording(
     /** Recorded by a series rule (its id): "keep the last N" applies. */
     val seriesId: String? = null,
     /** Downloaded from the provider's catch-up (rather than recorded as it aired). */
-    val fromCatchup: Boolean = false
+    val fromCatchup: Boolean = false,
+    /** Catch-up: how long the whole download should be (show plus extra time), in seconds; 0 = not known. */
+    val expectedSec: Double = 0.0
 ) {
     val isRecording: Boolean get() = status == RecordingStatus.RECORDING
 
@@ -50,6 +52,7 @@ data class LiveTvRecording(
         put("problem", problem ?: "")
         put("seriesId", seriesId ?: "")
         put("fromCatchup", fromCatchup)
+        put("expectedSec", expectedSec)
     }
 
     companion object {
@@ -73,7 +76,8 @@ data class LiveTvRecording(
                 problem = o.optString("problem").ifBlank { null },
                 dir = dir,
                 seriesId = o.optString("seriesId").ifBlank { null },
-                fromCatchup = o.optBoolean("fromCatchup", false)
+                fromCatchup = o.optBoolean("fromCatchup", false),
+                expectedSec = o.optDouble("expectedSec", 0.0).takeIf { !it.isNaN() } ?: 0.0
             )
         }.getOrNull()
     }

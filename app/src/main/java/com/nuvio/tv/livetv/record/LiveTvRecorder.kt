@@ -152,7 +152,8 @@ class LiveTvRecorder @Inject constructor(
             stopAtMs = stopAtMs,
             dir = dir.absolutePath,
             seriesId = seriesId,
-            fromCatchup = finite
+            fromCatchup = finite,
+            expectedSec = expectedSec ?: 0.0
         )
         // Not enough room to start: make room (if allowed) or say so.
         if (!ensureSpace(dir, protect = id)) {

@@ -775,7 +775,14 @@ private fun RecordingNowCard(
     val time = SimpleDateFormat("h:mm a", Locale.getDefault())
     val from = rec.programStartMs.takeIf { it > 0 } ?: rec.startedAtMs
     val to = rec.programStopMs.takeIf { it > 0 } ?: rec.stopAtMs
-    val fraction = if (rec.stopAtMs > rec.startedAtMs) ((nowMs - rec.startedAtMs).toFloat() / (rec.stopAtMs - rec.startedAtMs)) else 0f
+    // Catch-up downloads come faster than the show and have a long time limit: go by how much
+    // is saved against the show's length (show plus extra time when known), not the time limit.
+    val catchupLenSec = if (rec.fromCatchup) rec.expectedSec.takeIf { it > 0 } ?: (rec.programStopMs - rec.programStartMs).takeIf { it > 0 }?.div(1000.0) else null
+    val fraction = when {
+        catchupLenSec != null -> (rec.durationSec / catchupLenSec).toFloat().coerceIn(0f, 1f)
+        rec.stopAtMs > rec.startedAtMs -> ((nowMs - rec.startedAtMs).toFloat() / (rec.stopAtMs - rec.startedAtMs))
+        else -> 0f
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
