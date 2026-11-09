@@ -1610,6 +1610,9 @@ internal fun buildUi(
         ChannelSort.NUMBER -> list.sortedBy { it.number }
         ChannelSort.NAME -> list.sortedBy { it.name.lowercase() }
     }
+    // Needed for search/zapping in every result. All channels can share it; favorites/custom
+    // lists keep their own stable tie ordering. PLAYLIST still returns visible directly.
+    val sortedVisible = sorted(visible)
 
     /**
      * Your order from "Reorder channels" wins. A channel you haven't placed (one that was
@@ -1617,7 +1620,7 @@ internal fun buildUi(
      * normal order, not at the bottom of the group.
      */
     fun ordered(groupId: String, list: List<LiveChannel>): List<LiveChannel> {
-        val order = user.channelOrder[groupId] ?: return sorted(list)
+        val order = user.channelOrder[groupId] ?: return if (list === visible) sortedVisible else sorted(list)
         val byKeyHere = list.associateBy { it.key }
         val placed = order.mapNotNull { byKeyHere[it] }.distinctBy { it.key }
         val placedKeys = placed.mapTo(HashSet()) { it.key }
@@ -1625,7 +1628,7 @@ internal fun buildUi(
         // Each unplaced channel waits behind the nearest placed channel above it.
         val behind = HashMap<String?, MutableList<LiveChannel>>()
         var above: String? = null
-        for (c in sorted(list)) {
+        for (c in if (list === visible) sortedVisible else sorted(list)) {
             if (c.key in placedKeys) above = c.key else behind.getOrPut(above) { ArrayList() } += c
         }
         val out = ArrayList<LiveChannel>(list.size)
@@ -1736,7 +1739,7 @@ internal fun buildUi(
         groups = groups,
         selectedGroupId = groupId,
         channels = list,
-        allVisibleChannels = sorted(visible),
+        allVisibleChannels = sortedVisible,
         hasSources = hasSrc,
         searchQuery = query,
         orderableGroupIds = orderedRegular.map { it.id },

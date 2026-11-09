@@ -86,10 +86,42 @@ internal object ChannelRegions {
      */
     fun regionFirst(list: List<ChannelMatch>, choice: String): List<ChannelMatch> {
         if (choice.isBlank() || list.size < 2) return list
-        return list.sortedWith(
-            compareByDescending<ChannelMatch> { if (it.score >= 150) 1 else 0 }
-                .thenByDescending { if (includes(it.channel, choice)) 1 else 0 }
-        )
+        // A pair needs at most one comparison. Avoid the general grouping buffers (and
+        // region parsing altogether when a manual pick alone determines its order).
+        if (list.size == 2) {
+            val first = list[0]
+            val second = list[1]
+            val firstManual = first.score >= 150
+            val secondManual = second.score >= 150
+            val swap = if (firstManual != secondManual) secondManual
+                else !includes(first.channel, choice) && includes(second.channel, choice)
+            return if (swap) listOf(second, first) else list
+        }
+        return regionFirst(list) { includes(it.channel, choice) }
+    }
+
+    /** Stable manual/region groups, without parsing the channel's region on every comparison. */
+    internal fun regionFirst(list: List<ChannelMatch>, isPreferred: (ChannelMatch) -> Boolean): List<ChannelMatch> {
+        if (list.size < 2) return list
+        val manualCount = list.count { it.score >= 150 }
+        val ranks = ByteArray(list.size)
+        var previous = 4
+        var ordered = true
+        list.forEachIndexed { i, match ->
+            val manual = match.score >= 150
+            // Region has no effect when this is the only entry in its manual/automatic group.
+            val groupSize = if (manual) manualCount else list.size - manualCount
+            val rank = (if (manual) 2 else 0) + if (groupSize > 1 && isPreferred(match)) 1 else 0
+            ranks[i] = rank.toByte()
+            if (rank > previous) ordered = false
+            previous = rank
+        }
+        if (ordered) return list
+        val out = ArrayList<ChannelMatch>(list.size)
+        for (rank in 3 downTo 0) {
+            for (i in list.indices) if (ranks[i].toInt() == rank) out += list[i]
+        }
+        return out
     }
 
     /** The choices a game's channels offer, with how many of its channels each one has. */
