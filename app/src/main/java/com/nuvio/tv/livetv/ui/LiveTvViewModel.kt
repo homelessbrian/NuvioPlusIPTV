@@ -772,6 +772,15 @@ class LiveTvViewModel @Inject constructor(
                 _recordingEnded.value = RecordingEnd(s.recordingId, nextInFolder(s.recordingId))
                 return
             }
+            // Still being recorded: the seek bar's length grows with it (it was fixed at the
+            // length when opened, so you couldn't seek past that point).
+            recorder.recordings.value.firstOrNull { it.id == s.recordingId }?.let { rec ->
+                val known = p?.duration?.takeIf { it != androidx.media3.common.C.TIME_UNSET && it > 0 } ?: 0L
+                val saved = maxOf((rec.durationSec * 1000).toLong(), known)
+                if (saved > s.program.stopMs - s.program.startMs + 2_000) {
+                    _catchup.value = s.copy(program = s.program.copy(stopMs = s.program.startMs + saved))
+                }
+            }
             val now = System.currentTimeMillis()
             if (now - recordingSavedAt > 5_000) { recordingSavedAt = now; saveRecordingSpot(s) }
             return
@@ -839,7 +848,12 @@ class LiveTvViewModel @Inject constructor(
         if (s.recordingId != null) {
             // A recording: just move within it (never asks the provider).
             val p = playback.player ?: return
-            val dur = p.duration.takeIf { it != androidx.media3.common.C.TIME_UNSET && it > 0 } ?: (s.program.stopMs - s.program.startMs)
+            // The longer of what the player has read and what's saved so far (one still being
+            // recorded grows before the player next reads its list).
+            val dur = maxOf(
+                p.duration.takeIf { it != androidx.media3.common.C.TIME_UNSET && it > 0 } ?: 0L,
+                s.program.stopMs - s.program.startMs
+            )
             p.seekTo(offsetMs.coerceIn(0, (dur - 1_000).coerceAtLeast(0)))
             return
         }
