@@ -91,13 +91,18 @@ public final class VpnConnectionService extends android.net.VpnService {
         if (running) context.startService(new Intent(context, VpnConnectionService.class).setAction(DISCONNECT));
     }
     static void settingsChanged(Context context) {
+        settingsChanged(context, false);
+    }
+    static void settingsChanged(Context context, boolean explicitUserAction) {
         VpnPlaybackProtection.backupChanged();
         userProfileChanged(context);
+        if (explicitUserAction) VpnPlaybackProtection.requestAutomaticAppWide(true);
     }
     static void userProfileChanged(Context context) {
         VpnPlaybackProtection.publishSelectionChange();
         VpnHttpClient.invalidate();
         if (running) context.startService(new Intent(context, VpnConnectionService.class).setAction(CHANGED));
+        VpnPlaybackProtection.requestAutomaticAppWide(false);
     }
 
     // SDK/JNI calls are serialized across service destruction and recreation.

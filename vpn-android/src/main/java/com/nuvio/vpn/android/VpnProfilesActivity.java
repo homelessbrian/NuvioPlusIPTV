@@ -159,7 +159,7 @@ public final class VpnProfilesActivity extends Activity {
                 int outcome = R.string.vpn_scope_saved;
                 try {
                     settings.setShared(checkedId == allProfilesId);
-                    VpnConnectionService.settingsChanged(this);
+                    VpnConnectionService.settingsChanged(this, true);
                 } catch (IOException failure) { outcome = R.string.vpn_scope_failed; }
                 final int message = outcome;
                 showResult(() -> refresh(message));
@@ -185,7 +185,7 @@ public final class VpnProfilesActivity extends Activity {
             worker.execute(() -> {
                 try {
                     settings.saveMode(mode);
-                    VpnConnectionService.settingsChanged(this);
+                    VpnConnectionService.settingsChanged(this, true);
                     event("scope_intent_saved: " + mode.name());
                     showResult(() -> { savedMode = mode; setBusy(false); status.setText(R.string.vpn_scope_saved); });
                 } catch (Exception e) {
@@ -316,7 +316,12 @@ public final class VpnProfilesActivity extends Activity {
                                 setBusy(true);
                                 worker.execute(() -> {
                                     int message;
-                                    try { VpnBackup.updateCredentials(this,id,revision,user,secret); message = R.string.vpn_credentials_saved; }
+                                    try {
+                                        VpnBackup.updateCredentials(this,id,revision,user,secret);
+                                        if (id.equals(settings.read().getSelectedProfileId()))
+                                            VpnPlaybackProtection.requestAutomaticAppWide(true);
+                                        message = R.string.vpn_credentials_saved;
+                                    }
                                     catch (Exception | LinkageError failure) { message = R.string.vpn_credentials_failed; }
                                     int notice = message;
                                     showResult(() -> { setBusy(false); refresh(notice); });
@@ -444,7 +449,7 @@ public final class VpnProfilesActivity extends Activity {
                         settings.selectProfile(entry.id);
                     }
                 }
-                VpnConnectionService.settingsChanged(this);
+                VpnConnectionService.settingsChanged(this, true);
                 event(entry == null ? "selection_cleared; scope_off" : "selection_saved");
             } catch (Exception e) {
                 event("selection_failed: " + e.getClass().getSimpleName());

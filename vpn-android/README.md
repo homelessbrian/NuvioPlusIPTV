@@ -7,6 +7,8 @@ TV and Mobile open the same settings page from **Settings > VPN profiles**. Matc
 - **HTTP + HTTPS streams** protects both playback protocols. HTTPS keeps its original TLS session.
 - **Full app** uses Android VPN consent and restricts the VPN interface to the host package.
 
+Full app protection starts when a valid profile and scope are selected while Nuvio is visible, and resumes on foreground startup after the active Nuvio profile is known. An explicit VPN settings change may request Android consent. Passive startup and resume only connect with consent already granted; they do not reopen permission after a denial or revocation. HTTP playback modes remain on demand. The connection still must authenticate and pass the tunneled HTTPS probe before the app shows Connected. This is foreground activation, not Android always-on VPN or a promise of protection while the app process is stopped.
+
 ## Profiles and sync
 
 Import a WireGuard configuration or a self-contained OpenVPN TUN profile. OpenVPN supports UDP and TCP, inline CA and certificate material, and service credentials. Importing a profile with a bare `auth-user-pass` directive prompts for credentials. Use **OpenVPN service credentials** to update a previously imported profile. Desktop scripts, external credential files, interactive authentication challenges and external PKI are outside the supported profile format.

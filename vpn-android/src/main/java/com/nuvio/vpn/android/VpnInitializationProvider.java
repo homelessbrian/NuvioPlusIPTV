@@ -5,7 +5,7 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.net.Uri;
 
-/** Installs context only. Does not connect, read settings, or perform network/file IO. */
+/** Installs context and observes foreground startup; VPN IO stays on the worker. */
 public final class VpnInitializationProvider extends ContentProvider {
     @Override public boolean onCreate() {
         if (getContext() == null) return false;
