@@ -315,10 +315,13 @@ fun LiveTvPlayerScreen(
     var scrubTargetMs by remember { mutableStateOf<Long?>(null) }
     var scrubToken by remember { mutableIntStateOf(0) }
     var positionMs by remember { mutableStateOf(0L) }
+    // How far you can seek without waiting (saved on the box, or loaded ahead): the bar's lighter part.
+    var readyUntilMs by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(playback.catchupTitle, catchupSession) {
         while (playback.catchupTitle != null && catchupSession != null) {
             viewModel.followCatchup()
             viewModel.catchupPositionMs()?.let { positionMs = it }
+            readyUntilMs = viewModel.catchupReadyUntilMs()
             delay(500)
         }
     }
@@ -985,12 +988,15 @@ fun LiveTvPlayerScreen(
                         // A show still on air (watch from the beginning): the part that has aired
                         // so far in its own colour, with the live point marked.
                         val stillOn = tick < session.program.stopMs
+                        val aired = if (stillOn) tick else session.program.stopMs
                         PanelTimeline(
                             startMs = session.program.startMs,
                             endMs = session.program.stopMs,
                             positionMs = watchingAt,
                             liveMs = if (stillOn) tick else null,
-                            recordedUntilMs = if (stillOn) tick else session.program.stopMs,
+                            // The lighter part: how far you can seek without waiting (what's saved
+                            // with Faster Catch-Up Skipping, or loaded ahead); else what has aired.
+                            recordedUntilMs = readyUntilMs?.let { (session.program.startMs + it).coerceAtMost(aired) } ?: aired,
                             leftLabel = formatClock(session.program.startMs, use24h),
                             rightLabel = formatClock(session.program.stopMs, use24h),
                             status = formatDuration(pos) + " / " + formatDuration(len) +

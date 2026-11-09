@@ -838,6 +838,23 @@ class LiveTvViewModel @Inject constructor(
     }
 
     /**
+     * How far into the catch-up program you can seek without waiting (the seek bar's lighter
+     * part): the end of what's saved on this box with Faster Catch-Up Skipping, or else what the
+     * player has loaded ahead when skips stay inside the replay. Null: the whole show (recordings,
+     * which are all on the box) or not known (a replay that asks the provider again on a skip).
+     */
+    fun catchupReadyUntilMs(): Long? {
+        val s = _catchup.value ?: return null
+        if (s.recordingId != null) return null
+        playback.replaySavedMs()?.let { return s.baseOffsetMs + it }
+        if (!playback.catchupSeekInStream()) return null
+        val p = playback.player ?: return null
+        val ahead = p.bufferedPosition - p.currentPosition
+        if (ahead <= 0) return null
+        return (catchupPositionMs() ?: return null) + ahead
+    }
+
+    /**
      * Seeks the catch-up program to [offsetMs]. Seeks inside the stream when the provider allows
      * it; otherwise asks the provider for the archive again, starting at that point.
      */

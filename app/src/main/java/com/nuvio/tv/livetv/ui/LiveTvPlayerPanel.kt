@@ -81,7 +81,7 @@ internal data class PanelTimeline(
     val positionMs: Long,
     /** Where "live" is on the line (pause and rewind), or null. */
     val liveMs: Long? = null,
-    /** The recorded stretch ends here (pause and rewind), or null. */
+    /** The recorded stretch ends here (pause and rewind; in catch-up, how far is saved or loaded), or null. */
     val recordedUntilMs: Long? = null,
     val leftLabel: String,
     val rightLabel: String,

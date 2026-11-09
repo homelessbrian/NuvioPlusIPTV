@@ -1921,6 +1921,13 @@ class LiveTvPlaybackController @Inject constructor(
     fun catchupSeekInStream(): Boolean =
         replayLocal || archiveWallMapped || currentUrl?.substringBefore('?')?.contains("m3u8", ignoreCase = true) == true
 
+    /**
+     * Faster Catch-Up Skipping: how much of the replay is saved on this box so far (ms into what
+     * was asked for), while it plays from there; null otherwise.
+     */
+    fun replaySavedMs(): Long? =
+        if (replayLocal && savedRecordingId == null && replayCache.session != null) replayCache.savedMs else null
+
     /** A TS catch-up link tried after another failed: saved while it plays (false if it can't be). */
     private fun saveFallback(ch: LiveChannel, url: String): Boolean =
         catchupCache && ch.drm == null && !url.substringBefore('?').contains("m3u8", ignoreCase = true) &&

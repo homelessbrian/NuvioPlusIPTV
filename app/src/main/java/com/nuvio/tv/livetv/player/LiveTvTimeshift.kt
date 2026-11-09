@@ -54,6 +54,10 @@ class LiveTvTimeshift(private val context: Context) {
     @Volatile var trimmedMs: Long = 0L
         private set
 
+    /** TS: how much has been saved so far (ms from the start), for the seek bar's saved part. */
+    @Volatile var savedMs: Long = 0L
+        private set
+
     val isRecording: Boolean get() = recording
 
     /**
@@ -95,6 +99,7 @@ class LiveTvTimeshift(private val context: Context) {
         val isHls = url.lowercase().substringBefore('?').endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true)
         val now = System.currentTimeMillis()
         trimmedMs = 0L
+        savedMs = 0L
         firstBatchMs = 0L
         recording = true
         val s = if (isHls) {
@@ -117,6 +122,7 @@ class LiveTvTimeshift(private val context: Context) {
         session?.dir?.let { d -> ACTIVE -= d; scope.launch { runCatching { d.deleteRecursively() } } }
         session = null
         trimmedMs = 0L
+        savedMs = 0L
         // Leftovers from earlier (a crash, the app or the box switched off while paused).
         // Anything not written to for 15 minutes isn't being recorded any more: a buffer in use
         // gets a new piece every few seconds.
@@ -185,6 +191,7 @@ class LiveTvTimeshift(private val context: Context) {
                             bytes += n
                             segmenter.write(buf, 0, n)
                             trimmedMs = (segmenter.trimmedSec * 1000).toLong()
+                            savedMs = (segmenter.totalSec * 1000).toLong()
                         }
                         if (!recording) end = "stopped"
                         end
@@ -209,6 +216,7 @@ class LiveTvTimeshift(private val context: Context) {
         } finally {
             report.add("$label finished after ${(System.currentTimeMillis() - began) / 1000}s (${segmenter.totalSec.toInt()}s recorded)")
             runCatching { segmenter.finish(ended = true) }
+            if (session?.dir == dir) savedMs = (segmenter.totalSec * 1000).toLong()
             recording = false
         }
     }
