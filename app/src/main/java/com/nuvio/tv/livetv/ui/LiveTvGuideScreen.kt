@@ -170,9 +170,9 @@ fun LiveTvGuideScreen(
 ) {
     // Hold the first draw until the saved settings and menu look are read. Before that the guide
     // only has the built-in defaults, and it drew one frame of the old look, then redrew.
-    val loadedSettings by viewModel.settings.collectAsStateWithLifecycle()
+    val settingsLoaded by viewModel.settingsLoaded.collectAsStateWithLifecycle()
     val menuLoaded by viewModel.menuStyleLoaded.collectAsStateWithLifecycle()
-    if (!viewModel.isSettingsLoaded(loadedSettings) || !menuLoaded) {
+    if (!settingsLoaded || !menuLoaded) {
         Box(Modifier.fillMaxSize().background(NuvioTheme.colors.Background))
         return
     }

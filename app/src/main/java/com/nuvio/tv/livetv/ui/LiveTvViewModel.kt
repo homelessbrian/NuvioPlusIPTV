@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
@@ -121,12 +122,18 @@ class LiveTvViewModel @Inject constructor(
     ) { _, _ -> true }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
 
-    private val settingsPlaceholder = LiveTvSettings()
-    val settings: StateFlow<LiveTvSettings> = prefs.settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, settingsPlaceholder)
+    /**
+     * True once the saved settings have really been read. A separate flag, not a check on [settings]
+     * itself: when every Live TV setting is still at its default, the saved settings equal the
+     * placeholder, so [settings] never changes and the guide would wait forever (a black page).
+     * Set on the same read that fills [settings], so the two always arrive together.
+     */
+    private val _settingsLoaded = MutableStateFlow(false)
+    val settingsLoaded: StateFlow<Boolean> = _settingsLoaded
 
-    /** False until the saved settings have really been read (before that, [settings] is only the defaults). */
-    fun isSettingsLoaded(s: LiveTvSettings): Boolean = s !== settingsPlaceholder
+    val settings: StateFlow<LiveTvSettings> = prefs.settings
+        .onEach { _settingsLoaded.value = true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, LiveTvSettings())
 
     val userState: StateFlow<LiveUserState> = prefs.userState
         .stateIn(viewModelScope, SharingStarted.Eagerly, LiveUserState())
