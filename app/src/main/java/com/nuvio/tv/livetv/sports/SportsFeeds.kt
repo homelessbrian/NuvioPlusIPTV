@@ -612,11 +612,16 @@ internal class SportsFeeds {
         }
 
         private val iso = listOf("yyyy-MM-dd'T'HH:mm'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+        // SimpleDateFormat is mutable: reuse the same three patterns only on their own worker.
+        private val isoFormatters = object : ThreadLocal<List<SimpleDateFormat>>() {
+            override fun initialValue(): List<SimpleDateFormat> = iso.map { p ->
+                SimpleDateFormat(p, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC"); isLenient = false }
+            }
+        }
 
         fun parseIso(s: String?): Long? {
             if (s.isNullOrBlank()) return null
-            for (p in iso) {
-                val f = SimpleDateFormat(p, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC"); isLenient = false }
+            for (f in isoFormatters.get()) {
                 runCatching { return f.parse(s)?.time }
             }
             return null
@@ -679,6 +684,7 @@ internal class SportsFeeds {
         }
 
         private val CLOCK_FIRST = Regex("""^(\d{1,2}:\d{2}(?:\.\d)?)\s*-\s*(.+)$""")
+        private val OFF_STATUS = Regex("POSTPONED|CANCEL|SUSPENDED|FORFEIT|ABANDON")
 
         fun parseTeams(league: League, raw: String): List<TeamInfo> {
             val teams = JSONObject(raw).optJSONArray("sports")?.optJSONObject(0)
@@ -765,7 +771,7 @@ internal class SportsFeeds {
             val stateRaw = type?.str("state")
             val name = type?.str("name").orEmpty()
             val state = when {
-                Regex("POSTPONED|CANCEL|SUSPENDED|FORFEIT|ABANDON").containsMatchIn(name) -> GameState.OFF
+                OFF_STATUS.containsMatchIn(name) -> GameState.OFF
                 stateRaw == "in" -> GameState.LIVE
                 stateRaw == "post" -> GameState.POST
                 else -> GameState.PRE
