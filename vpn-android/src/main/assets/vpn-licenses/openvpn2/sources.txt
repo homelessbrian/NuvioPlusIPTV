@@ -1,0 +1,28 @@
+OpenVPN 2 is distributed as a separate GPL-2.0 compatibility executable and
+communicates with the Android app using the standard management protocol.
+It is not linked into the Android Java application or the OpenVPN 3 library.
+
+OpenVPN 2.7.9, GPL-2.0 with OpenSSL and Apache-2.0 linking exceptions:
+https://github.com/OpenVPN/openvpn/tree/7b60c2aa34992639691e3a2d651fe27301e2e9d5
+
+Android build support and LZO sources, GPL-2.0-or-later where indicated:
+https://github.com/schwabe/ics-openvpn/tree/f669267e2547fddca04d0bc699739137085eb633/main/src/main/cpp
+
+OpenSSL 4.1.0, Apache-2.0:
+https://github.com/schwabe/platform_external_openssl/tree/b280e0c0c81ce6f8d5291c1f8efb6712c357c28a
+
+LZ4, BSD-2-Clause:
+https://github.com/lz4/lz4/tree/5ff839680134437dbf4678f3d0c7b371d84f4964
+
+Nuvio launcher and engine security/validation overlays, GPL-2.0-only:
+vpn-android/openvpn2/launcher.c
+vpn-android/openvpn2/CMakeLists.txt
+vpn-android/openvpn2/patch-engine.cmake
+
+Distributors must provide the complete corresponding source of this executable
+and linked libraries, including these build files and local patches, alongside
+the binary using the same download location and terms required by COPYING.
+The exact pinned upstream sources and all local changes are publicly available
+in the application's source distribution; preserve that source access when
+redistributing a modified binary. A URL alone is not a substitute for satisfying
+the source-distribution requirements of the GPL.

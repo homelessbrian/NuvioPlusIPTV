@@ -163,6 +163,10 @@ jobs:
             -PlivetvBuildNumber=${{ steps.version.outputs.number }} \
             -PlivetvVersionName=${{ steps.version.outputs.version }}
 
+      - name: Package OpenVPN 2 corresponding source
+        run: |
+          python3 vpn-android/ci/package-openvpn2-sources.py --output out/openvpn2-corresponding-source.tar.gz
+
       - name: Send to the test repo (private)
         env:
           GH_TOKEN: ${{ secrets.TEST_BUILDS_PUBLISH_TOKEN }}
@@ -180,6 +184,6 @@ jobs:
           gh api "repos/$TEST_REPO/releases?per_page=100" \
             --jq '.[] | select(.tag_name | test("^release-check-[0-9]+$")) | .tag_name' \
             | while read -r old; do gh release delete "$old" -R "$TEST_REPO" --yes --cleanup-tag || true; done
-          gh release create "release-check-$code" "out/NuvioPlusIPTV-$VERSION-check.apk" -R "$TEST_REPO" \
+          gh release create "release-check-$code" "out/NuvioPlusIPTV-$VERSION-check.apk" "out/openvpn2-corresponding-source.tar.gz" -R "$TEST_REPO" \
             --title "$VERSION" --notes "Release check of $(git rev-parse --short HEAD): $(git log -1 --format=%s)" --prerelease
           echo "::notice title=Release check ready::$VERSION ($(git rev-parse --short HEAD)) is in the private test repo. Nothing was sent to users."

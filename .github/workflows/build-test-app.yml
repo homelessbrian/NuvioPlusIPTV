@@ -157,6 +157,10 @@ jobs:
           ./gradlew :app:assembleFullRelease --parallel --build-cache -PlivetvTestBuild=true \
             -x lintVitalAnalyzeFullRelease -x lintVitalReportFullRelease -x lintVitalFullRelease
 
+      - name: Package OpenVPN 2 corresponding source
+        run: |
+          python3 vpn-android/ci/package-openvpn2-sources.py --output out/openvpn2-corresponding-source.tar.gz
+
       - name: Collect APKs
         run: |
           mkdir -p out
@@ -182,7 +186,7 @@ jobs:
           case "$code" in ''|null|*[!0-9]*) echo "::error::Couldn't read the version code"; exit 1;; esac
           [ -n "$NOTES" ] || NOTES=$(git log -1 --format=%s)
           apk=$(ls out/Nuvio-IPTV-Test-*.apk | head -n 1)
-          gh release create "test-$code" "$apk" -R "$TEST_REPO" --title "$name" \
+          gh release create "test-$code" "$apk" "out/openvpn2-corresponding-source.tar.gz" -R "$TEST_REPO" --title "$name" \
             --notes "$NOTES" --prerelease
           echo "::notice title=Test build ready::$name was sent to the test repo; the test app will offer it."
 

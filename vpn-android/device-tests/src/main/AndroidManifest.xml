@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <application android:label="VPN device checks" android:allowBackup="false"
+        android:extractNativeLibs="true"
         android:usesCleartextTraffic="true" android:icon="@drawable/vpn_shield" />
 </manifest>

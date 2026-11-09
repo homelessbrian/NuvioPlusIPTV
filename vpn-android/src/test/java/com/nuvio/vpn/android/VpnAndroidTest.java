@@ -44,6 +44,10 @@ public final class VpnAndroidTest {
         WireGuardProfileChecks.main(new String[0]);
     }
 
+    @Test public void openVpnCompatibilityManagementFailsClosed() throws Exception {
+        OpenVpn2ManagementChecks.main(new String[0]);
+    }
+
     @Test public void credentialUpdatesPreserveRevocationAndConnectionBlocks() throws Exception {
         String connection = "<connection>\nremote vpn.example 1194 udp\n</connection>\n";
         String revocation = "<crl-verify>\nsynthetic-crl-placeholder\n</crl-verify>\n";
