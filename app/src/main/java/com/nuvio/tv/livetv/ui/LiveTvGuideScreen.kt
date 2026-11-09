@@ -2401,7 +2401,9 @@ private fun GuideHeader(
                 if (game != null) {
                     com.nuvio.tv.livetv.sports.SportsPosterCard(game, Modifier.fillMaxSize())
                 } else if (!poster.isNullOrBlank()) {
-                    LivePosterImage(poster, Modifier.fillMaxSize())
+                    LivePosterImage(poster, Modifier.fillMaxSize()) {
+                        ChannelLogo(channel.logo, if (small) 24.dp else 34.dp)
+                    }
                 } else {
                     ChannelLogo(channel.logo, if (small) 24.dp else 34.dp)
                 }

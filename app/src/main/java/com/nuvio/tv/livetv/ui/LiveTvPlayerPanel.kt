@@ -268,7 +268,9 @@ internal fun LiveTvPlayerPanel(
                             .border(1.dp, Color.White.copy(alpha = 0.12f), shape),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (!poster.isNullOrBlank()) LivePosterImage(poster, Modifier.fillMaxSize())
+                        if (!poster.isNullOrBlank()) LivePosterImage(poster, Modifier.fillMaxSize()) {
+                            ChannelLogo(channel.logo, maxOf(30.dp, posterHeight * 0.4f))
+                        }
                         else ChannelLogo(channel.logo, maxOf(30.dp, posterHeight * 0.4f))
                     }
                     Spacer(Modifier.width(14.dp))

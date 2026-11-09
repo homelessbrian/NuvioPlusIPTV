@@ -19,12 +19,22 @@ import androidx.compose.ui.layout.ContentScale
  * being cut down to a sliver of its middle.
  */
 @Composable
-fun LivePosterImage(url: String, modifier: Modifier = Modifier) {
+fun LivePosterImage(
+    url: String,
+    modifier: Modifier = Modifier,
+    /**
+     * Shown until the picture has loaded, and instead of it when it can't be loaded (a broken
+     * link, not an image): the box never ends up empty.
+     */
+    fallback: @Composable () -> Unit = {}
+) {
     var wide by remember(url) { mutableStateOf(false) }
+    var loaded by remember(url) { mutableStateOf(false) }
     Box(
-        modifier = modifier.then(if (wide) Modifier.background(Color.Black) else Modifier),
+        modifier = modifier.then(if (wide && loaded) Modifier.background(Color.Black) else Modifier),
         contentAlignment = Alignment.Center
     ) {
+        if (!loaded) fallback()
         coil3.compose.AsyncImage(
             model = url,
             contentDescription = null,
@@ -32,7 +42,9 @@ fun LivePosterImage(url: String, modifier: Modifier = Modifier) {
             onSuccess = { s ->
                 val size = s.painter.intrinsicSize
                 wide = size.width > 0f && size.height > 0f && size.width > size.height * 1.1f
+                loaded = true
             },
+            onError = { loaded = false },
             modifier = Modifier.fillMaxSize()
         )
     }
