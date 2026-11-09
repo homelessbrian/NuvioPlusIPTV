@@ -2,6 +2,9 @@ package com.nuvio.vpn.android;
 
 import android.content.Context;
 import android.content.Intent;
+import android.app.Activity;
+import android.app.Application;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -10,6 +13,7 @@ import com.nuvio.vpn.core.VpnPreferences;
 import com.nuvio.vpn.core.StreamRoutePolicy;
 import java.io.IOException;
 import java.net.URI;
+import java.lang.ref.WeakReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -21,6 +25,24 @@ public final class VpnPlaybackProtection {
     private static final Handler main = new Handler(Looper.getMainLooper());
     private static volatile Pending pending;
     private static volatile Context application;
+    private static volatile WeakReference<Activity> foregroundHost = new WeakReference<>(null);
+    private static Application observedApplication;
+    private static final Application.ActivityLifecycleCallbacks foregroundObserver = new Application.ActivityLifecycleCallbacks() {
+        @Override public void onActivityResumed(Activity activity) {
+            if (activity instanceof VpnPlaybackConsentActivity) return;
+            foregroundHost = new WeakReference<>(activity);
+            requestAutomaticAppWide(false);
+        }
+        @Override public void onActivityPaused(Activity activity) { clear(activity); }
+        @Override public void onActivityDestroyed(Activity activity) { clear(activity); }
+        private void clear(Activity activity) {
+            if (foregroundHost.get() == activity) foregroundHost = new WeakReference<>(null);
+        }
+        @Override public void onActivityCreated(Activity activity, Bundle state) { }
+        @Override public void onActivityStarted(Activity activity) { }
+        @Override public void onActivityStopped(Activity activity) { }
+        @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) { }
+    };
     /** Lets the host app collect short, non-secret VPN progress lines (for its start-up report). */
     public static volatile java.util.function.Consumer<String> diagnostics;
     static void report(String line) {
@@ -67,9 +89,39 @@ public final class VpnPlaybackProtection {
         }).get(5, TimeUnit.SECONDS);
     }
 
-    static void initialize(Context context) {
+    static synchronized void initialize(Context context) {
         application = context.getApplicationContext();
+        if (application instanceof Application && observedApplication != application) {
+            if (observedApplication != null) observedApplication.unregisterActivityLifecycleCallbacks(foregroundObserver);
+            foregroundHost = new WeakReference<>(null);
+            observedApplication = (Application) application;
+            observedApplication.registerActivityLifecycleCallbacks(foregroundObserver);
+        }
         worker.execute(() -> { try { settings(); } catch (IOException ignored) { } });
+    }
+
+    private static boolean hasForegroundHost() {
+        Activity activity = foregroundHost.get();
+        return activity != null && !activity.isFinishing() && !activity.isDestroyed();
+    }
+
+    /** Full app starts when the host is visible, rather than waiting for media.
+     * Passive startup/resume never reopens consent after an Android denial or revocation.
+     * Only an explicit VPN settings action may request new consent here. */
+    static void requestAutomaticAppWide(boolean mayRequestConsent) {
+        worker.execute(() -> {
+            CompletableFuture<Void> result = new CompletableFuture<>();
+            try {
+                if (profilesRestoring || activeUserProfile <= 0 || !hasForegroundHost()) return;
+                VpnPreferences preferences = settings();
+                if (preferences.getMode() != ProtectionMode.APP_WIDE || preferences.getSelectedProfileId() == null) return;
+                Context app = application();
+                if (!mayRequestConsent && android.net.VpnService.prepare(app) != null) return;
+                requestTunnel(app, preferences, result, mayRequestConsent, true);
+            } catch (Exception | LinkageError failure) {
+                result.completeExceptionally(prepareFailure(failure, "Full app VPN protection could not start. Check VPN settings."));
+            }
+        });
     }
 
     static int activeUserProfile() { return activeUserProfile; }
@@ -274,37 +326,7 @@ public final class VpnPlaybackProtection {
                     if (route == StreamRoutePolicy.Route.DIRECT) { result.complete(null); return; }
                     if (route == StreamRoutePolicy.Route.BLOCK) throw new IOException("Unsupported protected stream address.");
                 }
-                String profile = settings.getSelectedProfileId();
-                if (profile == null) throw new IOException("Select a VPN profile in Settings before playing.");
-                if (VpnConnectionService.verifiedFor(profile, settings.getMode())) { result.complete(null); return; }
-                if (pending != null && (!pending.profile.equals(profile) || pending.mode != settings.getMode())) {
-                    Pending obsolete = pending;
-                    pending = null;
-                    obsolete.result.completeExceptionally(new IOException("VPN settings changed before playback started."));
-                }
-                if (pending == null) {
-                    // Validate the selected protocol and routes before requesting consent or starting a service.
-                    try (com.nuvio.vpn.core.ProfileEnvelope.Opened opened = new AndroidProfileStore(app).open(settings.getSelectedProfileId())) {
-                        if (opened.getProtocol() == com.nuvio.vpn.core.ProfileImport.Protocol.OPENVPN) OpenVpnSession.requireReady(opened.copyContents());
-                        else WireGuardProfiles.prepareSelected(app, settings.getMode());
-                    }
-                    Pending request = new Pending(app, profile, settings.getMode());
-                    synchronized (nativeLeases) { pending = request; }
-                    if ((app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
-                        android.util.Log.i("NuvioVpn", "stream_requested_vpn; scope=" + request.mode.name());
-                    if (request.mode.isPlaybackScoped() || android.net.VpnService.prepare(app) == null) start(request);
-                    else main.post(() -> {
-                        try {
-                            app.startActivity(new Intent(app, VpnPlaybackConsentActivity.class)
-                                    .putExtra("request", request.token)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                        } catch (RuntimeException failure) { fail("Open VPN settings to grant Android VPN permission."); }
-                    });
-                    worker.schedule(() -> check(request), 250, TimeUnit.MILLISECONDS);
-                }
-                pending.result.whenComplete((value, error) -> {
-                    if (error == null) result.complete(null); else result.completeExceptionally(error);
-                });
+                requestTunnel(app, settings, result, true, false);
             } catch (Exception | LinkageError failure) {
                 result.completeExceptionally(prepareFailure(failure, "VPN protection could not be prepared. Check your selected profile and scope."));
             }
@@ -312,9 +334,74 @@ public final class VpnPlaybackProtection {
         return result;
     }
 
+    /** Runs on the playback actor for both media demand and foreground Full app startup. */
+    private static void requestTunnel(Context app, VpnPreferences settings, CompletableFuture<Void> result,
+                                      boolean mayRequestConsent, boolean automatic) throws Exception {
+        String profile = settings.getSelectedProfileId();
+        if (profile == null) throw new IOException("Select a VPN profile in Settings before playing.");
+        if (VpnConnectionService.verifiedFor(profile, settings.getMode())) { result.complete(null); return; }
+        if (pending != null && (!pending.profile.equals(profile) || pending.mode != settings.getMode()
+                || !pending.currentAutomaticIntent())) {
+            Pending obsolete = pending;
+            pending = null;
+            obsolete.result.completeExceptionally(new IOException("VPN settings changed before the connection started."));
+        }
+        if (pending == null) {
+            int user = activeUserProfile;
+            long revision = settingsRevision.get();
+            // Validate the selected protocol and routes before consent or service creation.
+            try (com.nuvio.vpn.core.ProfileEnvelope.Opened opened = new AndroidProfileStore(app).open(profile)) {
+                if (opened.getProtocol() == com.nuvio.vpn.core.ProfileImport.Protocol.OPENVPN) OpenVpnSession.requireReady(opened.copyContents());
+                else WireGuardProfiles.prepareSelected(app, settings.getMode());
+            }
+            if (automatic && (!hasForegroundHost() || activeUserProfile != user || revision != settingsRevision.get())) {
+                result.complete(null);
+                return;
+            }
+            Intent consent = settings.getMode().isPlaybackScoped() ? null : android.net.VpnService.prepare(app);
+            if (consent != null && !mayRequestConsent) {
+                result.completeExceptionally(new IOException("Android VPN permission is required for Full app protection."));
+                return;
+            }
+            Pending request = new Pending(app, profile, settings.getMode(), automatic);
+            synchronized (nativeLeases) { pending = request; }
+            if ((app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
+                android.util.Log.i("NuvioVpn", (automatic ? "foreground_requested_vpn; scope=" : "stream_requested_vpn; scope=") + request.mode.name());
+            if (consent == null) start(request);
+            else main.post(() -> {
+                if (pending != request) return;
+                boolean valid;
+                try {
+                    VpnPreferences current = new AndroidVpnSettings(request.app).read();
+                    valid = !profilesRestoring && request.currentAutomaticIntent()
+                            && current.getMode() == request.mode && request.profile.equals(current.getSelectedProfileId());
+                } catch (IOException failure) { valid = false; }
+                if (!valid || (request.automatic && !hasForegroundHost())) {
+                    fail(request, "VPN settings changed before permission was requested.");
+                    return;
+                }
+                try {
+                    app.startActivity(new Intent(app, VpnPlaybackConsentActivity.class)
+                            .putExtra("request", request.token)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (RuntimeException failure) {
+                    fail(request, "Open VPN settings to grant Android VPN permission.");
+                }
+            });
+            worker.schedule(() -> check(request), 250, TimeUnit.MILLISECONDS);
+        }
+        Pending request = pending;
+        if (request != null && !automatic) request.playbackDemand = true;
+        // start() can schedule a failure on this actor; that exact pending future remains the gate.
+        if (request != null) request.result.whenComplete((value, error) -> {
+            if (error == null) result.complete(null); else result.completeExceptionally(error);
+        });
+    }
+
     private static void start(Pending request) {
         try {
             if (pending != request || request.started) return;
+            if (!request.currentAutomaticIntent()) throw new IOException("VPN settings changed.");
             VpnPreferences settings = new AndroidVpnSettings(request.app).read();
             if (settings.getMode() != request.mode || !request.profile.equals(settings.getSelectedProfileId()))
                 throw new IOException("VPN settings changed.");
@@ -337,17 +424,22 @@ public final class VpnPlaybackProtection {
                 worker.schedule(() -> start(request), 250, TimeUnit.MILLISECONDS);
                 return;
             }
+            if (request.automatic && !request.playbackDemand && !request.consentGranted && !hasForegroundHost()) {
+                fail(request, "Nuvio left the foreground before Full app protection could start.");
+                return;
+            }
             request.started = true;
             VpnConnectionService.connect(request.app, request.profile, request.mode);
-        } catch (Exception failure) { fail("VPN connection could not start. Check VPN settings."); }
+        } catch (Exception failure) { fail(request, "VPN connection could not start. Check VPN settings."); }
     }
 
     private static void check(Pending request) {
         if (pending != request) return;
         try {
             VpnPreferences settings = new AndroidVpnSettings(request.app).read();
-            if (settings.getMode() != request.mode || !request.profile.equals(settings.getSelectedProfileId())) {
-                fail("VPN settings changed before playback started."); return;
+            if (!request.currentAutomaticIntent()
+                    || settings.getMode() != request.mode || !request.profile.equals(settings.getSelectedProfileId())) {
+                fail(request, "VPN settings changed before the connection started."); return;
             }
             if (VpnConnectionService.verifiedFor(request.profile, request.mode)) {
                 pending = null;
@@ -355,20 +447,33 @@ public final class VpnPlaybackProtection {
                 return;
             }
             if (request.started && VpnConnectionService.snapshot().phase == VpnConnectionService.Phase.ERROR) {
-                fail(VpnConnectionService.snapshot().authRejected ? request.app.getString(R.string.vpn_auth_rejected)
+                fail(request, VpnConnectionService.snapshot().authRejected ? request.app.getString(R.string.vpn_auth_rejected)
                         : withReason("VPN could not be verified. Playback was not started.")); return;
             }
             if (SystemClock.elapsedRealtime() - request.since > 60000) {
-                fail(withReason("VPN connection timed out. Playback was not started.")); return;
+                fail(request, withReason("VPN connection timed out. Playback was not started.")); return;
             }
             worker.schedule(() -> check(request), 250, TimeUnit.MILLISECONDS);
-        } catch (Exception failure) { fail("VPN settings could not be read. Playback was not started."); }
+        } catch (Exception failure) { fail(request, "VPN settings could not be read. Playback was not started."); }
     }
 
     static void consentResult(String token, boolean granted) {
         worker.execute(() -> {
             if (pending == null || !pending.token.equals(token)) return;
-            if (granted) start(pending); else fail("VPN permission was declined. Playback was not started.");
+            Pending request = pending;
+            if (granted) {
+                request.consentGranted = true;
+                start(request);
+            } else fail(request, "VPN permission was declined. Playback was not started.");
+        });
+    }
+
+    private static void fail(Pending expected, String message) {
+        worker.execute(() -> {
+            if (pending != expected) return;
+            pending = null;
+            report("VPN connection blocked: " + message);
+            expected.result.completeExceptionally(new IOException(message));
         });
     }
 
@@ -389,7 +494,18 @@ public final class VpnPlaybackProtection {
         final ProtectionMode mode;
         final long since = SystemClock.elapsedRealtime();
         final CompletableFuture<Void> result = new CompletableFuture<>();
-        boolean started;
-        Pending(Context app, String profile, ProtectionMode mode) { this.app = app; this.profile = profile; this.mode = mode; }
+        final boolean automatic;
+        final int automaticUser;
+        final long automaticRevision;
+        boolean started, playbackDemand, consentGranted;
+        Pending(Context app, String profile, ProtectionMode mode, boolean automatic) {
+            this.app = app; this.profile = profile; this.mode = mode;
+            this.automatic = automatic;
+            automaticUser = activeUserProfile;
+            automaticRevision = settingsRevision.get();
+        }
+        boolean currentAutomaticIntent() {
+            return !automatic || (automaticUser == activeUserProfile && automaticRevision == settingsRevision.get());
+        }
     }
 }

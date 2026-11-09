@@ -146,10 +146,10 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
                         SettingsActionRow(
                             title = live.title,
                             subtitle = listOfNotNull(live.detail, live.traffic).joinToString("\n"),
-                            value = if (live.canTurnOff) stringResource(VpnR.string.vpn_turn_off) else null,
                             leadingIcon = Icons.Default.Shield,
-                            // Always selectable so the screen can scroll up to it; it only acts when there is something to turn off.
-                            onClick = { if (live.canTurnOff && !busy) controller.turnOff() },
+                            // Keep status focusable for scrolling; protection is changed
+                            // only through the explicit Automatic protection setting.
+                            onClick = {},
                             modifier = Modifier.focusRequester(topRequester)
                         )
                     }
@@ -267,7 +267,8 @@ fun VpnSettingsContent(initialFocusRequester: FocusRequester? = null) {
                 selectedValue = mode,
                 onOptionSelected = { picked ->
                     dialog = null
-                    if (picked != mode) controller.setMode(picked)
+                    // Selecting Full app again also retries an earlier declined permission request.
+                    if (picked != mode || picked == VpnSettingsController.MODE_APP) controller.setMode(picked)
                 },
                 onDismiss = { dialog = null },
                 width = 560.dp

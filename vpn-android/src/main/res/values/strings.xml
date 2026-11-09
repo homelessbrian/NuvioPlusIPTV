@@ -8,7 +8,7 @@
     <string name="vpn_connection_failed">Could not verify a VPN connection</string>
     <string name="vpn_select_wireguard_profile">Select a saved VPN profile to connect.</string>
     <string name="vpn_requires_app_scope">Choose HTTP, HTTP + HTTPS or Full app to enable automatic protection.</string>
-    <string name="vpn_ready_to_connect">Connects automatically when you start a stream. All app traffic then uses the VPN.</string>
+    <string name="vpn_ready_to_connect">Full app protection starts automatically while Nuvio is open, after Android VPN permission is granted.</string>
     <string name="vpn_active_app_detail">All network traffic from this app uses the VPN. Other apps are unaffected.</string>
     <string name="vpn_verification_pending">The VPN connection is not verified yet. Keep it on to retry, or disconnect.</string>
     <string name="vpn_connection_error_detail">VPN protection is not verified. Disconnect before trying again.</string>
