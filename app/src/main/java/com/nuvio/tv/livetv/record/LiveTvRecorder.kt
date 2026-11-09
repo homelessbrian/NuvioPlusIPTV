@@ -554,8 +554,20 @@ class LiveTvRecorder @Inject constructor(
         while (scope.isActive && rec.id !in stopRequested && System.currentTimeMillis() < currentStop(rec.id)) {
             if (nothingYet()) return HLS_SENT_NOTHING
             // A live channel starts with a short lead-in before now; a catch-up show from its start.
-            video.saveNew(vm) { m -> if (finite) 0 else hls.startIndex(m.pieces, LIVE_LEAD_MS) }
-            if (audio != null && am != null) audio.saveNew(am!!) { a -> if (finite) 0 else hls.matchingStart(a.pieces, video) }
+            // A catch-up show's list has every piece at once: each piece gets a few tries, and the
+            // saved part shows (and plays) as it comes in instead of only at the end.
+            val tries = if (finite) 3 else 1
+            var shownAt = System.currentTimeMillis()
+            val shown: (() -> Unit)? = if (!finite) null else ({
+                val t = System.currentTimeMillis()
+                if (t - shownAt > 5_000) {
+                    shownAt = t
+                    writePlaylists(ended = false)
+                    onProgress(video.totalSec, dirSize(dir))
+                }
+            })
+            video.saveNew(vm, tries, shown) { m -> if (finite) 0 else hls.startIndex(m.pieces, LIVE_LEAD_MS) }
+            if (audio != null && am != null) audio.saveNew(am!!, tries, shown) { a -> if (finite) 0 else hls.matchingStart(a.pieces, video) }
             writePlaylists(ended = false)
             onProgress(video.totalSec, dirSize(dir))
             // A finished playlist (a catch-up show): everything's saved.

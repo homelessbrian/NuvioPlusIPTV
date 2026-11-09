@@ -474,8 +474,11 @@ class LiveTvRecordingScheduler @Inject constructor(
                 settings.epgOffsetMinutes * 60_000L - settings.catchupShiftMinutes * 60_000L -
                 (playlist?.catchupShiftMinutes ?: 0) * 60_000L
             val url = catchup?.let {
+                // Same kind of link as watching (the catch-up setting): HLS comes as pieces, which
+                // providers send at full speed; one long TS stream is often sent at viewing speed
+                // or slower. The TS link stays as the fall-back if the HLS one sends nothing.
                 CatchupUrlBuilder.build(channel.url, it, s.startMs - s.pre - shift, s.stopMs + s.post - shift, now,
-                    preferHls = false, serverTimezone = zone)
+                    preferHls = settings.catchupPreferHls, serverTimezone = zone)
             }
             if (url == null) {
                 // No catch-up link after all: nothing to download.
@@ -510,6 +513,8 @@ class LiveTvRecordingScheduler @Inject constructor(
                         val from = s.startMs - s.pre - shift + doneMs - 30_000L
                         CatchupUrlBuilder.build(channel.url, it, from, s.stopMs + s.post - shift, System.currentTimeMillis(),
                             preferHls = false, serverTimezone = zone)
+                            // Carrying on happens in the TS download: an m3u8 channel's link in its TS form.
+                            ?.let { link -> CatchupUrlBuilder.tsFallback(link) ?: link }
                     }
                 },
                 onFinished = { rec ->

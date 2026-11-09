@@ -231,7 +231,14 @@ internal object HlsPieces {
          * Saves the pieces in [m] not saved yet. The first time (and after [restart]) it starts
          * at [startAt]'s index. Returns the seconds added.
          */
-        fun saveNew(m: Media, startAt: (Media) -> Int): Double {
+        fun saveNew(
+            m: Media,
+            /** Tries per piece (a catch-up save can't come back for a piece it missed). */
+            tries: Int = 1,
+            /** After each piece saved (a long catch-up list shows progress as it goes). */
+            onPiece: (() -> Unit)? = null,
+            startAt: (Media) -> Int
+        ): Double {
             if (mapLine == null && m.mapUri != null) {
                 val init = "${prefix}init.mp4"
                 download(HlsPieces.resolve(url, m.mapUri), File(dir, init))
@@ -253,13 +260,20 @@ internal object HlsPieces {
                 if (p.seq <= lastSeq) continue
                 val name = "${prefix}seg$named.${if (mapLine != null) "m4s" else "ts"}"
                 // 1.0 = the whole piece; less = cut part way by a stop (its share of the length).
-                val got = download(HlsPieces.resolve(url, p.uri), File(dir, name)) ?: continue
+                var got: Double? = null
+                for (t in 1..tries.coerceAtLeast(1)) {
+                    got = download(HlsPieces.resolve(url, p.uri), File(dir, name))
+                    if (got != null || stopNow()) break
+                    Thread.sleep(1_000L * t)
+                }
+                if (got == null) continue
                 val dur = p.dur * got
                 saved += Saved(dur, name, saved.isNotEmpty() && (gap || (p.disc && i > from)))
                 gap = false
                 named++
                 lastSeq = p.seq
                 added += dur
+                onPiece?.invoke()
                 if (got < 1.0) break
             }
             return added
