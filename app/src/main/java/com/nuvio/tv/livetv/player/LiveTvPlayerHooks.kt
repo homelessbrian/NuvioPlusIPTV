@@ -29,7 +29,8 @@ import javax.inject.Singleton
 class LiveTvPlayerHooks @Inject constructor(
     private val playback: LiveTvPlaybackController,
     private val prefs: LiveTvPreferences,
-    private val repository: LiveTvRepository
+    private val repository: LiveTvRepository,
+    private val channelStore: com.nuvio.tv.livetv.data.LiveTvChannelStore
 ) {
     /** A Live TV screen that can switch to a backup channel and carry on a stalled replay. */
     interface Owner {
@@ -89,7 +90,15 @@ class LiveTvPlayerHooks @Inject constructor(
         // changes: looking through every channel when one failed ran on the main thread and,
         // with a big playlist, froze the app until Android closed it.
         scope.launch(Dispatchers.Default) {
-            repository.channels.collectLatest { list -> backupIndex = list.groupBy { backupName(it.name) } }
+            // Matched by the provider's own names (so the same copies are found as before), then
+            // each shown as it is everywhere else: the logo setting (playlist or EPG), picked
+            // logos and your names.
+            kotlinx.coroutines.flow.combine(repository.channels, channelStore.displayChannels) { raw, shown -> raw to shown }
+                .collectLatest { (raw, shown) ->
+                    val byKey = shown.associateBy { it.key }
+                    backupIndex = raw.groupBy { backupName(it.name) }
+                        .mapValues { (_, list) -> list.map { byKey[it.key] ?: it } }
+                }
         }
         scope.launch { prefs.userState.collect { playback.channelAudio = it.channelAudio; playback.channelCaptions = it.channelCaptions } }
         scope.launch {
