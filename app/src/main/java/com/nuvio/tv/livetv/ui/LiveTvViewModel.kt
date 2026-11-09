@@ -575,6 +575,7 @@ class LiveTvViewModel @Inject constructor(
             description = rec.description, episode = rec.episode
         )
         _catchup.value = CatchupSession(channel, program, 0L, recordingId = rec.id)
+        _recordingEnded.value = null
         recordingSavedAt = 0L
         playback.playSavedRecording(channel, file, rec.title, rec.id, resume)
         return true
@@ -583,12 +584,39 @@ class LiveTvViewModel @Inject constructor(
     /** Leaving a recording played here: keep where you got to (Recordings shows it, Resume uses it), then stop. */
     fun stopRecordingPlayback() {
         val s = _catchup.value
-        if (s?.recordingId != null) saveRecordingSpot(s)
+        if (s?.recordingId != null && _recordingEnded.value == null) saveRecordingSpot(s)
+        _recordingEnded.value = null
         _catchup.value = null
         playback.stop()
     }
 
     private var recordingSavedAt = 0L
+
+    /** The next episode in a recording's folder, offered when the recording ends. */
+    data class RecordingUpNext(val recordingId: String, val title: String, val episode: String)
+    /** A recording played to its end: what comes next in its folder (null: none, so it closes). */
+    data class RecordingEnd(val recordingId: String, val next: RecordingUpNext?)
+
+    private val _recordingEnded = MutableStateFlow<RecordingEnd?>(null)
+    val recordingEnded: StateFlow<RecordingEnd?> = _recordingEnded
+
+    /** The episode after [recordingId] in its show's folder (Recordings' order), or null. */
+    private fun nextInFolder(recordingId: String): RecordingUpNext? {
+        val done = recorder.recordings.value.filter { !it.isRecording }
+        val show = com.nuvio.tv.livetv.record.groupRecorded(done)
+            .filterIsInstance<com.nuvio.tv.livetv.record.RecordedShow>()
+            .firstOrNull { sh -> sh.episodes.any { it.id == recordingId } } ?: return null
+        val i = show.episodes.indexOfFirst { it.id == recordingId }
+        val next = show.episodes.getOrNull(i + 1) ?: return null
+        if (!recorder.playlistFile(next).isFile) return null
+        return RecordingUpNext(next.id, next.title, com.nuvio.tv.livetv.record.episodeLabel(next))
+    }
+
+    /** Plays the episode offered at the end. False if it can't be played. */
+    fun playNextRecording(): Boolean {
+        val next = _recordingEnded.value?.next ?: return false
+        return playRecording(next.recordingId, fromStart = false)
+    }
 
     private fun saveRecordingSpot(s: CatchupSession) {
         val id = s.recordingId ?: return
@@ -734,7 +762,16 @@ class LiveTvViewModel @Inject constructor(
     fun followCatchup() {
         val s = _catchup.value ?: return
         if (s.recordingId != null) {
-            // A recording: no next show, no provider. Its spot is kept every few seconds.
+            // A recording: no provider. Its spot is kept every few seconds; at its end it's marked
+            // watched and the next episode in its folder is offered (or it closes).
+            val p = playback.player
+            if (_recordingEnded.value == null && playback.savedRecordingId == s.recordingId &&
+                p?.playbackState == androidx.media3.common.Player.STATE_ENDED
+            ) {
+                com.nuvio.tv.livetv.record.RecordingResume.markWatched(recorder.appContext, s.recordingId)
+                _recordingEnded.value = RecordingEnd(s.recordingId, nextInFolder(s.recordingId))
+                return
+            }
             val now = System.currentTimeMillis()
             if (now - recordingSavedAt > 5_000) { recordingSavedAt = now; saveRecordingSpot(s) }
             return

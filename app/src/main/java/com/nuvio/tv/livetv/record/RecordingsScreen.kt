@@ -273,7 +273,8 @@ fun RecordingsScreen(
     val entries = remember(done) { groupRecorded(done) }
     val recContext = androidx.compose.ui.platform.LocalContext.current
     // A folder that's open, a move being chosen, and a whole folder being deleted.
-    var openShowKey by remember { mutableStateOf<String?>(null) }
+    // Kept while a recording plays (Recordings leaves the screen), so Back returns to the folder.
+    var openShowKey by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     val openShow = entries.firstOrNull { it.key == openShowKey } as? RecordedShow
     LaunchedEffect(openShow == null) {
         if (openShow == null) {
@@ -445,6 +446,7 @@ fun RecordingsScreen(
                                     RecordedCard(
                                         rec = rec,
                                         art = art[rec.id],
+                                        watched = resumeTick.let { viewModel.isWatched(rec) },
                                         resumeFraction = resumeTick.let { viewModel.resume(rec) }?.let { ms ->
                                             if (rec.durationSec > 0) (ms / 1000.0 / rec.durationSec).toFloat().coerceIn(0f, 1f) else null
                                         },
@@ -895,6 +897,8 @@ internal fun RecordedCard(
     art: RecordingArt?,
     resumeFraction: Float?,
     modifier: Modifier,
+    /** Watched to the end (or marked watched): a tick on the picture, as in a show's folder. */
+    watched: Boolean = false,
     onClick: () -> Unit,
     onMenu: () -> Unit
 ) {
@@ -929,6 +933,12 @@ internal fun RecordedCard(
                     f, colors.Secondary,
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp)
                 )
+            }
+            if (watched) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(8.dp).clip(RoundedCornerShape(50))
+                        .background(colors.Secondary).padding(horizontal = 8.dp, vertical = 2.dp)
+                ) { LiveText("✓", size = 13.sp, weight = FontWeight.Bold, color = colors.Background) }
             }
         }
         LiveText(
