@@ -482,9 +482,22 @@ class LiveTvRecordingScheduler @Inject constructor(
                 drop(s, "\"${s.title}\" couldn't be saved: this channel's catch-up isn't available")
                 return@launch
             }
-            remove(s)
-            markSeen(s)
-            recorder.start(
+            // One catch-up download per provider at a time, oldest show first: most accounts allow
+            // one connection, and a second download made the provider close the first part way
+            // (back-to-back shows of a series each came out a few minutes short).
+            val started = catchupStartLock.withLock {
+                val now2 = System.currentTimeMillis()
+                // An earlier show of this provider that's due, or waiting its turn (a retry after a
+                // failure, half an hour away, doesn't hold the others up).
+                val earlierWaiting = _schedules.value.any { o ->
+                    o.id != s.id && o.useCatchup && o.channel.sourceId == channel.sourceId &&
+                        o.startMs < s.startMs && o.stopMs + CATCHUP_DELAY_MS <= now2 &&
+                        fireTime(o) <= now2 + QUEUE_WAIT_MS
+                }
+                if (recorder.catchupBusy(channel.sourceId) || earlierWaiting) return@withLock null
+                remove(s)
+                markSeen(s)
+                recorder.start(
                 channel, url, s.title, s.episode, s.description, s.startMs, s.stopMs,
                 stopAtMs = now + (s.stopMs - s.startMs) * 3 + 30 * 60_000L,
                 finite = true,
@@ -517,10 +530,25 @@ class LiveTvRecordingScheduler @Inject constructor(
                             arm(retry)
                         }
                     }
-                }
+                },
+                expectedSec = (s.stopMs + s.post - (s.startMs - s.pre)) / 1000.0
             )
+            }
+            if (started == null) {
+                // Another download from this provider first: check again in a minute (not a try used up).
+                val wait = s.copy(nextTryMs = System.currentTimeMillis() + QUEUE_WAIT_MS)
+                mutex.withLock {
+                    _schedules.value = _schedules.value.map { if (it.id == s.id) wait else it }
+                    save()
+                }
+                arm(wait)
+                recorder.stopServiceIfIdle()
+            }
         }
     }
+
+    /** Checking for and starting a catch-up download happen together (two alarms at once). */
+    private val catchupStartLock = kotlinx.coroutines.sync.Mutex()
 
     // ------------------------------------------------------------------ connection
 
@@ -648,6 +676,8 @@ class LiveTvRecordingScheduler @Inject constructor(
         /** Catch-up downloads start this long after the show ends (providers need a moment). */
         const val CATCHUP_DELAY_MS = 10 * 60_000L
         const val RETRY_MS = 30 * 60_000L
+        /** A catch-up download waiting for another from the same provider checks again this often. */
+        const val QUEUE_WAIT_MS = 60_000L
         const val MAX_TRIES = 3
 
         private val SE = Regex("""(?i)\bS(?:eason)?\s*0*(\d{1,3})\s*[\-.:,x]?\s*E(?:p(?:isode)?)?\s*0*(\d{1,4})\b""")
