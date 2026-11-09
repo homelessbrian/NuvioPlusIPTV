@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 
-/** System consent only; the playback caller continues awaiting the verified connection. */
+/** System consent only; the requester continues awaiting the verified connection. */
 public final class VpnPlaybackConsentActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);

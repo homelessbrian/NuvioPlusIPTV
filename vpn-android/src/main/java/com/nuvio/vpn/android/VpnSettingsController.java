@@ -188,7 +188,7 @@ public final class VpnSettingsController {
                         settings.selectProfile(id);
                     }
                 }
-                VpnConnectionService.settingsChanged(app);
+                VpnConnectionService.settingsChanged(app, true);
             } catch (Exception e) {
                 message = R.string.vpn_profiles_selection_failed;
                 failed = true;
@@ -225,7 +225,7 @@ public final class VpnSettingsController {
             boolean failed = false;
             try {
                 settings().saveMode(mode);
-                VpnConnectionService.settingsChanged(app);
+                VpnConnectionService.settingsChanged(app, true);
             } catch (Exception e) {
                 message = R.string.vpn_scope_failed;
                 failed = true;
@@ -242,7 +242,7 @@ public final class VpnSettingsController {
             boolean failed = false;
             try {
                 settings().setShared(shared);
-                VpnConnectionService.settingsChanged(app);
+                VpnConnectionService.settingsChanged(app, true);
             } catch (IOException e) {
                 message = R.string.vpn_scope_failed;
                 failed = true;
@@ -311,6 +311,8 @@ public final class VpnSettingsController {
             try {
                 byte[] revision = store.revision(id);
                 VpnBackup.updateCredentials(app, id, revision, username, password);
+                if (id.equals(settings().read().getSelectedProfileId()))
+                    VpnPlaybackProtection.requestAutomaticAppWide(true);
                 message = R.string.vpn_credentials_saved;
             } catch (Exception | LinkageError failure) {
                 message = R.string.vpn_credentials_failed;

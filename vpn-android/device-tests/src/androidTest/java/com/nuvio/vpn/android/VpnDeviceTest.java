@@ -8,6 +8,7 @@ import android.app.Activity;
 import android.os.SystemClock;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
+import com.nuvio.vpn.core.OpenVpnEnginePolicy;
 import com.nuvio.vpn.core.ProfileEnvelope;
 import com.nuvio.vpn.core.ProfileImport;
 import com.nuvio.vpn.core.ProtectionMode;
@@ -349,6 +350,7 @@ public final class VpnDeviceTest {
         AndroidProfileStore store = new AndroidProfileStore(context);
         try (java.io.FileInputStream in = new java.io.FileInputStream(new File(context.getFilesDir(),"acceptance.ovpn"));
              ProfileImport.Candidate candidate = ProfileImport.read(in, ProfileImport.Protocol.OPENVPN)) {
+            assertExpectedOpenVpnEngine(candidate.getOpenVpnEngine());
             store.save(ID,"Integration profile",candidate);
             if (OpenVpnSession.evaluate(candidate.copyContents()) == 2) {
                 byte[] revision = store.revision(ID);
@@ -365,6 +367,11 @@ public final class VpnDeviceTest {
         store.delete(ID);
         settings.save(VpnPreferences.defaults());
         VpnBackup.restoreSetup(context, backup);
+        try (ProfileEnvelope.Opened restored = store.open(ID)) {
+            char[] contents = restored.copyContents();
+            try { assertExpectedOpenVpnEngine(OpenVpnEnginePolicy.select(contents)); }
+            finally { java.util.Arrays.fill(contents, '\0'); }
+        }
         VpnConnectionService.settingsChanged(context);
         try {
             java.util.concurrent.CompletableFuture<Void> gate = VpnPlaybackProtection.prepare(context,url);
@@ -372,6 +379,8 @@ public final class VpnDeviceTest {
                 try { gate.get(45,java.util.concurrent.TimeUnit.SECONDS); fail("Invalid peer was accepted"); }
                 catch (java.util.concurrent.ExecutionException rejected) { assertTrue(rejected.getCause() instanceof IOException); }
                 assertFalse(VpnConnectionService.verifiedFor(ID,mode));
+                assertNull(VpnConnectionService.httpProxy(ID));
+                assertEquals(new VpnPreferences(mode, ID), settings.read());
                 return;
             }
             gate.get(45,java.util.concurrent.TimeUnit.SECONDS);
@@ -398,11 +407,26 @@ public final class VpnDeviceTest {
             } finally { connection.disconnect(); }
             assertTrue(VpnConnectionService.verifiedFor(ID,mode));
             assertTrue(VpnConnectionService.snapshot().received > 0);
+            // Teardown must invalidate the verified session while retaining the
+            // selected protection scope. It must not expose a ready HTTP proxy.
+            VpnConnectionService.disconnect(context);
+            long deadline = SystemClock.elapsedRealtime() + 5000;
+            while (VpnConnectionService.isRunning() && SystemClock.elapsedRealtime() < deadline)
+                SystemClock.sleep(50);
+            assertFalse(VpnConnectionService.isRunning());
+            assertFalse(VpnConnectionService.verifiedFor(ID,mode));
+            assertNull(VpnConnectionService.httpProxy(ID));
+            assertEquals(new VpnPreferences(mode, ID), settings.read());
         } finally {
             settings.save(VpnPreferences.defaults());
             VpnConnectionService.settingsChanged(context);
             VpnConnectionService.disconnect(context);
         }
+    }
+
+    private static void assertExpectedOpenVpnEngine(OpenVpnEnginePolicy.Engine actual) {
+        String expected = InstrumentationRegistry.getArguments().getString("openvpnEngine");
+        if (expected != null) assertEquals(OpenVpnEnginePolicy.Engine.valueOf(expected), actual);
     }
 
     private void write(String name, byte[] bytes) throws IOException {

@@ -14,6 +14,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    // The compatibility engine is a separate executable process. Android only
+    // permits execution from the installed, extracted native-library directory.
+    packaging { jniLibs.useLegacyPackaging = true }
     sourceSets.getByName("androidTest").java.srcDir("../src/sharedTest/java")
 }
 

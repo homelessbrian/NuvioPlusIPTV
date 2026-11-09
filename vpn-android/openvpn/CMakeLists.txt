@@ -65,3 +65,7 @@ set_target_properties(nuvio-openvpn PROPERTIES CXX_VISIBILITY_PRESET hidden VISI
 target_link_options(nuvio-openvpn PRIVATE "-Wl,--exclude-libs,ALL" "-Wl,--gc-sections" "-Wl,-z,max-page-size=16384")
 set_property(SOURCE "${ovpn_SOURCE_DIR}/client/ovpncli.cpp" APPEND PROPERTY OBJECT_DEPENDS
     "${CMAKE_CURRENT_BINARY_DIR}/overlay/openvpn/mbedtls/ssl/sslctx.hpp;${CMAKE_CURRENT_BINARY_DIR}/overlay/openvpn/mbedtls/crypto/cipher.hpp")
+
+# OpenVPN 3 remains the default; the separate compatibility process is selected
+# only for explicitly supported legacy profile requirements.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../openvpn2" openvpn2-build)

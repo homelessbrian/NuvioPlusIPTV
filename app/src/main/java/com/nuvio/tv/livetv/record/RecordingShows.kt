@@ -47,6 +47,10 @@ import com.nuvio.tv.livetv.ui.guideBackdrop
 import com.nuvio.tv.livetv.ui.liveCorner
 import com.nuvio.tv.ui.theme.NuvioTheme
 import java.util.Locale
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.verticalScroll
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 /** What the Recorded grid shows: a recording on its own, or a folder holding a show's episodes. */
 internal sealed interface RecordedEntry {
@@ -209,6 +213,25 @@ internal fun RecordedShowPage(
     val nextResume = states[next.id]?.resumeMs
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } }
+    // Right and Left go straight across: from a button to the episode you were last on (the next
+    // to watch at first), and back to the button you were last on (Play at first). Left to the
+    // TV, a button with no episode level with it needed several presses (or did nothing).
+    val buttons = remember { List(4) { FocusRequester() } }
+    var lastButton by remember { mutableStateOf(0) }
+    val episodeFocus = remember(show) { show.episodes.associate { it.id to FocusRequester() } }
+    var lastEpisodeId by remember(show) { mutableStateOf(next.id) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val pageScope = rememberCoroutineScope()
+    fun toEpisodes() {
+        val id = lastEpisodeId.takeIf { k -> show.episodes.any { it.id == k } } ?: next.id
+        val index = show.episodes.indexOfFirst { it.id == id }.coerceAtLeast(0)
+        pageScope.launch {
+            // Off screen it isn't there to take the highlight yet: bring it into view first.
+            if (listState.layoutInfo.visibleItemsInfo.none { it.index == index }) listState.scrollToItem(index)
+            kotlinx.coroutines.delay(16)
+            runCatching { episodeFocus[show.episodes[index].id]?.requestFocus() }
+        }
+    }
     val totalBytes = show.episodes.sumOf { it.sizeBytes }
     val totalSec = show.episodes.sumOf { it.durationSec }
 
@@ -218,9 +241,19 @@ internal fun RecordedShowPage(
             Modifier.fillMaxSize().padding(start = 56.dp, end = 48.dp, top = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(40.dp)
         ) {
-            Column(Modifier.width(310.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            // Scrolls when every button is there (Mark All as Watched and Move All to…), so none
+            // gets squeezed: the highlighted one is brought into view.
+            Column(
+                Modifier.width(310.dp).fillMaxHeight()
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(bottom = 32.dp)
+                    .onPreviewKeyEvent { e ->
+                        if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) { toEpisodes(); true } else false
+                    },
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 LiveText("Recordings  ›  ${show.title}", size = 14.sp, color = colors.TextSecondary)
-                ArtThumb(art[newestOf(show).id], newestOf(show).channelLogo, show.title, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                ArtThumb(art[newestOf(show).id], newestOf(show).channelLogo, show.title, Modifier.fillMaxWidth(0.85f).aspectRatio(16f / 9f))
                 LiveText(show.title, size = 28.sp, weight = FontWeight.Bold, maxLines = 2)
                 LiveText(
                     "${show.episodes.size} episodes · $watchedCount watched" + (if (freshCount > 0) " · $freshCount new" else "") +
@@ -233,20 +266,28 @@ internal fun RecordedShowPage(
                 PillButton(
                     (if (nextResume != null) "Resume " else "Play ") + episodeLabel(next),
                     primary = true,
-                    modifier = Modifier.fillMaxWidth().focusRequester(first),
-                    onFocus = {}, onClick = { onPlay(next) }, onMenu = { onMenu(next) }
+                    modifier = Modifier.fillMaxWidth().focusRequester(first).focusRequester(buttons[0]),
+                    onFocus = { if (it) lastButton = 0 }, onClick = { onPlay(next) }, onMenu = { onMenu(next) }
                 )
                 if (watchedCount < show.episodes.size) {
-                    PillButton("Mark All as Watched", primary = false, modifier = Modifier.fillMaxWidth(), onFocus = {}, onClick = onMarkAllWatched, onMenu = onMarkAllWatched)
-                }
+                    PillButton("Mark All as Watched", primary = false, modifier = Modifier.fillMaxWidth().focusRequester(buttons[1]), onFocus = { if (it) lastButton = 1 }, onClick = onMarkAllWatched, onMenu = onMarkAllWatched)
+                } else if (lastButton == 1) lastButton = 0
                 onMoveAll?.let {
-                    PillButton("Move All to…", primary = false, modifier = Modifier.fillMaxWidth(), onFocus = {}, onClick = it, onMenu = it)
+                    PillButton("Move All to…", primary = false, modifier = Modifier.fillMaxWidth().focusRequester(buttons[2]), onFocus = { f -> if (f) lastButton = 2 }, onClick = it, onMenu = it)
                 }
-                PillButton("Delete All Episodes", primary = false, modifier = Modifier.fillMaxWidth(), onFocus = {}, onClick = onDeleteAll, onMenu = onDeleteAll)
+                PillButton("Delete All Episodes", primary = false, modifier = Modifier.fillMaxWidth().focusRequester(buttons[3]), onFocus = { if (it) lastButton = 3 }, onClick = onDeleteAll, onMenu = onDeleteAll)
             }
-            Column(Modifier.weight(1f)) {
+            Column(
+                Modifier.weight(1f).onPreviewKeyEvent { e ->
+                    if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft) {
+                        runCatching { buttons[lastButton].requestFocus() }.onFailure { runCatching { buttons[0].requestFocus() } }
+                        true
+                    } else false
+                }
+            ) {
                 SectionTitle("Episodes")
                 LazyColumn(
+                    state = listState,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 40.dp)
                 ) {
@@ -255,6 +296,8 @@ internal fun RecordedShowPage(
                             rec = rec,
                             art = art[rec.id],
                             state = states[rec.id] ?: EpisodeState(false, null),
+                            modifier = Modifier.focusRequester(episodeFocus.getValue(rec.id))
+                                .onFocusChanged { if (it.isFocused) lastEpisodeId = rec.id },
                             onClick = { onPlay(rec) },
                             onMenu = { onMenu(rec) }
                         )
@@ -270,6 +313,7 @@ private fun EpisodeRow(
     rec: LiveTvRecording,
     art: RecordingArt?,
     state: EpisodeState,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onMenu: () -> Unit
 ) {
@@ -281,7 +325,7 @@ private fun EpisodeRow(
     val minutesLeft = state.resumeMs?.let { ms -> ((rec.durationSec * 1000 - ms) / 60_000).toInt().coerceAtLeast(1) }
     val failed = rec.status == RecordingStatus.FAILED
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .background(bg)

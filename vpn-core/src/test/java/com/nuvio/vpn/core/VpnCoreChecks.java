@@ -21,6 +21,7 @@ public final class VpnCoreChecks {
         routing();
         imports();
         checks += OpenVpnBundleChecks.run();
+        checks += OpenVpnEnginePolicyChecks.run();
         encryptedProfiles();
         preferences();
         System.out.println("VPN core: " + checks + " checks passed.");
@@ -89,10 +90,7 @@ public final class VpnCoreChecks {
                 ProfileImport.Protocol.OPENVPN);
         for (String profile : new String[] {OVPN + "fragment 1300\n", express + "--fragment 1300\n"}) {
             try (ProfileImport.Candidate candidate = read(profile, ProfileImport.Protocol.OPENVPN)) {
-                throw new AssertionError("Unsupported OpenVPN fragmentation accepted.");
-            } catch (IOException expected) {
-                check(expected.getMessage().contains("fragmentation"));
-                check(expected.getMessage().contains("server"));
+                check(candidate.getOpenVpnEngine() == OpenVpnEnginePolicy.Engine.OPENVPN2);
             }
         }
         // Certificate contents are not OpenVPN directives.

@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
@@ -121,12 +122,18 @@ class LiveTvViewModel @Inject constructor(
     ) { _, _ -> true }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
 
-    private val settingsPlaceholder = LiveTvSettings()
-    val settings: StateFlow<LiveTvSettings> = prefs.settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, settingsPlaceholder)
+    /**
+     * True once the saved settings have really been read. A separate flag, not a check on [settings]
+     * itself: when every Live TV setting is still at its default, the saved settings equal the
+     * placeholder, so [settings] never changes and the guide would wait forever (a black page).
+     * Set on the same read that fills [settings], so the two always arrive together.
+     */
+    private val _settingsLoaded = MutableStateFlow(false)
+    val settingsLoaded: StateFlow<Boolean> = _settingsLoaded
 
-    /** False until the saved settings have really been read (before that, [settings] is only the defaults). */
-    fun isSettingsLoaded(s: LiveTvSettings): Boolean = s !== settingsPlaceholder
+    val settings: StateFlow<LiveTvSettings> = prefs.settings
+        .onEach { _settingsLoaded.value = true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, LiveTvSettings())
 
     val userState: StateFlow<LiveUserState> = prefs.userState
         .stateIn(viewModelScope, SharingStarted.Eagerly, LiveUserState())
@@ -568,6 +575,7 @@ class LiveTvViewModel @Inject constructor(
             description = rec.description, episode = rec.episode
         )
         _catchup.value = CatchupSession(channel, program, 0L, recordingId = rec.id)
+        _recordingEnded.value = null
         recordingSavedAt = 0L
         playback.playSavedRecording(channel, file, rec.title, rec.id, resume)
         return true
@@ -576,12 +584,39 @@ class LiveTvViewModel @Inject constructor(
     /** Leaving a recording played here: keep where you got to (Recordings shows it, Resume uses it), then stop. */
     fun stopRecordingPlayback() {
         val s = _catchup.value
-        if (s?.recordingId != null) saveRecordingSpot(s)
+        if (s?.recordingId != null && _recordingEnded.value == null) saveRecordingSpot(s)
+        _recordingEnded.value = null
         _catchup.value = null
         playback.stop()
     }
 
     private var recordingSavedAt = 0L
+
+    /** The next episode in a recording's folder, offered when the recording ends. */
+    data class RecordingUpNext(val recordingId: String, val title: String, val episode: String)
+    /** A recording played to its end: what comes next in its folder (null: none, so it closes). */
+    data class RecordingEnd(val recordingId: String, val next: RecordingUpNext?)
+
+    private val _recordingEnded = MutableStateFlow<RecordingEnd?>(null)
+    val recordingEnded: StateFlow<RecordingEnd?> = _recordingEnded
+
+    /** The episode after [recordingId] in its show's folder (Recordings' order), or null. */
+    private fun nextInFolder(recordingId: String): RecordingUpNext? {
+        val done = recorder.recordings.value.filter { !it.isRecording }
+        val show = com.nuvio.tv.livetv.record.groupRecorded(done)
+            .filterIsInstance<com.nuvio.tv.livetv.record.RecordedShow>()
+            .firstOrNull { sh -> sh.episodes.any { it.id == recordingId } } ?: return null
+        val i = show.episodes.indexOfFirst { it.id == recordingId }
+        val next = show.episodes.getOrNull(i + 1) ?: return null
+        if (!recorder.playlistFile(next).isFile) return null
+        return RecordingUpNext(next.id, next.title, com.nuvio.tv.livetv.record.episodeLabel(next))
+    }
+
+    /** Plays the episode offered at the end. False if it can't be played. */
+    fun playNextRecording(): Boolean {
+        val next = _recordingEnded.value?.next ?: return false
+        return playRecording(next.recordingId, fromStart = false)
+    }
 
     private fun saveRecordingSpot(s: CatchupSession) {
         val id = s.recordingId ?: return
@@ -727,7 +762,25 @@ class LiveTvViewModel @Inject constructor(
     fun followCatchup() {
         val s = _catchup.value ?: return
         if (s.recordingId != null) {
-            // A recording: no next show, no provider. Its spot is kept every few seconds.
+            // A recording: no provider. Its spot is kept every few seconds; at its end it's marked
+            // watched and the next episode in its folder is offered (or it closes).
+            val p = playback.player
+            if (_recordingEnded.value == null && playback.savedRecordingId == s.recordingId &&
+                p?.playbackState == androidx.media3.common.Player.STATE_ENDED
+            ) {
+                com.nuvio.tv.livetv.record.RecordingResume.markWatched(recorder.appContext, s.recordingId)
+                _recordingEnded.value = RecordingEnd(s.recordingId, nextInFolder(s.recordingId))
+                return
+            }
+            // Still being recorded: the seek bar's length grows with it (it was fixed at the
+            // length when opened, so you couldn't seek past that point).
+            recorder.recordings.value.firstOrNull { it.id == s.recordingId }?.let { rec ->
+                val known = p?.duration?.takeIf { it != androidx.media3.common.C.TIME_UNSET && it > 0 } ?: 0L
+                val saved = maxOf((rec.durationSec * 1000).toLong(), known)
+                if (saved > s.program.stopMs - s.program.startMs + 2_000) {
+                    _catchup.value = s.copy(program = s.program.copy(stopMs = s.program.startMs + saved))
+                }
+            }
             val now = System.currentTimeMillis()
             if (now - recordingSavedAt > 5_000) { recordingSavedAt = now; saveRecordingSpot(s) }
             return
@@ -785,6 +838,23 @@ class LiveTvViewModel @Inject constructor(
     }
 
     /**
+     * How far into the catch-up program you can seek without waiting (the seek bar's lighter
+     * part): the end of what's saved on this box with Faster Catch-Up Skipping, or else what the
+     * player has loaded ahead when skips stay inside the replay. Null: the whole show (recordings,
+     * which are all on the box) or not known (a replay that asks the provider again on a skip).
+     */
+    fun catchupReadyUntilMs(): Long? {
+        val s = _catchup.value ?: return null
+        if (s.recordingId != null) return null
+        playback.replaySavedMs()?.let { return s.baseOffsetMs + it }
+        if (!playback.catchupSeekInStream()) return null
+        val p = playback.player ?: return null
+        val ahead = p.bufferedPosition - p.currentPosition
+        if (ahead <= 0) return null
+        return (catchupPositionMs() ?: return null) + ahead
+    }
+
+    /**
      * Seeks the catch-up program to [offsetMs]. Seeks inside the stream when the provider allows
      * it; otherwise asks the provider for the archive again, starting at that point.
      */
@@ -795,7 +865,12 @@ class LiveTvViewModel @Inject constructor(
         if (s.recordingId != null) {
             // A recording: just move within it (never asks the provider).
             val p = playback.player ?: return
-            val dur = p.duration.takeIf { it != androidx.media3.common.C.TIME_UNSET && it > 0 } ?: (s.program.stopMs - s.program.startMs)
+            // The longer of what the player has read and what's saved so far (one still being
+            // recorded grows before the player next reads its list).
+            val dur = maxOf(
+                p.duration.takeIf { it != androidx.media3.common.C.TIME_UNSET && it > 0 } ?: 0L,
+                s.program.stopMs - s.program.startMs
+            )
             p.seekTo(offsetMs.coerceIn(0, (dur - 1_000).coerceAtLeast(0)))
             return
         }
@@ -1566,6 +1641,9 @@ internal fun buildUi(
         ChannelSort.NUMBER -> list.sortedBy { it.number }
         ChannelSort.NAME -> list.sortedBy { it.name.lowercase() }
     }
+    // Needed for search/zapping in every result. All channels can share it; favorites/custom
+    // lists keep their own stable tie ordering. PLAYLIST still returns visible directly.
+    val sortedVisible = sorted(visible)
 
     /**
      * Your order from "Reorder channels" wins. A channel you haven't placed (one that was
@@ -1573,7 +1651,7 @@ internal fun buildUi(
      * normal order, not at the bottom of the group.
      */
     fun ordered(groupId: String, list: List<LiveChannel>): List<LiveChannel> {
-        val order = user.channelOrder[groupId] ?: return sorted(list)
+        val order = user.channelOrder[groupId] ?: return if (list === visible) sortedVisible else sorted(list)
         val byKeyHere = list.associateBy { it.key }
         val placed = order.mapNotNull { byKeyHere[it] }.distinctBy { it.key }
         val placedKeys = placed.mapTo(HashSet()) { it.key }
@@ -1581,7 +1659,7 @@ internal fun buildUi(
         // Each unplaced channel waits behind the nearest placed channel above it.
         val behind = HashMap<String?, MutableList<LiveChannel>>()
         var above: String? = null
-        for (c in sorted(list)) {
+        for (c in if (list === visible) sortedVisible else sorted(list)) {
             if (c.key in placedKeys) above = c.key else behind.getOrPut(above) { ArrayList() } += c
         }
         val out = ArrayList<LiveChannel>(list.size)
@@ -1692,7 +1770,7 @@ internal fun buildUi(
         groups = groups,
         selectedGroupId = groupId,
         channels = list,
-        allVisibleChannels = sorted(visible),
+        allVisibleChannels = sortedVisible,
         hasSources = hasSrc,
         searchQuery = query,
         orderableGroupIds = orderedRegular.map { it.id },

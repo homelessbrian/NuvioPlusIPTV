@@ -47,6 +47,14 @@ class LiveTvRecorder @Inject constructor(
     private val stopRequested = ConcurrentHashMap.newKeySet<String>()
     /** Ended here because the job didn't stop in time: when the job does end, it just goes quietly. */
     private val forced = ConcurrentHashMap.newKeySet<String>()
+    /** Catch-up downloads going on: recording id -> the provider (playlist) it's from. */
+    private val catchupSources = ConcurrentHashMap<String, String>()
+
+    /**
+     * A catch-up download from this provider is going on. Most accounts allow one connection at
+     * a time, so a second one would make the provider close the first part way through.
+     */
+    fun catchupBusy(sourceId: String?): Boolean = sourceId != null && sourceId in catchupSources.values
 
     private val _recordings = MutableStateFlow<List<LiveTvRecording>>(emptyList())
     /** Every recording, newest first. */
@@ -118,7 +126,9 @@ class LiveTvRecorder @Inject constructor(
          * Catch-up only: the link for the rest of the show, from this far in (ms). A download that
          * gets cut off carries on from there instead of stopping with part of the show.
          */
-        resumeFrom: ((doneMs: Long) -> String?)? = null
+        resumeFrom: ((doneMs: Long) -> String?)? = null,
+        /** Catch-up only: how long the whole download should be (show plus extra time), in seconds. */
+        expectedSec: Double? = null
     ): LiveTvRecording {
         if (!finite) activeFor(channel.key)?.let { return it }
         val now = System.currentTimeMillis()
@@ -142,7 +152,8 @@ class LiveTvRecorder @Inject constructor(
             stopAtMs = stopAtMs,
             dir = dir.absolutePath,
             seriesId = seriesId,
-            fromCatchup = finite
+            fromCatchup = finite,
+            expectedSec = expectedSec ?: 0.0
         )
         // Not enough room to start: make room (if allowed) or say so.
         if (!ensureSpace(dir, protect = id)) {
@@ -155,10 +166,15 @@ class LiveTvRecorder @Inject constructor(
         save(rec)
         update(rec)
         LiveTvRecordingService.start(context)
+        if (finite) channel.sourceId?.let { catchupSources[id] = it }
         jobs[id] = scope.launch {
             // Accounts with one connection can refuse a new one while the old is still closing.
             if (startDelayMs > 0) delay(startDelayMs)
-            record(rec, url, channel.headers, finite, fallbacks, onFinished, channel.sourceId, resumeFrom)
+            try {
+                record(rec, url, channel.headers, finite, fallbacks, onFinished, channel.sourceId, resumeFrom, expectedSec)
+            } finally {
+                catchupSources.remove(id)
+            }
         }
         com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording \"$title\" on ${channel.name} until ${java.util.Date(stopAtMs)}")
         return rec
@@ -192,6 +208,7 @@ class LiveTvRecorder @Inject constructor(
         forced += id
         save(done); update(done)
         jobs.remove(id)?.cancel()
+        catchupSources.remove(id)
         stopRequested.remove(id)
         stopServiceIfIdle()
         com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording \"${done.title}\" was stuck; ended by hand: ${done.status}")
@@ -316,7 +333,8 @@ class LiveTvRecorder @Inject constructor(
         fallbacks: List<String> = emptyList(),
         onFinished: (LiveTvRecording) -> Unit = {},
         sourceId: String? = null,
-        resumeFrom: ((doneMs: Long) -> String?)? = null
+        resumeFrom: ((doneMs: Long) -> String?)? = null,
+        expectedSec: Double? = null
     ) {
         val links = ArrayDeque((listOf(firstUrl) + fallbacks).distinct())
         /** Why a connection failed, in words, and whether watching may have caused it. */
@@ -372,6 +390,7 @@ class LiveTvRecorder @Inject constructor(
                         }
                     }
                     first = false
+                    val hadSec = segmenter.totalSec
                     try {
                         val c = open(url, headers)
                         if (c.responseCode !in 200..299) {
@@ -401,7 +420,22 @@ class LiveTvRecorder @Inject constructor(
                             }
                         }
                         problem = null
-                        if (finite) break // the whole show has come in
+                        if (finite) {
+                            // The provider closed the download. That's the end only if the whole
+                            // show came in: providers also close one early (another connection
+                            // on the account, often the next catch-up download), and that looks
+                            // the same. Short: carry on from where it got to, unless a carry-on
+                            // link brought nothing new (the provider has no more of it).
+                            val got = segmenter.totalSec
+                            val short = expectedSec != null && got < expectedSec - SHORT_SLACK_SEC
+                            val nothingNew = tries > 0 && got - hadSec < 60.0
+                            if (!short || nothingNew || rec.id in stopRequested) break
+                            problem = dropped("The provider closed the download early") + "; it carried on from where it got to"
+                            rec = noteProblem(rec, problem)
+                            com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
+                                "Recording \"${rec.title}\": the provider closed the download at ${got.toInt() / 60} of ${(expectedSec ?: 0.0).toInt() / 60} min; carrying on from there"
+                            )
+                        }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -521,8 +555,20 @@ class LiveTvRecorder @Inject constructor(
         while (scope.isActive && rec.id !in stopRequested && System.currentTimeMillis() < currentStop(rec.id)) {
             if (nothingYet()) return HLS_SENT_NOTHING
             // A live channel starts with a short lead-in before now; a catch-up show from its start.
-            video.saveNew(vm) { m -> if (finite) 0 else hls.startIndex(m.pieces, LIVE_LEAD_MS) }
-            if (audio != null && am != null) audio.saveNew(am!!) { a -> if (finite) 0 else hls.matchingStart(a.pieces, video) }
+            // A catch-up show's list has every piece at once: each piece gets a few tries, and the
+            // saved part shows (and plays) as it comes in instead of only at the end.
+            val tries = if (finite) 3 else 1
+            var shownAt = System.currentTimeMillis()
+            val shown: (() -> Unit)? = if (!finite) null else ({
+                val t = System.currentTimeMillis()
+                if (t - shownAt > 5_000) {
+                    shownAt = t
+                    writePlaylists(ended = false)
+                    onProgress(video.totalSec, dirSize(dir))
+                }
+            })
+            video.saveNew(vm, tries, shown) { m -> if (finite) 0 else hls.startIndex(m.pieces, LIVE_LEAD_MS) }
+            if (audio != null && am != null) audio.saveNew(am!!, tries, shown) { a -> if (finite) 0 else hls.matchingStart(a.pieces, video) }
             writePlaylists(ended = false)
             onProgress(video.totalSec, dirSize(dir))
             // A finished playlist (a catch-up show): everything's saved.
@@ -645,6 +691,8 @@ class LiveTvRecorder @Inject constructor(
         const val LIVE_LEAD_MS = 30_000L
         /** A catch-up HLS replay that's saved nothing after this long: switch to the TS link. */
         const val HLS_GIVE_UP_MS = 20_000L
+        /** A catch-up download this much shorter than asked for was cut off (links go by the minute). */
+        const val SHORT_SLACK_SEC = 120.0
         const val HLS_SENT_NOTHING = "The HLS replay sent nothing"
     }
 }

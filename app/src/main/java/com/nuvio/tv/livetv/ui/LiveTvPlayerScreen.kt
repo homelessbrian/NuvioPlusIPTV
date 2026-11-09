@@ -12,6 +12,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.focusable
@@ -73,6 +74,9 @@ import kotlinx.coroutines.launch
 private enum class PlayerDialog { NONE, OPTIONS, AUDIO, SUBTITLES, SCREEN_SIZE, STREAM_INFO, SLEEP, BACKUPS, BACKUP_FLYOUT }
 
 /** Right twice within this long, in full screen: the backup channels flyout. */
+/** Seconds before the next episode of a recording starts by itself. */
+private const val UP_NEXT_SECONDS = 10
+
 private const val DOUBLE_RIGHT_MS = 400L
 
 /** The picture size saved in settings, as one of Nuvio's own player modes. */
@@ -311,12 +315,30 @@ fun LiveTvPlayerScreen(
     var scrubTargetMs by remember { mutableStateOf<Long?>(null) }
     var scrubToken by remember { mutableIntStateOf(0) }
     var positionMs by remember { mutableStateOf(0L) }
+    // How far you can seek without waiting (saved on the box, or loaded ahead): the bar's lighter part.
+    var readyUntilMs by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(playback.catchupTitle, catchupSession) {
         while (playback.catchupTitle != null && catchupSession != null) {
             viewModel.followCatchup()
             viewModel.catchupPositionMs()?.let { positionMs = it }
+            readyUntilMs = viewModel.catchupReadyUntilMs()
             delay(500)
         }
+    }
+    // A recording that played to its end: the next episode in its folder after a countdown
+    // (OK plays it now, Back goes back), or straight back when there's none.
+    val recordingEnd by viewModel.recordingEnded.collectAsStateWithLifecycle()
+    val upNext = recordingEnd?.next
+    var upNextSec by remember { mutableIntStateOf(UP_NEXT_SECONDS) }
+    LaunchedEffect(recordingEnd) {
+        val end = recordingEnd ?: return@LaunchedEffect
+        if (end.next == null) { onBack(); return@LaunchedEffect }
+        dialog = PlayerDialog.NONE
+        closeFull(); bannerVisible = false
+        runCatching { rootFocus.requestFocus() }
+        upNextSec = UP_NEXT_SECONDS
+        while (upNextSec > 0) { delay(1_000); upNextSec-- }
+        if (!viewModel.playNextRecording()) onBack()
     }
     LaunchedEffect(scrubToken) {
         val target = scrubTargetMs ?: return@LaunchedEffect
@@ -404,6 +426,14 @@ fun LiveTvPlayerScreen(
             .onPreviewKeyEvent { e ->
                 if (listVisible || dialog != PlayerDialog.NONE) return@onPreviewKeyEvent false
                 val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                // ---- "Up next" at the end of a recording: OK plays it now, Back goes back.
+                if (upNext != null) {
+                    if (e.type == KeyEventType.KeyUp) {
+                        if (isOk) { if (!viewModel.playNextRecording()) onBack() }
+                        else if (e.key == Key.Back) onBack()
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 // ---- channel surfing: OK watches the channel on the bar, Back stays put
                 if (swallowOkUp && isOk) {
                     if (e.type == KeyEventType.KeyUp) swallowOkUp = false
@@ -958,12 +988,15 @@ fun LiveTvPlayerScreen(
                         // A show still on air (watch from the beginning): the part that has aired
                         // so far in its own colour, with the live point marked.
                         val stillOn = tick < session.program.stopMs
+                        val aired = if (stillOn) tick else session.program.stopMs
                         PanelTimeline(
                             startMs = session.program.startMs,
                             endMs = session.program.stopMs,
                             positionMs = watchingAt,
                             liveMs = if (stillOn) tick else null,
-                            recordedUntilMs = if (stillOn) tick else session.program.stopMs,
+                            // The lighter part: how far you can seek without waiting (what's saved
+                            // with Faster Catch-Up Skipping, or loaded ahead); else what has aired.
+                            recordedUntilMs = readyUntilMs?.let { (session.program.startMs + it).coerceAtMost(aired) } ?: aired,
                             leftLabel = formatClock(session.program.startMs, use24h),
                             rightLabel = formatClock(session.program.stopMs, use24h),
                             status = formatDuration(pos) + " / " + formatDuration(len) +
@@ -1151,6 +1184,23 @@ fun LiveTvPlayerScreen(
                 size = 40.sp,
                 weight = FontWeight.Bold
             )
+        }
+        upNext?.let { n ->
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 48.dp, bottom = 48.dp)
+                    .widthIn(max = 420.dp)
+                    .glass(glassColor(settings.panelBackground), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 22.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                LiveText("Up next in $upNextSec", size = 13.sp, weight = FontWeight.Medium, color = Color.White.copy(alpha = 0.7f))
+                LiveText(n.title, size = 20.sp, weight = FontWeight.Bold, color = Color.White)
+                LiveText(n.episode, size = 15.sp, color = Color.White.copy(alpha = 0.85f))
+                Spacer(Modifier.height(6.dp))
+                LiveText("OK to play now · Back to stop", size = 12.sp, color = Color.White.copy(alpha = 0.6f))
+            }
         }
         toast?.let {
             LiveText(

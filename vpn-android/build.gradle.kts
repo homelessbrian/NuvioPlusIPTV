@@ -17,6 +17,7 @@ android {
     defaultConfig {
         minSdk = 24
         externalNativeBuild.cmake.arguments("-DANDROID_STL=c++_static")
+        externalNativeBuild.cmake.targets("nuvio-openvpn", "nuvio-openvpn2", "nuvio-openvpn2-engine")
         consumerProguardFiles("consumer-rules.pro")
     }
     externalNativeBuild { cmake { path = file("openvpn/CMakeLists.txt"); version = "3.22.1" } }

@@ -81,7 +81,7 @@ internal data class PanelTimeline(
     val positionMs: Long,
     /** Where "live" is on the line (pause and rewind), or null. */
     val liveMs: Long? = null,
-    /** The recorded stretch ends here (pause and rewind), or null. */
+    /** The recorded stretch ends here (pause and rewind; in catch-up, how far is saved or loaded), or null. */
     val recordedUntilMs: Long? = null,
     val leftLabel: String,
     val rightLabel: String,
@@ -268,7 +268,9 @@ internal fun LiveTvPlayerPanel(
                             .border(1.dp, Color.White.copy(alpha = 0.12f), shape),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (!poster.isNullOrBlank()) LivePosterImage(poster, Modifier.fillMaxSize())
+                        if (!poster.isNullOrBlank()) LivePosterImage(poster, Modifier.fillMaxSize()) {
+                            ChannelLogo(channel.logo, maxOf(30.dp, posterHeight * 0.4f))
+                        }
                         else ChannelLogo(channel.logo, maxOf(30.dp, posterHeight * 0.4f))
                     }
                     Spacer(Modifier.width(14.dp))

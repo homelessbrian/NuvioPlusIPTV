@@ -14,7 +14,7 @@ import org.json.JSONObject;
 final class HttpStreamTunnel implements TunnelEngine {
     static { System.loadLibrary("nuvio-http-vpn"); }
     private volatile long handle;
-    private volatile OpenVpnSession openVpn;
+    private volatile OpenVpnEngine openVpn;
     final int port;
     final String token;
     volatile boolean retiring;
