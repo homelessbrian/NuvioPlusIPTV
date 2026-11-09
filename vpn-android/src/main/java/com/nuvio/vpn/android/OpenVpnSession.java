@@ -2,8 +2,6 @@ package com.nuvio.vpn.android;
 
 import android.net.VpnService;
 import android.os.ParcelFileDescriptor;
-import com.nuvio.vpn.core.ProfileEnvelope;
-import com.nuvio.vpn.core.ProfileImport;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.regex.Pattern;
@@ -11,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 
 /** A single official OpenVPN 3 client. The core receives either an app-only
  * Android TUN fd or the packet boundary of the playback proxy's private stack. */
-final class OpenVpnSession implements TunnelEngine {
+final class OpenVpnSession implements OpenVpnEngine {
     static { System.loadLibrary("nuvio-openvpn"); }
     private static final Pattern CERT = Pattern.compile("(?im)^\\s*<(?:cert|pkcs12)>\\s*$");
     private static final Pattern AES_CBC = Pattern.compile("(?im)^\\s*(?:--)?cipher\\s+AES-(?:128|192|256)-CBC(?:\\s*(?:[;#].*)?)$");
@@ -25,6 +23,9 @@ final class OpenVpnSession implements TunnelEngine {
     }
 
     static int evaluate(char[] text) throws IOException {
+        return OpenVpnSessions.evaluate(text);
+    }
+    static int evaluateCore3(char[] text) throws IOException {
         String profile = new String(text);
         Arrays.fill(text, '\0');
         byte[] bytes = profile.getBytes(StandardCharsets.UTF_8);
@@ -37,10 +38,11 @@ final class OpenVpnSession implements TunnelEngine {
     static void requireReady(char[] text) throws IOException {
         if (evaluate(text) != 1) throw new IOException("Set the OpenVPN service credentials in VPN profiles.");
     }
-    static OpenVpnSession selected(VpnConnectionService service, String id, HttpStreamTunnel proxy) throws Exception {
-        try (ProfileEnvelope.Opened opened = new AndroidProfileStore(service).open(id)) {
-            if (opened.getProtocol() != ProfileImport.Protocol.OPENVPN) throw new IOException("Profile changed.");
-            char[] text = opened.copyContents();
+    static OpenVpnEngine selected(VpnConnectionService service, String id, HttpStreamTunnel proxy) throws Exception {
+        return OpenVpnSessions.selected(service, id, proxy);
+    }
+    static OpenVpnSession selectedCore3(VpnConnectionService service, char[] text, HttpStreamTunnel proxy) throws Exception {
+        try {
             String profile = new String(text);
             Arrays.fill(text, '\0');
             byte[] bytes = profile.getBytes(StandardCharsets.UTF_8);
@@ -50,7 +52,7 @@ final class OpenVpnSession implements TunnelEngine {
                 if (session.handle == 0) throw new IOException("OpenVPN could not start. Check the profile and service credentials.");
                 return session;
             } finally { Arrays.fill(bytes,(byte)0); }
-        }
+        } finally { Arrays.fill(text, '\0'); }
     }
     // Called by the core before connecting its transport socket. In stream modes
     // there is no OS VPN route to protect the underlying socket from.

@@ -45,7 +45,9 @@ public final class ProfileImport {
                 throw new IOException("VPN configuration is empty or contains binary data.");
             }
             preflight(text, protocol);
-            return new Candidate(protocol, text.toCharArray());
+            OpenVpnEnginePolicy.Engine engine = protocol == Protocol.OPENVPN
+                    ? OpenVpnEnginePolicy.selectPreflighted(text) : null;
+            return new Candidate(protocol, engine, text.toCharArray());
         } finally {
             Arrays.fill(buffer, (byte) 0);
             bytes.wipe();
@@ -53,7 +55,10 @@ public final class ProfileImport {
         }
     }
 
-    private static void preflight(String text, Protocol protocol) throws IOException {
+    static void preflight(String text, Protocol protocol) throws IOException {
+        if (text.trim().isEmpty() || text.indexOf('\0') >= 0) {
+            throw new IOException("VPN configuration is empty or contains binary data.");
+        }
         boolean interfaceSeen = false;
         boolean peerSeen = false;
         boolean clientSeen = false;
@@ -144,10 +149,6 @@ public final class ProfileImport {
             if (option.equals("tls-client")) tlsClientSeen = true;
             if (option.equals("pull")) pullSeen = true;
             if (option.equals("remote") && !value.isEmpty()) remoteSeen = true;
-            if (option.equals("fragment")) {
-                throw new IOException("OpenVPN fragmentation (fragment) is not supported by the OpenVPN 3 engine. "
-                        + "Use a provider profile and server that do not require fragmentation.");
-            }
             // Imported files may not execute code, include files, or expose management sockets.
             if (option.matches("up|down|route-up|route-pre-down|ipchange|plugin|script-security|config|cd|chroot|daemon|log|log-append|writepid|status|auth-user-pass-verify|client-connect|client-disconnect|learn-address|tls-verify|iproute|tls-crypt-v2-verify|engine|providers")
                     || option.startsWith("management")
@@ -189,14 +190,19 @@ public final class ProfileImport {
     /** Contains private keys. Never log, serialize, or treat this preflight result as validated. */
     public static final class Candidate implements AutoCloseable {
         private final Protocol protocol;
+        private final OpenVpnEnginePolicy.Engine openVpnEngine;
         private char[] contents;
 
-        private Candidate(Protocol protocol, char[] contents) {
+        private Candidate(Protocol protocol, OpenVpnEnginePolicy.Engine openVpnEngine, char[] contents) {
             this.protocol = protocol;
+            this.openVpnEngine = openVpnEngine;
             this.contents = contents;
         }
 
         public Protocol getProtocol() { return protocol; }
+
+        /** Required engine, after bounded preflight; null for WireGuard. Not native validation. */
+        public OpenVpnEnginePolicy.Engine getOpenVpnEngine() { return openVpnEngine; }
 
         /** Caller must wipe this copy after native-engine validation/use. */
         public synchronized char[] copyContents() {
