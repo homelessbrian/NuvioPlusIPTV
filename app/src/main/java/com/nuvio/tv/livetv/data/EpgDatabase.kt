@@ -276,6 +276,16 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         toMs: Long,
         minStopMs: Long,
         onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?) -> Unit
+    ) = scanListingsGrouped(fromMs, toMs, minStopMs) { channels, start, stop, title, descr, cat ->
+        for (ch in channels) onRow(ch, start, stop, title, descr, cat)
+    }
+
+    /** A guide show is read once even when many playlist channels share it. */
+    fun scanListingsGrouped(
+        fromMs: Long,
+        toMs: Long,
+        minStopMs: Long,
+        onRow: (channels: List<String>, start: Long, stop: Long, title: String, descr: String?, cat: String?) -> Unit
     ) {
         for (group in allGroups()) {
             val sh = group.shiftMs
@@ -290,7 +300,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                         val title = c.getString(3)
                         val descr = if (c.isNull(4)) null else c.getString(4)
                         val cat = if (c.isNull(5)) null else c.getString(5)
-                        for (ch in chans) onRow(ch, start, stop, title, descr, cat)
+                        onRow(chans, start, stop, title, descr, cat)
                     }
                 }
             }
