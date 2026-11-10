@@ -3,8 +3,11 @@ package com.nuvio.tv.livetv.sports
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReferenceArray
 import kotlin.random.Random
 import org.junit.Assert.*
 import org.junit.Test
@@ -210,6 +213,109 @@ class SportsFeedCacheTest {
             jobs.forEach { it.get(5, TimeUnit.SECONDS) }
             assertEquals(1_600, cache.size)
         } finally { pool.shutdownNow() }
+    }
+
+    @Test
+    fun `eight overlapping misses share one response and release their loading key`() {
+        val cache = SportsFeedCache { 0L }
+        val ready = CountDownLatch(8)
+        val start = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val threads = AtomicReferenceArray<Thread>(8)
+        val loads = AtomicInteger()
+        val pool = Executors.newFixedThreadPool(8)
+        try {
+            val jobs = (0 until 8).map { i -> pool.submit<Any> {
+                threads.set(i, Thread.currentThread())
+                ready.countDown()
+                check(start.await(5, TimeUnit.SECONDS))
+                cache.getOrLoad("season", 1_800_000) {
+                    loads.incrementAndGet()
+                    check(release.await(5, TimeUnit.SECONDS))
+                    Any()
+                }
+            } }
+            assertTrue(ready.await(5, TimeUnit.SECONDS))
+            start.countDown()
+            awaitCacheCallers(threads)
+            assertEquals(1, loads.get())
+            assertEquals(1, cache.loadingKeys)
+            release.countDown()
+            val answers = jobs.map { it.get(5, TimeUnit.SECONDS) }
+            answers.forEach { assertSame(answers.first(), it) }
+            assertEquals(0, cache.loadingKeys)
+        } finally { start.countDown(); release.countDown(); pool.shutdownNow() }
+    }
+
+    @Test
+    fun `a blocked load does not hold up an unrelated key with the same hash`() {
+        assertEquals("Aa".hashCode(), "BB".hashCode())
+        val cache = SportsFeedCache { 0L }
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val first = pool.submit<Any> { cache.getOrLoad("Aa", 60_000) {
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+                Any()
+            } }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val other = pool.submit<Any> { cache.getOrLoad("BB", 60_000) { Any() } }
+            assertNotNull(other.get(2, TimeUnit.SECONDS))
+            release.countDown()
+            assertNotNull(first.get(5, TimeUnit.SECONDS))
+            assertEquals(0, cache.loadingKeys)
+        } finally { release.countDown(); pool.shutdownNow() }
+    }
+
+    @Test
+    fun `a queued request retries after the first loader fails and leaves no loading keys`() {
+        val cache = SportsFeedCache { 0L }
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val first = pool.submit<Any> { cache.getOrLoad("season", 60_000) {
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+                throw IOException("offline")
+            } }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val second = pool.submit<Any> { cache.getOrLoad("season", 60_000) { Any() } }
+            release.countDown()
+            try {
+                first.get(5, TimeUnit.SECONDS)
+                fail("The first loader must fail")
+            } catch (e: ExecutionException) { assertTrue(e.cause is IOException) }
+            val answer = second.get(5, TimeUnit.SECONDS)
+            assertSame(answer, cache.getOrLoad("season", 60_000) { fail("Retry was cached"); Any() })
+            assertEquals(0, cache.loadingKeys)
+        } finally { release.countDown(); pool.shutdownNow() }
+    }
+
+    @Test
+    fun `loading guards do not accumulate after successes failures and zero age requests`() {
+        val cache = SportsFeedCache { 0L }
+        repeat(1_000) { i ->
+            cache.getOrLoad("success-$i", 60_000) { Any() }
+            try { cache.getOrLoad<Any>("failure-$i", 60_000) { throw IOException("offline") } }
+            catch (_: IOException) { }
+            cache.getOrLoad("zero-$i", 0) { Any() }
+            assertEquals(0, cache.loadingKeys)
+        }
+    }
+
+    private fun awaitCacheCallers(threads: AtomicReferenceArray<Thread>) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while ((0 until threads.length()).any { i ->
+                val thread = threads[i]
+                thread.state !in setOf(Thread.State.BLOCKED, Thread.State.WAITING, Thread.State.TIMED_WAITING) ||
+                    thread.stackTrace.none { it.className == SportsFeedCache::class.java.name && it.methodName == "getOrLoad" }
+            }) {
+            check(System.nanoTime() < deadline) { "Callers did not overlap inside the cache" }
+            Thread.yield()
+        }
     }
 
     @Test
