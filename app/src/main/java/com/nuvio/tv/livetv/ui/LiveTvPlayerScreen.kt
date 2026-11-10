@@ -97,8 +97,11 @@ fun LiveTvPlayerScreen(
     embedded: Boolean = false,
     /** The gear panel's "Settings" link (All Live TV settings). */
     onOpenSettings: () -> Unit = {},
-    viewModel: LiveTvViewModel = hiltViewModel()
+    viewModel: LiveTvViewModel = hiltViewModel(),
+    onOpenSportsMultiview: (Int) -> Unit = {}
 ) {
+    val sports: com.nuvio.tv.livetv.sports.SportsWatchViewModel = hiltViewModel()
+    val sportsSettings by sports.settings.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val playback by viewModel.playbackState.collectAsStateWithLifecycle()
     val user by viewModel.userState.collectAsStateWithLifecycle()
@@ -124,6 +127,14 @@ fun LiveTvPlayerScreen(
     var bannerVisible by remember { mutableStateOf(true) }
     var bannerToken by remember { mutableIntStateOf(0) }
     var listVisible by remember { mutableStateOf(false) }
+    var sportsGamesOpen by remember { mutableStateOf(false) }
+    var selectedSportsSelection by remember {
+        mutableStateOf(viewModel.playbackState.value.channelKey?.let { channelKey ->
+            com.nuvio.tv.livetv.sports.SportsLaunch.watchingEventId?.let { eventId ->
+                com.nuvio.tv.livetv.sports.SportsWatchLaunch.SingleSelection(channelKey, eventId)
+            }
+        })
+    }
     var dialog by remember { mutableStateOf(PlayerDialog.NONE) }
     // The backup copy whose long-press menu is open, the copy the bar's list reopens on, and a
     // tick that rebuilds the backups list after that menu (a rename, a new number).
@@ -149,7 +160,7 @@ fun LiveTvPlayerScreen(
             ?: viewModel.playback.playingChannel?.takeIf { it.key == playback.channelKey }
     }
 
-    fun showBanner() { bannerVisible = true; bannerToken++ }
+    fun showBanner() { if (!sportsGamesOpen) bannerVisible = true; bannerToken++ }
 
     // The bottom panel's controls (Down while it's showing): which one is highlighted.
     var controlFocus by remember { mutableStateOf<PanelControl?>(null) }
@@ -365,9 +376,17 @@ fun LiveTvPlayerScreen(
         delay(settings.infoBannerSeconds.coerceAtLeast(2) * 1000L)
         bannerVisible = false
     }
-    LaunchedEffect(playback.channelKey) { showBanner() }
+    LaunchedEffect(playback.channelKey) {
+        // Clear the game on an outside channel change, not when its match list changes.
+        // Read the controller's latest key: a Sports tune can precede this UI snapshot.
+        val channelKey = viewModel.playbackState.value.channelKey
+        if (channelKey != null && selectedSportsSelection?.channelKey != channelKey) {
+            selectedSportsSelection = null
+        }
+        showBanner()
+    }
     LaunchedEffect(toast) { toast?.let { t -> delay(if (t.length > 40) 4_000 else 2_000); toast = null } }
-    LaunchedEffect(Unit) { delay(100); runCatching { rootFocus.requestFocus() } }
+    LaunchedEffect(Unit) { delay(100); if (!sportsGamesOpen) runCatching { rootFocus.requestFocus() } }
     LaunchedEffect(numberBuffer) {
         if (numberBuffer.isEmpty()) return@LaunchedEffect
         delay(1_300)
@@ -375,13 +394,13 @@ fun LiveTvPlayerScreen(
         numberBuffer = ""
         n?.let { viewModel.channelByNumber(it) }?.let { viewModel.preview(it) } ?: run { if (n != null) toast = "No channel $n" }
     }
-    LaunchedEffect(listVisible) {
-        if (!listVisible) {
+    LaunchedEffect(listVisible, sportsGamesOpen) {
+        if (!listVisible && !sportsGamesOpen) {
             // Overlay mode took the focus with it when it closed: take it back, trying a few
             // times (once isn't always enough), or the remote does nothing until you press OK.
             for (wait in longArrayOf(60, 150, 300, 600, 1000)) {
                 delay(wait)
-                if (dialog != PlayerDialog.NONE) break
+                if (dialog != PlayerDialog.NONE || sportsGamesOpen) break
                 runCatching { rootFocus.requestFocus() }
             }
         }
@@ -400,6 +419,38 @@ fun LiveTvPlayerScreen(
     val bellInBar = liveBell != null && BarPart.BELL !in BarPart.parse(settings.barHidden)
     // Sports: the live game on this channel, if it can be pinned to the corner.
     val pinGame = com.nuvio.tv.livetv.sports.rememberPinnableGame(current?.key).takeIf { playback.catchupTitle == null }
+    val sportsEligible = current != null && playback.catchupTitle == null && !playingRecording && sportsSettings.showInSidebar
+    fun openSportsGames() {
+        okHoldJob?.cancel()
+        longPressFired = false
+        closeFull()
+        bannerVisible = false
+        browseKey = null
+        listVisible = false
+        dialog = PlayerDialog.NONE
+        sportsGamesOpen = true
+    }
+    fun playSportsGame(eventId: String, channelKey: String? = null): Boolean {
+        val match = sports.resolve(eventId, channelKey) ?: return false
+        com.nuvio.tv.livetv.sports.SportsLaunch.openedFromSports(eventId)
+        viewModel.preview(match.channel)
+        selectedSportsSelection = com.nuvio.tv.livetv.sports.SportsWatchLaunch.SingleSelection(
+            match.channel.key, eventId)
+        return true
+    }
+    val reopenSports by com.nuvio.tv.livetv.sports.SportsWatchLaunch.openSingleStrip.collectAsStateWithLifecycle()
+    LaunchedEffect(reopenSports, sportsEligible, playback.channelKey) {
+        if (reopenSports && sportsEligible) {
+            val handoff = com.nuvio.tv.livetv.sports.SportsWatchLaunch.peekSingleSelection()
+            if (handoff != null && handoff.channelKey != playback.channelKey) return@LaunchedEffect
+            com.nuvio.tv.livetv.sports.SportsWatchLaunch.takeSingleSelection()?.let {
+                selectedSportsSelection = it
+            }
+            openSportsGames()
+            com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleStripOpened()
+        }
+    }
+    LaunchedEffect(sportsEligible) { if (!sportsEligible) sportsGamesOpen = false }
     val pinList = com.nuvio.tv.livetv.sports.SportsLive.pins.collectAsState().value
     // Other copies of this channel for the bar's backup button (live only; hidden channels included).
     val backups = remember(current?.key, panelFull, playback.catchupTitle, backupsTick) {
@@ -424,7 +475,7 @@ fun LiveTvPlayerScreen(
             .background(if (embedded) Color.Transparent else Color.Black)
             .focusRequester(rootFocus)
             .onPreviewKeyEvent { e ->
-                if (listVisible || dialog != PlayerDialog.NONE) return@onPreviewKeyEvent false
+                if (sportsGamesOpen || listVisible || dialog != PlayerDialog.NONE) return@onPreviewKeyEvent false
                 val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
                 // ---- "Up next" at the end of a recording: OK plays it now, Back goes back.
                 if (upNext != null) {
@@ -561,7 +612,7 @@ fun LiveTvPlayerScreen(
                         else if (shiftStartedAt != null || (ownTimeline && viewModel.playback.shiftIsBehind())) PanelMode.SHIFT
                         else PanelMode.LIVE
                     val paused = playback.userPaused
-                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty())
+                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty(), sports = sportsEligible)
                     if (e.type == KeyEventType.KeyUp) return@onPreviewKeyEvent isOk || e.key == Key.Back
                     showBanner()
                     val buttons = list.filter { it != PanelControl.TIMELINE }
@@ -638,6 +689,7 @@ fun LiveTvPlayerScreen(
                                     com.nuvio.tv.livetv.record.LiveTvNotice.show(if (pinned) "Score pinned to the corner" else "Score unpinned")
                                 }
                                 PanelControl.BACKUPS -> dialog = PlayerDialog.BACKUPS
+                                PanelControl.SPORTS -> openSportsGames()
                                 PanelControl.MORE -> openGear()
                                 PanelControl.TIMELINE, null -> Unit
                             }
@@ -830,14 +882,14 @@ fun LiveTvPlayerScreen(
         // The always-on corner clock, out of the way while the panel, channel list or a menu is
         // up (the panel shows the time itself).
         // Pinned scoreboards share the corner rules: out of the way while those are up.
-        val pinsCovered = panelFull || listVisible || dialog != PlayerDialog.NONE
+        val pinsCovered = panelFull || listVisible || sportsGamesOpen || dialog != PlayerDialog.NONE
         DisposableEffect(pinsCovered) {
             com.nuvio.tv.livetv.sports.SportsLive.pinsHidden.value = pinsCovered
             onDispose { com.nuvio.tv.livetv.sports.SportsLive.pinsHidden.value = false }
         }
         OnScreenClock(
             settings = settings,
-            visible = current != null && !(bannerVisible || panelFull || pausedNow) && !listVisible &&
+            visible = current != null && !(bannerVisible || panelFull || pausedNow) && !listVisible && !sportsGamesOpen &&
                 dialog == PlayerDialog.NONE
         )
         // ---- channel surfing: the bar for the channel being looked at
@@ -1076,6 +1128,7 @@ fun LiveTvPlayerScreen(
                 }
                 LiveTvPlayerPanel(
                     onBackupsBounds = { backupsAnchor = it },
+                    onMultiview = { openSportsGames() },
                     background = settings.panelBackground,
                     channel = ch,
                     mode = mode,
@@ -1095,7 +1148,7 @@ fun LiveTvPlayerScreen(
                     showPosters = settings.showPosters,
                     timeline = timeline,
                     paused = paused,
-                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty()),
+                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty(), sports = sportsEligible),
                     focused = controlFocus,
                     captionsOn = captionsOn,
                     audioLabel = remember(playback.channelKey, bannerVisible) { viewModel.playback.audioLabel() },
@@ -1214,6 +1267,39 @@ fun LiveTvPlayerScreen(
             )
         }
         // This channel is being recorded: a small REC mark in the corner.
+        if (sportsGamesOpen) {
+            val games by sports.games.collectAsStateWithLifecycle()
+            val rows by sports.rows.collectAsStateWithLifecycle()
+            DisposableEffect(sports) {
+                val lease = sports.acquireViewing()
+                onDispose { lease.close() }
+            }
+            com.nuvio.tv.livetv.sports.SportsGameStrip(
+                games = games,
+                rows = rows,
+                selectedEventId = selectedSportsSelection?.takeIf { it.channelKey == playback.channelKey }?.eventId
+                    ?: games.firstOrNull { game ->
+                    game.channels.any { it.channel.key == playback.channelKey }
+                }?.event?.id,
+                paneChannelKeys = listOf(playback.channelKey),
+                focusedPane = 0,
+                paneCount = 1,
+                hideScores = sportsSettings.hideScores,
+                onGame = { game -> sports.resolve(game.event.id) != null },
+                onStream = { game, channelKey -> playSportsGame(game.event.id, channelKey) },
+                onAdd = {
+                    val channelKey = viewModel.playbackState.value.channelKey
+                    val eventId = selectedSportsSelection?.takeIf { it.channelKey == channelKey }?.eventId
+                        ?: games.firstOrNull { game -> game.channels.any { it.channel.key == channelKey } }?.event?.id
+                    com.nuvio.tv.livetv.sports.SportsWatchLaunch.prepareEvent(channelKey, eventId)
+                    onOpenSportsMultiview(2)
+                },
+                onRemove = {},
+                onPane = {},
+                onClose = { sportsGamesOpen = false },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
         if (playback.channelKey != null && recordings.any { it.channelKey == playback.channelKey && it.isRecording }) {
             LiveText(
                 "● REC",

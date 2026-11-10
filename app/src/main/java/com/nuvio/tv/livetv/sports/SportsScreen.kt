@@ -118,6 +118,8 @@ object SportsLaunch {
     @Volatile private var returnSetAt = 0L
     fun openedFromSports(eventId: String) { returnTo = eventId; focusEvent = eventId; returnSetAt = System.currentTimeMillis() }
     fun takeReturnToSports(): Boolean = (returnTo != null).also { returnTo = null }
+    val isWatchingFromSports: Boolean get() = returnTo != null
+    val watchingEventId: String? get() = returnTo
     fun clearReturn() { returnTo = null; focusEvent = null }
     /** Live TV closed some other way: Back there no longer goes to Sports. */
     fun dropReturn() {
@@ -163,7 +165,8 @@ fun SportsScreen(
     onOpenLive: () -> Unit,
     /** Back on a game opened from another page (the Calendar): that page's route. */
     onReturnTo: (route: String) -> Unit = {},
-    viewModel: SportsViewModel = hiltViewModel()
+    viewModel: SportsViewModel = hiltViewModel(),
+    onOpenMultiview: (String?) -> Unit = {}
 ) {
     val events by viewModel.events.collectAsStateWithLifecycle()
     val known by viewModel.known.collectAsStateWithLifecycle()
@@ -420,6 +423,7 @@ fun SportsScreen(
                 onOpen = { ev -> fromRoute = null; fromLabel = null; openId = ev.id },
                 onQuickWatch = ::quickWatch,
                 onPick = { picker = true },
+                onOpenMultiview = { onOpenMultiview(playingKey) },
                 onWatchChannel = { ch -> viewModel.watchChannel(ch); onOpenLive() }
             )
         }
@@ -529,6 +533,7 @@ private fun SportsHub(
     onOpen: (SportsEvent) -> Unit,
     onQuickWatch: (SportsEvent) -> Unit,
     onPick: () -> Unit,
+    onOpenMultiview: () -> Unit,
     onWatchChannel: (LiveChannel) -> Unit
 ) {
     // Back opens the side menu first, like the guide and On Demand (it used to go straight to
@@ -721,6 +726,7 @@ private fun SportsHub(
             item(key = CHIP_TABLES) { FilterIcon("🏆", "Tables", effectiveChip == CHIP_TABLES, upTo, withLabel = true) { pickChip(CHIP_TABLES) } }
             // Each league's own channel (NFL Network, NBA TV…).
             item(key = CHIP_NETWORKS) { FilterIcon("📡", "League Networks", effectiveChip == CHIP_NETWORKS, upTo, withLabel = true) { pickChip(CHIP_NETWORKS) } }
+            item(key = "multiview") { FilterIcon("▦", "Multiview", false, upTo, withLabel = true, onClick = onOpenMultiview) }
             // Sports you follow: My Teams for that sport only.
             if (followedSports.size > 1) {
                 item(key = "sep1") { ChipGap() }

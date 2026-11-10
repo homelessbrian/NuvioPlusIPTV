@@ -27,7 +27,8 @@ class SportsViewModel @Inject constructor(
     private val playback: LiveTvPlaybackController,
     private val livePrefs: LiveTvPreferences,
     liveRepo: LiveTvRepository,
-    private val recordings: com.nuvio.tv.livetv.record.LiveTvRecordingScheduler
+    private val recordings: com.nuvio.tv.livetv.record.LiveTvRecordingScheduler,
+    private val watchSelection: SportsWatchSelection,
 ) : ViewModel() {
     val settings = repo.settings
     val follows = repo.follows
@@ -59,7 +60,10 @@ class SportsViewModel @Inject constructor(
     private val pageQuery = MutableStateFlow<SportsPageQuery?>(null)
 
     /** The screen's day and filter (see [SportsPageQuery]). */
-    internal fun setPageQuery(q: SportsPageQuery) { pageQuery.value = q }
+    internal fun setPageQuery(q: SportsPageQuery) {
+        pageQuery.value = q
+        watchSelection.select(q)
+    }
 
     /** The page's lists, rebuilt in the background when games, channels, follows or the minute change. */
     internal val pageData: StateFlow<SportsPageData?> = kotlinx.coroutines.flow.combine(

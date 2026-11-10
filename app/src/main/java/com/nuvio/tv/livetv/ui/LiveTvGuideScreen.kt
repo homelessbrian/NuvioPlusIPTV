@@ -100,6 +100,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.LocalContentFocusRequester
 import com.nuvio.tv.livetv.data.CatchupUrlBuilder
@@ -114,6 +116,8 @@ import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val SLOT_MS = 30L * 60L * 1000L
 private const val WINDOW_MS = 2L * 60L * 60L * 1000L
@@ -167,7 +171,9 @@ fun LiveTvGuideScreen(
     onReturnToSports: () -> Unit = {},
     /** A recording played here from Recordings or the Calendar: Back goes back to that screen (its route). */
     onReturnTo: (String) -> Unit = {},
-    viewModel: LiveTvViewModel = hiltViewModel()
+    viewModel: LiveTvViewModel = hiltViewModel(),
+    onOpenMultiview: () -> Unit = {},
+    onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() }
 ) {
     // Hold the first draw until the saved settings and menu look are read. Before that the guide
     // only has the built-in defaults, and it drew one frame of the old look, then redrew.
@@ -181,6 +187,8 @@ fun LiveTvGuideScreen(
         onOpenFullscreen = onOpenFullscreen,
         onOpenSettings = onOpenSettings,
         onOpenRecordings = onOpenRecordings,
+        onOpenMultiview = onOpenMultiview,
+        onOpenSportsMultiview = onOpenSportsMultiview,
         onFindInNuvio = onFindInNuvio,
         onOpenNuvioSearch = onOpenNuvioSearch,
         onReturnToSports = onReturnToSports,
@@ -195,6 +203,8 @@ private fun LiveTvGuideScreenBody(
     onOpenSettings: () -> Unit,
     /** Opens Recordings (the ● button beside the ⚙). */
     onOpenRecordings: () -> Unit = {},
+    onOpenMultiview: () -> Unit = {},
+    onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() },
     onFindInNuvio: () -> Unit = {},
     onOpenNuvioSearch: () -> Unit = onFindInNuvio,
     /** Full screen was opened from the Sports page: Back goes back there. */
@@ -206,6 +216,9 @@ private fun LiveTvGuideScreenBody(
     // preview window to the whole screen and back. The picture never moves to a different
     // view, which is what froze it (or left it loading) on some TVs.
     var fullscreen by remember { mutableStateOf(false) }
+    val sportsHandoffOnOpen = remember {
+        com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.value != null
+    }
     // For the smoothness line in the start-up report: guide and full screen counted apart.
     val perfView = androidx.compose.ui.platform.LocalView.current
     LaunchedEffect(fullscreen) {
@@ -299,11 +312,55 @@ private fun LiveTvGuideScreenBody(
         viewModel.playback.attach()
         onDispose { viewModel.playback.detach() }
     }
+    // Sports Multiview releases its owners before sending this key. Wait until this guide is
+    // the resumed destination, then resolve the source again under the current profile rules.
+    val queuedSportsHandoff by com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.collectAsStateWithLifecycle()
+    val sportsHandoff = queuedSportsHandoff
+    if (sportsHandoff != null) {
+        val source: com.nuvio.tv.livetv.sports.SportsWatchViewModel = hiltViewModel()
+        val owner = LocalLifecycleOwner.current
+        DisposableEffect(source, sportsHandoff) {
+            val lease = source.acquireViewing()
+            onDispose {
+                lease.close()
+                // Leaving before resolution abandons this request, without clearing a newer one.
+                com.nuvio.tv.livetv.sports.SportsWatchLaunch.cancelSingleHandoff(sportsHandoff)
+            }
+        }
+        LaunchedEffect(sportsHandoff, owner) {
+            val handoff = sportsHandoff
+            fullscreenComing = true
+            owner.lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+            val channel = withTimeoutOrNull(15_000L) {
+                combine(source.currentProfile, source.allowedChannels) { profile, allowed ->
+                    profile to allowed.firstOrNull { it.key == handoff.channelKey && source.mayPlay(it) }
+                }.first { (profile, channel) -> profile != handoff.profileId || channel != null }.second
+            }
+            // Loading a fresh source may have outlasted this destination's resumed state.
+            owner.lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+            if (com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.value != handoff) return@LaunchedEffect
+            LiveTvFullscreen.pending = false
+            if (channel == null || source.currentProfile.value != handoff.profileId || !source.mayPlay(channel)) {
+                viewModel.playback.stop()
+                fullscreen = false
+                fullscreenComing = false
+                com.nuvio.tv.livetv.sports.SportsWatchLaunch.cancelSingleHandoff(handoff)
+                com.nuvio.tv.livetv.record.LiveTvNotice.show("This stream is no longer available for this profile.")
+                return@LaunchedEffect
+            }
+            viewModel.preview(channel)
+            handoff.eventId?.let(com.nuvio.tv.livetv.sports.SportsLaunch::openedFromSports)
+            fullscreen = true
+            fullscreenComing = false
+            com.nuvio.tv.livetv.sports.SportsWatchLaunch.finishSingleHandoff(handoff, source.currentProfile.value)
+        }
+    }
     // Preview window off: nothing plays behind the guide. Not when the guide is only on its way
     // to full screen (a game opened from Sports, the home screen row, a reminder, search…):
     // stopping then left full screen on "Nothing playing".
     LaunchedEffect(settings.showPreview) {
-        if (!settings.showPreview && !LiveTvFullscreen.pending && !fullscreenComing && !fullscreen) viewModel.playback.stop()
+        if (!settings.showPreview && !LiveTvFullscreen.pending && !fullscreenComing && !fullscreen &&
+            com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.value == null) viewModel.playback.stop()
     }
 
     val gridFocus = remember { FocusRequester() }
@@ -623,6 +680,7 @@ private fun LiveTvGuideScreenBody(
     // Full screen asked for from elsewhere (home screen row, reminders, search…).
     val fullscreenRequests by LiveTvFullscreen.requests.collectAsStateWithLifecycle()
     LaunchedEffect(fullscreenRequests) {
+        if (com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.value != null) return@LaunchedEffect
         if (!LiveTvFullscreen.pending) return@LaunchedEffect
         LiveTvFullscreen.pending = false
         fullscreenComing = true
@@ -667,6 +725,7 @@ private fun LiveTvGuideScreenBody(
     //  2. Otherwise, if something is already playing, highlight it.
     //  3. Otherwise "Resume last channel in preview" starts the last channel in the preview.
     LaunchedEffect(Unit) {
+        if (sportsHandoffOnOpen || com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.value != null) return@LaunchedEffect
         // Sports: "Watch from the start" on a game (a replay through the channel's catch-up).
         com.nuvio.tv.livetv.sports.SportsLaunch.takeCatchup()?.let { c ->
             val ch = viewModel.channelByKey(c.channelKey)
@@ -1056,6 +1115,7 @@ private fun LiveTvGuideScreenBody(
                     if (!toSearch) runCatching { gridFocus.requestFocus() }
                 },
                 onRecordings = onOpenRecordings,
+                onMultiview = onOpenMultiview,
                 playlistName = if (settings.showPlaylistInInfo) headerChannel?.sourceId?.let { playlistNames[it] } else null,
                 settings = settings,
                 now = now,
@@ -2359,6 +2419,7 @@ private fun LiveTvGuideScreenBody(
                 onBackToGroups = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; stopIfNoPreview(); fullscreen = false; savedSpot = null; exitFullscreenTick++; focusGroups() },
                 embedded = true,
                 onOpenSettings = onOpenSettings,
+                onOpenSportsMultiview = { panes -> onOpenSportsMultiview(panes, playback.channelKey) },
                 viewModel = viewModel
             )
         }
@@ -2406,7 +2467,8 @@ private fun GuideHeader(
     onGear: () -> Unit = {},
     onGearDown: () -> Unit = {},
     /** Opens Recordings (the ● beside the ⚙). */
-    onRecordings: () -> Unit = {}
+    onRecordings: () -> Unit = {},
+    onMultiview: () -> Unit = {}
 ) {
     if (!settings.showProgramDetails && !showPreview) {
         Row(
@@ -2417,6 +2479,8 @@ private fun GuideHeader(
             LiveText("Live TV", size = 16.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
             status?.let { LiveText(it, color = NuvioTheme.colors.TextSecondary, size = 13.sp) }
             Spacer(Modifier.width(16.dp))
+            GuideMultiviewButton(onOpen = onMultiview, onDown = onGearDown)
+            Spacer(Modifier.width(6.dp))
             GuideRecordingsButton(onOpen = onRecordings, onDown = onGearDown)
             Spacer(Modifier.width(6.dp))
             GuideGearButton(Modifier.focusRequester(gearFocus), onOpen = onGear, onDown = onGearDown)
@@ -2568,6 +2632,8 @@ private fun GuideHeader(
         }
         // Recordings (●) and the ⚙ for the guide's display settings, in the corner of the panel.
         Row {
+            GuideMultiviewButton(onOpen = onMultiview, onDown = onGearDown)
+            Spacer(Modifier.width(6.dp))
             GuideRecordingsButton(onOpen = onRecordings, onDown = onGearDown)
             Spacer(Modifier.width(6.dp))
             GuideGearButton(Modifier.focusRequester(gearFocus), onOpen = onGear, onDown = onGearDown)
