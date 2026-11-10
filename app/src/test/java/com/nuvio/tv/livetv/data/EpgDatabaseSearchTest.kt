@@ -62,6 +62,6 @@ class EpgDatabaseSearchTest {
         every { database.readableDatabase } returns sqlite
         val result = database.searchPrograms(EpgSearchRequest("t", listOf("p:1"), emptySet(), 0, 0))
         assertTrue(result.matching.isEmpty())
-        verify(exactly = 0) { sqlite.rawQuery(any(), any<Array<String>>(), any<CancellationSignal?>()) }
+        verify(exactly = 0) { sqlite.rawQuery(any(), any<Array<String>>(), null as CancellationSignal?) }
     }
 }
