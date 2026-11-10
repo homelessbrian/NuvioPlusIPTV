@@ -1206,7 +1206,8 @@ class LiveTvRepository @Inject constructor(
         // Publish a small priority read immediately; fill the global now/next view in background.
         val epoch = cacheEpoch.incrementAndGet()
         val revision = guideDb.revision()
-        rangeMutex.withLock {
+        val requestedSchedules = rangeMutex.withLock {
+            val requested = schedules.keys.toList()
             windowCache.clear()
             mergedWindows.clear()
             schedules.clear()
@@ -1217,9 +1218,11 @@ class LiveTvRepository @Inject constructor(
             lightPrograms = true
             _guideGeneration.value++
             _committedGuideRevision.value = revision
+            requested
         }
         ensureRange(0L, 0L)
         loadChannelsNow(viewportKeys.ifEmpty { priorityKeys() })
+        requestedSchedules.forEach(::ensureChannelSchedule)
         if (_epgSources.value.isEmpty()) scope.launch(Dispatchers.IO) { loadSourceLists(targets) }
         // Availability uses key-only database reads, not whether a channel's RAM tile was visited.
         scope.launch(BackgroundWork.reads) {
