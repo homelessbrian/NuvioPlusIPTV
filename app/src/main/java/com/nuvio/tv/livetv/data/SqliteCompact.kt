@@ -13,8 +13,11 @@ internal object SqliteCompact {
     /** Only worth the work past this much empty space, and when it's a good part of the file. */
     private const val MIN_FREE_BYTES = 8L * 1024 * 1024
 
-    /** Returns the bytes given back (0 when there was nothing worth doing). */
-    fun compactIfWasteful(db: SQLiteDatabase, label: String): Long = runCatching {
+    /**
+     * Returns the bytes given back (0 when there was nothing worth doing). [emptyShare]: how much
+     * of the file has to be empty before it's rewritten (a quarter, unless said otherwise).
+     */
+    fun compactIfWasteful(db: SQLiteDatabase, label: String, emptyShare: Double = 0.25): Long = runCatching {
         fun pragma(q: String): Long = db.rawQuery(q, null).use { c -> if (c.moveToFirst()) c.getLong(0) else 0L }
         fun checkpoint() = runCatching { db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() } }
         // The write-ahead file can stay large after a big update; fold it back in first.
@@ -23,7 +26,7 @@ internal object SqliteCompact {
         val pages = pragma("PRAGMA page_count")
         val free = pragma("PRAGMA freelist_count")
         val freeBytes = free * pageSize
-        if (freeBytes < MIN_FREE_BYTES || free * 4 < pages) return@runCatching 0L
+        if (freeBytes < MIN_FREE_BYTES || free < pages * emptyShare) return@runCatching 0L
         db.execSQL("VACUUM")
         checkpoint()
         val mb = freeBytes / (1024 * 1024)
