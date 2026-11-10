@@ -77,13 +77,33 @@ private const val UPCOMING_WINDOW_MS = 6L * 60 * 60 * 1000
 /** Words after a channel's name that only say which copy it is (its quality). */
 private val QUALITY_WORDS = setOf("hd", "fhd", "uhd", "sd", "4k", "hevc", "h265", "backup", "1080p", "720p")
 
+/** The channel's name without its region prefix and quality tags: "US: TNT HD" -> "tnt". */
+private fun cleanChannelName(name: String): String =
+    name.substringAfterLast(':').substringAfterLast('|').trim().lowercase()
+        .split(' ', '-', '_').filter { it.isNotEmpty() && it !in QUALITY_WORDS }.joinToString(" ")
+
+/** How good this copy is, best first: 4K, then FHD, HD, no tag, SD, and backups last. */
+private fun qualityRank(name: String): Int {
+    val words = name.lowercase().split(' ', '-', '_', '|', ':', '(', ')', '[', ']').filter { it.isNotEmpty() }.toSet()
+    return when {
+        "backup" in words -> 5
+        words.any { it == "4k" || it == "uhd" || it == "2160p" } -> 0
+        words.any { it == "fhd" || it == "1080p" } -> 1
+        words.any { it == "hd" || it == "720p" || it == "hevc" || it == "h265" } -> 2
+        "sd" in words -> 4
+        else -> 3
+    }
+}
+
 /** 0 = the channel's name is exactly [q], 1 = starts with it, 2 = a word in it starts with it, 3 = contains it. */
 private fun nameMatchTier(name: String, q: String): Int {
     // "US: CNN HD" / "UK | TNT Sports 1" -> "cnn" / "tnt sports 1": no region prefix, no quality tags.
     val words = name.substringAfterLast(':').substringAfterLast('|').trim().lowercase()
         .split(' ', '-', '_').filter { it.isNotEmpty() && it !in QUALITY_WORDS }
     val clean = words.joinToString(" ")
-    val query = q.lowercase()
+    // Quality words typed in the search ("tnt hd") are dropped like the ones in channel names.
+    val query = q.lowercase().split(' ').filter { it.isNotEmpty() && it !in QUALITY_WORDS }.joinToString(" ")
+        .ifEmpty { q.lowercase() }
     return when {
         clean == query -> 0
         clean.startsWith(query) -> 1
@@ -179,7 +199,10 @@ private fun rememberLiveTvSearchResultsEnabled(
                         }
                     }
                 }
-                matched.sortedWith(compareBy({ tiers[it.key] ?: 3 }, { regions[it.key] ?: 0 }))
+                // Same match and region: names A to Z, and each name's copies best quality first.
+                matched.sortedWith(
+                    compareBy<LiveChannel>({ tiers[it.key] ?: 3 }, { regions[it.key] ?: 0 }, { cleanChannelName(it.name) }, { qualityRank(it.name) })
+                )
             }
             for (c in ranked) {
                 if (out.size >= MAX_HITS) break
