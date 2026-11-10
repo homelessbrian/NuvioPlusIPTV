@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.ondemand
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,9 +54,11 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 /** The parts of a group's line, left to right. */
 private enum class GroupControl { TOGGLE, SORT, RENAME, UP, DOWN }
 
-/** Where the highlight is: a control on a group's line, or one of the two buttons at the bottom. */
+/** Where the highlight is: a control on a group's line, or a footer action. */
 private sealed interface PanelSpot {
     data class Line(val index: Int, val control: GroupControl) : PanelSpot
+    data object SelectAll : PanelSpot
+    data object DeselectAll : PanelSpot
     data object Reset : PanelSpot
     data object Done : PanelSpot
 }
@@ -64,7 +67,8 @@ private sealed interface PanelSpot {
  * Manage VOD Groups: show or hide, rename and reorder your provider's groups on the On Demand
  * page. With the remote: Down/Up move to the same control on the next/previous group (to switch
  * many groups off quickly), Left/Right move along a line, Right from the last control goes to
- * Done. Changes apply on Done.
+ * Done. Down from the last group reaches Select all / Deselect all, then Reset / Done.
+ * Changes apply on Done.
  */
 @Composable
 internal fun ManageVodGroupsPanel(
@@ -77,7 +81,7 @@ internal fun ManageVodGroupsPanel(
 ) {
     val colors = NuvioTheme.colors
     val edited = remember(groups) { mutableStateListOf<VodGroupEntry>().apply { addAll(groups) } }
-    var spot by remember { mutableStateOf<PanelSpot>(PanelSpot.Line(0, GroupControl.TOGGLE)) }
+    var spot by remember { mutableStateOf<PanelSpot>(if (groups.isEmpty()) PanelSpot.SelectAll else PanelSpot.Line(0, GroupControl.TOGGLE)) }
     var renaming by remember { mutableStateOf<Int?>(null) }
     var sorting by remember { mutableStateOf<Int?>(null) }
     // Back with unsaved changes: ask before throwing them away.
@@ -96,8 +100,11 @@ internal fun ManageVodGroupsPanel(
         if (line < first + 1 || line > last - 1) runCatching { listState.animateScrollToItem((line - 3).coerceAtLeast(0)) }
     }
 
-    fun press() {
-        when (val s = spot) {
+    fun press(target: PanelSpot = spot) {
+        spot = target
+        // Pointer and remote activation share the same action; the parent consumes remote OK.
+        runCatching { keys.requestFocus() }
+        when (val s = target) {
             is PanelSpot.Line -> {
                 val i = s.index
                 val g = edited.getOrNull(i) ?: return
@@ -113,6 +120,8 @@ internal fun ManageVodGroupsPanel(
                     }
                 }
             }
+            PanelSpot.SelectAll -> edited.indices.forEach { i -> edited[i] = edited[i].copy(visible = true) }
+            PanelSpot.DeselectAll -> edited.indices.forEach { i -> edited[i] = edited[i].copy(visible = false) }
             PanelSpot.Reset -> onReset()
             PanelSpot.Done -> onDone(edited.toList())
         }
@@ -139,21 +148,26 @@ internal fun ManageVodGroupsPanel(
                         when (e.key) {
                             Key.DirectionDown -> {
                                 spot = when (s) {
-                                    is PanelSpot.Line -> if (s.index < last) s.copy(index = s.index + 1) else PanelSpot.Done
+                                    is PanelSpot.Line -> if (s.index < last) s.copy(index = s.index + 1) else PanelSpot.SelectAll
+                                    PanelSpot.SelectAll -> PanelSpot.Reset
+                                    PanelSpot.DeselectAll -> PanelSpot.Done
                                     else -> s
                                 }; true
                             }
                             Key.DirectionUp -> {
                                 spot = when (s) {
                                     is PanelSpot.Line -> if (s.index > 0) s.copy(index = s.index - 1) else s
-                                    else -> PanelSpot.Line(last.coerceAtLeast(0), GroupControl.TOGGLE)
+                                    PanelSpot.Reset -> PanelSpot.SelectAll
+                                    PanelSpot.Done -> PanelSpot.DeselectAll
+                                    else -> if (last >= 0) PanelSpot.Line(last, GroupControl.TOGGLE) else s
                                 }; true
                             }
                             Key.DirectionLeft -> {
                                 spot = when (s) {
                                     is PanelSpot.Line -> s.copy(control = GroupControl.entries[(s.control.ordinal - 1).coerceAtLeast(0)])
                                     PanelSpot.Done -> PanelSpot.Reset
-                                    PanelSpot.Reset -> s
+                                    PanelSpot.DeselectAll -> PanelSpot.SelectAll
+                                    else -> s
                                 }; true
                             }
                             Key.DirectionRight -> {
@@ -162,7 +176,8 @@ internal fun ManageVodGroupsPanel(
                                     is PanelSpot.Line -> if (s.control == GroupControl.DOWN) PanelSpot.Done
                                         else s.copy(control = GroupControl.entries[s.control.ordinal + 1])
                                     PanelSpot.Reset -> PanelSpot.Done
-                                    PanelSpot.Done -> s
+                                    PanelSpot.SelectAll -> PanelSpot.DeselectAll
+                                    else -> s
                                 }; true
                             }
                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { if (e.nativeKeyEvent.repeatCount == 0) press(); true }
@@ -190,7 +205,11 @@ internal fun ManageVodGroupsPanel(
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            ToggleSwitch(on = g.visible, focused = onLine && lineSpot?.control == GroupControl.TOGGLE)
+                            ToggleSwitch(
+                                on = g.visible,
+                                focused = onLine && lineSpot?.control == GroupControl.TOGGLE,
+                                onClick = { press(PanelSpot.Line(i, GroupControl.TOGGLE)) }
+                            )
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 LiveText(g.name, size = 15.sp, maxLines = 1, color = if (g.visible) colors.TextPrimary else colors.TextSecondary)
@@ -199,21 +218,27 @@ internal fun ManageVodGroupsPanel(
                             SortChip(
                                 label = sortLabel(g.sort) ?: "Default",
                                 custom = g.sort != null,
-                                focused = onLine && lineSpot?.control == GroupControl.SORT
+                                focused = onLine && lineSpot?.control == GroupControl.SORT,
+                                onClick = { press(PanelSpot.Line(i, GroupControl.SORT)) }
                             )
                             Spacer(Modifier.width(6.dp))
-                            IconSquare(Icons.Default.Edit, onLine && lineSpot?.control == GroupControl.RENAME)
+                            IconSquare(Icons.Default.Edit, onLine && lineSpot?.control == GroupControl.RENAME, onClick = { press(PanelSpot.Line(i, GroupControl.RENAME)) })
                             Spacer(Modifier.width(6.dp))
-                            IconSquare(Icons.Default.KeyboardArrowUp, onLine && lineSpot?.control == GroupControl.UP, enabled = i > 0)
+                            IconSquare(Icons.Default.KeyboardArrowUp, onLine && lineSpot?.control == GroupControl.UP, enabled = i > 0, onClick = { press(PanelSpot.Line(i, GroupControl.UP)) })
                             Spacer(Modifier.width(6.dp))
-                            IconSquare(Icons.Default.KeyboardArrowDown, onLine && lineSpot?.control == GroupControl.DOWN, enabled = i < edited.lastIndex)
+                            IconSquare(Icons.Default.KeyboardArrowDown, onLine && lineSpot?.control == GroupControl.DOWN, enabled = i < edited.lastIndex, onClick = { press(PanelSpot.Line(i, GroupControl.DOWN)) })
                         }
                     }
                 }
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PanelButton("Reset to Default", primary = false, focused = spot == PanelSpot.Reset, modifier = Modifier.weight(1f))
-                    PanelButton("Done", primary = true, focused = spot == PanelSpot.Done, modifier = Modifier.weight(1f))
+                    PanelButton("Select all", primary = false, focused = spot == PanelSpot.SelectAll, onClick = { press(PanelSpot.SelectAll) }, modifier = Modifier.weight(1f))
+                    PanelButton("Deselect all", primary = false, focused = spot == PanelSpot.DeselectAll, onClick = { press(PanelSpot.DeselectAll) }, modifier = Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PanelButton("Reset to Default", primary = false, focused = spot == PanelSpot.Reset, onClick = { press(PanelSpot.Reset) }, modifier = Modifier.weight(1f))
+                    PanelButton("Done", primary = true, focused = spot == PanelSpot.Done, onClick = { press(PanelSpot.Done) }, modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -280,13 +305,14 @@ internal fun ManageVodGroupsPanel(
 }
 
 @Composable
-private fun ToggleSwitch(on: Boolean, focused: Boolean) {
+private fun ToggleSwitch(on: Boolean, focused: Boolean, onClick: () -> Unit) {
     val colors = NuvioTheme.colors
     Box(
         modifier = Modifier
             .width(44.dp)
             .height(24.dp)
             .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
             .background(if (on) colors.Secondary else Color.White.copy(alpha = 0.18f))
             .border(if (focused) 2.dp else 0.dp, if (focused) colors.FocusRing else Color.Transparent, RoundedCornerShape(12.dp))
             .padding(3.dp),
@@ -297,12 +323,13 @@ private fun ToggleSwitch(on: Boolean, focused: Boolean) {
 }
 
 @Composable
-private fun IconSquare(icon: androidx.compose.ui.graphics.vector.ImageVector, focused: Boolean, enabled: Boolean = true) {
+private fun IconSquare(icon: androidx.compose.ui.graphics.vector.ImageVector, focused: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val colors = NuvioTheme.colors
     Box(
         modifier = Modifier
             .size(34.dp)
             .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled, onClick = onClick)
             .background(if (focused) colors.FocusRing else Color.White.copy(alpha = 0.08f)),
         contentAlignment = Alignment.Center
     ) {
@@ -319,13 +346,14 @@ private fun IconSquare(icon: androidx.compose.ui.graphics.vector.ImageVector, fo
 }
 
 @Composable
-private fun PanelButton(label: String, primary: Boolean, focused: Boolean, modifier: Modifier = Modifier) {
+private fun PanelButton(label: String, primary: Boolean, focused: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = NuvioTheme.colors
     val shape = RoundedCornerShape(12.dp)
     Box(
         modifier = modifier
             .height(48.dp)
             .clip(shape)
+            .clickable(onClick = onClick)
             .background(
                 when {
                     focused -> colors.FocusRing
@@ -342,12 +370,13 @@ private fun PanelButton(label: String, primary: Boolean, focused: Boolean, modif
 
 /** The group's sort on its line ("A–Z", or "Default" when it follows Default Sort Order). */
 @Composable
-private fun SortChip(label: String, custom: Boolean, focused: Boolean) {
+private fun SortChip(label: String, custom: Boolean, focused: Boolean, onClick: () -> Unit) {
     val colors = NuvioTheme.colors
     Box(
         modifier = Modifier
             .height(34.dp)
             .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
             .background(
                 when {
                     focused -> colors.FocusRing
