@@ -2,8 +2,11 @@ package com.nuvio.tv.livetv.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
+import android.database.sqlite.SQLiteCursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import androidx.core.database.sqlite.SQLiteCursorCompat
 import com.nuvio.tv.livetv.model.EpgAssignment
 import com.nuvio.tv.livetv.model.EpgProgram
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,6 +21,11 @@ import javax.inject.Singleton
 @Singleton
 class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     SQLiteOpenHelper(context, "livetv_guide.db", null, 3) {
+
+    /** Sequential scans never revisit rows. Core leaves this unchanged below Android 9. */
+    private fun Cursor.forwardOnly(): Cursor = apply {
+        if (this is SQLiteCursor) SQLiteCursorCompat.setFillWindowForwardOnly(this, true)
+    }
 
     /**
      * Goes up whenever listings are written or removed: things worked out from the guide (Sports'
