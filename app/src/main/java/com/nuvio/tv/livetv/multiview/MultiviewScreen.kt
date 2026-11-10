@@ -98,6 +98,8 @@ fun MultiviewScreen(
     val state by session.state.collectAsStateWithLifecycle()
     val soundPaused = state.isForeground && state.panes.any { it.channelKey != null } && !state.hasAudioFocus
     val allowedChannels by viewModel.allowedChannels.collectAsStateWithLifecycle()
+    val queued = remember { MultiviewQueue.take() }
+    var seeded by remember { mutableStateOf(queued.isEmpty()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var editorOpen by remember { mutableStateOf(true) }
     var editedPane by remember { mutableIntStateOf(0) }
@@ -147,6 +149,18 @@ fun MultiviewScreen(
     LaunchedEffect(allowedChannels) {
         // Includes parental and visibility filtering; refreshes changed source details by key.
         session.validateAllowedChannels(allowedChannels)
+        if (!seeded && allowedChannels.isNotEmpty()) {
+            // Channels set aside with "Add to Multiview" start in the first panes.
+            seeded = true
+            val chosen = queued.mapNotNull { key -> allowedChannels.firstOrNull { it.key == key } }
+            if (chosen.isNotEmpty()) {
+                val count = chosen.size.coerceIn(2, 4)
+                session.setLayout(MultiviewLayout.entries.first { it.paneCount == count })
+                chosen.forEachIndexed { pane, channel -> session.assignChannel(pane, channel) }
+                editedPane = chosen.size.coerceAtMost(count - 1)
+                editorOpen = chosen.size < count
+            }
+        }
     }
     LaunchedEffect(editorOpen, state.layout) {
         if (!editorOpen) paneFocus[state.focusedPane].requestFocus()

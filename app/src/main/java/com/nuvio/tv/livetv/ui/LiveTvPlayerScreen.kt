@@ -1414,6 +1414,9 @@ fun LiveTvPlayerScreen(
                         }
                     },
                 onReload = { dialog = PlayerDialog.NONE; viewModel.playback.retry() },
+                onMultiview = if (archive) null else {
+                    { dialog = PlayerDialog.NONE; com.nuvio.tv.livetv.multiview.MultiviewQueue.addAndAnnounce(ch.key) }
+                },
                 onHide = {
                     viewModel.hideChannel(ch)
                     dialog = PlayerDialog.NONE

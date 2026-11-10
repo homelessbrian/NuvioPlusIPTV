@@ -3689,6 +3689,7 @@ private fun ChannelContextMenu(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             item { MenuHeader("Watch", first = true) }
             item { MenuItem("Watch full screen", Modifier.focusRequester(first), onWatch) }
+            item { MenuItem("Add to Multiview", onClick = { com.nuvio.tv.livetv.multiview.MultiviewQueue.addAndAnnounce(ch.key); onDismiss() }) }
             // On now, with catch-up or a recording running: start it over (right under Watch).
             if (canRestart && (program == null || (now >= program.startMs && now < program.stopMs))) item {
                 MenuItem(restartLabel, onClick = onRestart)
