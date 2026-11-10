@@ -45,6 +45,36 @@
       "trace": "baseline-repeat-3",
       "sha256": "0a128d67f23ef329577fa8e8c4ff8dc0ff240cd99e4d180faed16caa9aa5b106",
       "samples": 31
+    },
+    {
+      "trace": "baseline-control-1",
+      "sha256": "7fdccd3e71c1bffcb680ee4d1266ca87a94ce720475369d033b868e1f1b51127",
+      "samples": 31
+    },
+    {
+      "trace": "baseline-control-2",
+      "sha256": "8561f04d7b58f5889c8e51aecc73fa673c6c1af1af0cadbb94e208918a82bcbf",
+      "samples": 31
+    },
+    {
+      "trace": "baseline-control-3",
+      "sha256": "5f74dfade076f29c526016d1f3083cae83368de18f51aaa8dbd4df7349bd6d48",
+      "samples": 31
+    },
+    {
+      "trace": "final-control-1",
+      "sha256": "f1953ee33071265a91c2d12183f1023cbb928713aa6b1f037348519f64556dfc",
+      "samples": 31
+    },
+    {
+      "trace": "final-control-2",
+      "sha256": "898a261f8d620e2441e391e0b226174598da58116240999d6fe1eea103378aee",
+      "samples": 31
+    },
+    {
+      "trace": "final-control-3",
+      "sha256": "dfa12b585db8b8a5c825db6a430466b74a5f56d5037b08470a9a106f61d0d770",
+      "samples": 31
     }
   ],
   "limits": [
@@ -53,9 +83,11 @@
     "Initial unfavorable natural traces preserved separately from final revision",
     "Missing swap values were not captured; do not treat blanks as zero",
     "Only completed warm traces are exported; failed startup attempts are not measurements",
-    "Original baseline has three warm repeats; final warm/control comparison may be pending",
     "Fresh-process warm repeats reuse loaded data; no forcedGC",
     "Main import phases begin at different elapsed startup times; startup work and wall-clock cache freshness can overlap",
-    "No private app archives, heap dumps, smaps or source credentials included"
+    "No private app archives, heap dumps, smaps or source credentials included",
+    "Three complete baseline/final natural controls after owned idle Gradle stop and owned emulator reboot; older baseline repetitions are a separate series",
+    "Final-control1 outlier is preserved; no stable residentRAM reduction claimed",
+    "Synthetic loopback server was unavailable during clean-guest controls; both used the complete cached4k database. Separate startup profiling restarts the unchanged fixedserver."
   ]
 }

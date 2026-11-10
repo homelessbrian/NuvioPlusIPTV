@@ -341,7 +341,7 @@
     "settled_pss_median_across_repeats": 311759,
     "limit": "PSS is sampled physical attribution; PSS+SwapPSS is a separate logical footprint approximation. Initial natural traces did not sample swap; full meminfo is a later snapshot only."
   },
-  "final_warm_status": "Incomplete: startup ANRs before sampling; no valid final warm repetitions. New paired controls after emulator restart pending.",
+  "final_warm_status": "Three complete valid baseline/final controls after emulator restart, with identical hardened sidebar navigation. Earlier startup failures excluded. Wide final outlier prevents stableRAM claim.",
   "limits": [
     "Main replay: one observation per build, not a stable population RAM estimate",
     "Near1Hz sampling can miss short peaks",
@@ -353,6 +353,163 @@
     "No forcedGC/trim/pruning in natural main traces",
     "Combined after builds include independent parserPR104; no parser-only or guide-only totalRAM attribution",
     "Failed warm startups are excluded from measurements; hostdaemon cleanup and emulator reboot define a new control series",
-    "Private appdata archives/HPROFs/smaps/logs are never published"
-  ]
+    "Private appdata archives/HPROFs/smaps/logs are never published",
+    "Synthetic loopback server was unavailable during clean-guest controls; both used the complete cached4k database. Separate startup profiling restarts the unchanged fixedserver."
+  ],
+  "clean_guest_controls": {
+    "baseline": {
+      "prefix": "baseline",
+      "series": "control",
+      "forced_gc": false,
+      "unit": "KiB",
+      "repeats": [
+        {
+          "label": "baseline-control-1",
+          "last5_medians_kib": {
+            "pss_kib": 288408,
+            "java_heap_kib": 49196,
+            "native_heap_kib": 37104,
+            "rss_kib": 407792,
+            "swap_pss_kib": 221
+          },
+          "full_meminfo_kib": {
+            "pss": 288332,
+            "swap_pss": 221,
+            "pss_plus_swap_pss": 288553,
+            "dalvik_pss": 43118,
+            "dalvik_swap_pss": 31,
+            "dalvik_heap_size": 64637,
+            "dalvik_heap_alloc": 40061,
+            "dalvik_heap_free": 24576
+          },
+          "samples": 31
+        },
+        {
+          "label": "baseline-control-2",
+          "last5_medians_kib": {
+            "pss_kib": 288666,
+            "java_heap_kib": 49248,
+            "native_heap_kib": 35924,
+            "rss_kib": 407936,
+            "swap_pss_kib": 221
+          },
+          "full_meminfo_kib": {
+            "pss": 288470,
+            "swap_pss": 221,
+            "pss_plus_swap_pss": 288691,
+            "dalvik_pss": 43150,
+            "dalvik_swap_pss": 31,
+            "dalvik_heap_size": 64649,
+            "dalvik_heap_alloc": 40073,
+            "dalvik_heap_free": 24576
+          },
+          "samples": 31
+        },
+        {
+          "label": "baseline-control-3",
+          "last5_medians_kib": {
+            "pss_kib": 286204,
+            "java_heap_kib": 49204,
+            "native_heap_kib": 35176,
+            "rss_kib": 405316,
+            "swap_pss_kib": 221
+          },
+          "full_meminfo_kib": {
+            "pss": 286188,
+            "swap_pss": 221,
+            "pss_plus_swap_pss": 286409,
+            "dalvik_pss": 43102,
+            "dalvik_swap_pss": 31,
+            "dalvik_heap_size": 64624,
+            "dalvik_heap_alloc": 40048,
+            "dalvik_heap_free": 24576
+          },
+          "samples": 31
+        }
+      ],
+      "settled_pss_last5_median_range": [
+        286204,
+        288666
+      ],
+      "settled_pss_median_across_repeats": 288408,
+      "limit": "PSS is sampled physical attribution; PSS+SwapPSS is a separate logical footprint approximation. Initial natural traces did not sample swap; full meminfo is a later snapshot only."
+    },
+    "final": {
+      "prefix": "final",
+      "series": "control",
+      "forced_gc": false,
+      "unit": "KiB",
+      "repeats": [
+        {
+          "label": "final-control-1",
+          "last5_medians_kib": {
+            "pss_kib": 365590,
+            "java_heap_kib": 113292,
+            "native_heap_kib": 47916,
+            "rss_kib": 483180,
+            "swap_pss_kib": 225
+          },
+          "full_meminfo_kib": {
+            "pss": 350074,
+            "swap_pss": 225,
+            "pss_plus_swap_pss": 350299,
+            "dalvik_pss": 96318,
+            "dalvik_swap_pss": 31,
+            "dalvik_heap_size": 112783,
+            "dalvik_heap_alloc": 88239,
+            "dalvik_heap_free": 24544
+          },
+          "samples": 31
+        },
+        {
+          "label": "final-control-2",
+          "last5_medians_kib": {
+            "pss_kib": 277284,
+            "java_heap_kib": 42644,
+            "native_heap_kib": 30220,
+            "rss_kib": 394488,
+            "swap_pss_kib": 225
+          },
+          "full_meminfo_kib": {
+            "pss": 277260,
+            "swap_pss": 225,
+            "pss_plus_swap_pss": 277485,
+            "dalvik_pss": 36398,
+            "dalvik_swap_pss": 31,
+            "dalvik_heap_size": 57868,
+            "dalvik_heap_alloc": 33292,
+            "dalvik_heap_free": 24576
+          },
+          "samples": 31
+        },
+        {
+          "label": "final-control-3",
+          "last5_medians_kib": {
+            "pss_kib": 281576,
+            "java_heap_kib": 42660,
+            "native_heap_kib": 33024,
+            "rss_kib": 398800,
+            "swap_pss_kib": 225
+          },
+          "full_meminfo_kib": {
+            "pss": 281552,
+            "swap_pss": 225,
+            "pss_plus_swap_pss": 281777,
+            "dalvik_pss": 36422,
+            "dalvik_swap_pss": 31,
+            "dalvik_heap_size": 57876,
+            "dalvik_heap_alloc": 33300,
+            "dalvik_heap_free": 24576
+          },
+          "samples": 31
+        }
+      ],
+      "settled_pss_last5_median_range": [
+        277284,
+        365590
+      ],
+      "settled_pss_median_across_repeats": 281576,
+      "limit": "PSS is sampled physical attribution; PSS+SwapPSS is a separate logical footprint approximation. Initial natural traces did not sample swap; full meminfo is a later snapshot only."
+    }
+  }
 }
