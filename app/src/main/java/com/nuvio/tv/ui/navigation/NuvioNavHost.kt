@@ -1421,6 +1421,11 @@ private fun PlaybackNavHost(
                 onOpenSettings = { navController.navigate(Screen.LiveTvSettings.route) },
                 // Recordings opens from the guide now (Back comes back to the guide).
                 onOpenRecordings = { navController.navigate(Screen.Recordings.route) { launchSingleTop = true } },
+                onOpenMultiview = { navController.navigate(Screen.LiveTvMultiview.route) { launchSingleTop = true } },
+                onOpenSportsMultiview = { panes, channelKey ->
+                    com.nuvio.tv.livetv.sports.SportsWatchLaunch.request(panes, channelKey)
+                    navController.navigate(Screen.SportsMultiview.route) { launchSingleTop = true }
+                },
                 onFindInNuvio = {
                     // Back from search returns to the guide.
                     navController.navigate(Screen.Search.route) { launchSingleTop = true }
@@ -1528,6 +1533,10 @@ private fun PlaybackNavHost(
             // Live TV fork: the Sports page (scores, schedules, which of your channels show each game).
             if (sportsShown) com.nuvio.tv.livetv.sports.SportsScreen(
                 onOpenLive = { com.nuvio.tv.livetv.sports.openLiveTvFullscreen(navController) },
+                onOpenMultiview = { channelKey ->
+                    com.nuvio.tv.livetv.sports.SportsWatchLaunch.request(2, channelKey)
+                    navController.navigate(Screen.SportsMultiview.route) { launchSingleTop = true }
+                },
                 // Back on a game opened from another page: that page again, as it was (like
                 // picking it in the side menu).
                 onReturnTo = { route ->
@@ -1587,6 +1596,27 @@ private fun PlaybackNavHost(
                     com.nuvio.tv.livetv.ui.LiveTvSearchBridge.origin.value = com.nuvio.tv.livetv.ui.LiveTvSearchBridge.ON_DEMAND
                     navController.navigate(Screen.Search.route) { launchSingleTop = true }
                 }
+            )
+        }
+
+        composable(Screen.LiveTvMultiview.route) {
+            com.nuvio.tv.livetv.multiview.MultiviewScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.SportsMultiview.route) {
+            com.nuvio.tv.livetv.sports.SportsMultiviewScreen(
+                onSingle = {
+                    // Return directly to the guide. Restoring its saved stack can resurrect a
+                    // previous Multiview child that would release the incoming single player.
+                    if (!navController.popBackStack(Screen.LiveTv.route, inclusive = false)) {
+                        navController.navigate(Screen.LiveTv.route) {
+                            popUpTo(Screen.SportsMultiview.route) { inclusive = true }
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    }
+                },
+                onExit = { navController.popBackStack() },
             )
         }
 

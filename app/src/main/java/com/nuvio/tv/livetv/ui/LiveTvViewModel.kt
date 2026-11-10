@@ -7,7 +7,6 @@ import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.LiveTvStatus
 import com.nuvio.tv.livetv.model.ChannelGroup
-import com.nuvio.tv.livetv.model.ChannelSort
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveTvSettings
@@ -1621,30 +1620,18 @@ internal fun buildUi(
      */
     exactGroup: Boolean = false
 ): LiveTvUiState {
-    // Channels you hid one by one stay out everywhere. Hiding a playlist group only hides that
-    // group: its channels still show in your own groups (customPool below).
-    val notHidden = channels.filter { it.key !in user.hiddenChannels }
-    val shown = notHidden.filter { it.groupId !in user.hiddenGroups }
-    // Parental controls: channels in locked groups stay out of every list until unlocked.
-    val lockedIds = HashSet<String>()
-    notHidden.distinctBy { it.groupId }.forEach { c ->
-        if (com.nuvio.tv.livetv.parental.ParentalControls.isLocked(c.groupId, c.group, s, user.lockedGroups)) lockedIds += c.groupId
-    }
-    user.customGroups.forEach { g ->
-        if (com.nuvio.tv.livetv.parental.ParentalControls.isLocked(g.id, g.name, s, user.lockedGroups)) lockedIds += g.id
-    }
-    val visible = shown.filter { it.groupId !in lockedIds }
+    val visibility = liveTvChannelVisibility(channels, user, s)
+    val notHidden = visibility.notHidden
+    val shown = visibility.shown
+    val lockedIds = visibility.lockedIds
+    val visible = visibility.visible
     val byKey = visible.associateBy { it.key }
     // What your own groups can show: also channels whose playlist group is hidden.
     val customPool = notHidden.filter { it.groupId !in lockedIds }.associateBy { it.key }
     val favorites = user.favorites.mapNotNull { byKey[it] }
     val recent = user.recent.mapNotNull { byKey[it] }
 
-    fun sorted(list: List<LiveChannel>): List<LiveChannel> = when (s.channelSort) {
-        ChannelSort.PLAYLIST -> list
-        ChannelSort.NUMBER -> list.sortedBy { it.number }
-        ChannelSort.NAME -> list.sortedBy { it.name.lowercase() }
-    }
+    fun sorted(list: List<LiveChannel>): List<LiveChannel> = sortLiveTvChannels(list, s.channelSort)
     // Needed for search/zapping in every result. All channels can share it; favorites/custom
     // lists keep their own stable tie ordering. PLAYLIST still returns visible directly.
     val sortedVisible = sorted(visible)
