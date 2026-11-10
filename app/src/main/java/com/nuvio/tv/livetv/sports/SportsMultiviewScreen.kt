@@ -121,9 +121,7 @@ internal fun SportsMultiviewScreen(
             val eventId = paneEvents[state.focusedPane] ?: games.firstOrNull { game ->
                 game.channels.any { it.channel.key == channel.key }
             }?.event?.id
-            eventId?.let(SportsLaunch::openedFromSports)
-            playback.playback.play(channel)
-            SportsWatchLaunch.returnToSingle(channel.key, eventId)
+            SportsWatchLaunch.returnToSingle(openingProfile, channel.key, eventId)
             onSingle()
         } else onExit()
     }
@@ -132,6 +130,7 @@ internal fun SportsMultiviewScreen(
     DisposableEffect(session, owner) {
         val lease = sports.acquireViewing()
         fun foreground() {
+            if (exitRequested[0]) return
             if (sports.currentProfile.value != openingProfile) {
                 profileChanged()
                 return

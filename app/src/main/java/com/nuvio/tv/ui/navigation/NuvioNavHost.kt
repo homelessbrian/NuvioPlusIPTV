@@ -1605,7 +1605,17 @@ private fun PlaybackNavHost(
 
         composable(Screen.SportsMultiview.route) {
             com.nuvio.tv.livetv.sports.SportsMultiviewScreen(
-                onSingle = { com.nuvio.tv.livetv.sports.openLiveTvFullscreen(navController) },
+                onSingle = {
+                    // Return directly to the guide. Restoring its saved stack can resurrect a
+                    // previous Multiview child that would release the incoming single player.
+                    if (!navController.popBackStack(Screen.LiveTv.route, inclusive = false)) {
+                        navController.navigate(Screen.LiveTv.route) {
+                            popUpTo(Screen.SportsMultiview.route) { inclusive = true }
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    }
+                },
                 onExit = { navController.popBackStack() },
             )
         }
