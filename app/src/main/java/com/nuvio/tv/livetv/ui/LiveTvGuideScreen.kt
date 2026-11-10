@@ -12,6 +12,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -370,6 +371,10 @@ private fun LiveTvGuideScreenBody(
     var savedMovedKey by remember { mutableStateOf<String?>(null) }
     var visibilityChannels by remember { mutableStateOf<List<LiveChannel>>(emptyList()) }
     var pendingHidden by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val channelVisibilityActionsFocus = remember { FocusRequester() }
+    val groupVisibilityActionsFocus = remember { FocusRequester() }
+    val groupVisibilityFirstRowFocus = remember { FocusRequester() }
+    val groupVisibilityLastRowFocus = remember { FocusRequester() }
     // Pick favorites (several at once, TiviMate style): a group's channels, ★ on the ones picked.
     var favoritesMode by remember { mutableStateOf(false) }
     var favoritesChannels by remember { mutableStateOf<List<LiveChannel>>(emptyList()) }
@@ -412,6 +417,34 @@ private fun LiveTvGuideScreenBody(
         savedOrder != null -> savedOrder!!
         epgUnassignedOnly -> ui.channels.filter { programs[it.key].isNullOrEmpty() }
         else -> ui.channels
+    }
+    fun finishChannelVisibility() {
+        val all = visibilityChannels
+        val shown = all.filter { it.key !in pendingHidden }
+        val keep = all.getOrNull(row)?.takeIf { it.key !in pendingHidden }
+            ?: all.drop(row + 1).firstOrNull { it.key !in pendingHidden }
+            ?: all.take(row).lastOrNull { it.key !in pendingHidden }
+        val slot = (row - listState.firstVisibleItemIndex).coerceAtLeast(0)
+        val slotOffset = listState.firstVisibleItemScrollOffset
+        viewModel.saveVisibility(all, pendingHidden)
+        savedOrder = shown
+        savedMovedKey = keep?.key
+        visibilityMode = false
+        row = shown.indexOfFirst { it.key == keep?.key }.coerceAtLeast(0)
+        scope.launch {
+            delay(40)
+            listState.scrollToItem((row - slot).coerceAtLeast(0), if (row - slot >= 0) slotOffset else 0)
+            runCatching { gridFocus.requestFocus() }
+        }
+    }
+    fun finishGroupVisibility() {
+        viewModel.saveGroupVisibility(groupVisibilityList.orEmpty(), groupHiddenPending)
+        if (ui.selectedGroupId in groupHiddenPending) viewModel.selectGroup(ui.defaultGroupId)
+        groupVisibilityList = null
+        scope.launch {
+            androidx.compose.runtime.withFrameNanos { }
+            runCatching { groupsFocus.requestFocus() }
+        }
     }
     val selectedGroupTitle = ui.groups.firstOrNull { it.id == ui.selectedGroupId }?.title ?: "All channels"
     // The group on screen gets its listings for every day ahead (Guide Days Ahead), in the
@@ -1083,13 +1116,10 @@ private fun LiveTvGuideScreenBody(
                     },
                     onHideAllGroups = { groupHiddenPending = groupVisibilityList.orEmpty().map { it.id }.toSet() },
                     onShowAllGroups = { groupHiddenPending = emptySet() },
-                    onVisibilityDone = {
-                        val list = groupVisibilityList.orEmpty()
-                        viewModel.saveGroupVisibility(list, groupHiddenPending)
-                        // If the group on screen was just hidden, move to the main group.
-                        if (ui.selectedGroupId in groupHiddenPending) viewModel.selectGroup(ui.defaultGroupId)
-                        groupVisibilityList = null
-                    },
+                    onVisibilityDone = ::finishGroupVisibility,
+                    onVisibilityActions = { groupVisibilityActionsFocus.requestFocus() },
+                    visibilityFirstRowFocus = groupVisibilityFirstRowFocus,
+                    visibilityLastRowFocus = groupVisibilityLastRowFocus,
                     playlistNames = playlistNames,
                     showPlaylistHeadings = settings.groupPlaylistHeadings,
                     collapsed = collapsedPlaylists,
@@ -1313,34 +1343,19 @@ private fun LiveTvGuideScreenBody(
                                             }
                                         }
                                         !down -> Unit
-                                        event.key == Key.DirectionUp -> moveRow(-1)
-                                        event.key == Key.DirectionDown -> moveRow(1)
+                                        event.key == Key.DirectionUp -> {
+                                            if (row <= 0) channelVisibilityActionsFocus.requestFocus()
+                                            else moveRow(-1)
+                                        }
+                                        event.key == Key.DirectionDown -> {
+                                            if (row >= channels.lastIndex) channelVisibilityActionsFocus.requestFocus()
+                                            else moveRow(1)
+                                        }
                                         event.key == Key.PageUp || event.key == Key.ChannelUp -> moveRow(-8)
                                         event.key == Key.PageDown || event.key == Key.ChannelDown -> moveRow(8)
                                         event.key == Key.DirectionLeft -> pendingHidden = channels.map { it.key }.toSet()
                                         event.key == Key.DirectionRight -> pendingHidden = emptySet()
-                                        event.key == Key.Back -> {
-                                            // Back to the group without the hidden channels, the cursor on
-                                            // the same channel (or the nearest one still shown) at the same
-                                            // spot on screen, so you can carry on from where you were.
-                                            val all = visibilityChannels
-                                            val shown = all.filter { it.key !in pendingHidden }
-                                            val keep = all.getOrNull(row)?.takeIf { it.key !in pendingHidden }
-                                                ?: all.drop(row + 1).firstOrNull { it.key !in pendingHidden }
-                                                ?: all.take(row).lastOrNull { it.key !in pendingHidden }
-                                            val slot = (row - listState.firstVisibleItemIndex).coerceAtLeast(0)
-                                            val slotOffset = listState.firstVisibleItemScrollOffset
-                                            viewModel.saveVisibility(all, pendingHidden)
-                                            // Shown straight away, until the group reloads the same way.
-                                            savedOrder = shown
-                                            savedMovedKey = keep?.key
-                                            visibilityMode = false
-                                            row = shown.indexOfFirst { it.key == keep?.key }.coerceAtLeast(0)
-                                            scope.launch {
-                                                delay(40)
-                                                listState.scrollToItem((row - slot).coerceAtLeast(0), if (row - slot >= 0) slotOffset else 0)
-                                            }
-                                        }
+                                        event.key == Key.Back -> finishChannelVisibility()
                                     }
                                     return@onPreviewKeyEvent true
                                 }
@@ -1590,6 +1605,11 @@ private fun LiveTvGuideScreenBody(
                                             focusColumn = if (index == row && (gridFocused || epgPickerFor != null || logoPickerFor != null) && !nameFocus && !reorderActive) column else null,
                                             focusedBlock = if (index == row) focusedBlock else null,
                                             visible = if (visibilityMode) ch.key !in pendingHidden else null,
+                                            onToggleVisibility = if (visibilityMode) ({
+                                                row = index
+                                                pendingHidden = if (ch.key in pendingHidden) pendingHidden - ch.key else pendingHidden + ch.key
+                                                runCatching { gridFocus.requestFocus() }
+                                            }) else null,
                                             moving = reorderKey == ch.key,
                                             reorderMode = reorderActive,
                                             nameFocused = (index == row && gridFocused && nameFocus) ||
@@ -1771,6 +1791,33 @@ private fun LiveTvGuideScreenBody(
                 LiveText("Manage group visibility", size = 15.sp, weight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 LiveText("OK: show or hide group", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+                VisibilityBulkActions(
+                    firstFocus = groupVisibilityActionsFocus,
+                    onSelectAll = { groupHiddenPending = emptySet() },
+                    onDeselectAll = { groupHiddenPending = groupVisibilityList.orEmpty().map { it.id }.toSet() },
+                    onReturnToFirst = {
+                        scope.launch {
+                            if (groupVisibilityList.orEmpty().isNotEmpty()) {
+                                groupsListState.scrollToItem(0)
+                                androidx.compose.runtime.withFrameNanos { }
+                                runCatching { groupVisibilityFirstRowFocus.requestFocus() }
+                            }
+                        }
+                    },
+                    onReturnToList = {
+                        scope.launch {
+                            val last = groupVisibilityList.orEmpty().lastIndex
+                            if (last >= 0) {
+                                groupsListState.scrollToItem(last)
+                                androidx.compose.runtime.withFrameNanos { }
+                                runCatching { groupVisibilityLastRowFocus.requestFocus() }
+                            }
+                        }
+                    },
+                    onDone = ::finishGroupVisibility,
+                )
+                LiveText("Up at first / Down at last: actions", color = NuvioTheme.colors.TextSecondary, size = 12.sp)
+                LiveText("Actions: Down to first · Up to last", color = NuvioTheme.colors.TextSecondary, size = 12.sp)
                 LiveText("Left: hide all", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
                 LiveText("Right: show all", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
                 LiveText("Back: save and return", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
@@ -1857,6 +1904,28 @@ private fun LiveTvGuideScreenBody(
                 LiveText("Manage visibility", size = 15.sp, weight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 LiveText("OK: show or hide channel", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+                VisibilityBulkActions(
+                    firstFocus = channelVisibilityActionsFocus,
+                    onSelectAll = { pendingHidden = emptySet() },
+                    onDeselectAll = { pendingHidden = visibilityChannels.map { it.key }.toSet() },
+                    onReturnToFirst = {
+                        row = 0
+                        scope.launch {
+                            if (channels.isNotEmpty()) listState.scrollToItem(0)
+                            runCatching { gridFocus.requestFocus() }
+                        }
+                    },
+                    onReturnToList = {
+                        row = channels.lastIndex.coerceAtLeast(0)
+                        scope.launch {
+                            if (channels.isNotEmpty()) listState.scrollToItem(row)
+                            runCatching { gridFocus.requestFocus() }
+                        }
+                    },
+                    onDone = ::finishChannelVisibility,
+                )
+                LiveText("Up at first / Down at last: actions", color = NuvioTheme.colors.TextSecondary, size = 12.sp)
+                LiveText("Actions: Down to first · Up to last", color = NuvioTheme.colors.TextSecondary, size = 12.sp)
                 LiveText("Left: hide all", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
                 LiveText("Right: show all", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
                 LiveText("Back: save and return", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
@@ -2584,6 +2653,7 @@ private fun GuideRow(
     focusedBlock: GuideBlock?,
     /** In Manage visibility: true = shown, false = hidden. Null otherwise. */
     visible: Boolean? = null,
+    onToggleVisibility: (() -> Unit)? = null,
     /** Picked up to be moved with "Reorder channels". */
     moving: Boolean = false,
     /** "Reorder channels" is on: every channel shows the move marker. */
@@ -2609,6 +2679,7 @@ private fun GuideRow(
             .height(rowHeight)
             .padding(vertical = 2.dp)
             .graphicsLayer { alpha = if (visible == false) 0.45f else 1f }
+            .then(if (onToggleVisibility != null) Modifier.clickable(onClick = onToggleVisibility) else Modifier)
     ) {
         // Channel cell
         // The channel cell is never highlighted; the program under the cursor is.
@@ -3019,6 +3090,40 @@ private fun EmptyGuideMessage(title: String, body: String?, action: String?) {
 
 // ==================================================================== group panel
 
+/** Bulk visibility edits stay in the current draft; Back uses the list's existing save path. */
+@Composable
+private fun VisibilityBulkActions(
+    firstFocus: FocusRequester,
+    onSelectAll: () -> Unit,
+    onDeselectAll: () -> Unit,
+    onReturnToFirst: () -> Unit,
+    onReturnToList: () -> Unit,
+    onDone: () -> Unit,
+) {
+    val secondFocus = remember { FocusRequester() }
+    Row(
+        modifier = Modifier.padding(vertical = 8.dp).onPreviewKeyEvent { event ->
+            val down = event.type == KeyEventType.KeyDown
+            when (event.key) {
+                Key.DirectionUp -> { if (down) onReturnToList(); true }
+                Key.DirectionDown -> { if (down) onReturnToFirst(); true }
+                Key.DirectionLeft -> { if (down) firstFocus.requestFocus(); true }
+                Key.DirectionRight -> { if (down) secondFocus.requestFocus(); true }
+                Key.Back -> { if (down) onDone(); true }
+                else -> false
+            }
+        },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LiveFocusRow(modifier = Modifier.width(128.dp).focusRequester(firstFocus), onClick = onSelectAll) { focused ->
+            LiveText("Select all", color = focusedTextColor(focused), size = 13.sp)
+        }
+        LiveFocusRow(modifier = Modifier.width(148.dp).focusRequester(secondFocus), onClick = onDeselectAll) { focused ->
+            LiveText("Deselect all", color = focusedTextColor(focused), size = 13.sp)
+        }
+    }
+}
+
 @Composable
 private fun GroupColumn(
     width: Dp,
@@ -3055,6 +3160,9 @@ private fun GroupColumn(
     onHideAllGroups: () -> Unit = {},
     onShowAllGroups: () -> Unit = {},
     onVisibilityDone: () -> Unit = {},
+    onVisibilityActions: () -> Unit = {},
+    visibilityFirstRowFocus: FocusRequester? = null,
+    visibilityLastRowFocus: FocusRequester? = null,
     /** Height of a group tile: the same as a channel tile, so the two lists line up. */
     tileHeight: Dp = 32.dp
 ) {
@@ -3140,6 +3248,8 @@ private fun GroupColumn(
                         e.key == Key.DirectionLeft -> { onHideAllGroups(); true }
                         e.key == Key.DirectionRight -> { onShowAllGroups(); true }
                         e.key == Key.Back -> { onVisibilityDone(); true }
+                        e.key == Key.DirectionUp && focusedKey == rowKeys.firstOrNull() -> { onVisibilityActions(); true }
+                        e.key == Key.DirectionDown && focusedKey == rowKeys.lastOrNull() -> { onVisibilityActions(); true }
                         e.key == Key.DirectionUp || e.key == Key.DirectionDown -> stepGroup(e)
                         else -> false
                     }
@@ -3222,13 +3332,17 @@ private fun GroupColumn(
                         moving = moving,
                         visible = hiddenPending?.let { g.id !in it },
                         modifier = Modifier.focusRequester(requesterFor(g.id))
+                            .then(if (hiddenPending != null && g.id == rowKeys.firstOrNull() && visibilityFirstRowFocus != null)
+                                Modifier.focusRequester(visibilityFirstRowFocus) else Modifier)
+                            .then(if (hiddenPending != null && g.id == rowKeys.lastOrNull() && visibilityLastRowFocus != null)
+                                Modifier.focusRequester(visibilityLastRowFocus) else Modifier)
                             .then(if (requester) Modifier.focusRequester(focusRequester) else Modifier),
                         onFocused = {
                             focusedGroupId = g.id
                             focusedKey = g.id
                             if (!reorderMode && hiddenPending == null) onFocusGroup(g)
                         },
-                        onClick = { onSelect(g) },
+                        onClick = { if (hiddenPending != null) onToggleGroupVisible(g.id) else onSelect(g) },
                         onLongClick = if (g.special) null else ({ onGroupMenu(g) })
                     )
                 }
