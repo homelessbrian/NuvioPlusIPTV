@@ -1423,7 +1423,12 @@ class LiveTvRepository @Inject constructor(
                                 if (past.isNotEmpty()) guideDb.putChannelRange(ch.key, from, pastEnd, past)
                                 if (later.isNotEmpty()) guideDb.putChannelRange(ch.key, later.first().startMs, later.last().stopMs, later)
                             } finally {
-                                publishCommittedGuide(setOf(ch.key))
+                                // A normalized guide channel can feed HD/SD/backups and other
+                                // playlists, each with its own shift. Refresh every binding.
+                                withContext(kotlinx.coroutines.NonCancellable) {
+                                    val affected = runCatching { guideDb.channelsSharingListings(setOf(ch.key)) }.getOrNull()
+                                    publishCommittedGuide(affected)
+                                }
                             }
                             archiveEpoch = cacheEpoch.get()
                         } else {
@@ -1590,7 +1595,11 @@ class LiveTvRepository @Inject constructor(
 
         beginGuideMutation()
         runCatching { guideDb.dropPlaylists(removedPlaylists, newlyHidden + lostPinned, fingerprint, partsText, removedTargets) }
-            .onFailure { Log.w(TAG, "Couldn't take turned-off playlists out of the guide", it); return@withContext false }
+            .onFailure {
+                Log.w(TAG, "Couldn't take turned-off playlists out of the guide", it)
+                publishCommittedGuide()
+                return@withContext false
+            }
         saveSkipped(skipped + newlyHidden)
         val logos = _epgLogos.value.filterKeys { it in keys && it !in lostPinned }
         if (logos.size != _epgLogos.value.size) { _epgLogos.value = logos; saveEpgLogos(logos) }
@@ -2129,6 +2138,9 @@ class LiveTvRepository @Inject constructor(
             val listedIds = entries.mapTo(HashSet()) { it.id }
             val extraIds = if (selected == null) parsed.programChannelIds.filter { it !in listedIds } else emptyList()
             val kept = selected ?: wantedUnlistedFrom(listedIds + extraIds)
+            // Unlike the former working table, finishing a normalized source already moves
+            // live channel bindings. Fence readers before that first visible commit too.
+            beginGuideMutation()
             val meta = runCatching { writer.finish(stamp, entries.map { Triple(it.id, it.names, it.icon) }, kept, listed, extraIds) }
                 .onFailure { writer.abort(); Log.w(TAG, "Couldn't store ${target.name}", it) }
                 .getOrNull() ?: run { LIVE_REPORT.add("Guide \"${target.name}\": couldn't be stored"); return fallBack() }

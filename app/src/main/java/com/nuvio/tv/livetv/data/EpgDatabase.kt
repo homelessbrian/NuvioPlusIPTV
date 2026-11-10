@@ -198,6 +198,17 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     private fun selectedGroups(channels: Collection<String>?): List<Group> =
         if (channels == null) allGroups() else groups(links(channels))
 
+    /** An archive write changes a shared guide channel, including its other shifted bindings. */
+    fun channelsSharingListings(channels: Collection<String>): Set<String> {
+        val out = HashSet<String>()
+        for (part in links(channels).map { it.gid }.distinct().chunked(GID_CHUNK)) {
+            readableDatabase.rawQuery("SELECT ch FROM chan WHERE gid IN (${part.joinToString(",")})", null).forwardOnly().use { c ->
+                while (c.moveToNext()) out += c.getString(0)
+            }
+        }
+        return out
+    }
+
     /** Availability comes from every stored binding, independently of resident guide tiles. */
     fun channelsWithListings(fromMs: Long? = null, toMs: Long? = null, channels: Set<String>? = null): Set<String> {
         fun read(): Set<String> {
