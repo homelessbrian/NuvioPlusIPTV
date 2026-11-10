@@ -125,30 +125,24 @@ class LiveTvRepository @Inject constructor(
             }
         }
         scope.launch {
-            // Saved channels and guide first: reading them only uses the device's storage.
-            loadFromCache()
-            // A playlist running out within a week: say so (once per app start).
-            runCatching {
-                val names = prefs.currentPlaylists().associate { it.id to it.name }
-                prefs.playlistAccounts.first().forEach { (id, a) -> names[id]?.let { warnIfExpiring(id, it, a) } }
-            }
-            // Groups hidden or shown since the guide was stored (and from now on).
-            watchHidden()
-            // Space left empty in the guide database by earlier versions or updates.
-            scheduleCompact()
-            // Checking for playlist / guide updates uses the network and a lot of processing,
-            // so when this starts with the app it waits a little, out of Nuvio's way.
-            if (updateCheckDelayMs > 0) delay(updateCheckDelayMs)
-            refreshStale()
-            firstCheckDone = true
-            // Then keep checking while the app stays open. TV boxes keep the app running for
-            // days (Home only sends it to the background), and the check used to happen only
-            // when the app started: the guide ran out after a day or two and never refreshed
-            // until the box restarted or someone pressed Update now.
-            while (true) {
-                delay(STALE_CHECK_MS)
-                runCatching { refreshStale() }.onFailure { Log.w(TAG, "Update check failed", it) }
-            }
+            maintainGuideUpdates(
+                loadCache = { loadFromCache() },
+                afterCache = {
+                    // A playlist running out within a week: say so (once per app start).
+                    runCatching {
+                        val names = prefs.currentPlaylists().associate { it.id to it.name }
+                        prefs.playlistAccounts.first().forEach { (id, a) -> names[id]?.let { warnIfExpiring(id, it, a) } }
+                    }
+                    watchHidden()
+                    scheduleCompact()
+                },
+                beforeFirstCheck = { if (updateCheckDelayMs > 0) delay(updateCheckDelayMs) },
+                refresh = { refreshStale() },
+                firstCheckDone = { firstCheckDone = true },
+                // TVs can stay open for days. A failed first check must not lose these retries.
+                awaitNextCheck = { delay(STALE_CHECK_MS) },
+                reportFailure = { stage, failure -> Log.w(TAG, "$stage failed; later checks remain enabled", failure) }
+            )
         }
     }
 
@@ -316,7 +310,7 @@ class LiveTvRepository @Inject constructor(
 
     private suspend fun loadFromCache() {
         if (_epgLogos.value.isEmpty()) _epgLogos.value = withContext(Dispatchers.IO) { readEpgLogos() }
-        mutex.withLock { rebuildLocked() }
+        guideOperation { rebuildLocked() }
     }
 
     // ---------------------------------------------------------------- logos from the guide
@@ -512,8 +506,32 @@ class LiveTvRepository @Inject constructor(
     }
 
     private suspend fun rebuild() {
-        mutex.withLock { rebuildLocked() }
+        guideOperation { rebuildLocked() }
     }
+
+    /** The lock's owner also owns its busy status and any recovery after a failed mutation. */
+    private suspend fun guideOperation(block: suspend () -> Unit) = runGuideOperation(
+        mutex = mutex,
+        recoverCommittedGuide = {
+            if (_committedGuideRevision.value == null && guideDb.fingerprint() != null) {
+                // Do not put back a captured revision: SQLite may have committed before a later
+                // projection failed. Re-read the authoritative database under the same owner lock,
+                // with publishCommittedGuide's epoch/write-counter fences and current preferences.
+                publishCommittedGuide()
+            }
+        },
+        finish = { failure ->
+            val status = _status.value
+            _status.value = status.copy(
+                loading = false, message = null, quiet = false,
+                loadedOnce = status.loadedOnce || (guideInDb && _committedGuideRevision.value != null),
+                error = if (failure != null && failure !is kotlinx.coroutines.CancellationException)
+                    "Live TV couldn't finish updating. Try again." else status.error
+            )
+        },
+        reportFailure = { Log.w(TAG, "Live TV operation failed; keeping the committed guide", it) },
+        block = block
+    )
 
     private suspend fun refreshInternal(
         forcePlaylists: Boolean,
@@ -528,7 +546,7 @@ class LiveTvRepository @Inject constructor(
             manualQueued.value = true
             if (mutex.isLocked) LIVE_REPORT.add("Update asked for: finishing the update already running first")
         }
-        mutex.withLock { refreshLocked(forcePlaylists, forceEpg, forceIds, automatic) }
+        guideOperation { refreshLocked(forcePlaylists, forceEpg, forceIds, automatic) }
     }
 
     /** When the last automatic check finished (see [refreshIfStale]). */
@@ -931,7 +949,7 @@ class LiveTvRepository @Inject constructor(
             prefs.hiddenEverywhere.collectLatest {
                 delay(2_000) // a few changes in a row are handled together
                 // Once started, finished (a newer change waits its turn instead of cutting it short).
-                withContext(kotlinx.coroutines.NonCancellable) { mutex.withLock { syncHidden() } }
+                withContext(kotlinx.coroutines.NonCancellable) { guideOperation { syncHidden() } }
             }
         }
     }
@@ -2385,8 +2403,9 @@ class LiveTvRepository @Inject constructor(
     fun applyEpgChanges(changes: Map<String, EpgAssignment?>) {
         if (changes.isEmpty()) return
         scope.launch {
-            mutex.withLock {
+            guideOperation {
                 val quick = runCatching { applyEpgChangesQuick(changes) }
+                    .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
                     .onFailure { Log.w(TAG, "Quick EPG change failed; full re-match", it) }
                     .getOrDefault(false)
                 if (!quick) {
@@ -2517,7 +2536,7 @@ class LiveTvRepository @Inject constructor(
 
     fun rematchEpg() {
         scope.launch {
-            mutex.withLock {
+            guideOperation {
                 setStatus(loading = true, message = "Updating guide…")
                 buildPrograms(prefs.currentSettings(), collectEpgTargets())
                 _status.value = LiveTvStatus(loading = false, loadedOnce = true)

@@ -633,6 +633,8 @@ class SportsRepository @Inject constructor(
         val read = java.util.concurrent.atomic.AtomicInteger()
         val same = java.util.concurrent.atomic.AtomicInteger()
         val ready = java.util.concurrent.atomic.AtomicInteger()
+        val heavyWaitNanos = java.util.concurrent.atomic.AtomicLong()
+        val leagueWorkNanos = java.util.concurrent.atomic.AtomicLong()
         try {
             val (from, to) = espnRange(now)
             val days = espnDays(now)
@@ -644,59 +646,66 @@ class SportsRepository @Inject constructor(
                     val useDirect = isMine(l, f) || l.id in playingLeagues || (viewing && SportsCatalog.shown(l, s))
                     // Leagues nobody is looking at wait while the guide is being built or channels
                     // are being found for games, rather than all three running at once.
-                    if (!useDirect) com.nuvio.tv.livetv.data.BackgroundWork.awaitNoHeavy()
-                    if (!useDirect && memoryTight()) {
-                        // Memory nearly full: leagues nobody is looking at wait for a later round.
-                        val old = leagueData.value[l.id]
-                        leagueData.update { m -> m + (l.id to LeagueData(old?.events.orEmpty(), System.currentTimeMillis() - 30 * MINUTE, old?.error)) }
-                        noteSkipped()
-                        return@withPermit
+                    if (!useDirect) {
+                        val waitStart = System.nanoTime()
+                        try { com.nuvio.tv.livetv.data.BackgroundWork.awaitNoHeavy() }
+                        finally { heavyWaitNanos.addAndGet(System.nanoTime() - waitStart) }
                     }
-                    // Leagues nobody is looking at: nuvio-data's ready-made file when it's fresh
-                    // (already read, and only downloaded when it changed); otherwise as before.
-                    val compact = if (useDirect) null else runCatching {
-                        fromCompact(l, "d", days, now, leagueData.value[l.id] != null) { i -> if (i == 1) 20 * MINUTE else 90 * MINUTE }
-                    }.getOrNull()
-                    val r = runCatching<List<SportsEvent>?> {
-                        if (compact != null) compact.games
-                        else {
-                            val raws = if (useDirect) fetchScoreboard(l, from, to, days) else fetchViaSharedCache(l, days, now)
-                            // Same answer as last time (or the shared file hasn't changed): nothing to read or save.
-                            if (raws == null || sameAsLast("sb|" + l.id, raws) && leagueData.value[l.id] != null) null
-                            else withContext(if (useDirect) Dispatchers.IO else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
-                                raws.flatMap { raw -> runCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrElse { emptyList() } }
-                                    .distinctBy { it.id }
+                    val workStart = System.nanoTime()
+                    try {
+                        if (!useDirect && memoryTight()) {
+                            // Memory nearly full: leagues nobody is looking at wait for a later round.
+                            val old = leagueData.value[l.id]
+                            leagueData.update { m -> m + (l.id to LeagueData(old?.events.orEmpty(), System.currentTimeMillis() - 30 * MINUTE, old?.error)) }
+                            noteSkipped()
+                            return@withPermit
+                        }
+                        // Leagues nobody is looking at: nuvio-data's ready-made file when it's fresh
+                        // (already read, and only downloaded when it changed); otherwise as before.
+                        val compact = if (useDirect) null else runCatching {
+                            fromCompact(l, "d", days, now, leagueData.value[l.id] != null) { i -> if (i == 1) 20 * MINUTE else 90 * MINUTE }
+                        }.getOrNull()
+                        val r = runCatching<List<SportsEvent>?> {
+                            if (compact != null) compact.games
+                            else {
+                                val raws = if (useDirect) fetchScoreboard(l, from, to, days) else fetchViaSharedCache(l, days, now)
+                                // Same answer as last time (or the shared file hasn't changed): nothing to read or save.
+                                if (raws == null || sameAsLast("sb|" + l.id, raws) && leagueData.value[l.id] != null) null
+                                else withContext(if (useDirect) Dispatchers.IO else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+                                    raws.flatMap { raw -> runCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrElse { emptyList() } }
+                                        .distinctBy { it.id }
+                                }
                             }
                         }
-                    }
-                    r.onSuccess { parsed ->
-                        if (parsed == null) {
-                            checkedAt[l.id] = System.currentTimeMillis()
-                            touch(File(dir, "sb_${safe(l.id)}.json"))
-                            same.incrementAndGet()
-                            return@onSuccess
+                        r.onSuccess { parsed ->
+                            if (parsed == null) {
+                                checkedAt[l.id] = System.currentTimeMillis()
+                                touch(File(dir, "sb_${safe(l.id)}.json"))
+                                same.incrementAndGet()
+                                return@onSuccess
+                            }
+                            if (compact != null) { compact.hash?.let { compactSeen["d|" + l.id] = it }; ready.incrementAndGet() }
+                            else compactSeen.remove("d|" + l.id)
+                            compactDirty = true
+                            read.incrementAndGet()
+                            val before = leagueData.value[l.id]?.events
+                            val at = System.currentTimeMillis()
+                            checkedAt[l.id] = at
+                            // Only when a game actually changed: everything built from the games
+                            // (the page, rows, finding channels) is worked out again on every change.
+                            if (before != parsed || leagueData.value[l.id]?.error != null) leagueData.update { it + (l.id to LeagueData(parsed, at, null)) }
+                            val file = File(dir, "sb_${safe(l.id)}.json")
+                            if (before != parsed || resave.remove("sb|" + l.id)) saveGames(file, at, parsed) else touch(file)
+                            // With Score Delay on, alerts come from the delayed scores instead (see watchDelayedScores).
+                            if (before != null && scoreDelayMs.value <= 0) noticeScoring(l, before, parsed)
+                        }.onFailure { e ->
+                            synchronized(failed) { failed += l.name; reasons += describe(e) }
+                            leagueData.update { m ->
+                                val old = m[l.id]
+                                m + (l.id to LeagueData(old?.events.orEmpty(), old?.fetchedAt ?: (System.currentTimeMillis() - 4 * MINUTE), e.message))
+                            }
                         }
-                        if (compact != null) { compact.hash?.let { compactSeen["d|" + l.id] = it }; ready.incrementAndGet() }
-                        else compactSeen.remove("d|" + l.id)
-                        compactDirty = true
-                        read.incrementAndGet()
-                        val before = leagueData.value[l.id]?.events
-                        val at = System.currentTimeMillis()
-                        checkedAt[l.id] = at
-                        // Only when a game actually changed: everything built from the games
-                        // (the page, rows, finding channels) is worked out again on every change.
-                        if (before != parsed || leagueData.value[l.id]?.error != null) leagueData.update { it + (l.id to LeagueData(parsed, at, null)) }
-                        val file = File(dir, "sb_${safe(l.id)}.json")
-                        if (before != parsed || resave.remove("sb|" + l.id)) saveGames(file, at, parsed) else touch(file)
-                        // With Score Delay on, alerts come from the delayed scores instead (see watchDelayedScores).
-                        if (before != null && scoreDelayMs.value <= 0) noticeScoring(l, before, parsed)
-                    }.onFailure { e ->
-                        synchronized(failed) { failed += l.name; reasons += describe(e) }
-                        leagueData.update { m ->
-                            val old = m[l.id]
-                            m + (l.id to LeagueData(old?.events.orEmpty(), old?.fetchedAt ?: (System.currentTimeMillis() - 4 * MINUTE), e.message))
-                        }
-                    }
+                    } finally { leagueWorkNanos.addAndGet(System.nanoTime() - workStart) }
                 }
             }
             val why = reasons.take(2).joinToString(", ")
@@ -711,7 +720,11 @@ class SportsRepository @Inject constructor(
             // How long a bigger round took and how much of it could be skipped (for the Start-Up Report).
             val took = System.currentTimeMillis() - roundStart
             if (took > 5_000 || due.size >= 10) {
-                LiveTvLoadReport.add("Sports scores: ${due.size} leagues checked in ${took / 1000.0} s (${same.get()} unchanged, ${read.get()} read, ${ready.get()} of them ready-made, ${failed.size} failed)")
+                // Per-league durations can overlap, so label their sums separately from the
+                // round's wall time. A ten-minute heavy-work deferral is not a slow HTTP fetch.
+                LiveTvLoadReport.add("Sports scores: ${due.size} leagues checked in ${took / 1000.0} s round " +
+                    "(${heavyWaitNanos.get() / 1_000_000_000.0} s waiting and ${leagueWorkNanos.get() / 1_000_000_000.0} s processing, summed across leagues; " +
+                    "${same.get()} unchanged, ${read.get()} read, ${ready.get()} of them ready-made, ${failed.size} failed)")
             }
         } finally {
             _loading.value = false
