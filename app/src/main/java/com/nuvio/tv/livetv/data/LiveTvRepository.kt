@@ -1047,10 +1047,11 @@ class LiveTvRepository @Inject constructor(
     }
 
     /** Publish after a disk commit, keeping the old visible guide usable while files are parsed. */
-    private suspend fun publishCommittedGuide(changedChannels: Set<String>? = null) = withContext(Dispatchers.IO) {
+    private suspend fun publishCommittedGuide(changedChannels: Set<String>? = null, retry: Int = 0): Unit = withContext(Dispatchers.IO) {
         val epoch = cacheEpoch.incrementAndGet()
         val changes = guideDb.changes
         val revision = guideDb.revision()
+        try {
         val shift = prefs.currentSettings().epgOffsetMinutes * 60_000L
         val at = System.currentTimeMillis() - shift
         val next = guideDb.nowNext(at, changedChannels)
@@ -1088,6 +1089,33 @@ class LiveTvRepository @Inject constructor(
         val keys = viewportKeys.ifEmpty { priorityKeys() }
         val (from, to) = if (viewportTo > viewportFrom) viewportFrom to viewportTo else defaultWindow(at)
         requestWindow(keys, from, to, replace = true)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            // A failed optional RAM projection must not hide a successfully committed disk
+            // guide from Search/Sports or prevent viewport reads from recovering.
+            Log.w(TAG, "Couldn't load guide overview", failure)
+            rangeMutex.withLock {
+                if (cacheEpoch.get() == epoch && guideDb.changes == changes) {
+                    windowCache.clear()
+                    mergedWindows.clear()
+                    schedules.clear()
+                    overview = emptyMap()
+                    _programs.value = emptyMap()
+                    overviewAt = 0L
+                    guideInDb = true
+                    lightPrograms = true
+                    _guideGeneration.value++
+                    _committedGuideRevision.value = revision
+                }
+            }
+            if (retry < 3) scope.launch(BackgroundWork.reads) {
+                delay(2_000)
+                mutex.withLock {
+                    if (cacheEpoch.get() == epoch && guideDb.changes == changes) publishCommittedGuide(changedChannels, retry + 1)
+                }
+            }
+        }
     }
 
     private fun publishWindows() {
