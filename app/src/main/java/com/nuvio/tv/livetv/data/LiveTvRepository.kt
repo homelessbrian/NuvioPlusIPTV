@@ -1151,7 +1151,7 @@ class LiveTvRepository @Inject constructor(
             mergedWindows[key] = Triple(list, current, merged)
             shown[key] = merged
         }
-        schedules.forEach { (key, list) -> shown[key] = list }
+        schedules.forEach { (key, list) -> shown[key] = mergeGuideSchedules(list, shown[key].orEmpty()) }
         _programs.value = shown
     }
 

@@ -2,6 +2,15 @@ package com.nuvio.tv.livetv.data
 
 import com.nuvio.tv.livetv.model.EpgProgram
 
+/** Full metadata wins at shared starts; neither source may hide the other's loaded hours. */
+internal fun mergeGuideSchedules(primary: List<EpgProgram>, extra: List<EpgProgram>): List<EpgProgram> {
+    if (primary.isEmpty()) return extra
+    if (extra.isEmpty()) return primary
+    val starts = primary.mapTo(HashSet()) { it.startMs }
+    val added = extra.filter { it.startMs !in starts }
+    return if (added.isEmpty()) primary else (primary + added).sortedBy { it.startMs }
+}
+
 /** Bounded browsing data only. Search, Sports and full schedules use the stored guide. */
 internal class GuideWindowCache(private val capacity: Int = 384) {
     data class Tile(val channel: String, val startMs: Long) {
