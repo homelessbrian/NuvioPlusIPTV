@@ -1,0 +1,71 @@
+{
+  "experiment": "incremental formatter reuse and lazy catalogue materialization",
+  "recorded_date": "2026-11-10",
+  "before_commit": "30a5fc7bcf77345737b3a21869878d186f295646",
+  "after_commit": "99fd33887356ac947f2e907acca9388cbabd8c67",
+  "observations_per_revision": 1,
+  "environment": {
+    "java": "Temurin 21.0.12.1+1",
+    "kotlin": "2.3.0",
+    "junit": "4.13.2",
+    "json": "20250517",
+    "okhttp": "4.12.0",
+    "okio": "3.16.4",
+    "platform": "Windows x86_64 host JVM",
+    "measurement": "cumulative calling-thread allocated bytes; not Android PSS",
+    "forced_gc": false,
+    "live_network": false
+  },
+  "class_order": [
+    "com.nuvio.tv.livetv.sports.SportsFeedCacheTest",
+    "com.nuvio.tv.livetv.sports.SportsHockeyTechTest",
+    "com.nuvio.tv.livetv.sports.SportsFeedDateFormattingTest",
+    "com.nuvio.tv.livetv.sports.SportsFeedCacheAllocationBenchmark",
+    "com.nuvio.tv.livetv.sports.SportsHockeyTechAllocationBenchmark",
+    "com.nuvio.tv.livetv.sports.SportsMatchInputsAllocationBenchmark"
+  ],
+  "tests_before": 29,
+  "tests_after": 29,
+  "result_before": "PASS",
+  "result_after": "PASS",
+  "hockey": {
+    "before_bytes": 85077984,
+    "after_bytes": 49325472,
+    "events": 37,
+    "output_bytes": 30974,
+    "output_sha256": "1f46d444242c5fbde104291890c933afbafc69a7d6ef4a7914c17c35099dbf8a"
+  },
+  "match_inputs": {
+    "before_bytes": 1901744,
+    "after_bytes": 381688,
+    "catalogue_channels": 26716,
+    "eligible_channels": 26714,
+    "before_catalogue_reads": 133580,
+    "after_catalogue_reads": 26716,
+    "before_fence_reads": 133580,
+    "after_fence_reads": 0,
+    "scope": "actual private MatchInputs class and actual sportsMatchChannels; pinned eager constructor adapter reproduces pre-change filter argument; preference/database/matcher work excluded"
+  },
+  "changed_source_sha256": {
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeeds.kt": {
+      "before": "984B114D9DC3145E8D6481DE6239428B58A4392C303EC49A6CEE16D510B0C569",
+      "after": "D0076F1145FD3520E723C877BA5D71DDE4BCC280319782D0FF453AFB629B0D38"
+    },
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsRepository.kt": {
+      "before": "16A8B94EA5A0102E37C5CD5F473A49257CBD496CE5D4220F2ECAFBA6050A8CC3",
+      "after": "0A62AFFA5A965DE0D6FFE05E40DFBF7F75B31B98858B8E457C68AAC4B331CF58"
+    }
+  },
+  "earlier_baseline_probe": {
+    "hockey_allocated_bytes": 85181088,
+    "tests": 27,
+    "note": "Separate earlier before-only probe, before optional MatchInputs diagnostic was added; preserved and excluded from this matched pair."
+  },
+  "source_hash_note": "SHA256 of actual compiled source bytes. Before exported Git blobs and Windows checkouts may differ in line endings; hashes are not logical-source equivalence claims.",
+  "limitations": [
+    "Cumulative JVM allocation, not Android PSS or a physical-device RAM result.",
+    "MatchInputs diagnostic invokes actual source-compiled private class and filtering function. The pinned eager constructor adapter supplies its original production filtering argument. Preference/database/matcher work is excluded.",
+    "The 26,714 eligible channels reflect deliberate visibility/parental exclusions from 26,716 inputs; the final channel remains present and concurrent consumers share one complete result.",
+    "The 7-test current-base HockeyTech pair has different warmup selection; do not combine its numbers with this 29-test pair."
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "experiment": "matched HockeyTech-only current-base pair",
+  "recorded_date": "2026-11-10",
+  "before_commit": "67570ddd2f8c21900d99b663170ba023a19eb382",
+  "after_commit": "99fd33887356ac947f2e907acca9388cbabd8c67",
+  "observations_per_revision": 1,
+  "environment": {
+    "java": "Temurin 21.0.12.1+1",
+    "kotlin": "2.3.0",
+    "junit": "4.13.2",
+    "json": "20250517",
+    "okhttp": "4.12.0",
+    "okio": "3.16.4",
+    "platform": "Windows x86_64 host JVM",
+    "measurement": "cumulative calling-thread allocated bytes; not Android PSS",
+    "forced_gc": false,
+    "live_network": false
+  },
+  "class_order": [
+    "com.nuvio.tv.livetv.sports.SportsHockeyTechTest",
+    "com.nuvio.tv.livetv.sports.SportsFeedDateFormattingTest",
+    "com.nuvio.tv.livetv.sports.SportsHockeyTechAllocationBenchmark"
+  ],
+  "tests_before": 7,
+  "tests_after": 7,
+  "result_before": "PASS",
+  "result_after": "PASS",
+  "selection": "Same six HockeyTech/date/defaults/concurrency warmup tests, then one unchanged allocation diagnostic. Cache/loadingKeys and MatchInputs sources/tests omitted on both sides.",
+  "original_runner": "Local selection-only wrapper around ci/benchmarks/sports/run.ps1",
+  "committed_reproduction": "ci/benchmarks/sports/run.ps1 -HockeyOnly",
+  "reproduction_status": "HockeyOnly selection prepared for review; public-harness rerun pending release and must retain separate observations.",
+  "hockey": {
+    "season_games": 3657,
+    "requested_days": 3,
+    "before_allocated_bytes": 142703848,
+    "after_allocated_bytes": 48346440,
+    "before_mib": 136.0929946899414,
+    "after_mib": 46.10675811767578,
+    "returned_events_before": 37,
+    "returned_events_after": 37,
+    "output_bytes_before": 30974,
+    "output_bytes_after": 30974,
+    "output_sha256_before": "1f46d444242c5fbde104291890c933afbafc69a7d6ef4a7914c17c35099dbf8a",
+    "output_sha256_after": "1f46d444242c5fbde104291890c933afbafc69a7d6ef4a7914c17c35099dbf8a"
+  },
+  "before_source_sha256": {
+    "app/src/main/java/com/nuvio/tv/livetv/data/ForkHttp.kt": "705fff76049114568f891cf4835bdcf0811d16adcfbe520159acc76347326dbf",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeedCache.kt": "21b0ae2da773a79fd74a399371fcf1954eff27c45cf58e91af198dfbc833498d",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeeds.kt": "69a1220b856e342ba7064809a32cf5c996bc60a3655aa0ee619f0e6307f3911f",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsModels.kt": "8e64ce33e6de1aae4cc28f01fdf51688858f5ab19ccf96e311cbd1d1832dc1fd",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsCatalog.kt": "74691e124a63e68c05b791b6a769c64b60a453a14c4355ca0555bc8c5cd1afd8",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsEventCodec.kt": "991fe05d7d5c4710d675c4915b2b55cbe0160e64dfdb2a30803a07e927dad3ae"
+  },
+  "after_source_sha256": {
+    "app/src/main/java/com/nuvio/tv/livetv/data/ForkHttp.kt": "5AEFC35ED408D9F1263FE8F6134C50A1F262287AAEFB8722D2EBAD0F637AAEE5",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeedCache.kt": "E587024C4F72B8A8BDDE9569ED52F2AC0103154C206BC875CEF188E9E8888820",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeeds.kt": "D0076F1145FD3520E723C877BA5D71DDE4BCC280319782D0FF453AFB629B0D38",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsModels.kt": "DEAA914A2A5DDCD4E1CDF8A1D7617F4190E37E608096D820741817CE90A75758",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsCatalog.kt": "365118DE2C921C91B0010127FFBA3A2CD635EA2E66C3DD4FAA7B63C9541D2F1E",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsEventCodec.kt": "741ED759093A4C1CBBCE1FC1467AB543F67CC65891FEB559283E46AFED1D5643"
+  },
+  "source_hash_note": "SHA256 of actual compiled source bytes. Before exported Git blobs and Windows checkouts may differ in line endings; hashes are not logical-source equivalence claims.",
+  "limitations": [
+    "One observation per revision; no distribution or Android process RAM claim.",
+    "Do not pool with the larger 29-test incremental suite or historical 131.63 MiB baseline.",
+    "Compatible cached application model dependencies were used; the six listed Sports production sources were compiled from the selected revisions."
+  ]
+}

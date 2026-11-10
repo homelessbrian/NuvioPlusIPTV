@@ -3,10 +3,12 @@ param(
     [Parameter(Mandatory=$true)][string]$AppClasses,
     [string]$ProductionSourceRoot = '',
     [string]$MatchSourceClasses = '',
+    [switch]$HockeyOnly,
     [string]$GradleCache = (Join-Path ([Environment]::GetFolderPath('UserProfile')) '.gradle/caches/modules-2/files-2.1'),
     [string]$OutputDirectory = (Join-Path ([IO.Path]::GetTempPath()) ('nuvio-sports-bench-' + [Guid]::NewGuid().ToString('N')))
 )
 $ErrorActionPreference = 'Stop'
+if ($HockeyOnly -and $MatchSourceClasses) { throw '-HockeyOnly cannot be combined with -MatchSourceClasses.' }
 $checkout = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 if (!$ProductionSourceRoot) { $ProductionSourceRoot = $checkout }
 function CachedJar([string]$Group, [string]$Artifact, [string]$Version) {
@@ -31,20 +33,25 @@ $classpath = @($stdlib, $coroutines) + $(if ($MatchSourceClasses) { @((Resolve-P
     (CachedJar 'com.squareup.okhttp3' 'okhttp' '4.12.0'),
     (CachedJar 'com.squareup.okio' 'okio-jvm' '3.16.4')
 )
-$sources = @(
+$sourcePaths = @(
     'app/src/main/java/com/nuvio/tv/livetv/data/ForkHttp.kt',
     'app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeedCache.kt',
     'app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeeds.kt',
     'app/src/main/java/com/nuvio/tv/livetv/sports/SportsModels.kt',
     'app/src/main/java/com/nuvio/tv/livetv/sports/SportsCatalog.kt',
     'app/src/main/java/com/nuvio/tv/livetv/sports/SportsEventCodec.kt',
-    'app/src/main/java/com/nuvio/tv/livetv/sports/SportsMatchWork.kt',
-    'app/src/test/java/com/nuvio/tv/livetv/sports/SportsFeedCacheTest.kt',
     'app/src/test/java/com/nuvio/tv/livetv/sports/SportsHockeyTechTest.kt',
     'app/src/test/java/com/nuvio/tv/livetv/sports/SportsFeedDateFormattingTest.kt',
-    'ci/benchmarks/sports/SportsFeedCacheAllocationBenchmark.kt',
     'ci/benchmarks/sports/SportsHockeyTechAllocationBenchmark.kt'
-) | ForEach-Object { Join-Path $(if ($_.StartsWith('app/src/main/')) { $ProductionSourceRoot } else { $checkout }) $_ }
+)
+if (!$HockeyOnly) {
+    $sourcePaths += @(
+        'app/src/main/java/com/nuvio/tv/livetv/sports/SportsMatchWork.kt',
+        'app/src/test/java/com/nuvio/tv/livetv/sports/SportsFeedCacheTest.kt',
+        'ci/benchmarks/sports/SportsFeedCacheAllocationBenchmark.kt'
+    )
+}
+$sources = $sourcePaths | ForEach-Object { Join-Path $(if ($_.StartsWith('app/src/main/')) { $ProductionSourceRoot } else { $checkout }) $_ }
 if ($MatchSourceClasses) { $sources += Join-Path $checkout 'ci/benchmarks/sports/SportsMatchInputsAllocationBenchmark.kt' }
 if (Test-Path -LiteralPath $OutputDirectory) { throw 'Choose a fresh output directory to preserve previous results.' }
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
@@ -55,13 +62,17 @@ $argFile = Join-Path $OutputDirectory 'compiler.args'
 $compileArgs | ForEach-Object { '"' + $_.Replace('\', '/') + '"' } | Set-Content -LiteralPath $argFile -Encoding utf8NoBOM
 & $java '-Xmx768m' '-cp' ($compiler -join [IO.Path]::PathSeparator) 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler' "@$argFile"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$tests = @(
+$tests = if ($HockeyOnly) { @(
+    'com.nuvio.tv.livetv.sports.SportsHockeyTechTest',
+    'com.nuvio.tv.livetv.sports.SportsFeedDateFormattingTest',
+    'com.nuvio.tv.livetv.sports.SportsHockeyTechAllocationBenchmark'
+) } else { @(
     'com.nuvio.tv.livetv.sports.SportsFeedCacheTest',
     'com.nuvio.tv.livetv.sports.SportsHockeyTechTest',
     'com.nuvio.tv.livetv.sports.SportsFeedDateFormattingTest',
     'com.nuvio.tv.livetv.sports.SportsFeedCacheAllocationBenchmark',
     'com.nuvio.tv.livetv.sports.SportsHockeyTechAllocationBenchmark'
-)
+) }
 if ($MatchSourceClasses) { $tests += 'com.nuvio.tv.livetv.sports.SportsMatchInputsAllocationBenchmark' }
 & $java '-cp' ((@($OutputDirectory) + $classpath) -join [IO.Path]::PathSeparator) 'org.junit.runner.JUnitCore' @tests | Tee-Object -FilePath (Join-Path $OutputDirectory 'results.txt')
 exit $LASTEXITCODE

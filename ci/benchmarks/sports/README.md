@@ -22,3 +22,21 @@ For a pinned incremental comparison, keep the test/benchmark sources identical a
 ```
 
 Optional `-MatchSourceClasses /path/to/compiled/selected/source/classes` also runs `SportsMatchInputsAllocationBenchmark`. Compile the actual `SportsRepository` source from the selected before/after revision first; that directory takes precedence over the compatible application dependencies. The diagnostic invokes its private `MatchInputs` class without changing production visibility. For the pinned eager constructor, the adapter supplies the exact pre-change filtering argument; for the lazy constructor it uses the captured snapshot/settings directly. Four snapshot-only fences plus one real consumer must traverse all 26,716 catalogue entries five times before and once after; visibility/pick/parental behavior and concurrent list identity remain checked. This measures channel-materialization allocation only, excluding preference reads, database work and matching. It does not measure application PSS.
+
+## Matched current-base HockeyTech pair
+
+Use `-HockeyOnly` on **both** sides when comparing upstream `67570ddd` with `99fd3388` or a later checkout of the same Sports sources. It compiles the six exact production sources from `-ProductionSourceRoot` and runs these classes in this exact order: `SportsHockeyTechTest`, `SportsFeedDateFormattingTest`, `SportsHockeyTechAllocationBenchmark` (seven tests total). The cache/loading-registry and MatchInputs tests/diagnostics are omitted from both runs; upstream lacks their newer contracts. `-HockeyOnly` rejects `-MatchSourceClasses`.
+
+Run the committed harness/test sources from the current checkout while pointing at clean, pinned production checkouts. Keep the same JDK, dependencies, test sources and warmup order, and use fresh output directories:
+
+```powershell
+./ci/benchmarks/sports/run.ps1 -HockeyOnly -JavaHome $env:JAVA_HOME -AppClasses /path/to/compatible/app/classes -ProductionSourceRoot /path/to/pinned/67570ddd -OutputDirectory /path/to/new-overall-before
+./ci/benchmarks/sports/run.ps1 -HockeyOnly -JavaHome $env:JAVA_HOME -AppClasses /path/to/compatible/app/classes -ProductionSourceRoot /path/to/pinned/99fd3388 -OutputDirectory /path/to/new-overall-after
+```
+
+Sanitized summaries in `recorded/2026-11-10/` distinguish two completed experiments:
+
+- Matched upstream HockeyTech-only pair: **142,703,848 → 48,346,440 allocated bytes** (**136.09 → 46.11 MiB**), seven tests per build. Both returned 37 events/30,974 bytes and identical SHA-256. The original run used a local selection-only wrapper; `-HockeyOnly` exposes that same selection/order in the committed harness. A new public-harness run must keep its own results rather than replace those observations.
+- Incremental `30a5fc7b` → `99fd3388`: **85,077,984 → 49,325,472 bytes** (**81.14 → 47.04 MiB**) for the season diagnostic and **1,901,744 → 381,688 bytes** for the MatchInputs component, with 29 tests per build. Its larger suite/order differs from the seven-test overall pair; do not pool the numbers. The earlier 131.63 MiB source diagnostic remains historical and is not this current-base observation.
+
+These summaries describe one matched pair per experiment, not Android PSS, a cross-device RAM estimate or a benchmark distribution. Source hashes describe actual compiled source bytes; exported Git blobs and Windows checkouts can differ solely in line endings. Recorded summaries contain no application data, private paths, credentials or raw provider responses.
