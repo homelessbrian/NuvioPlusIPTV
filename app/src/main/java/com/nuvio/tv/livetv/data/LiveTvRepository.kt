@@ -1099,9 +1099,19 @@ class LiveTvRepository @Inject constructor(
                 if (cacheEpoch.get() == epoch && guideDb.changes == changes) {
                     windowCache.clear()
                     mergedWindows.clear()
-                    schedules.clear()
-                    overview = emptyMap()
-                    _programs.value = emptyMap()
+                    // Keep unaffected partial projections and the two schedule requests, so
+                    // a retry can restore them even when no screen/navigation key changes.
+                    if (changedChannels == null) {
+                        overview = emptyMap()
+                        _guideChannelsWithListings.value = emptySet()
+                    } else {
+                        overview = overview - changedChannels
+                        _guideChannelsWithListings.value = _guideChannelsWithListings.value - changedChannels
+                    }
+                    schedules.keys.toList().forEach { key ->
+                        if (changedChannels == null || key in changedChannels) schedules[key] = emptyList()
+                    }
+                    publishWindows()
                     overviewAt = 0L
                     guideInDb = true
                     lightPrograms = true
