@@ -61,3 +61,32 @@ python summarize.py /path/to/new-results
 `ANDROID_HOME`/`ANDROID_SDK_ROOT` and `JAVA_HOME` can supply the SDK/JDK paths. Windows paths work as separate quoted arguments as well. To permit a completed slow 16k baseline like the recorded run, explicitly use `--large-budget 900`; the default is 300 seconds. Default sampling is five alternating 4k trials and one 16k trial per strategy. A strategy that times out is not repeatedly retried. `--forward-pair` adds one separately labelled large-case forward/default pair.
 
 The portable runner adds bounded process timeout handling and a unique scratch directory. It preserves the measured SQL/decoder configuration; exact sources used for the recorded runs are retained under `recorded-sources/`, with SHA-256 hashes in the recorded directory. Source compilation and the portable CLI were checked without repeating device measurements after packaging.
+
+## Actual-app RAM fixture
+
+`app-fixture/server.py` is a separate, self-contained Python 3 fixture for actual-app comparisons: 4,000 live channels, 96,000 programmes, three live groups, and small synthetic movie/series metadata. It uses only the standard library and the adjacent `small_fixture.py`; there is no dependency on another checkout. The small helper still defaults to six live channels when used on its own. Neither helper reads app data or serves playable media: every media URL returns HTTP 404. The only credentials are the synthetic `demo` / `demo` pair.
+
+From the repository root, start a new comparison fixture on an available port:
+
+```sh
+python ci/benchmarks/guide/app-fixture/server.py --output-dir ci/benchmarks/guide/.run/ram-compare-01 --port 18082
+```
+
+On Windows, `py -3` can replace `python`. The default output directory, when omitted, is `ci/benchmarks/guide/.run/ram-fixture` regardless of the working directory. Generated files are ignored by Git. The server binds **only `127.0.0.1`**, and `--port 0` selects an unused loopback port reported at startup. A test device needs its own explicitly selected loopback forwarding to that host port. Configure its synthetic Xtream source as `http://127.0.0.1:18082` with username/password `demo` / `demo`; do not substitute real provider credentials.
+
+On first generation, the schedule starts at the current UTC hour minus two hours and contains 24 half-hour slots. `fixture.json` freezes that base epoch, channel/programme counts, XML byte count, and SHA-256 hashes. Restart with the **same output directory** for both APK versions to reuse the identical `guide.xml` and stream metadata. Do not create a fresh current-time fixture between versions. If the comparison outlasts its 12-hour schedule, generate a new directory and repeat both versions against that new fixture.
+
+The startup JSON and unauthenticated `/health` endpoint report `xml_bytes`, `xml_sha256`, and `live_streams_sha256`; `/health` also reports completed XML transfers and bytes sent. The XML hash covers the exact file bytes. The stream hash covers the UTF-8 bytes of Python's `json.dumps(streams, sort_keys=True)` using its default separators. Restart checks both hashes and refuses changed files or a conflicting `--base-epoch`. `--generate-only` writes/verifies the fixture and exits without opening a port. For an independent file check, use `sha256sum` on `guide.xml` or PowerShell `Get-FileHash -Algorithm SHA256`.
+
+To reproduce the historical fixture byte for byte, use a separate directory:
+
+```sh
+python ci/benchmarks/guide/app-fixture/server.py --output-dir ci/benchmarks/guide/.run/ram-historical --base-epoch 1794294000 --generate-only
+```
+
+That epoch is **2026-11-10 07:00:00 UTC**, and the frozen guide ends at 19:00:00 UTC. It produces:
+
+- XML: **34,017,648 bytes**, SHA-256 `ed9f806b84542c37461ffb77e70790d917dcf22cceab0084441d85becc0356a9`.
+- Canonical live-stream metadata: SHA-256 `b4d5551ae1f31aa79f61dd6fd8e035f4814c0725f2edf5799555b98217b87223`.
+
+Use current-time generation for a new interactive RAM measurement; the historical epoch exists to reproduce the recorded input. This fixture has a different schedule and listing count from the isolated SQLite benchmark above. Keep actual-app RAM observations separate from those component results. Commit only sanitized measurement records and fixture sources; generated XML, private app data, archives, and HPROF files are not benchmark artifacts to publish.
