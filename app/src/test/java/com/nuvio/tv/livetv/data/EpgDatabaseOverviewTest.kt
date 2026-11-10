@@ -20,45 +20,47 @@ class EpgDatabaseOverviewTest {
         var position = -1
         every { cursor.moveToNext() } answers { ++position < rows.size }
         every { cursor.getString(any()) } answers { rows[position][firstArg<Int>()] as String? }
-        every { cursor.getLong(any()) } answers { rows[position][firstArg<Int>()] as Long }
+        every { cursor.getLong(any()) } answers { (rows[position][firstArg<Int>()] as Number).toLong() }
         every { cursor.isNull(any()) } answers { rows[position][firstArg<Int>()] == null }
         justRun { cursor.close() }
         return cursor
     }
 
-    @Test fun `overview keeps current and next without materializing every row`() {
+    @Test fun `normalized overview decodes selected listings once and shares backup channels`() {
         val (helper, sqlite) = database()
         val h = 3_600_000L
-        val rows = cursor(listOf(
-            listOf("one", 0L, 4*h, "Current one", null, null),
-            listOf("channel650", 0L, h, "Current 650", null, null),
-            listOf("one", h, 2*h, "Overlapping entry", null, null),
-            listOf("channel650", h, 2*h, "Next 650", null, null),
-            listOf("channel650", 2*h, 3*h, "Later 650", null, null),
-            listOf("one", 4*h, 5*h, "Next one", null, null)))
-        every { sqlite.rawQuery(any(), any<Array<String>>()) } returns rows
+        val bindings = cursor(listOf(listOf("one", 7L, 0L), listOf("backup", 7L, 0L), listOf("channel650", 11L, 0L)))
+        val selected = cursor(listOf(
+            listOf(7L, 0L, 4*h, "Current one", null, null, 4*h, 5*h, "Next one", null, null),
+            listOf(11L, 0L, h, "Current 650", null, null, h, 2*h, "Next 650", null, null)))
+        every { sqlite.rawQuery(match { it.startsWith("SELECT ch, gid, sh FROM chan") }, any()) } returns bindings
+        every { sqlite.rawQuery(match { it.startsWith("SELECT g.gid, p.start") }, any()) } returns selected
         val result = helper.nowNext(h / 2)
         assertEquals(listOf("Current one", "Next one"), result.getValue("one").map { it.title })
         assertEquals(listOf("Current 650", "Next 650"), result.getValue("channel650").map { it.title })
-        verify(exactly = 4) { rows.getString(3) }
+        assertSame(result["one"], result["backup"])
+        verify(exactly = 2) { selected.getString(3) }
+        verify(exactly = 2) { selected.getString(8) }
+        verify(exactly = 1) { selected.close() }
+        verify(exactly = 1) { bindings.close() }
+    }
+
+    @Test fun `partial overview reads bindings only for the changed channel`() {
+        val (helper, sqlite) = database()
+        val rows = cursor(emptyList())
+        every { sqlite.rawQuery(match { it == "SELECT ch, gid, sh FROM chan WHERE ch IN (?)" },
+            match { it?.toList() == listOf("channel650") }) } returns rows
+        assertTrue(helper.nowNext(1_000L, setOf("channel650")).isEmpty())
+        verify(exactly = 1) { sqlite.rawQuery(any(), any()) }
         verify(exactly = 1) { rows.close() }
     }
 
-    @Test fun `a partial update queries only the changed channel`() {
+    @Test fun `availability includes every binding of stored listings independently of browsing`() {
         val (helper, sqlite) = database()
-        val rows = cursor(emptyList())
-        val sql = slot<String>()
-        val args = slot<Array<String>>()
-        every { sqlite.rawQuery(capture(sql), capture(args)) } returns rows
-        helper.nowNext(1_000L, setOf("channel650"))
-        assertTrue(sql.captured.contains("AND ch IN (?)"))
-        assertEquals("channel650", args.captured.last())
-    }
-
-    @Test fun `availability comes from all stored channels independently of browsing`() {
-        val (helper, sqlite) = database()
-        val rows = cursor(listOf(listOf("one"), listOf("channel16000")))
-        every { sqlite.rawQuery(match { it.startsWith("SELECT DISTINCT ch") }, any<Array<String>>()) } returns rows
+        val bindings = cursor(listOf(listOf("one", 7L, 0L), listOf("channel16000", 7L, 0L)))
+        val available = cursor(listOf(listOf(7L)))
+        every { sqlite.rawQuery(match { it.startsWith("SELECT ch, gid, sh FROM chan") }, any()) } returns bindings
+        every { sqlite.rawQuery(match { it.startsWith("SELECT g.gid FROM guide_ch") }, any()) } returns available
         assertEquals(setOf("one", "channel16000"), helper.channelsWithListings())
     }
 
@@ -66,6 +68,6 @@ class EpgDatabaseOverviewTest {
         val (helper, sqlite) = database()
         assertTrue(helper.nowNext(0L, emptySet()).isEmpty())
         assertTrue(helper.channelsWithListings(channels = emptySet()).isEmpty())
-        verify(exactly = 0) { sqlite.rawQuery(any(), any<Array<String>>()) }
+        verify(exactly = 0) { sqlite.rawQuery(any(), any()) }
     }
 }
