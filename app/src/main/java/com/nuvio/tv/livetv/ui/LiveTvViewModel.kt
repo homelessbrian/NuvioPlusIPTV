@@ -964,7 +964,7 @@ class LiveTvViewModel @Inject constructor(
         }
         // The group you open: its listings straight away, if they aren't loaded yet.
         viewModelScope.launch {
-            uiState.map { it.channels.take(400).map { c -> c.key } }.distinctUntilChanged().collect { keys ->
+            uiState.map { it.channels.take(32).map { c -> c.key } }.distinctUntilChanged().collect { keys ->
                 repository.loadChannelsNow(keys)
             }
         }
@@ -996,8 +996,12 @@ class LiveTvViewModel @Inject constructor(
 
     /** Guide scrolled ahead or back: load those hours from the guide database if needed. */
     fun ensureGuideRange(fromMs: Long, toMs: Long) = repository.ensureRange(fromMs, toMs)
-    /** The group on screen: its listings for every day the guide keeps (see the repository). */
-    fun ensureGroupFullRange(channelKeys: List<String>) = repository.ensureFullRange(channelKeys)
+    /** Only the grid's visible rows/hours and prefetch margin, in stored (unshifted) time. */
+    fun ensureGuideWindow(channelKeys: List<String>, fromMs: Long, toMs: Long) {
+        val shift = settings.value.epgOffsetMinutes * 60_000L
+        repository.ensureGuideWindow(channelKeys, fromMs - shift, toMs - shift)
+    }
+    val guideChannelsWithListings: StateFlow<Set<String>> = repository.guideChannelsWithListings
     /** Changes when the guide's days ahead need asking for again (see the repository). */
     val guideGeneration: StateFlow<Int> = repository.guideGeneration
 

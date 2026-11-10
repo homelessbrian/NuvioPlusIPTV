@@ -70,6 +70,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInRoot
@@ -113,6 +114,8 @@ import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 
 private const val SLOT_MS = 30L * 60L * 1000L
 private const val WINDOW_MS = 2L * 60L * 60L * 1000L
@@ -313,10 +316,6 @@ private fun LiveTvGuideScreenBody(
     var row by remember { mutableIntStateOf(0) }
     var cursorMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var windowStart by remember { mutableLongStateOf(floorSlot(System.currentTimeMillis())) }
-    // Load listings for the hours being looked at (scrolling ahead, or back for catch-up).
-    LaunchedEffect(windowStart) {
-        viewModel.ensureGuideRange(windowStart - 2 * 3_600_000L, windowStart + guideWindowMs(settings) + 6 * 3_600_000L)
-    }
     // Going back in time on catch-up channels: fetch their full catch-up archive (many guide
     // files only reach about a day back; the provider keeps up to a week or more).
     var pendingGroupId by remember { mutableStateOf<String?>(null) }
@@ -405,22 +404,34 @@ private fun LiveTvGuideScreenBody(
 
     // "Unassigned channels" (from the Assign EPG panel): only channels with no guide data.
     var epgUnassignedOnly by remember { mutableStateOf(false) }
+    val guideChannelsWithListings by viewModel.guideChannelsWithListings.collectAsStateWithLifecycle()
     val channels = when {
         visibilityMode -> visibilityChannels
         favoritesMode -> favoritesChannels
         reorderActive -> reorderList
         savedOrder != null -> savedOrder!!
-        epgUnassignedOnly -> ui.channels.filter { programs[it.key].isNullOrEmpty() }
+        epgUnassignedOnly -> ui.channels.filter { it.key !in guideChannelsWithListings }
         else -> ui.channels
     }
     val selectedGroupTitle = ui.groups.firstOrNull { it.id == ui.selectedGroupId }?.title ?: "All channels"
-    // The group on screen gets its listings for every day ahead (Guide Days Ahead), in the
-    // background, so scrolling ahead in it doesn't run out after half a day.
-    // Also after a guide update, which keeps only the hours around now in memory.
+    // Decode a screen and a prefetch margin. The stored guide still covers every channel/day.
     val guideGeneration by viewModel.guideGeneration.collectAsStateWithLifecycle()
-    LaunchedEffect(ui.selectedGroupId, ui.channels.size, guideGeneration) {
-        delay(400) // flicking through groups: only the one you stop on
-        viewModel.ensureGroupFullRange(ui.channels.map { it.key })
+    LaunchedEffect(channels, windowStart, guideGeneration, settings.epgOffsetMinutes, guideWindowMs(settings)) {
+        snapshotFlow { (listState.firstVisibleItemIndex / 8) to (row / 8) }
+            .distinctUntilChanged()
+            .collectLatest { (firstPage, focusedPage) ->
+                if (channels.isEmpty()) return@collectLatest
+                // Pointer scrolling moves the visible rows without moving the virtual cursor;
+                // D-pad jumps can move the cursor before LazyColumn catches up. Cover both.
+                fun segment(page: Int, count: Int): List<String> {
+                    val start = (page * 8 - 8).coerceIn(0, channels.size)
+                    val end = (start + count).coerceAtMost(channels.size)
+                    return channels.subList(start, end).map { it.key }
+                }
+                val keys = (segment(firstPage, 48) + segment(focusedPage, 32)).distinct()
+                viewModel.ensureGuideWindow(keys, windowStart - 3_600_000L,
+                    windowStart + guideWindowMs(settings) + 2 * 3_600_000L)
+            }
     }
 
     // A different group opens at its top. (It used to jump to the playing channel when that

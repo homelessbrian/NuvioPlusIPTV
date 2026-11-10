@@ -263,6 +263,51 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             if (c.moveToFirst()) c.getString(0) else null
         }
 
+    /** Availability is independent of the browsing cache (including never-browsed channels). */
+    fun channelsWithListings(fromMs: Long? = null, toMs: Long? = null, channels: Set<String>? = null): Set<String> {
+        val out = HashSet<String>()
+        val bounded = fromMs != null && toMs != null
+        val conditions = if (bounded) "start >= ? AND start < ? AND stop > ?" else "1=1"
+        val timeArgs = if (bounded) listOf((fromMs!! - MAX_SHOW_MS).toString(), toMs.toString(), fromMs.toString()) else emptyList()
+        val parts = channels?.toList()?.chunked(400) ?: listOf(null)
+        for (part in parts) {
+            val filter = if (part == null) "" else " AND ch IN (${part.joinToString(",") { "?" }})"
+            readableDatabase.rawQuery("SELECT DISTINCT ch FROM programs WHERE $conditions$filter", (timeArgs + part.orEmpty()).toTypedArray()).use { c ->
+                while (c.moveToNext()) out += c.getString(0)
+            }
+        }
+        return out
+    }
+
+    /** At most the current and next listing per channel; no full-guide object graph. */
+    fun nowNext(atMs: Long, channels: Set<String>? = null): Map<String, List<EpgProgram>> {
+        val out = HashMap<String, ArrayList<EpgProgram>>()
+        val parts = channels?.toList()?.chunked(400) ?: listOf(null)
+        for (part in parts) {
+        val filter = if (part == null) "" else " AND ch IN (${part.joinToString(",") { "?" }})"
+        readableDatabase.rawQuery(
+            "SELECT ch, start, stop, title, ep, icon FROM programs " +
+                "WHERE start >= ? AND start < ? AND stop > ?$filter ORDER BY start",
+            (listOf((atMs - MAX_SHOW_MS).toString(), (atMs + 12 * 3_600_000L).toString(), atMs.toString()) + part.orEmpty()).toTypedArray()
+        ).use { c ->
+            while (c.moveToNext()) {
+                val key = c.getString(0)
+                val list = out.getOrPut(key) { ArrayList(2) }
+                if (list.size >= 2) continue
+                val start = c.getLong(1)
+                // Overlapping entries must not displace the actual next show.
+                if (list.isNotEmpty() && start < list[0].stopMs) continue
+                list += EpgProgram(
+                    startMs = start, stopMs = c.getLong(2), title = c.getString(3),
+                    episode = if (c.isNull(4)) null else XmltvParser.cleanEpisode(c.getString(4)),
+                    icon = if (c.isNull(5)) null else c.getString(5)
+                )
+            }
+        }
+        }
+        return out
+    }
+
     /** Listings overlapping [fromMs, toMs), by channel, in time order. */
     /**
      * Listings in [fromMs, toMs), by channel, in time order.
@@ -318,6 +363,48 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         }
         out.values.forEach { l -> l.sortBy { it.startMs } }
         return out
+    }
+
+    /** Title search and current-show cards over the full stored guide, never the viewport cache. */
+    internal fun searchPrograms(request: EpgSearchRequest, cancellation: android.os.CancellationSignal? = null): EpgSearchPrograms {
+        if (request.query.length < 2 || (request.channelKeys.isEmpty() && request.currentKeys.isEmpty())) return EpgSearchPrograms()
+        val out = EpgSearchAccumulator(request)
+        val sql = "SELECT ch, start, stop, title, ep, icon FROM programs WHERE start < ? AND stop > ?"
+        readableDatabase.rawQuery(sql, arrayOf(request.toMs.toString(), request.fromMs.toString()), cancellation).use { c ->
+            while (c.moveToNext()) {
+                cancellation?.throwIfCanceled()
+                val ch = c.getString(0)
+                val start = c.getLong(1)
+                val stop = c.getLong(2)
+                val title = c.getString(3)
+                out.offer(ch, start, stop, title) {
+                    EpgProgram(start, stop, title,
+                        episode = if (c.isNull(4)) null else XmltvParser.cleanEpisode(c.getString(4)),
+                        icon = if (c.isNull(5)) null else c.getString(5))
+                }
+            }
+        }
+        // At most 40 cards survive ranking. Reading their descriptions/cast by (ch,start)
+        // avoids copying those large columns through CursorWindow for the entire guide.
+        fun details(ch: String, light: EpgProgram): EpgProgram {
+            cancellation?.throwIfCanceled()
+            return readableDatabase.rawQuery(
+                "SELECT start, stop, title, descr, cat, ep, icon, year, people FROM programs WHERE ch = ? AND start = ? LIMIT 1",
+                arrayOf(ch, (light.startMs - request.shiftMs).toString()), cancellation
+            ).use { c ->
+                if (!c.moveToFirst()) light else EpgProgram(
+                    c.getLong(0) + request.shiftMs, c.getLong(1) + request.shiftMs, c.getString(2),
+                    description = if (c.isNull(3)) null else c.getString(3),
+                    category = if (c.isNull(4)) null else c.getString(4),
+                    episode = if (c.isNull(5)) null else XmltvParser.cleanEpisode(c.getString(5)),
+                    icon = if (c.isNull(6)) null else c.getString(6),
+                    year = if (c.isNull(7)) null else c.getInt(7),
+                    people = if (c.isNull(8)) emptyList() else c.getString(8).split('\u001F'))
+            }
+        }
+        val result = out.result()
+        return EpgSearchPrograms(result.current.mapValues { (ch, p) -> details(ch, p) },
+            result.matching.mapValues { (ch, p) -> details(ch, p) })
     }
 
     /**

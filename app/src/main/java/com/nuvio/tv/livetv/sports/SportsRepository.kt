@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.sports
 
 import android.content.Context
 import android.util.Log
+import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.livetv.data.EpgDatabase
 import com.nuvio.tv.livetv.data.LiveTvChannelStore
 import com.nuvio.tv.livetv.data.LiveTvPreferences
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -59,7 +61,8 @@ class SportsRepository @Inject constructor(
     private val channelStore: LiveTvChannelStore,
     private val guideDb: EpgDatabase,
     private val playback: LiveTvPlaybackController,
-    private val addonSource: SportsAddonSource
+    private val addonSource: SportsAddonSource,
+    private val profiles: ProfileManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val feeds = SportsFeeds()
@@ -74,6 +77,15 @@ class SportsRepository @Inject constructor(
     val follows: StateFlow<SportsFollows> = prefs.sportsMineJson
         .map { SportsFollows.fromJson(it) }
         .stateIn(scope, SharingStarted.Eagerly, SportsFollows())
+
+    private data class MatchAccess(val profileId: Int, val ready: Boolean, val policy: SportsMatchPolicy)
+
+    private val matchAccess: StateFlow<MatchAccess?> = combine(
+        profiles.activeProfileId, profiles.activeProfileReady, prefs.settings, prefs.userState,
+        ParentalControls.unlocked
+    ) { profile, ready, live, user, unlocked ->
+        MatchAccess(profile, ready, SportsMatchPolicy.from(live, user, unlocked))
+    }.stateIn(scope, SharingStarted.Eagerly, null)
 
     /**
      * League Networks: the channels whose names say they're a league's own channel (NFL Network,
@@ -1390,29 +1402,31 @@ class SportsRepository @Inject constructor(
      */
     @OptIn(FlowPreview::class)
     private suspend fun matchLoop() {
+        scope.launch {
+            var previous: MatchAccess? = null
+            matchAccess.filterNotNull().collect { access ->
+                if (previous != null && previous != access) {
+                    // A singleton outlives the screen/profile. Do not keep the old profile's
+                    // channels or guide-only followed names while its replacement is searched.
+                    _matches.value = emptyMap()
+                    guideData.value = emptyMap()
+                    lastMatchAt = 0L
+                    matchKick.value++
+                }
+                previous = access
+            }
+        }
         val trigger = combine(
             // The games: only what changes the search (not scores or clocks). A number instead of
             // a list of ~1000 strings each time the feed updates.
-            events.map { list ->
-                var h = 17L
-                var n = 0
-                for (e in list) {
-                    if (e.source == EventSource.GUIDE) continue
-                    h = h * 31 + e.id.hashCode(); h = h * 31 + e.startMs; h = h * 31 + e.broadcasts.size
-                    n++
-                }
-                n to h
-            }.distinctUntilChanged(),
+            events.map(::sportsMatchEventStamp).distinctUntilChanged(),
             // Your channels (any added, removed or renamed in a playlist update).
-            channelStore.displayChannels.map { list ->
-                var h = 17L
-                for (c in list) h = h * 31 + c.key.hashCode()
-                list.size to h
-            }.distinctUntilChanged(),
-            settings.map { listOf(it.networkChannels, it.eventChannels, it.teamChannels, it.leagueChannels, it.blocked, it.bestChannelFirst, it.hiddenLeagues, it.region, it.preferredGroups) }.distinctUntilChanged(),
+            channelStore.displayChannels,
+            settings.map { it.matchRules() }.distinctUntilChanged(),
             follows.map { it.words to it.leagues }.distinctUntilChanged(),
-            // Live TV ready, and the guide really replaced (not every update check that found nothing new).
-            combine(liveRepo.status.map { it.loadedOnce }, liveRepo.guideGeneration) { a, b -> a to b }.distinctUntilChanged()
+            // Disk commits, including quick EPG reassignment/pruning/catch-up writes. Loading or
+            // evicting RAM viewport tiles must neither delay Sports nor start another search.
+            combine(liveRepo.status.map { it.loadedOnce }, liveRepo.committedGuideRevision, matchAccess) { a, b, c -> Triple(a, b, c) }.distinctUntilChanged()
         ) { a, b, c, d, e -> listOf(a, b, c, d, e) }
         var lastRun = 0L
         scope.launch {
@@ -1440,8 +1454,19 @@ class SportsRepository @Inject constructor(
         scope.launch {
             val saved = withContext(Dispatchers.IO) { runCatching { File(dir, "matches.json").takeIf { it.exists() }?.readText() }.getOrNull() }
             if (saved != null) {
-                val chans = channelStore.displayChannels.first { it.isNotEmpty() }.associateBy { it.key }
-                if (_matches.value.isEmpty()) runCatching { restoreMatches(saved, chans) }
+                liveRepo.committedGuideRevision.filterNotNull().first()
+                channelStore.displayChannels.first { it.isNotEmpty() }
+                val input = captureMatchInputs()
+                if (input != null && _matches.value.isEmpty()) runCatching {
+                    runSportsMatchWork(input.snapshot, { captureMatchInputs()?.snapshot }, {
+                        restoreMatches(saved, input.snapshot, input.channels.associateBy { it.key })
+                    }) { restored ->
+                        if (restored.isNotEmpty() && _matches.value.isEmpty()) {
+                            _matches.value = restored
+                            LiveTvLoadReport.add("Sports: showing last time's channels for ${restored.size} games while matching again")
+                        }
+                    }
+                }
             }
         }
         // Not before the saved games are read: a search with no games found nothing, then ran again.
@@ -1455,29 +1480,12 @@ class SportsRepository @Inject constructor(
             // both fight the import for the database (which is what made this take minutes) and
             // match against a guide that isn't fully there yet (so real channels get missed).
             if (!status.loadedOnce) { matchMissed = true; return@collect }
+            if (liveRepo.committedGuideRevision.value == null || !profiles.activeProfileReady.value) {
+                matchMissed = true
+                return@collect
+            }
             if (status.loading && !status.quiet && _matches.value.isNotEmpty() && !pickPending) { matchMissed = true; return@collect }
             pickPending = false
-            // The very first search (nothing shown yet) waits for the start-up guide read to finish:
-            // both work on the same guide database, which made the search take many minutes, and
-            // the guide isn't all there yet anyway.
-            // Same while the guide is being built (a first setup, or new guide files): searching
-            // before it's in found channels for only a few games.
-            if (_matches.value.isEmpty() && com.nuvio.tv.livetv.data.BackgroundWork.guideBuilding.value) {
-                _matching.value = true
-                val w0 = System.currentTimeMillis()
-                kotlinx.coroutines.withTimeoutOrNull(10 * 60_000L) {
-                    com.nuvio.tv.livetv.data.BackgroundWork.guideBuilding.first { !it }
-                }
-                _matching.value = false
-                LiveTvLoadReport.add("Sports matching waited ${(System.currentTimeMillis() - w0) / 1000} s for the guide to be built")
-            }
-            if (_matches.value.isEmpty() && liveRepo.guideReadBusy()) {
-                _matching.value = true
-                var waited = 0
-                while (liveRepo.guideReadBusy() && waited < 300_000) { delay(1_000); waited += 1_000 }
-                _matching.value = false
-                if (waited > 0) LiveTvLoadReport.add("Sports matching waited ${waited / 1000} s for the guide to finish loading")
-            }
             // "Start in Full Screen": not while the last channel is starting / playing full screen.
             com.nuvio.tv.livetv.data.BackgroundWork.awaitLiveHold()
             // Not while video is playing full screen (unless you're on the Sports page).
@@ -1485,11 +1493,17 @@ class SportsRepository @Inject constructor(
             matchMissed = false
             lastRun = System.currentTimeMillis()
             val t0 = System.currentTimeMillis()
-            runCatching { com.nuvio.tv.livetv.data.BackgroundWork.heavy { runMatch() } }.onFailure { Log.w(TAG, "Sports matching failed", it) }
+            val accepted = runCatching { com.nuvio.tv.livetv.data.BackgroundWork.heavy { runMatch() } }
+                .onFailure { Log.w(TAG, "Sports matching failed", it) }.getOrDefault(false)
+            if (!accepted) {
+                matchMissed = true
+                // An invalidated pass must not swallow the newer input while collect was busy.
+                if (liveRepo.committedGuideRevision.value != null) matchKick.value++
+                return@collect
+            }
             lastMatchAt = System.currentTimeMillis()
             val took = lastMatchAt - t0
             if (took > 2_000) LiveTvLoadReport.add("Sports matching took ${took / 1000.0} s (page open: ${viewers.value > 0})")
-            runCatching { saveMatches() }
         }
     }
 
@@ -1516,10 +1530,10 @@ class SportsRepository @Inject constructor(
         LiveTvLoadReport.add("Sports matching waited ${(System.currentTimeMillis() - t0) / 1000} s while video was playing")
     }
 
-    /** Saves which channels were matched to which games, to show right away next time. */
-    private suspend fun saveMatches() = withContext(Dispatchers.IO) {
+    /** Prepared before the final fence; writing and publishing use the same accepted result. */
+    private fun savedMatches(snapshot: SportsMatchSnapshot, matches: Map<String, List<ChannelMatch>>): String {
         val arr = org.json.JSONArray()
-        for ((id, list) in _matches.value) {
+        for ((id, list) in matches) {
             val o = org.json.JSONObject().put("id", id)
             val items = org.json.JSONArray()
             list.forEach { m ->
@@ -1528,11 +1542,17 @@ class SportsRepository @Inject constructor(
             }
             arr.put(o.put("m", items))
         }
-        File(dir, "matches.json").writeText(arr.toString())
+        val stamp = snapshot.savedStamp()
+        return org.json.JSONObject().put("v", 2).put("revision", stamp.revision)
+            .put("profile", stamp.profile).put("context", stamp.context).put("matches", arr).toString()
     }
 
-    private fun restoreMatches(text: String, chans: Map<String, LiveChannel>) {
-        val arr = org.json.JSONArray(text)
+    private fun restoreMatches(text: String, snapshot: SportsMatchSnapshot, chans: Map<String, LiveChannel>): Map<String, List<ChannelMatch>> {
+        val saved = org.json.JSONObject(text)
+        val stamp = snapshot.savedStamp()
+        if (saved.optInt("v") != 2 || saved.optLong("revision") != stamp.revision ||
+            saved.optInt("profile") != stamp.profile || saved.optInt("context") != stamp.context) return emptyMap()
+        val arr = saved.getJSONArray("matches")
         val out = HashMap<String, List<ChannelMatch>>()
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
@@ -1545,65 +1565,94 @@ class SportsRepository @Inject constructor(
             }
             if (list.isNotEmpty()) out[o.getString("id")] = list
         }
-        if (out.isNotEmpty() && _matches.value.isEmpty()) {
-            _matches.value = out
-            LiveTvLoadReport.add("Sports: showing last time's channels for ${out.size} games while matching again")
-        }
+        return out
     }
     @Volatile private var pickPending = false
     private var lastSummary: String? = null
 
-    // Nobody on the Sports page: low priority, out of the way of the guide and the video.
-    private suspend fun runMatch() = withContext(if (viewers.value > 0) Dispatchers.Default else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+    private class MatchInputs(
+        val snapshot: SportsMatchSnapshot,
+        val settings: SportsSettings,
+        val channels: List<LiveChannel>
+    )
+
+    private suspend fun captureMatchInputs(): MatchInputs? {
+        val profile = profiles.activeProfileId.value
+        if (!profiles.activeProfileReady.value) return null
+        val committed = liveRepo.committedGuideRevision.value ?: return null
+        // Cold preference flows read this profile afresh, rather than a possibly delayed UI flow.
         val live = prefs.settings.first()
         val user = prefs.userState.first()
-        // Channels you picked yourself (Fix Channel) count even in a hidden group.
-        val sp = settings.value
-        val picked = HashSet<String>().apply {
-            sp.eventChannels.values.forEach { add(it.substringBeforeLast('|')) }
-            addAll(sp.networkChannels.values); addAll(sp.teamChannels.values); addAll(sp.leagueChannels.values)
+        val sports = SportsSettings.fromJson(prefs.sportsSettingsJson.first())
+        val mine = SportsFollows.fromJson(prefs.sportsMineJson.first())
+        val policy = SportsMatchPolicy.from(live, user, ParentalControls.unlocked.value)
+        val catalog = channelStore.displayChannels.value
+        val changes = guideDb.changes
+        val revision = guideDb.revision()
+        if (changes != guideDb.changes || revision != committed ||
+            committed != liveRepo.committedGuideRevision.value || profile != profiles.activeProfileId.value) return null
+        val snapshot = SportsMatchSnapshot(
+            profile, revision, changes, catalog, policy, sports.matchRules(), mine.words, mine.leagues,
+            sportsMatchEventStamp(events.value)
+        )
+        return MatchInputs(snapshot, sports, sportsMatchChannels(catalog, policy, sports))
+    }
+
+    // Nobody on the Sports page: low priority, out of the way of the guide and the video.
+    private suspend fun runMatch(): Boolean = withContext(if (viewers.value > 0) Dispatchers.Default else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+        val input = captureMatchInputs() ?: return@withContext false
+        val snapshot = input.snapshot
+        val channels = input.channels
+        if (channels.isEmpty()) return@withContext runSportsMatchWork(snapshot, { captureMatchInputs()?.snapshot }, { Unit }) {
+            guideData.value = emptyMap()
+            _matches.value = emptyMap()
+            rebuildLiveScores()
         }
-        val channels: List<LiveChannel> = channelStore.displayChannels.value.filter { ch ->
-            (ch.key in picked || (ch.key !in user.hiddenChannels && ch.groupId !in user.hiddenGroups)) &&
-                !ParentalControls.isLocked(ch.groupId, ch.group, live, user.lockedGroups) &&
-                !(ParentalControls.enabled(live) && live.lockAdultContent && ParentalControls.isAdult(ch.name))
-        }
-        if (channels.isEmpty()) return@withContext
         _matching.value = true
         try {
             val now = System.currentTimeMillis()
-            val shift = live.epgOffsetMinutes * MINUTE
-            val s = settings.value
-            val f = follows.value
+            val shift = snapshot.policy.shiftMs
             // Sports ESPN doesn't cover, from the guide: yesterday to tomorrow, every one of
             // them, not just your region's (this is a local guide search, not an API call, so
             // there's no traffic reason to leave any of them out) — plus names you follow.
             val guideLeagues = SportsCatalog.all.filter { it.guideOnly }
             val keys = channels.associateBy { it.key }
-            matcher.prepareTable(events.value, guideLeagues, f.words, now, gentle = viewers.value == 0)
+            matcher.prepareTable(events.value, guideLeagues, snapshot.followedWords, now, gentle = viewers.value == 0)
             // All three days from one read of the guide (none at all when it hasn't changed).
-            val days = runCatching {
-                matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, f.words, keys, shift, now)
-            }.getOrDefault((-1..1).associate { dayStart(it) to emptyList() })
-            // Only when something in it changed: everything built from the games is worked out again on a change.
-            if (days != guideData.value) guideData.value = days
-            val result = matcher.match(
-                SportsMatcher.Input(
-                    events = events.value,
-                    channels = channels,
-                    quality = user.channelQuality,
-                    shiftMs = shift,
-                    settings = s,
-                    now = now,
-                    gentle = viewers.value == 0
-                )
-            )
-            _matches.value = result.matches
-            if (result.summary != lastSummary) {
-                lastSummary = result.summary
-                LiveTvLoadReport.add(result.summary)
+            val daysAccepted = runSportsMatchWork(snapshot, { captureMatchInputs()?.snapshot }, {
+                runCatching {
+                    matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, snapshot.followedWords, keys, shift, now)
+                }.getOrDefault((-1..1).associate { dayStart(it) to emptyList() })
+            }) { days ->
+                // Keep the original guide-events -> page event preparation pipeline. Its output
+                // can become the input to matching below, but only from a still-current scan.
+                if (days != guideData.value) guideData.value = days
             }
-            rebuildLiveScores()
+            if (!daysAccepted) return@withContext false
+            withContext(Dispatchers.IO) {
+                runSportsMatchWork(snapshot, { captureMatchInputs()?.snapshot }, {
+                    val result = matcher.match(
+                        SportsMatcher.Input(
+                            events = events.value,
+                            channels = channels,
+                            quality = snapshot.policy.quality,
+                            shiftMs = shift,
+                            settings = input.settings,
+                            now = now,
+                            gentle = viewers.value == 0
+                        )
+                    )
+                    result to savedMatches(snapshot, result.matches)
+                }) { (result, saved) ->
+                    _matches.value = result.matches
+                    if (result.summary != lastSummary) {
+                        lastSummary = result.summary
+                        LiveTvLoadReport.add(result.summary)
+                    }
+                    rebuildLiveScores()
+                    runCatching { File(dir, "matches.json").writeText(saved) }
+                }
+            }
         } finally {
             _matching.value = false
         }

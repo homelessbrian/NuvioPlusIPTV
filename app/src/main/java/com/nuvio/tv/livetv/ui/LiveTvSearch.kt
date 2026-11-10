@@ -34,7 +34,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlin.coroutines.resume
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -46,16 +53,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.tv.livetv.data.EpgDatabase
+import com.nuvio.tv.livetv.data.EpgSearchPrograms
+import com.nuvio.tv.livetv.data.EpgSearchRequest
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.startup.LiveTvStartupEntryPoint
 import com.nuvio.tv.ui.theme.NuvioTheme
-
-data class LiveSearchHit(
-    val channel: LiveChannel,
-    /** The program to show on the card: what's on now, or the upcoming show that matched. */
-    val program: EpgProgram?,
-    val matchedProgram: Boolean
-)
 
 class LiveTvSearchResults(
     val hits: List<LiveSearchHit>,
@@ -70,9 +74,6 @@ class LiveTvSearchResults(
     /** Plays [LiveSearchHit] behind the search (TiviMate style); OK again on it goes full screen. */
     val preview: (LiveSearchHit) -> Unit = {}
 )
-
-private const val MAX_HITS = 40
-private const val UPCOMING_WINDOW_MS = 6L * 60 * 60 * 1000
 
 /**
  * Live TV matches for Nuvio's search screen: channels whose name matches, then channels
@@ -110,13 +111,25 @@ private fun rememberLiveTvSearchResultsEnabled(
     viewModel: LiveTvViewModel = hiltViewModel()
 ): LiveTvSearchResults {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
-    val programs by viewModel.programs.collectAsStateWithLifecycle()
+    val user by viewModel.userState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
     val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val entry = remember(context) {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(context.applicationContext, LiveTvStartupEntryPoint::class.java)
+    }
+    val profiles = entry.profileManager()
+    val profileId by profiles.activeProfileId.collectAsStateWithLifecycle()
+    val profileReady by profiles.activeProfileReady.collectAsStateWithLifecycle()
+    val revision by entry.liveTvRepository().committedGuideRevision.collectAsStateWithLifecycle()
+    val unlocked by com.nuvio.tv.livetv.parental.ParentalControls.unlocked.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val access = LiveTvSearchAccess.capture(profileId, user, settings, unlocked)
+    val stamp = LiveTvSearchStamp(access, revision, ui.allVisibleChannels)
     val q = query.trim()
     // The channel playing behind the search, if one was picked.
-    var previewKey by remember { mutableStateOf<String?>(null) }
+    var previewKey by remember(profileId) { mutableStateOf<String?>(null) }
 
     // Search once typing pauses (not on every letter), and off the main thread, so typing
     // stays smooth on slower devices with big playlists.
@@ -124,42 +137,33 @@ private fun rememberLiveTvSearchResultsEnabled(
         if (q.length >= 2) delay(300)
         value = q
     }
-    val searchLive = true
-    val hits by produceState(initialValue = emptyList<LiveSearchHit>(), settled, ui.allVisibleChannels, programs, now, searchLive) {
-        val q = settled
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            if (!searchLive || q.length < 2) return@withContext emptyList()
-            val out = ArrayList<LiveSearchHit>()
-            val seen = HashSet<String>()
-            for (c in ui.allVisibleChannels) {
-                if (out.size >= MAX_HITS) break
-                if (c.name.contains(q, ignoreCase = true) || c.number.toString() == q) {
-                    val current = programs[c.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
-                    out += LiveSearchHit(c, current, matchedProgram = false)
-                    seen += c.key
-                }
-            }
-            if (out.size < MAX_HITS) {
-                for (c in ui.allVisibleChannels) {
-                    if (out.size >= MAX_HITS) break
-                    if (c.key in seen) continue
-                    val match = programs[c.key]?.firstOrNull {
-                        it.stopMs > now && it.startMs < now + UPCOMING_WINDOW_MS && it.title.contains(q, ignoreCase = true)
-                    } ?: continue
-                    out += LiveSearchHit(c, match, matchedProgram = true)
-                }
-            }
-            out
+    val publication by produceState(initialValue = LiveTvSearchPublication(), settled, stamp, now, profileReady) {
+        value = LiveTvSearchPublication()
+        if (!profileReady) return@produceState
+        val expected = stamp
+        val hits = withContext(Dispatchers.Default) {
+            val plan = LiveTvSearchPlan(settled, expected.channels, now, expected.access)
+            loadLiveTvSearchHits(plan, expected,
+                read = { request -> readSearchPrograms(entry.epgDatabase(), expected.revision!!, request) },
+                current = { currentSearchStamp(entry, viewModel) })
         }
+        value = LiveTvSearchPublication(expected, hits)
     }
 
+    val displayed = publication
     return LiveTvSearchResults(
-        hits = hits,
+        // A profile/policy change hides old cards immediately, before the replacement query runs.
+        hits = displayed.hits.takeIf { displayed.stamp == stamp }.orEmpty(),
         use24h = settings.use24HourClock,
         open = { hit ->
-            viewModel.preview(hit.channel)
-            viewModel.markFullscreenOpened()
-            onOpened()
+            scope.launch {
+                val expected = displayed.stamp
+                if (expected != null && currentSearchStamp(entry, viewModel) == expected) {
+                    viewModel.preview(hit.channel)
+                    viewModel.markFullscreenOpened()
+                    onOpened()
+                }
+            }
         },
         posterFor = { hit ->
             val p = hit.program?.takeIf { !LiveTvRepository.isPlaceholderTitle(it.title) }
@@ -177,13 +181,49 @@ private fun rememberLiveTvSearchResultsEnabled(
         playlistNames = playlistNames,
         previewKey = previewKey,
         preview = { hit ->
-            if (viewModel.settings.value.searchPreview) {
-                viewModel.preview(hit.channel)
-                previewKey = hit.channel.key
+            scope.launch {
+                val expected = displayed.stamp
+                if (expected != null && currentSearchStamp(entry, viewModel) == expected && viewModel.settings.value.searchPreview) {
+                    viewModel.preview(hit.channel)
+                    previewKey = hit.channel.key
+                }
             }
         }
     )
 }
+
+private data class LiveTvSearchPublication(val stamp: LiveTvSearchStamp? = null, val hits: List<LiveSearchHit> = emptyList())
+
+private suspend fun currentSearchStamp(entry: LiveTvStartupEntryPoint, viewModel: LiveTvViewModel): LiveTvSearchStamp? {
+    val profiles = entry.profileManager()
+    if (!profiles.activeProfileReady.value) return null
+    val id = profiles.activeProfileId.value
+    val settings = entry.liveTvPreferences().currentSettings()
+    val user = entry.liveTvPreferences().userState.first()
+    if (profiles.activeProfileId.value != id) return null
+    return LiveTvSearchStamp(
+        LiveTvSearchAccess.capture(id, user, settings, com.nuvio.tv.livetv.parental.ParentalControls.unlocked.value),
+        entry.liveTvRepository().committedGuideRevision.value, viewModel.uiState.value.allVisibleChannels)
+}
+
+private suspend fun readSearchPrograms(db: EpgDatabase, revision: Long, request: EpgSearchRequest): EpgSearchPrograms? =
+    withContext(Dispatchers.IO) {
+        suspendCancellableCoroutine { continuation ->
+            val signal = android.os.CancellationSignal()
+            continuation.invokeOnCancellation { signal.cancel() }
+            try {
+                val changes = db.changes
+                if (db.revision() != revision) {
+                    continuation.resume(null)
+                } else {
+                    val programs = db.searchPrograms(request, signal)
+                    continuation.resume(programs.takeIf { db.changes == changes && db.revision() == revision })
+                }
+            } catch (error: Exception) {
+                if (signal.isCanceled) continuation.cancel() else continuation.resume(EpgSearchPrograms())
+            }
+        }
+    }
 
 /**
  * The Live TV row in Nuvio's search, drawn like the addon rows around it.
