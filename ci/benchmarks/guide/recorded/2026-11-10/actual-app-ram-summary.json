@@ -1,0 +1,358 @@
+{
+  "fixture": {
+    "channels": 4000,
+    "programmes": 96000,
+    "slots": 24,
+    "base_epoch": 1794294000,
+    "slot_seconds": 1800,
+    "media": "always404",
+    "xml_bytes": 34017648,
+    "xml_sha256": "ed9f806b84542c37461ffb77e70790d917dcf22cceab0084441d85becc0356a9",
+    "live_streams_sha256": "b4d5551ae1f31aa79f61dd6fd8e035f4814c0725f2edf5799555b98217b87223"
+  },
+  "unit": "MiB (PSS KiB divided by1024)",
+  "baseline": "1049818 + group1303d9f0 + Expressf9d67542",
+  "initial_preview": "26af4a42567618784cbde3d2e9d69caae3a3e016; guidefc322c6f + parser660fd2d9",
+  "final_preview": "5fca4878490daf121aa7b4be159da7bfad65a2ba",
+  "final_guide_source": "7d816f906227546f33d52e912c6077e7d2475a40",
+  "final_apk_sha256": "B7FD78CC4C9DA772D1B16EDAC8EDA1DF169F76B5B1C376C8F35FEA587EF3538B",
+  "initial_observations": {
+    "import_peak": {
+      "baseline": {
+        "pss_kib": 358271,
+        "pss_mib": 349.8740234375,
+        "phase_samples": 171,
+        "used_samples": 171,
+        "used_elapsed_first_s": 195.125,
+        "used_elapsed_last_s": 365.528,
+        "statistic": "maximum sampled phase PSS"
+      },
+      "optimized": {
+        "pss_kib": 424579,
+        "pss_mib": 414.6279296875,
+        "phase_samples": 133,
+        "used_samples": 133,
+        "used_elapsed_first_s": 130.066,
+        "used_elapsed_last_s": 262.16,
+        "statistic": "maximum sampled phase PSS"
+      },
+      "delta_mib": 64.75390625,
+      "delta_percent": 18.507777632015987
+    },
+    "settled_30s": {
+      "baseline": {
+        "pss_kib": 298800,
+        "pss_mib": 291.796875,
+        "phase_samples": 31,
+        "used_samples": 30,
+        "used_elapsed_first_s": 366.53,
+        "used_elapsed_last_s": 395.602,
+        "statistic": "last5 median of first30 phase samples"
+      },
+      "optimized": {
+        "pss_kib": 359077,
+        "pss_mib": 350.6611328125,
+        "phase_samples": 47,
+        "used_samples": 30,
+        "used_elapsed_first_s": 263.161,
+        "used_elapsed_last_s": 292.213,
+        "statistic": "last5 median of first30 phase samples"
+      },
+      "delta_mib": 58.8642578125,
+      "delta_percent": 20.17302543507363
+    },
+    "browsing_peak": {
+      "baseline": {
+        "pss_kib": 305370,
+        "pss_mib": 298.212890625,
+        "phase_samples": 63,
+        "used_samples": 63,
+        "used_elapsed_first_s": 397.603,
+        "used_elapsed_last_s": 459.674,
+        "statistic": "maximum sampled phase PSS"
+      },
+      "optimized": {
+        "pss_kib": 367389,
+        "pss_mib": 358.7783203125,
+        "phase_samples": 63,
+        "used_samples": 63,
+        "used_elapsed_first_s": 310.256,
+        "used_elapsed_last_s": 372.306,
+        "statistic": "maximum sampled phase PSS"
+      },
+      "delta_mib": 60.5654296875,
+      "delta_percent": 20.30946065428824
+    },
+    "post_browse_30s": {
+      "baseline": {
+        "pss_kib": 302032,
+        "pss_mib": 294.953125,
+        "phase_samples": 30,
+        "used_samples": 30,
+        "used_elapsed_first_s": 460.675,
+        "used_elapsed_last_s": 489.768,
+        "statistic": "last5 median of first30 phase samples"
+      },
+      "optimized": {
+        "pss_kib": 363369,
+        "pss_mib": 354.8525390625,
+        "phase_samples": 30,
+        "used_samples": 30,
+        "used_elapsed_first_s": 373.307,
+        "used_elapsed_last_s": 402.367,
+        "statistic": "last5 median of first30 phase samples"
+      },
+      "delta_mib": 59.8994140625,
+      "delta_percent": 20.308113047624094
+    },
+    "warm_startup_and_navigation_peak": {
+      "baseline": {
+        "pss_kib": 330041,
+        "pss_mib": 322.3056640625,
+        "phase_samples": 88,
+        "used_samples": 88,
+        "used_elapsed_first_s": 11.004,
+        "used_elapsed_last_s": 98.053,
+        "statistic": "maximum sampled phase PSS"
+      },
+      "optimized": {
+        "pss_kib": 410964,
+        "pss_mib": 401.33203125,
+        "phase_samples": 87,
+        "used_samples": 87,
+        "used_elapsed_first_s": 11.005,
+        "used_elapsed_last_s": 97.047,
+        "statistic": "maximum sampled phase PSS"
+      },
+      "delta_mib": 79.0263671875,
+      "delta_percent": 24.519074902815106
+    },
+    "warm_guide_30s": {
+      "baseline": {
+        "pss_kib": 297390,
+        "pss_mib": 290.419921875,
+        "phase_samples": 31,
+        "used_samples": 30,
+        "used_elapsed_first_s": 99.054,
+        "used_elapsed_last_s": 128.115,
+        "statistic": "last5 median of first30 phase samples"
+      },
+      "optimized": {
+        "pss_kib": 355253,
+        "pss_mib": 346.9267578125,
+        "phase_samples": 52,
+        "used_samples": 30,
+        "used_elapsed_first_s": 98.049,
+        "used_elapsed_last_s": 127.106,
+        "statistic": "last5 median of first30 phase samples"
+      },
+      "delta_mib": 56.5068359375,
+      "delta_percent": 19.456942062611386
+    }
+  },
+  "final_main_replay": {
+    "import_peak": {
+      "baseline": {
+        "pss_kib": 358271,
+        "pss_mib": 349.8740234375,
+        "phase_samples": 171,
+        "used_samples": 171,
+        "used_first_elapsed_s": 195.125,
+        "used_last_elapsed_s": 365.528,
+        "statistic": "maximum sampled PSS",
+        "swap_pss_sampled": false,
+        "swap_pss_kib_range": null
+      },
+      "final": {
+        "pss_kib": 435735,
+        "pss_mib": 425.5224609375,
+        "phase_samples": 75,
+        "used_samples": 75,
+        "used_first_elapsed_s": 81.051,
+        "used_last_elapsed_s": 155.767,
+        "statistic": "maximum sampled PSS",
+        "swap_pss_sampled": true,
+        "swap_pss_kib_range": [
+          264,
+          4548
+        ]
+      },
+      "delta_mib": 75.6484375,
+      "delta_percent": 21.62162162162162
+    },
+    "settled_30s": {
+      "baseline": {
+        "pss_kib": 298800,
+        "pss_mib": 291.796875,
+        "phase_samples": 31,
+        "used_samples": 30,
+        "used_first_elapsed_s": 366.53,
+        "used_last_elapsed_s": 395.602,
+        "statistic": "last5 median within first30 valid phase samples",
+        "swap_pss_sampled": false,
+        "swap_pss_kib_range": null
+      },
+      "final": {
+        "pss_kib": 348264,
+        "pss_mib": 340.1015625,
+        "phase_samples": 44,
+        "used_samples": 30,
+        "used_first_elapsed_s": 156.769,
+        "used_last_elapsed_s": 185.816,
+        "statistic": "last5 median within first30 valid phase samples",
+        "swap_pss_sampled": true,
+        "swap_pss_kib_range": [
+          4548,
+          4548
+        ]
+      },
+      "delta_mib": 48.3046875,
+      "delta_percent": 16.55421686746988
+    },
+    "browsing_peak": {
+      "baseline": {
+        "pss_kib": 305370,
+        "pss_mib": 298.212890625,
+        "phase_samples": 63,
+        "used_samples": 63,
+        "used_first_elapsed_s": 397.603,
+        "used_last_elapsed_s": 459.674,
+        "statistic": "maximum sampled PSS",
+        "swap_pss_sampled": false,
+        "swap_pss_kib_range": null
+      },
+      "final": {
+        "pss_kib": 356443,
+        "pss_mib": 348.0888671875,
+        "phase_samples": 63,
+        "used_samples": 63,
+        "used_first_elapsed_s": 200.84,
+        "used_last_elapsed_s": 262.894,
+        "statistic": "maximum sampled PSS",
+        "swap_pss_sampled": true,
+        "swap_pss_kib_range": [
+          4548,
+          4548
+        ]
+      },
+      "delta_mib": 49.8759765625,
+      "delta_percent": 16.724956610014083
+    },
+    "post_browse_30s": {
+      "baseline": {
+        "pss_kib": 302032,
+        "pss_mib": 294.953125,
+        "phase_samples": 30,
+        "used_samples": 30,
+        "used_first_elapsed_s": 460.675,
+        "used_last_elapsed_s": 489.768,
+        "statistic": "last5 median within first30 valid phase samples",
+        "swap_pss_sampled": false,
+        "swap_pss_kib_range": null
+      },
+      "final": {
+        "pss_kib": 353209,
+        "pss_mib": 344.9306640625,
+        "phase_samples": 30,
+        "used_samples": 30,
+        "used_first_elapsed_s": 263.895,
+        "used_last_elapsed_s": 292.96,
+        "statistic": "last5 median within first30 valid phase samples",
+        "swap_pss_sampled": true,
+        "swap_pss_kib_range": [
+          4548,
+          4548
+        ]
+      },
+      "delta_mib": 49.9775390625,
+      "delta_percent": 16.944231074852997
+    }
+  },
+  "original_baseline_warm_repeats": {
+    "prefix": "baseline",
+    "forced_gc": false,
+    "unit": "KiB",
+    "repeats": [
+      {
+        "label": "baseline-repeat-1",
+        "last5_medians_kib": {
+          "pss_kib": 311529,
+          "java_heap_kib": 53440,
+          "native_heap_kib": 33816,
+          "rss_kib": 402180
+        },
+        "full_meminfo_kib": {
+          "pss": 310947,
+          "swap_pss": 264,
+          "pss_plus_swap_pss": 311211,
+          "dalvik_pss": 45039,
+          "dalvik_swap_pss": 36,
+          "dalvik_heap_size": 65472,
+          "dalvik_heap_alloc": 40896,
+          "dalvik_heap_free": 24576
+        },
+        "samples": 31
+      },
+      {
+        "label": "baseline-repeat-2",
+        "last5_medians_kib": {
+          "pss_kib": 311759,
+          "java_heap_kib": 53344,
+          "native_heap_kib": 35204,
+          "rss_kib": 402900
+        },
+        "full_meminfo_kib": {
+          "pss": 311315,
+          "swap_pss": 264,
+          "pss_plus_swap_pss": 311579,
+          "dalvik_pss": 44959,
+          "dalvik_swap_pss": 36,
+          "dalvik_heap_size": 65376,
+          "dalvik_heap_alloc": 40800,
+          "dalvik_heap_free": 24576
+        },
+        "samples": 31
+      },
+      {
+        "label": "baseline-repeat-3",
+        "last5_medians_kib": {
+          "pss_kib": 314991,
+          "java_heap_kib": 53304,
+          "native_heap_kib": 36848,
+          "rss_kib": 406128
+        },
+        "full_meminfo_kib": {
+          "pss": 314953,
+          "swap_pss": 264,
+          "pss_plus_swap_pss": 315217,
+          "dalvik_pss": 44983,
+          "dalvik_swap_pss": 36,
+          "dalvik_heap_size": 65384,
+          "dalvik_heap_alloc": 40808,
+          "dalvik_heap_free": 24576
+        },
+        "samples": 31
+      }
+    ],
+    "settled_pss_last5_median_range": [
+      311529,
+      314991
+    ],
+    "settled_pss_median_across_repeats": 311759,
+    "limit": "PSS is sampled physical attribution; PSS+SwapPSS is a separate logical footprint approximation. Initial natural traces did not sample swap; full meminfo is a later snapshot only."
+  },
+  "final_warm_status": "Incomplete: startup ANRs before sampling; no valid final warm repetitions. New paired controls after emulator restart pending.",
+  "limits": [
+    "Main replay: one observation per build, not a stable population RAM estimate",
+    "Near1Hz sampling can miss short peaks",
+    "Settled main replay uses last5 median from first30 phase samples",
+    "Initial import phases include manual settings/navigation and start at different startup elapsed times; not import-duration benchmarks",
+    "Main import triggers: baseline195.125s, initialoptimized130.066s, final81.051s aftersamplerstart",
+    "Cached appdata is reused but external startup work, wallclock cache freshness and OS residency were not isolated",
+    "Original raw traces did not sample SwapPSS; missing values are unknown rather than zero",
+    "No forcedGC/trim/pruning in natural main traces",
+    "Combined after builds include independent parserPR104; no parser-only or guide-only totalRAM attribution",
+    "Failed warm startups are excluded from measurements; hostdaemon cleanup and emulator reboot define a new control series",
+    "Private appdata archives/HPROFs/smaps/logs are never published"
+  ]
+}

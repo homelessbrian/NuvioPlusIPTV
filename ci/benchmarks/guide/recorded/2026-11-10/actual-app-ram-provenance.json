@@ -1,0 +1,61 @@
+{
+  "unit": "KiB except elapsed seconds",
+  "baseline_apk_sha256": "3719755BCF3D7DE6497B52EC0C517E7C9561770F40346F177D9712382D6BD339",
+  "initial_optimized_apk_sha256": "8E895FB4B06D51FCCC2265CD7D1D9AC7D1D76EA4D2C4153EF44393EDD8316B4A",
+  "final_apk_sha256": "b7fd78cc4c9da772d1b16edac8eda1df169f76b5b1c376c8f35fea587ef3538b",
+  "guide_commit": "7d816f906227546f33d52e912c6077e7d2475a40",
+  "combined_preview_commit": "5fca4878490daf121aa7b4be159da7bfad65a2ba",
+  "traces": [
+    {
+      "trace": "baseline",
+      "sha256": "bb56527abb726ea053bd5a6c78fe8393df528d6bf33a8d04dbb29a4f1658ea27",
+      "samples": 510
+    },
+    {
+      "trace": "baseline-warm",
+      "sha256": "ce077719b71f8830f593bdfd906cf46c79c9aca28234e6ff072a812b014a336a",
+      "samples": 130
+    },
+    {
+      "trace": "optimized",
+      "sha256": "00f42dfa14d38cb7e4d48a639a20b64a6c35b3047abf6d497768dffb9f5889f1",
+      "samples": 435
+    },
+    {
+      "trace": "optimized-warm",
+      "sha256": "6c82e4978e1cd3b00fd5f4e2a830a87cc7fd12fb153d7c3edd0bfe14c4637788",
+      "samples": 150
+    },
+    {
+      "trace": "final",
+      "sha256": "a6187789eed64b194422339c906738efecb4d2794b286c3f81c8dac0f133920b",
+      "samples": 299
+    },
+    {
+      "trace": "baseline-repeat-1",
+      "sha256": "b4bb5e7593ec5d31533f74d434c3cd906233b60156d017b1a9684cddb3d4f9d4",
+      "samples": 31
+    },
+    {
+      "trace": "baseline-repeat-2",
+      "sha256": "5606559c0a79104a6585b8266469df286e6fe3e4c155988449a5806a5a0bf808",
+      "samples": 31
+    },
+    {
+      "trace": "baseline-repeat-3",
+      "sha256": "0a128d67f23ef329577fa8e8c4ff8dc0ff240cd99e4d180faed16caa9aa5b106",
+      "samples": 31
+    }
+  ],
+  "limits": [
+    "Synthetic4k-channel96k-programme emulator fixture; no playback",
+    "Builds include group/Express fixes; after builds also parserPR104 plus guidechanges",
+    "Initial unfavorable natural traces preserved separately from final revision",
+    "Missing swap values were not captured; do not treat blanks as zero",
+    "Only completed warm traces are exported; failed startup attempts are not measurements",
+    "Original baseline has three warm repeats; final warm/control comparison may be pending",
+    "Fresh-process warm repeats reuse loaded data; no forcedGC",
+    "Main import phases begin at different elapsed startup times; startup work and wall-clock cache freshness can overlap",
+    "No private app archives, heap dumps, smaps or source credentials included"
+  ]
+}
