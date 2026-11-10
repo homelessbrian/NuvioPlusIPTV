@@ -584,6 +584,9 @@ class LiveTvRepository @Inject constructor(
         val now = System.currentTimeMillis()
         val playlists = prefs.currentPlaylists().filter { it.liveEnabled }
         var changed = false
+        // Playlists downloaded for the first time (just added): the channel list is still read
+        // from every saved playlist, but the message only names these.
+        val newlyAdded = ArrayList<String>()
         // Automatic checks wait while a movie or episode is playing in Nuvio's player (unless
         // an update you asked for is waiting behind this one).
         suspend fun outOfTheWay() {
@@ -632,6 +635,7 @@ class LiveTvRepository @Inject constructor(
                     Log.w(TAG, "Playlist ${pl.name} failed: $err")
                     LIVE_REPORT.add("Playlist \"${pl.name}\" failed: $err" + if (pl.isXtream) " (Xtream login: server ${if (pl.xtreamServer.isBlank()) "missing" else "set"}, user ${if (pl.xtreamUsername.isBlank()) "missing" else "set"}, password ${if (pl.xtreamPassword.isBlank()) "missing" else "set"})" else "")
                 }
+                if (before == null && file.exists()) newlyAdded += pl.name
                 if (result.getOrNull() == true || (before == null && file.exists())) changed = true
             }
         }
@@ -639,8 +643,8 @@ class LiveTvRepository @Inject constructor(
         // Build channels first so EPG matching knows which channels exist.
         if (changed || _channels.value.isEmpty()) {
             outOfTheWay()
-            setStatus(loading = true, message = "Reading channels…")
-            buildChannels()
+            setStatus(loading = true, message = addingMessage(newlyAdded) ?: "Reading channels…")
+            buildChannels(addingMessage(newlyAdded))
             saveChannels() // so the next start uses it straight away
         }
 
@@ -1770,7 +1774,19 @@ class LiveTvRepository @Inject constructor(
         }.onFailure { Log.w(TAG, "Carrying settings over to renamed channels failed", it) }
     }
 
-    private suspend fun buildChannels() = withContext(BackgroundWork.cpu()) {
+    /** "Adding channels from …" for playlists just added, or null when none were. */
+    private fun addingMessage(names: List<String>): String? = when (names.size) {
+        0 -> null
+        1 -> "Adding channels from \"${names[0]}\"…"
+        else -> "Adding channels from ${names.size} new playlists…"
+    }
+
+    /**
+     * Reads every saved playlist into one channel list (numbers carry on from one playlist to
+     * the next). [fixedMessage]: shown for the whole read instead of naming each playlist, so
+     * adding a playlist doesn't look like the others are being loaded again.
+     */
+    private suspend fun buildChannels(fixedMessage: String? = null) = withContext(BackgroundWork.cpu()) {
         val before = (_channels.value.takeIf { it.isNotEmpty() }?.associate { it.key to it.url } ?: previousLinks)
             .takeIf { it.isNotEmpty() }
         previousLinks = emptyMap()
@@ -1782,7 +1798,7 @@ class LiveTvRepository @Inject constructor(
         for ((plIndex, pl) in playlists.withIndex()) {
             val file = playlistFile(pl.id)
             if (!file.exists()) continue
-            setStatus(loading = true, message = "Reading channels from \"${pl.name}\"" + (if (playlists.size > 1) " (${plIndex + 1} of ${playlists.size})" else "") + "…")
+            if (fixedMessage == null) setStatus(loading = true, message = "Reading channels from \"${pl.name}\"" + (if (playlists.size > 1) " (${plIndex + 1} of ${playlists.size})" else "") + "…")
             val parsed = runCatching { openMaybeGzip(file).bufferedReader().use { M3uParser.parse(it) } }
                 .onFailure { Log.w(TAG, "Parse ${pl.name} failed", it) }
                 .getOrNull() ?: continue
