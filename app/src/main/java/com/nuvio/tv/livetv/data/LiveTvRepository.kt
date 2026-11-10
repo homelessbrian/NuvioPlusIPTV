@@ -1225,8 +1225,10 @@ class LiveTvRepository @Inject constructor(
         scope.launch(BackgroundWork.reads) {
             val changes = guideDb.changes
             val available = guideDb.channelsWithListings()
-            if (cacheEpoch.get() != epoch || guideDb.changes != changes) return@launch
-            _guideChannelsWithListings.value = available
+            rangeMutex.withLock {
+                if (cacheEpoch.get() != epoch || guideDb.changes != changes) return@launch
+                _guideChannelsWithListings.value = available
+            }
             val now = System.currentTimeMillis()
             val present = guideDb.channelsWithListings(now - 3 * HOUR, now + 18 * HOUR)
             if (cacheEpoch.get() != epoch || guideDb.changes != changes) return@launch
