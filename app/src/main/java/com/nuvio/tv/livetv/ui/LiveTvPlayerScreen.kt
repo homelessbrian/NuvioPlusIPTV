@@ -67,6 +67,7 @@ import com.nuvio.tv.livetv.model.PanelRowLists
 import com.nuvio.tv.livetv.model.matchFrameRate
 import com.nuvio.tv.livetv.player.LiveTrackOption
 import com.nuvio.tv.livetv.player.LiveFrameRateStabilizer
+import com.nuvio.tv.livetv.player.liveFrameRateForSession
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -272,27 +273,21 @@ fun LiveTvPlayerScreen(
         while (true) {
             val p = viewModel.playback.player
             val f = p?.videoFormat
+            val active = p != null && playback.channelKey != null
+            val measured = if (active) viewModel.playback.measuredFps else -1f
+            if (measured > 0f) hasMeasuredFrames = true
             if (f != null) {
                 if (playback.catchupTitle == null) playback.channelKey?.let { viewModel.recordQuality(it, f.height) }
-                // The frame rate measured from the frames themselves, once there is one: what's
-                // actually on screen (a stream's stated rate can be wrong, or left over from
-                // another feed). Until then, the stream's stated rate.
-                val measured = viewModel.playback.measuredFps
-                if (measured > 0f) hasMeasuredFrames = true
-                val fps = if (measured > 0f) measured else f.frameRate
-                if (fps > 0f) shownFps = fps
-                // Give timestamp measurement time to distinguish 59.94 from 60 before the first
-                // switch. Metadata remains a fallback for decoders that supply no frame callbacks.
-                val now = android.os.SystemClock.elapsedRealtime()
-                val matchingFps = when {
-                    measured > 0f -> measured
-                    !hasMeasuredFrames && now - startedAt >= 6_000L -> f.frameRate
-                    else -> -1f
-                }
-                videoFps = frameRateStabilizer.update(matchingFps, now)
-            } else {
-                videoFps = frameRateStabilizer.update(-1f, android.os.SystemClock.elapsedRealtime())
             }
+            // Timestamp callbacks can be usable before videoFormat/its frameRate is available.
+            val fps = liveFrameRateForSession(active, measured, f?.frameRate ?: -1f)
+            if (fps > 0f) shownFps = fps
+            // Keep waiting for measurements after the diagnostic below; a late measured rate
+            // must still trigger mode selection on metadata-less live streams.
+            val now = android.os.SystemClock.elapsedRealtime()
+            val matchingFps = liveFrameRateForSession(active, measured,
+                if (!hasMeasuredFrames && now - startedAt >= 6_000L) f?.frameRate ?: -1f else -1f)
+            videoFps = frameRateStabilizer.update(matchingFps, now)
             // Match Frame Rate switches the display itself: the player's own frame rate hint to
             // the screen is turned off then, so the two don't pull against each other.
             runCatching {
@@ -305,8 +300,9 @@ fun LiveTvPlayerScreen(
         }
     }
     MatchFrameRate(
-        enabled = settings.matchFrameRate, fps = videoFps, restore = settings.frameRateMode == "START_STOP",
+        enabled = settings.matchFrameRate && playback.channelKey != null, fps = videoFps, restore = settings.frameRateMode == "START_STOP",
         channelKey = playback.channelKey,
+        diagnostics = { viewModel.playback.frameRateDiagnostics() },
         // The switch is made with the picture paused, as Nuvio's own player and TiviMate do: some
         // TVs ignored a switch asked for while a channel was playing.
         pause = { viewModel.playback.player?.let { pl -> pl.playWhenReady.also { pl.playWhenReady = false } } ?: false },
@@ -1807,6 +1803,7 @@ private fun MatchFrameRate(
     fps: Float,
     restore: Boolean,
     channelKey: String? = null,
+    diagnostics: () -> String = { "" },
     pause: () -> Boolean = { false },
     resume: (Boolean) -> Unit = {}
 ) {
@@ -1830,11 +1827,12 @@ private fun MatchFrameRate(
     }
     // Say why nothing happened, so the Start-Up Report shows which part is missing.
     val fpsNow = androidx.compose.runtime.rememberUpdatedState(fps)
-    LaunchedEffect(enabled) {
+    val diagnosticsNow = androidx.compose.runtime.rememberUpdatedState(diagnostics)
+    LaunchedEffect(enabled, channelKey) {
         if (!enabled) return@LaunchedEffect
         delay(20_000)
         if (fpsNow.value <= 0f) com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
-            "Match frame rate: this stream doesn't say its frame rate and it couldn't be measured yet, so the display wasn't switched"
+            "Match frame rate: still waiting for usable frame timing; will retry while playing (" + diagnosticsNow.value() + ")"
         )
     }
     // The per-channel stabilizer has already normalized and confirmed the rate.
