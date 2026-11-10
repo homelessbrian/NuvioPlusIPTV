@@ -1,8 +1,5 @@
 package com.nuvio.tv.livetv.sports
 
-import com.sun.management.ThreadMXBean
-import java.lang.management.ManagementFactory
-import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -52,7 +49,20 @@ class SportsHockeyTechTest {
 
     private fun assertEventsEqual(expected: List<JSONObject>, actual: List<JSONObject>) {
         assertEquals(expected.map { it.getString("id") }, actual.map { it.getString("id") })
-        expected.zip(actual).forEach { (before, after) -> assertTrue("Event ${before.optString("id")} changed", before.similar(after)) }
+        expected.zip(actual).forEach { (before, after) ->
+            assertEquals("Event ${before.optString("id")} changed", canonicalJson(before), canonicalJson(after))
+        }
+    }
+
+    /** Compare every nested value without depending on object key order or host-only JSON APIs. */
+    private fun canonicalJson(value: Any?): String = when (value) {
+        is JSONObject -> value.keys().asSequence().toList().sorted().joinToString(",", "{", "}") { key ->
+            JSONObject.quote(key) + ":" + canonicalJson(value.get(key))
+        }
+        is JSONArray -> (0 until value.length()).joinToString(",", "[", "]") { canonicalJson(value.get(it)) }
+        null, JSONObject.NULL -> "null"
+        is Number, is Boolean -> value.toString()
+        else -> JSONObject.quote(value.toString())
     }
 
     internal class Fixture(private val code: String) {
@@ -116,28 +126,5 @@ class SportsHockeyTechTest {
         internal fun easternDay(event: JSONObject): String = Instant.parse(event.getString("date")).atZone(eastern)
             .toLocalDate().toString().replace("-", "")
         internal fun JSONArray.objects(): List<JSONObject> = (0 until length()).map(::getJSONObject)
-    }
-}
-
-/** Run on the same JVM before and after editing SportsFeeds; never an Android PSS result. */
-class SportsHockeyTechAllocationBenchmark {
-    @Test
-    fun `measure cached season conversion for three requested days`() {
-        val feed = SportsHockeyTechTest.Fixture("ushl")
-        feed.events("20260101", "20260101") // Warm parsing and the cached season outside the measurement.
-        val bean = ManagementFactory.getThreadMXBean() as ThreadMXBean
-        check(bean.isThreadAllocatedMemorySupported)
-        bean.isThreadAllocatedMemoryEnabled = true
-        @Suppress("DEPRECATION")
-        val threadId = Thread.currentThread().id
-        val before = bean.getThreadAllocatedBytes(threadId)
-        val output = listOf("20261109", "20261110", "20261111").map { feed.events(it, it) }
-        val allocated = bean.getThreadAllocatedBytes(threadId) - before
-        val bytes = output.joinToString("\n") { it.toString() }.toByteArray(Charsets.UTF_8)
-        val sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        assertEquals(listOf(11, 15, 11), output.map { it.length() })
-        assertEquals(2, feed.requests)
-        println("sports-hockey-allocation: seasonGames=3657 requestedDays=3 returnedEvents=${output.sumOf { it.length() }} " +
-            "callerAllocatedBytes=$allocated outputBytes=${bytes.size} outputSha256=$sha fixtureLoads=${feed.requests}")
     }
 }
