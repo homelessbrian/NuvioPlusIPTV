@@ -929,7 +929,7 @@ fun LiveTvPlayerScreen(
                     nextTime = next?.let { formatRange(it.startMs, it.stopMs, use24h) },
                     catchupAvailable = b.catchup != null,
                     browsing = true,
-                    hidden = BarPart.parse(settings.barHidden)
+                    hidden = BarPart.hiddenOf(settings.barHidden)
                 )
             }
         }
@@ -1131,7 +1131,7 @@ fun LiveTvPlayerScreen(
                         }
                     } else null,
                     recentFocus = recentFocus,
-                    hidden = BarPart.parse(settings.barHidden),
+                    hidden = BarPart.hiddenOf(settings.barHidden),
                     bellOn = liveBell?.on == true,
                     pinOn = pinGame != null && pinGame.id in pinList
                 )
@@ -1282,7 +1282,7 @@ fun LiveTvPlayerScreen(
                 },
                 sleepLabel = sleepAt?.let { "${((it - System.currentTimeMillis()) / 60_000 + 1).coerceAtLeast(1)} min left" } ?: "Off",
                 timeAction = timeAction,
-                hidden = BarPart.parse(settings.barHidden),
+                hidden = BarPart.hiddenOf(settings.barHidden),
                 quickSettings = settings,
                 quickGroups = { viewModel.rowGroupOptions() },
                 onQuickUpdate = { t -> viewModel.updateSettings(t) },
@@ -1293,8 +1293,7 @@ fun LiveTvPlayerScreen(
                 },
                 onToggle = { part ->
                     viewModel.updateSettings { s ->
-                        val cur = BarPart.parse(s.barHidden)
-                        s.copy(barHidden = BarPart.join(if (part in cur) cur - part else cur + part))
+                        s.copy(barHidden = BarPart.toggled(s.barHidden, part))
                     }
                 },
                 onReset = { viewModel.updateSettings { it.copy(barHidden = "") } },
@@ -1379,7 +1378,7 @@ fun LiveTvPlayerScreen(
         PlayerDialog.BACKUPS -> if (backups.isEmpty()) dialog = PlayerDialog.NONE else if (backupMenuFor == null) BackupChannelsDialog(
             anchor = backupsAnchor,
             channels = backups,
-            showGroup = BarPart.GROUP !in BarPart.parse(settings.barHidden),
+            showGroup = BarPart.GROUP !in BarPart.hiddenOf(settings.barHidden),
             playingKey = playback.channelKey,
             startKey = backupMenuLastKey,
             onLongPress = { ch -> backupMenuFor = ch; backupMenuLastKey = ch.key },

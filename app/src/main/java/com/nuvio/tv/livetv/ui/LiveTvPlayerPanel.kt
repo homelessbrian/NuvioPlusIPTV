@@ -117,6 +117,22 @@ internal object BarPart {
     )
 
     fun parse(raw: String): Set<String> = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
+    /** Parts that start switched off: they're saved as "+name" once switched on (so older saved layouts keep them off). */
+    private val OFF_BY_DEFAULT = setOf(GROUP)
+
+    /** The parts that are off for this saved layout (use this, not [parse], for the full-screen bar). */
+    fun hiddenOf(raw: String): Set<String> {
+        val saved = parse(raw)
+        return saved.filterNot { it.startsWith("+") }.toSet() + OFF_BY_DEFAULT.filter { "+$it" !in saved }
+    }
+
+    /** The saved layout after switching [part] on or off. */
+    fun toggled(raw: String, part: String): String {
+        val cur = parse(raw)
+        val key = if (part in OFF_BY_DEFAULT) "+$part" else part
+        return join(if (key in cur) cur - key else cur + key)
+    }
     fun join(set: Set<String>): String = set.sorted().joinToString(",")
 }
 
