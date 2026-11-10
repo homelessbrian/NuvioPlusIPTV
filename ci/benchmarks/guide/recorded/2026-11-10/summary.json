@@ -1,0 +1,475 @@
+{
+  "scope": "Android SQLite query/Java light-programme decoding and retention reproduction, not whole-app or key-to-frame latency",
+  "p95Method": "Nearest rank; with n=5 this is the observed maximum. No p95 for n<5.",
+  "completedSamples": 15,
+  "timeoutSamples": [],
+  "groups": [
+    {
+      "channels": 4000,
+      "configuration": "baseline",
+      "n": 5,
+      "metrics": {
+        "readDecodeMergeMs": {
+          "observed": null,
+          "median": 8831.3692,
+          "p95": 11330.7658,
+          "min": 8580.6523,
+          "max": 11330.7658
+        },
+        "decodedPrograms": {
+          "observed": null,
+          "median": 226400,
+          "p95": 226400,
+          "min": 226400,
+          "max": 226400
+        },
+        "displayRetainedPrograms": {
+          "observed": null,
+          "median": 211200,
+          "p95": 211200,
+          "min": 211200,
+          "max": 211200
+        },
+        "ownerRetainedPrograms": {
+          "observed": null,
+          "median": 211200,
+          "p95": 211200,
+          "min": 211200,
+          "max": 211200
+        },
+        "heapDeltaBytes": {
+          "observed": null,
+          "median": 31989856,
+          "p95": 32055392,
+          "min": 31989856,
+          "max": 32055392
+        },
+        "pssKiB": {
+          "observed": null,
+          "median": 110174,
+          "p95": 110255,
+          "min": 109845,
+          "max": 110255
+        },
+        "pssBeforeKiB": {
+          "observed": null,
+          "median": 70479,
+          "p95": 70641,
+          "min": 70284,
+          "max": 70641
+        },
+        "visitedRows": {
+          "observed": null,
+          "median": 226400,
+          "p95": 226400,
+          "min": 226400,
+          "max": 226400
+        },
+        "queries": {
+          "observed": null,
+          "median": 8,
+          "p95": 8,
+          "min": 8,
+          "max": 8
+        },
+        "javaMaxHeapBytes": {
+          "observed": null,
+          "median": 201326592,
+          "p95": 201326592,
+          "min": 201326592,
+          "max": 201326592
+        }
+      }
+    },
+    {
+      "channels": 4000,
+      "configuration": "windowed",
+      "n": 5,
+      "metrics": {
+        "readDecodeMergeMs": {
+          "observed": null,
+          "median": 3752.6655,
+          "p95": 5555.4106,
+          "min": 3285.3498,
+          "max": 5555.4106
+        },
+        "decodedPrograms": {
+          "observed": null,
+          "median": 8768,
+          "p95": 8768,
+          "min": 8768,
+          "max": 8768
+        },
+        "displayRetainedPrograms": {
+          "observed": null,
+          "median": 8704,
+          "p95": 8704,
+          "min": 8704,
+          "max": 8704
+        },
+        "ownerRetainedPrograms": {
+          "observed": null,
+          "median": 8768,
+          "p95": 8768,
+          "min": 8768,
+          "max": 8768
+        },
+        "heapDeltaBytes": {
+          "observed": null,
+          "median": 2056288,
+          "p95": 2056288,
+          "min": 2056288,
+          "max": 2056288
+        },
+        "pssKiB": {
+          "observed": null,
+          "median": 80792,
+          "p95": 80993,
+          "min": 79086,
+          "max": 80993
+        },
+        "pssBeforeKiB": {
+          "observed": null,
+          "median": 70658,
+          "p95": 70710,
+          "min": 70442,
+          "max": 70710
+        },
+        "visitedRows": {
+          "observed": null,
+          "median": 96768,
+          "p95": 96768,
+          "min": 96768,
+          "max": 96768
+        },
+        "queries": {
+          "observed": null,
+          "median": 4,
+          "p95": 4,
+          "min": 4,
+          "max": 4
+        },
+        "javaMaxHeapBytes": {
+          "observed": null,
+          "median": 201326592,
+          "p95": 201326592,
+          "min": 201326592,
+          "max": 201326592
+        }
+      }
+    },
+    {
+      "channels": 16000,
+      "configuration": "baseline",
+      "n": 1,
+      "metrics": {
+        "readDecodeMergeMs": {
+          "observed": 561239.5427,
+          "median": null,
+          "p95": null,
+          "min": 561239.5427,
+          "max": 561239.5427
+        },
+        "decodedPrograms": {
+          "observed": 730400,
+          "median": null,
+          "p95": null,
+          "min": 730400,
+          "max": 730400
+        },
+        "displayRetainedPrograms": {
+          "observed": 715200,
+          "median": null,
+          "p95": null,
+          "min": 715200,
+          "max": 715200
+        },
+        "ownerRetainedPrograms": {
+          "observed": 715200,
+          "median": null,
+          "p95": null,
+          "min": 715200,
+          "max": 715200
+        },
+        "heapDeltaBytes": {
+          "observed": 108122208,
+          "median": null,
+          "p95": null,
+          "min": 108122208,
+          "max": 108122208
+        },
+        "pssKiB": {
+          "observed": 154930,
+          "median": null,
+          "p95": null,
+          "min": 154930,
+          "max": 154930
+        },
+        "pssBeforeKiB": {
+          "observed": 72809,
+          "median": null,
+          "p95": null,
+          "min": 72809,
+          "max": 72809
+        },
+        "visitedRows": {
+          "observed": 730400,
+          "median": null,
+          "p95": null,
+          "min": 730400,
+          "max": 730400
+        },
+        "queries": {
+          "observed": 8,
+          "median": null,
+          "p95": null,
+          "min": 8,
+          "max": 8
+        },
+        "javaMaxHeapBytes": {
+          "observed": 201326592,
+          "median": null,
+          "p95": null,
+          "min": 201326592,
+          "max": 201326592
+        }
+      }
+    },
+    {
+      "channels": 16000,
+      "configuration": "default_with_checksum",
+      "n": 1,
+      "metrics": {
+        "readDecodeMergeMs": {
+          "observed": 43577.6654,
+          "median": null,
+          "p95": null,
+          "min": 43577.6654,
+          "max": 43577.6654
+        },
+        "decodedPrograms": {
+          "observed": 32768,
+          "median": null,
+          "p95": null,
+          "min": 32768,
+          "max": 32768
+        },
+        "displayRetainedPrograms": {
+          "observed": 32704,
+          "median": null,
+          "p95": null,
+          "min": 32704,
+          "max": 32704
+        },
+        "ownerRetainedPrograms": {
+          "observed": 32768,
+          "median": null,
+          "p95": null,
+          "min": 32768,
+          "max": 32768
+        },
+        "heapDeltaBytes": {
+          "observed": 7241824,
+          "median": null,
+          "p95": null,
+          "min": 7241824,
+          "max": 7241824
+        },
+        "pssKiB": {
+          "observed": 103524,
+          "median": null,
+          "p95": null,
+          "min": 103524,
+          "max": 103524
+        },
+        "pssBeforeKiB": {
+          "observed": 87325,
+          "median": null,
+          "p95": null,
+          "min": 87325,
+          "max": 87325
+        },
+        "visitedRows": {
+          "observed": 384768,
+          "median": null,
+          "p95": null,
+          "min": 384768,
+          "max": 384768
+        },
+        "queries": {
+          "observed": 4,
+          "median": null,
+          "p95": null,
+          "min": 4,
+          "max": 4
+        },
+        "javaMaxHeapBytes": {
+          "observed": 201326592,
+          "median": null,
+          "p95": null,
+          "min": 201326592,
+          "max": 201326592
+        }
+      }
+    },
+    {
+      "channels": 16000,
+      "configuration": "forward_only_api28",
+      "n": 1,
+      "metrics": {
+        "readDecodeMergeMs": {
+          "observed": 31758.4589,
+          "median": null,
+          "p95": null,
+          "min": 31758.4589,
+          "max": 31758.4589
+        },
+        "decodedPrograms": {
+          "observed": 32768,
+          "median": null,
+          "p95": null,
+          "min": 32768,
+          "max": 32768
+        },
+        "displayRetainedPrograms": {
+          "observed": 32704,
+          "median": null,
+          "p95": null,
+          "min": 32704,
+          "max": 32704
+        },
+        "ownerRetainedPrograms": {
+          "observed": 32768,
+          "median": null,
+          "p95": null,
+          "min": 32768,
+          "max": 32768
+        },
+        "heapDeltaBytes": {
+          "observed": 7241824,
+          "median": null,
+          "p95": null,
+          "min": 7241824,
+          "max": 7241824
+        },
+        "pssKiB": {
+          "observed": 104074,
+          "median": null,
+          "p95": null,
+          "min": 104074,
+          "max": 104074
+        },
+        "pssBeforeKiB": {
+          "observed": 87632,
+          "median": null,
+          "p95": null,
+          "min": 87632,
+          "max": 87632
+        },
+        "visitedRows": {
+          "observed": 384768,
+          "median": null,
+          "p95": null,
+          "min": 384768,
+          "max": 384768
+        },
+        "queries": {
+          "observed": 4,
+          "median": null,
+          "p95": null,
+          "min": 4,
+          "max": 4
+        },
+        "javaMaxHeapBytes": {
+          "observed": 201326592,
+          "median": null,
+          "p95": null,
+          "min": 201326592,
+          "max": 201326592
+        }
+      }
+    },
+    {
+      "channels": 16000,
+      "configuration": "windowed",
+      "n": 2,
+      "metrics": {
+        "readDecodeMergeMs": {
+          "observed": null,
+          "median": 51403.4548,
+          "p95": null,
+          "min": 50980.8991,
+          "max": 51826.0105
+        },
+        "decodedPrograms": {
+          "observed": null,
+          "median": 32768.0,
+          "p95": null,
+          "min": 32768,
+          "max": 32768
+        },
+        "displayRetainedPrograms": {
+          "observed": null,
+          "median": 32704.0,
+          "p95": null,
+          "min": 32704,
+          "max": 32704
+        },
+        "ownerRetainedPrograms": {
+          "observed": null,
+          "median": 32768.0,
+          "p95": null,
+          "min": 32768,
+          "max": 32768
+        },
+        "heapDeltaBytes": {
+          "observed": null,
+          "median": 7241824.0,
+          "p95": null,
+          "min": 7241824,
+          "max": 7241824
+        },
+        "pssKiB": {
+          "observed": null,
+          "median": 103257.0,
+          "p95": null,
+          "min": 102416,
+          "max": 104098
+        },
+        "pssBeforeKiB": {
+          "observed": null,
+          "median": 86555.0,
+          "p95": null,
+          "min": 85651,
+          "max": 87459
+        },
+        "visitedRows": {
+          "observed": null,
+          "median": 384768.0,
+          "p95": null,
+          "min": 384768,
+          "max": 384768
+        },
+        "queries": {
+          "observed": null,
+          "median": 4.0,
+          "p95": null,
+          "min": 4,
+          "max": 4
+        },
+        "javaMaxHeapBytes": {
+          "observed": null,
+          "median": 201326592.0,
+          "p95": null,
+          "min": 201326592,
+          "max": 201326592
+        }
+      }
+    }
+  ],
+  "controlledOutputChecksum": "93be033f79c09f2607deed0ea8b271a8336a34fcb41a0e4595ccfbeb965518ef",
+  "unchangedDatabaseHashes": {
+    "database-before.sha256": "670e00151fd11b1a352474fa24715437ca7dd4b65d5a42095c8b33ca061d63f5"
+  },
+  "deviceCleanup": "CLEAN"
+}

@@ -1,0 +1,19 @@
+{
+  "observation": "In-flight 16k baseline, before its completed 561239.5427 ms query/decode/merge result",
+  "processId": 16968,
+  "processElapsedSeconds": 553,
+  "processCpuSeconds": 190,
+  "mainThreadCpuSeconds": 188,
+  "state": "D (disk sleep)",
+  "rssKiB": 161712,
+  "swapKiB": 36992,
+  "threads": 10,
+  "rchar": 202063658666,
+  "wchar": 5177,
+  "syscr": 49331455,
+  "syscw": 48,
+  "read_bytes": 7000891392,
+  "write_bytes": 32768,
+  "cancelled_write_bytes": 0,
+  "counterMeaning": "rchar is logical read traffic, including cached reads; read_bytes is the kernel storage I/O counter. Do not call rchar physical disk traffic."
+}

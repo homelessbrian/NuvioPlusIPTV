@@ -1,0 +1,14 @@
+[
+  {
+    "file": "recorded-sources/default/GuideQueryBenchmark.java",
+    "sha256": "67f839ecdc872b3a9b116fcc7bc470b60acaefd70f95ff0ba65bccf20fa8ee11"
+  },
+  {
+    "file": "recorded-sources/forward-check/GuideQueryBenchmark.java",
+    "sha256": "9d0fb6b3f830c0df381d8582615ada52c79aaecc5142f591da5f482a4523ed5c"
+  },
+  {
+    "file": "recorded-sources/forward-check/GuideQueryBenchmarkForward.java",
+    "sha256": "ac400857eeb0a16b1e4ba42b34287e1e0f0ac4ca23ca8b23345467b60b52b96b"
+  }
+]
