@@ -1492,20 +1492,25 @@ internal object OtherFeeds {
         val games = LinkedHashMap<String, JSONObject>()
         for (i in 0 until season.length()) {
             val g = season.optJSONObject(i) ?: continue
-            val ev = htEvent(code, g) ?: continue
-            if (inSpan(isoMs(ev.optString("date")), span)) games[ev.optString("id")] = ev
+            val ev = htEvent(code, g, span) ?: continue
+            games[ev.optString("id")] = ev
         }
         for (i in 0 until bar.length()) {
-            val ev = htEvent(code, bar.optJSONObject(i) ?: continue) ?: continue
-            if (inSpan(isoMs(ev.optString("date")), span)) games[ev.optString("id")] = ev
+            val ev = htEvent(code, bar.optJSONObject(i) ?: continue, span) ?: continue
+            games[ev.optString("id")] = ev
         }
         return games.values.toList()
     }
 
     /** One HockeyTech game (the season list and the score bar name things differently). */
-    private fun htEvent(code: String, g: JSONObject): JSONObject? {
+    private fun htEvent(code: String, g: JSONObject, span: Pair<String, String>): JSONObject? {
         val id = g.any("game_id", "ID", "id") ?: return null
         val start = isoMs(g.any("GameDateISO8601")) ?: return null
+        val date = isoOut(start)
+        // A day request reuses the whole season. Reject its other dates before building
+        // teams, status, competitors and venue objects that the caller would discard.
+        // Use the same normalized date as the old post-conversion check.
+        if (!inSpan(isoMs(date), span)) return null
         val raw = g.any("game_status", "GameStatusStringLong", "GameStatusString").orEmpty()
         val low = raw.lowercase(Locale.ROOT)
         val statusCode = g.any("GameStatus", "status")
@@ -1544,7 +1549,7 @@ internal object OtherFeeds {
         val competition = JSONObject().put("status", status)
             .put("competitors", JSONArray().put(comp(home, true, hs, done && hN != null && vN != null && hN > vN)).put(comp(away, false, vs, done && hN != null && vN != null && vN > hN)))
         g.any("venue_name", "venue_location")?.let { competition.put("venue", JSONObject().put("fullName", it)) }
-        return JSONObject().put("id", "$code-$id").put("date", isoOut(start)).put("status", status)
+        return JSONObject().put("id", "$code-$id").put("date", date).put("status", status)
             .put("name", "${away.optString("displayName")} at ${home.optString("displayName")}")
             .put("competitions", JSONArray().put(competition))
     }
