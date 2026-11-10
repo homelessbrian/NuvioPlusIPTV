@@ -22,33 +22,42 @@ final class OpenVpn2Config implements AutoCloseable {
     }
 
     static char[] core3Preflight(char[] source) throws IOException {
-        StringBuilder output = new StringBuilder();
-        String block = null;
-        for (String line : new String(source).split("\\r?\\n", -1)) {
-            String trimmed = line.trim().toLowerCase(Locale.ROOT);
-            if (block != null) {
-                output.append(line).append('\n');
-                if (trimmed.equals("</" + block + ">")) block = null;
-            } else {
-                if (inlineOpening(trimmed))
-                    block = trimmed.substring(1, trimmed.length() - 1);
-                String option = option(trimmed);
-                if (!option.equals("fragment")) output.append(line).append('\n');
+        if (OpenVpnEnginePolicy.select(source) != OpenVpnEnginePolicy.Engine.OPENVPN2) return source.clone();
+        char[] normalized = OpenVpnEnginePolicy.normalizeLegacyKeysize(source);
+        try {
+            StringBuilder output = new StringBuilder();
+            String block = null;
+            for (String line : new String(normalized).split("\\r?\\n", -1)) {
+                String trimmed = line.trim().toLowerCase(Locale.ROOT);
+                if (block != null) {
+                    output.append(line).append('\n');
+                    if (trimmed.equals("</" + block + ">")) block = null;
+                } else {
+                    if (inlineOpening(trimmed))
+                        block = trimmed.substring(1, trimmed.length() - 1);
+                    String option = option(trimmed);
+                    // Core3 uses MbedTLS3, which cannot parse this legacy purpose check. This
+                    // supplemental preflight uses its supported server-purpose equivalent;
+                    // the actual OpenSSL/OpenVPN2 config below retains the original constraint.
+                    if (option.equals("ns-cert-type")) output.append("remote-cert-tls server\n");
+                    else if (!option.equals("fragment")) output.append(line).append('\n');
+                }
             }
-        }
-        return output.toString().toCharArray();
+            return output.toString().toCharArray();
+        } finally { Arrays.fill(normalized, '\0'); }
     }
 
     static OpenVpn2Config prepare(char[] source) throws IOException {
+        char[] normalized = OpenVpnEnginePolicy.normalizeLegacyKeysize(source);
         StringBuilder output = new StringBuilder();
         String block = null;
         char[] username = null, password = null;
         boolean required = false, authBlock = false, noCompression = false;
         String cipher = null;
         boolean negotiatedCiphers = false, fallbackCipher = false;
-        int authFields = 0;
+        int authFields = 0, legacyCertTypes = 0;
         try {
-            for (String line : new String(source).split("\\r?\\n", -1)) {
+            for (String line : new String(normalized).split("\\r?\\n", -1)) {
                 String trimmed = line.trim().toLowerCase(Locale.ROOT);
                 if (authBlock) {
                     if (trimmed.equals("</auth-user-pass>")) {
@@ -75,6 +84,11 @@ final class OpenVpn2Config implements AutoCloseable {
                 if (inlineOpening(trimmed))
                     block = trimmed.substring(1, trimmed.length() - 1);
                 String option = option(trimmed);
+                if (option.equals("ns-cert-type")) {
+                    List<String> purpose = OpenVpnEnginePolicy.arguments(line.trim());
+                    if (++legacyCertTypes != 1 || purpose.size() != 2 || !purpose.get(1).equals("server"))
+                        throw new IOException("OpenVPN compatibility requires a single server certificate purpose.");
+                }
                 if (option.equals("auth-user-pass")) { required = true; continue; }
                 if (option.equals("cipher")) cipher = OpenVpnEnginePolicy.arguments(line.trim()).get(1);
                 if (option.equals("data-ciphers") || option.equals("ncp-ciphers")) negotiatedCiphers = true;
@@ -103,7 +117,7 @@ final class OpenVpn2Config implements AutoCloseable {
             if (username != null) Arrays.fill(username, '\0');
             if (password != null) Arrays.fill(password, '\0');
             throw failure;
-        }
+        } finally { Arrays.fill(normalized, '\0'); }
     }
 
     private static String option(String line) throws IOException {
