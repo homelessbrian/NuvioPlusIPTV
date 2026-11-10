@@ -108,7 +108,9 @@ internal fun GearPanel(
     onReload: () -> Unit,
     onHide: () -> Unit,
     onSettings: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** "Add to Multiview" for the channel on screen (null where it does not apply). */
+    onMultiview: (() -> Unit)? = null
 ) {
     var customizing by remember { mutableStateOf(false) }
     var sizing by remember { mutableStateOf(startPage == "size") }
@@ -262,6 +264,7 @@ internal fun GearPanel(
                     // Watch from the beginning / Go live: first, where it's easiest to reach.
                     timeAction?.let { add(Triple(it, null, onTimeAction)) }
                     bell?.let { (label, value, action) -> add(Triple(label, value, action)) }
+                    onMultiview?.let { add(Triple("Add to Multiview", null, it)) }
                     add(Triple("Screen size", sizeLabel, { sizing = true }))
                     add(Triple("Sleep timer", sleepLabel, { page = "sleep" }))
                     add(Triple("Previous channel", null, onPrevious))

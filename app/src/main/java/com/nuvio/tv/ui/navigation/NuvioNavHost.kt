@@ -1321,14 +1321,19 @@ private fun PlaybackNavHost(
                         com.nuvio.tv.livetv.ondemand.OnDemandPlay.KEY, onDemandUid
                     )
                 },
-                onPlayOnDemand = { url, title, type, poster ->
+                onPlayOnDemand = { url, title, type, poster, contentId, contentName, season, episode, episodeName ->
                     navController.navigate(
                         Screen.Player.createRoute(
                             streamUrl = url,
                             title = title,
+                            contentId = contentId,
                             contentType = type,
-                            contentName = title,
+                            contentName = contentName,
                             poster = poster,
+                            videoId = if (type == "series" && season != null && episode != null) "$contentId:$season:$episode" else contentId,
+                            season = season,
+                            episode = episode,
+                            episodeTitle = episodeName,
                             addonName = com.nuvio.tv.livetv.ondemand.OnDemandStreams.GROUP_NAME
                         )
                     )
@@ -1577,14 +1582,19 @@ private fun PlaybackNavHost(
                         com.nuvio.tv.livetv.ondemand.OnDemandPlay.KEY, onDemandUid
                     )
                 },
-                onPlay = { url, title, type, poster ->
+                onPlay = { url, title, type, poster, contentId, contentName, season, episode, episodeName ->
                     navController.navigate(
                         Screen.Player.createRoute(
                             streamUrl = url,
                             title = title,
+                            contentId = contentId,
                             contentType = type,
-                            contentName = title,
+                            contentName = contentName,
                             poster = poster,
+                            videoId = if (type == "series" && season != null && episode != null) "$contentId:$season:$episode" else contentId,
+                            season = season,
+                            episode = episode,
+                            episodeTitle = episodeName,
                             addonName = com.nuvio.tv.livetv.ondemand.OnDemandStreams.GROUP_NAME
                         )
                     )

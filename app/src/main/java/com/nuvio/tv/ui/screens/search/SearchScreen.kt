@@ -142,7 +142,7 @@ fun SearchScreen(
     onOpenLiveTv: () -> Unit = {},
     // Live TV fork: your provider's On Demand titles (the On Demand row).
     onOpenOnDemand: (itemId: String, itemType: String, addonBaseUrl: String?, onDemandUid: String) -> Unit = { _, _, _, _ -> },
-    onPlayOnDemand: (url: String, title: String, type: String, poster: String?) -> Unit = { _, _, _, _ -> }
+    onPlayOnDemand: (url: String, title: String, type: String, poster: String?, contentId: String, contentName: String, season: Int?, episode: Int?, episodeName: String?) -> Unit = { _, _, _, _, _, _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val watchedMovieIds by viewModel.watchedMovieIds.collectAsState()
