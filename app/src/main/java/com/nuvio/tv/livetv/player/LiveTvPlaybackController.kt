@@ -595,6 +595,7 @@ class LiveTvPlaybackController @Inject constructor(
      */
     private val frameRateEstimator = LiveFrameRateEstimator()
     val measuredFps: Float get() = frameRateEstimator.framesPerSecond
+    fun frameRateDiagnostics(): String = frameRateEstimator.diagnostics()
     private val frameListener = androidx.media3.exoplayer.video.VideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
         frameRateEstimator.onFrame(presentationTimeUs)
     }
