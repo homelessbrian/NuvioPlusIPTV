@@ -1,3 +1,5 @@
+> Measurement correction: these full-dump app values are GC-perturbed diagnostics. Read [the correction](RAM-MEASUREMENT-CORRECTION.md); numeric observations are unchanged.
+
 # Actual app RAM observations
 
 These measurements use the combined x86_64 debug app on an Android API36 emulator, with a separate 4,000-channel/96,000-programme fixture. They do not use the 672,000-row or 2,688,000-row query benchmark databases.
