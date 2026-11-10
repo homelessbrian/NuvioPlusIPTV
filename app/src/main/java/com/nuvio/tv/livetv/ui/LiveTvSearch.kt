@@ -187,21 +187,12 @@ private fun rememberLiveTvSearchResultsEnabled(
             }
             val ranked = if (matched.size < 2) matched else {
                 val tiers = HashMap<String, Int>(matched.size)
-                val regions = HashMap<String, Int>(matched.size)
                 for (c in matched) {
                     tiers[c.key] = if (c.number.toString() == q) 0 else nameMatchTier(c.name, q)
-                    if (preferredRegion.isNotEmpty()) {
-                        val code = com.nuvio.tv.livetv.sports.SportsMatcher.channelRegionCode(c)
-                        regions[c.key] = when {
-                            code == null -> 1
-                            com.nuvio.tv.livetv.sports.ChannelRegions.includes(code, preferredRegion) -> 0
-                            else -> 2
-                        }
-                    }
                 }
-                // Same match and region: names A to Z, and each name's copies best quality first.
+                // Same match: names A to Z, and each name's copies best quality first.
                 matched.sortedWith(
-                    compareBy<LiveChannel>({ tiers[it.key] ?: 3 }, { regions[it.key] ?: 0 }, { cleanChannelName(it.name) }, { qualityRank(it.name) })
+                    compareBy<LiveChannel>({ tiers[it.key] ?: 3 }, { cleanChannelName(it.name) }, { qualityRank(it.name) })
                 )
             }
             for (c in ranked) {
