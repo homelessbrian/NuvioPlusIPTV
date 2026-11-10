@@ -84,7 +84,7 @@ fun OnDemandSearchRow(
     entryFocusRequester: FocusRequester?,
     upFocusRequester: FocusRequester?,
     onOpenDetail: (itemId: String, itemType: String, addonBaseUrl: String?, onDemandUid: String) -> Unit,
-    onPlay: (url: String, title: String, type: String, poster: String?) -> Unit,
+    onPlay: (url: String, title: String, type: String, poster: String?, contentId: String, contentName: String, season: Int?, episode: Int?, episodeName: String?) -> Unit,
     modifier: Modifier = Modifier,
     posterCardStyle: com.nuvio.tv.ui.components.PosterCardStyle = com.nuvio.tv.ui.components.PosterCardDefaults.Style
 ) {
@@ -123,9 +123,13 @@ fun OnDemandSearchRow(
             item = item,
             viewModel = viewModel,
             onDismiss = { providerItem = null },
-            onPlay = { url, title, poster ->
+            onPlay = { url, title, poster, season, episode, episodeName ->
                 providerItem = null
-                onPlay(url, title, if (item.kind == VodKind.SERIES) "series" else "movie", poster)
+                // Played with the title's id, so Nuvio tracks progress: resumes, and Continue Watching.
+                onPlay(
+                    url, title, if (item.kind == VodKind.SERIES) "series" else "movie", poster,
+                    VodHomeIds.metaId(item.uid), OnDemandDatabase.displayTitle(item.name), season, episode, episodeName
+                )
             }
         )
     }
