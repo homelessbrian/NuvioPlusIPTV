@@ -876,9 +876,9 @@ fun LiveTvPlayerScreen(
         val pausedNow = playback.userPaused && current != null && playback.error == null
         // The full panel closes by itself after a while without a button press (not while paused,
         // and not while the gear panel or another dialog is open over it).
-        // Follows "Info Bar Stays For", always staying up 5 s longer than the info bar (10 s at the default).
+        // Follows "Info Bar Stays For".
         LaunchedEffect(bannerToken, panelFull, pausedNow, dialog, settings.infoBannerSeconds) {
-            if (panelFull && !pausedNow && dialog == PlayerDialog.NONE) { delay((settings.infoBannerSeconds.coerceAtLeast(2) + 5) * 1000L); closeFull(); bannerVisible = false }
+            if (panelFull && !pausedNow && dialog == PlayerDialog.NONE) { delay(settings.infoBannerSeconds.coerceAtLeast(2) * 1000L); closeFull(); bannerVisible = false }
         }
         // The always-on corner clock, out of the way while the panel, channel list or a menu is
         // up (the panel shows the time itself).
