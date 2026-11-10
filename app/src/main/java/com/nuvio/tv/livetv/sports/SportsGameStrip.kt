@@ -195,8 +195,20 @@ internal fun SportsGameStrip(
         add(StripControl("add", "Add pane", false, enabled = paneCount < 4, onClick = onAdd))
         add(StripControl("remove", "Remove pane", false, enabled = paneCount > 1, onClick = ::removeSelectedPane))
         add(StripControl("games", "Games", !streamsOpen) { showGames() })
-        add(StripControl("streams", "Streams", streamsOpen, enabled = streamGame != null) {
-            if (streamsOpen) {
+        add(StripControl("streams", "Streams", streamsOpen) {
+            if (streamGame == null) {
+                // No game is chosen for this pane yet: use the first game here that has a stream,
+                // otherwise say what to do instead of silently ignoring the press.
+                val first = rowGames.firstOrNull { it.channels.isNotEmpty() && onGame(it) }
+                if (first != null) {
+                    chosenGames[focusedPane] = first.event.id
+                    initializedStreamTarget = null
+                    streamsOpen = true
+                } else {
+                    com.nuvio.tv.livetv.record.LiveTvNotice.show(
+                        "Pick a game first. Its streams show here.")
+                }
+            } else if (streamsOpen) {
                 focusStreamAt(streams.indexOfFirst { it.channel.key == currentChannelKey }.takeIf { it >= 0 } ?: 0)
             } else {
                 initializedStreamTarget = null
