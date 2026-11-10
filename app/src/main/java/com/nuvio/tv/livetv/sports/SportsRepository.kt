@@ -1585,9 +1585,12 @@ class SportsRepository @Inject constructor(
 
     private class MatchInputs(
         val snapshot: SportsMatchSnapshot,
-        val settings: SportsSettings,
-        val channels: List<LiveChannel>
-    )
+        val settings: SportsSettings
+    ) {
+        val channels: List<LiveChannel> by lazy {
+            sportsMatchChannels(snapshot.catalog, snapshot.policy, settings)
+        }
+    }
 
     private suspend fun captureMatchInputs(): MatchInputs? {
         val profile = profiles.activeProfileId.value
@@ -1608,7 +1611,7 @@ class SportsRepository @Inject constructor(
             profile, revision, changes, catalog, policy, sports.matchRules(), mine.words, mine.leagues,
             sportsMatchEventStamp(events.value)
         )
-        return MatchInputs(snapshot, sports, sportsMatchChannels(catalog, policy, sports))
+        return MatchInputs(snapshot, sports)
     }
 
     // Nobody on the Sports page: low priority, out of the way of the guide and the video.

@@ -1295,7 +1295,18 @@ internal object OtherFeeds {
     private fun span(from: String, to: String): Pair<String, String> =
         (if (from.length == 6) from + "01" else from) to (if (to.length == 6) to + "31" else to)
 
-    private fun dayKey(ms: Long): String = SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = EASTERN }.format(java.util.Date(ms))
+    // Formatting is synchronous; each worker owns its mutable calendars and keeps the exact
+    // patterns, locale, zones and default leniency of the former fresh formatter calls.
+    private val dayKeyFormatter = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue() = SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = EASTERN }
+    }
+    private val isoOutFormatter = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue() = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+    }
+
+    private fun dayKey(ms: Long): String = dayKeyFormatter.get()!!.format(java.util.Date(ms))
 
     private fun isoMs(s: String?): Long? {
         if (s.isNullOrBlank()) return null
@@ -1305,7 +1316,7 @@ internal object OtherFeeds {
             ?: runCatching { java.time.Instant.parse(if (s.length == 17 && s.endsWith("Z")) s.dropLast(1) + ":00Z" else s).toEpochMilli() }.getOrNull()
     }
 
-    private fun isoOut(ms: Long): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(java.util.Date(ms))
+    private fun isoOut(ms: Long): String = isoOutFormatter.get()!!.format(java.util.Date(ms))
 
     private fun inSpan(ms: Long?, span: Pair<String, String>): Boolean {
         val d = dayKey(ms ?: return false)
