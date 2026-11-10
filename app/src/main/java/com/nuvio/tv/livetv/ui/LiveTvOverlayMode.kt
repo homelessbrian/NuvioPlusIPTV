@@ -1080,7 +1080,7 @@ private fun BackupFlyoutContent(
                         }
                         val from = playlistNames[ch.sourceId] ?: ch.sourceName
                         LiveText(
-                            listOfNotNull(from.takeIf { it.isNotBlank() }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
+                            listOfNotNull(from.takeIf { it.isNotBlank() }, ch.group.takeIf { it.isNotBlank() && BarPart.GROUP !in BarPart.parse(settings.barHidden) }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
                             color = dim, size = osp(12f), maxLines = 1
                         )
                         LiveText(

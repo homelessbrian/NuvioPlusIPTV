@@ -1379,6 +1379,7 @@ fun LiveTvPlayerScreen(
         PlayerDialog.BACKUPS -> if (backups.isEmpty()) dialog = PlayerDialog.NONE else if (backupMenuFor == null) BackupChannelsDialog(
             anchor = backupsAnchor,
             channels = backups,
+            showGroup = BarPart.GROUP !in BarPart.parse(settings.barHidden),
             playingKey = playback.channelKey,
             startKey = backupMenuLastKey,
             onLongPress = { ch -> backupMenuFor = ch; backupMenuLastKey = ch.key },
@@ -1524,7 +1525,8 @@ private fun BackupChannelsDialog(
     onDismiss: () -> Unit,
     anchor: androidx.compose.ui.geometry.Rect? = null,
     onLongPress: (LiveChannel) -> Unit = {},
-    startKey: String? = null
+    startKey: String? = null,
+    showGroup: Boolean = true
 ) {
     val first = remember { FocusRequester() }
     val colors = NuvioTheme.colors
@@ -1563,7 +1565,7 @@ private fun BackupChannelsDialog(
                         }
                         // Only the highlighted copy shows where it comes from and what's on.
                         if (f) {
-                            val line = listOf(ch.sourceName, nowTitle(ch.key)?.let { "Now: $it" }.orEmpty())
+                            val line = listOf(ch.sourceName, ch.group.takeIf { showGroup }.orEmpty(), nowTitle(ch.key)?.let { "Now: $it" }.orEmpty())
                                 .filter { it.isNotBlank() }.joinToString(" · ")
                             if (line.isNotBlank()) LiveText(line, size = 9.sp, color = focusedTextColor(f), maxLines = 1)
                         }

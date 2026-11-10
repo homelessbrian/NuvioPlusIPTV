@@ -181,6 +181,8 @@ fun SportsScreen(
 
     var day by rememberSaveable { mutableIntStateOf(0) }
     var chip by rememberSaveable { mutableStateOf<String?>(null) }
+    // All Events' sport row (Football…): kept here with the day and filter, so opening a game and coming back finds it still picked.
+    var allSportPick by rememberSaveable { mutableStateOf<String?>(null) }
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     // The page the open game came from (the Calendar): Back goes back there, not to the hub.
     var fromRoute by rememberSaveable { mutableStateOf<String?>(null) }
@@ -406,6 +408,8 @@ fun SportsScreen(
                 onDay = { day = it },
                 chip = chip,
                 onChip = { chip = it },
+                allSportPick = allSportPick,
+                onAllSportPick = { allSportPick = it },
                 listState = listState,
                 requesterFor = ::requesterFor,
                 returnTo = returnTo,
@@ -514,6 +518,8 @@ private fun SportsHub(
     onDay: (Int) -> Unit,
     chip: String?,
     onChip: (String) -> Unit,
+    allSportPick: String?,
+    onAllSportPick: (String?) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
     requesterFor: (String) -> FocusRequester,
     returnTo: String?,
@@ -567,8 +573,7 @@ private fun SportsHub(
     val leagueView = effectiveChip.takeIf { it.startsWith(CHIP_LEAGUE) }?.removePrefix(CHIP_LEAGUE)
     // Days before yesterday: their games are fetched when you open one.
     LaunchedEffect(day) { if (day < -1) viewModel.repo.wantPast() }
-    // All Events only: narrow the day to one sport (the sport row under the days).
-    var allSportPick by rememberSaveable { mutableStateOf<String?>(null) }
+    // All Events only: narrow the day to one sport (the sport row under the days; kept by the screen above).
     // The day's games, sections and My Teams' rows: built by the view model in the background
     // (they used to be worked out here while the screen drew, every 15 seconds and every score).
     val pageQuery = SportsPageQuery(day, effectiveChip, allSportPick, rowsSport)
@@ -694,9 +699,9 @@ private fun SportsHub(
                 verticalAlignment = Alignment.CenterVertically,
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
             ) {
-                item(key = "sport_all") { FilterIcon("▦", "All", allSport == null, withLabel = true) { allSportPick = null; contentJump++ } }
+                item(key = "sport_all") { FilterIcon("▦", "All", allSport == null, withLabel = true) { onAllSportPick(null); contentJump++ } }
                 items(allSports, key = { "sport_" + it.name }) { sp ->
-                    FilterIcon(sp.icon, sp.label, allSport == sp.name, withLabel = true) { allSportPick = sp.name; contentJump++ }
+                    FilterIcon(sp.icon, sp.label, allSport == sp.name, withLabel = true) { onAllSportPick(sp.name); contentJump++ }
                 }
             }
         }

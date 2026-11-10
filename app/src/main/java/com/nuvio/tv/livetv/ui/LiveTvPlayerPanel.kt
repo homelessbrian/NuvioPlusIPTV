@@ -93,6 +93,7 @@ internal data class PanelTimeline(
 internal object BarPart {
     const val POSTER = "poster"
     const val CHANNEL = "channel"
+    const val GROUP = "group"
     const val TAGS = "tags"
     const val DESCRIPTION = "description"
     const val PROGRESS = "progress"
@@ -105,6 +106,7 @@ internal object BarPart {
     val ALL: List<Triple<String, String, String?>> = listOf(
         Triple(POSTER, "Poster", null),
         Triple(CHANNEL, "Channel name & logo", null),
+        Triple(GROUP, "Group name", "On the bar and in the backups lists"),
         Triple(TAGS, "Tags", "Live, quality, sound, catch-up"),
         Triple(DESCRIPTION, "Description", null),
         Triple(PROGRESS, "Progress bar", "Always shown while paused"),
@@ -230,6 +232,7 @@ internal fun LiveTvPlayerPanel(
     val showPoster = on(BarPart.POSTER) && showPosters
     val showChannel = on(BarPart.CHANNEL)
     val showTags = on(BarPart.TAGS)
+    val groupName = channel.group.takeIf { on(BarPart.GROUP) && it.isNotBlank() }
     val showClock = on(BarPart.CLOCK) && clock.isNotEmpty()
     val showNext = on(BarPart.NEXT) && nextTitle != null && mode == PanelMode.LIVE
     val desc = description?.takeIf { it.isNotBlank() && on(BarPart.DESCRIPTION) }
@@ -284,7 +287,7 @@ internal fun LiveTvPlayerPanel(
 
                 // ---- middle: channel line, title, description, the controls and progress
                 Column(Modifier.weight(1f).onSizeChanged { middleHeight = with(density) { it.height.toDp() } }) {
-                    if (showChannel || showTags) {
+                    if (showChannel || showTags || groupName != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (showChannel) {
                                 if (showPoster && !poster.isNullOrBlank() && !channel.logo.isNullOrBlank()) {
@@ -296,6 +299,15 @@ internal fun LiveTvPlayerPanel(
                                     Spacer(Modifier.width(6.dp))
                                 }
                                 LiveText(channel.name, size = 13.sp, color = colors.TextSecondary, maxLines = 1, modifier = Modifier.widthIn(max = 320.dp))
+                                Spacer(Modifier.width(10.dp))
+                            }
+                            // The channel's group (e.g. "US | Sports"): a small tag, cut short if it's long.
+                            if (groupName != null) {
+                                LiveText(
+                                    groupName,
+                                    size = 10.sp, weight = FontWeight.Bold, color = Color.White.copy(alpha = 0.9f), maxLines = 1,
+                                    modifier = Modifier.widthIn(max = 200.dp).clip(RoundedCornerShape(5.dp)).background(Color.White.copy(alpha = 0.14f)).padding(horizontal = 6.dp, vertical = 1.dp)
+                                )
                                 Spacer(Modifier.width(10.dp))
                             }
                             if (showTags) {
