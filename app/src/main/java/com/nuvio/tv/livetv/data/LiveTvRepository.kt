@@ -1017,6 +1017,7 @@ class LiveTvRepository @Inject constructor(
     private var viewportJob: kotlinx.coroutines.Job? = null
     private var overviewJob: kotlinx.coroutines.Job? = null
     @Volatile private var overviewAt = 0L
+    @Volatile private var overviewFullAt = 0L
     @Volatile private var overviewShift = Long.MIN_VALUE
     @Volatile private var viewportKeys: List<String> = emptyList()
     @Volatile private var viewportFrom = 0L
@@ -1078,6 +1079,7 @@ class LiveTvRepository @Inject constructor(
                 mergedWindows.clear()
                 overview = next
                 _guideChannelsWithListings.value = available
+                overviewFullAt = System.currentTimeMillis()
             } else {
                 windowCache.removeChannels(changedChannels)
                 changedChannels.forEach { mergedWindows.remove(it) }
@@ -1214,6 +1216,7 @@ class LiveTvRepository @Inject constructor(
             overview = pre?.window.orEmpty()
             _programs.value = overview
             overviewAt = 0L
+            overviewFullAt = 0L
             guideInDb = true
             lightPrograms = true
             _guideGeneration.value++
@@ -1266,12 +1269,17 @@ class LiveTvRepository @Inject constructor(
             if (System.currentTimeMillis() - overviewAt < 60_000L && shift == overviewShift) return@launch
             val epoch = cacheEpoch.get()
             val changes = guideDb.changes
-            val next = runCatching { guideDb.nowNext(System.currentTimeMillis() - shift) }.getOrNull() ?: return@launch
+            val now = System.currentTimeMillis()
+            val full = shift != overviewShift || now - overviewFullAt >= 30 * 60_000L
+            val due = if (full) null else rangeMutex.withLock { overviewChannelsDue(overview, now - shift) }
+            if (due != null && due.isEmpty()) { overviewAt = now; return@launch }
+            val next = runCatching { guideDb.nowNext(now - shift, due) }.getOrNull() ?: return@launch
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             if (prefs.currentSettings().epgOffsetMinutes * 60_000L != shift) return@launch
             rangeMutex.withLock {
                 if (cacheEpoch.get() != epoch || guideDb.changes != changes) return@withLock
-                overview = next
+                overview = if (due == null) next else (overview - due) + next
+                if (full) overviewFullAt = now
                 overviewAt = System.currentTimeMillis()
                 overviewShift = shift
                 publishWindows()
