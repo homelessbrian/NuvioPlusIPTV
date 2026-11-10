@@ -1012,6 +1012,8 @@ class LiveTvRepository @Inject constructor(
             onPublished = ::publishWindows)
     }
     private var overview: Map<String, List<EpgProgram>> = emptyMap()
+    private var publishedOverviewSource: Map<String, List<EpgProgram>>? = null
+    private var publishedOverviewBase: GuideMapSnapshot.Base<String, List<EpgProgram>>? = null
     private val mergedWindows = HashMap<String, Triple<List<EpgProgram>, List<EpgProgram>, List<EpgProgram>>>()
     private val schedules = LinkedHashMap<String, List<EpgProgram>>()
     private var viewportJob: kotlinx.coroutines.Job? = null
@@ -1140,7 +1142,15 @@ class LiveTvRepository @Inject constructor(
     }
 
     private fun publishWindows() {
-        val shown = HashMap(overview)
+        // Overview maps are replaced, never mutated in place. Freeze each identity once, then
+        // every small tile publication snapshots only its bounded windows/schedule overrides.
+        val base = if (publishedOverviewSource === overview) publishedOverviewBase!! else {
+            GuideMapSnapshot.Base.capture(overview).also {
+                publishedOverviewSource = overview
+                publishedOverviewBase = it
+            }
+        }
+        val shown = HashMap<String, List<EpgProgram>>()
         val windows = windowCache.programs()
         mergedWindows.keys.retainAll(windows.keys)
         windows.forEach { (key, list) ->
@@ -1151,8 +1161,11 @@ class LiveTvRepository @Inject constructor(
             mergedWindows[key] = Triple(list, current, merged)
             shown[key] = merged
         }
-        schedules.forEach { (key, list) -> shown[key] = mergeGuideSchedules(list, shown[key].orEmpty()) }
-        _programs.value = shown
+        schedules.forEach { (key, list) ->
+            val current = if (shown.containsKey(key)) shown[key].orEmpty() else base.snapshot[key].orEmpty()
+            shown[key] = mergeGuideSchedules(list, current)
+        }
+        _programs.value = GuideMapSnapshot(base, shown)
     }
 
     /** Only requested channel/time tiles are decoded; an old WAL read cannot enter a new guide. */
@@ -1214,7 +1227,7 @@ class LiveTvRepository @Inject constructor(
             mergedWindows.clear()
             schedules.clear()
             overview = pre?.window.orEmpty()
-            _programs.value = overview
+            publishWindows()
             overviewAt = 0L
             overviewFullAt = 0L
             guideInDb = true
