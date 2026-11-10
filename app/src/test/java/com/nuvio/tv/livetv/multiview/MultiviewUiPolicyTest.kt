@@ -39,6 +39,17 @@ class MultiviewUiPolicyTest {
     }
 
     @Test
+    fun `one pane fills the video area and every direction remains on that pane`() {
+        assertEquals(listOf(MultiviewPaneBounds(0, 0f, 0f, 1f, 1f)), multiviewPaneBounds(MultiviewLayout.ONE))
+        for (from in listOf(-1, 0, 1, 3)) {
+            assertEquals(0, multiviewVisiblePane(MultiviewLayout.ONE, from))
+            for (direction in MultiviewDirection.entries) {
+                assertEquals(0, multiviewNextPane(MultiviewLayout.ONE, from, direction))
+            }
+        }
+    }
+
+    @Test
     fun `remote moves between neighboring panes without wrapping at edges`() {
         assertEquals(1, multiviewNextPane(MultiviewLayout.TWO, 0, MultiviewDirection.RIGHT))
         assertEquals(0, multiviewNextPane(MultiviewLayout.TWO, 0, MultiviewDirection.LEFT))

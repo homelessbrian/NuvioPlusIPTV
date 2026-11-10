@@ -167,7 +167,8 @@ fun LiveTvGuideScreen(
     /** A recording played here from Recordings or the Calendar: Back goes back to that screen (its route). */
     onReturnTo: (String) -> Unit = {},
     viewModel: LiveTvViewModel = hiltViewModel(),
-    onOpenMultiview: () -> Unit = {}
+    onOpenMultiview: () -> Unit = {},
+    onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() }
 ) {
     // Hold the first draw until the saved settings and menu look are read. Before that the guide
     // only has the built-in defaults, and it drew one frame of the old look, then redrew.
@@ -182,6 +183,7 @@ fun LiveTvGuideScreen(
         onOpenSettings = onOpenSettings,
         onOpenRecordings = onOpenRecordings,
         onOpenMultiview = onOpenMultiview,
+        onOpenSportsMultiview = onOpenSportsMultiview,
         onFindInNuvio = onFindInNuvio,
         onOpenNuvioSearch = onOpenNuvioSearch,
         onReturnToSports = onReturnToSports,
@@ -197,6 +199,7 @@ private fun LiveTvGuideScreenBody(
     /** Opens Recordings (the ● button beside the ⚙). */
     onOpenRecordings: () -> Unit = {},
     onOpenMultiview: () -> Unit = {},
+    onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() },
     onFindInNuvio: () -> Unit = {},
     onOpenNuvioSearch: () -> Unit = onFindInNuvio,
     /** Full screen was opened from the Sports page: Back goes back there. */
@@ -2294,6 +2297,7 @@ private fun LiveTvGuideScreenBody(
                 onBackToGroups = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; stopIfNoPreview(); fullscreen = false; savedSpot = null; exitFullscreenTick++; focusGroups() },
                 embedded = true,
                 onOpenSettings = onOpenSettings,
+                onOpenSportsMultiview = { panes -> onOpenSportsMultiview(panes, playback.channelKey) },
                 viewModel = viewModel
             )
         }

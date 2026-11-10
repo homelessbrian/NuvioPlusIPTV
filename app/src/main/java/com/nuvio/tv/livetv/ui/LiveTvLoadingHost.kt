@@ -72,7 +72,7 @@ fun LiveTvLoadingHost(navController: NavController) {
     }.collectAsState(false)
     val route = navController.currentBackStackEntryAsState().value?.destination?.route.orEmpty()
     val liveFullscreen by LiveTvFullscreen.active.collectAsState()
-    val multiview = route == Screen.LiveTvMultiview.route
+    val multiview = route == Screen.LiveTvMultiview.route || route == Screen.SportsMultiview.route
     val playing = route == Screen.LiveTvPlayer.route || route.startsWith("player/") || liveFullscreen || multiview
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, route) {

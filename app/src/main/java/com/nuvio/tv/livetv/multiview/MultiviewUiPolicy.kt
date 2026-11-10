@@ -6,7 +6,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
-/** Coordinates are fractions of the available video area; pane IDs never move between layouts. */
+/** Coordinates are fractions of the available video area; IDs identify the current visible slots. */
 data class MultiviewPaneBounds(
     val id: Int,
     val left: Float,
@@ -18,6 +18,7 @@ data class MultiviewPaneBounds(
 enum class MultiviewDirection { LEFT, RIGHT, UP, DOWN }
 
 fun multiviewPaneBounds(layout: MultiviewLayout): List<MultiviewPaneBounds> = when (layout) {
+    MultiviewLayout.ONE -> listOf(MultiviewPaneBounds(0, 0f, 0f, 1f, 1f))
     MultiviewLayout.TWO -> listOf(
         MultiviewPaneBounds(0, 0f, 0f, .5f, 1f),
         MultiviewPaneBounds(1, .5f, 0f, 1f, 1f)
@@ -43,6 +44,7 @@ fun multiviewVisiblePane(layout: MultiviewLayout, paneId: Int): Int =
 fun multiviewNextPane(layout: MultiviewLayout, fromPane: Int, direction: MultiviewDirection): Int {
     val pane = multiviewVisiblePane(layout, fromPane)
     return when (layout) {
+        MultiviewLayout.ONE -> pane
         MultiviewLayout.TWO -> when (direction) {
             MultiviewDirection.LEFT -> 0
             MultiviewDirection.RIGHT -> 1

@@ -1312,7 +1312,7 @@ open class MainActivity : ComponentActivity() {
                     val updateState by updateViewModel.uiState.collectAsState()
                     val updateBannerState = updateState.copy(
                         showBanner = updateState.showBanner && currentRoute?.startsWith("player/") != true &&
-                            currentRoute != Screen.LiveTvMultiview.route
+                            currentRoute != Screen.LiveTvMultiview.route && currentRoute != Screen.SportsMultiview.route
                     )
                     // Live TV fork: the Live TV row on Home lets Up through to the banner while it shows.
                     LaunchedEffect(updateBannerState.showBanner, updateBannerState.update != null) {
@@ -1425,6 +1425,7 @@ open class MainActivity : ComponentActivity() {
                                 controller = ambientIdleController,
                                 allowed = currentRoute?.startsWith("player/") != true &&
                                     currentRoute != Screen.LiveTvMultiview.route &&
+                                    currentRoute != Screen.SportsMultiview.route &&
                                     autoNextOverlay == null &&
                                     !isTrailerPlaying &&
                                     liveTvPlaying == null,

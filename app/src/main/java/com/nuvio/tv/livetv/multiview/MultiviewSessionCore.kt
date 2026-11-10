@@ -3,7 +3,7 @@ package com.nuvio.tv.livetv.multiview
 import com.nuvio.tv.livetv.model.LiveChannel
 
 enum class MultiviewLayout(val paneCount: Int) {
-    TWO(2), THREE(3), FOUR(4)
+    ONE(1), TWO(2), THREE(3), FOUR(4)
 }
 
 /** Download-ahead targets share one budget, including empty/hidden slots. */
@@ -105,6 +105,32 @@ internal class MultiviewSessionCore(
         releasePane(paneId)
         channels[paneId] = null
         setupErrors[paneId] = null
+        reconcileAudioFocus()
+        applyPlaybackAndSound()
+        onChanged()
+    }
+
+    /** Remove this slot, retaining every other player's stream, decoder and buffer ownership. */
+    fun removePane(paneId: Int) {
+        if (released || !isVisible(paneId) || layout.paneCount <= 1) return
+        muteAll()
+        val last = layout.paneCount - 1
+        releasePane(paneId)
+        for (id in paneId until last) {
+            channels[id] = channels[id + 1]
+            players[id] = players[id + 1]
+            setupErrors[id] = setupErrors[id + 1]
+        }
+        // The last owner moved down; clearing its old reference must not release it again.
+        channels[last] = null
+        players[last] = null
+        setupErrors[last] = null
+        layout = MultiviewLayout.entries.first { it.paneCount == last }
+        focusedPane = when {
+            focusedPane > paneId -> focusedPane - 1
+            focusedPane == paneId -> paneId.coerceAtMost(last - 1)
+            else -> focusedPane
+        }
         reconcileAudioFocus()
         applyPlaybackAndSound()
         onChanged()

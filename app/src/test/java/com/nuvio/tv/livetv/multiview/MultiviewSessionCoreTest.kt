@@ -67,6 +67,144 @@ class MultiviewSessionCoreTest {
     }
 
     @Test
+    fun `removing a middle pane compacts owners without restarting remaining streams or audio focus`() {
+        val h = Harness()
+        h.openFour()
+        val before = (0..3).map { h.core.playerAt(it) as FakePlayer }
+        h.core.focusPane(3)
+        h.events.clear()
+        h.core.removePane(1)
+
+        assertEquals(MultiviewLayout.THREE, h.core.layout)
+        assertEquals(listOf("0", "2", "3"), (0..2).map { h.core.channelAt(it)?.key })
+        assertSame(before[0], h.core.playerAt(0))
+        assertSame(before[2], h.core.playerAt(1))
+        assertSame(before[3], h.core.playerAt(2))
+        assertTrue(before[1].released)
+        assertTrue(listOf(before[0], before[2], before[3]).all { !it.released && it.playingValue })
+        assertNull(h.core.playerAt(3))
+        assertNull(h.core.channelAt(3))
+        assertEquals(2, h.core.focusedPane)
+        assertEquals(listOf(before[3]), h.active.filter { it.audibleValue })
+        assertEquals(listOf("release:1"), h.events.filter { it.startsWith("release:") })
+        assertFalse(h.events.any { it.startsWith("create:") || it.startsWith("prepare:") })
+        assertEquals(1, h.focus.requests)
+        assertEquals(0, h.focus.abandons)
+        assertEquals(3 * before[0].bufferBytes, h.active.sumOf { it.bufferBytes })
+        val unmute = h.events.indexOf("audible:3:true")
+        assertTrue(unmute >= 0)
+        for (id in 0..3) assertTrue(h.events.indexOf("audible:$id:false") in 0 until unmute)
+    }
+
+    @Test
+    fun `removing the audible pane chooses its next neighbor or the preceding last pane`() {
+        for (removed in listOf(0, 1, 3)) {
+            val h = Harness()
+            h.openFour()
+            val before = (0..3).map { h.core.playerAt(it) as FakePlayer }
+            h.core.focusPane(removed)
+            h.core.removePane(removed)
+            val survivors = before.filterIndexed { id, _ -> id != removed }
+            val next = removed.coerceAtMost(2)
+            assertEquals(next, h.core.focusedPane)
+            assertSame(survivors[next], h.core.playerAt(next))
+            assertEquals(listOf(survivors[next]), h.active.filter { it.audibleValue })
+            assertEquals(survivors, (0..2).map { h.core.playerAt(it) })
+            assertEquals(1, h.focus.requests)
+            assertEquals(0, h.focus.abandons)
+        }
+    }
+
+    @Test
+    fun `two panes can become one and removing the final pane or invalid slot is ignored`() {
+        val h = Harness()
+        h.core.setLayout(MultiviewLayout.TWO)
+        h.core.onForeground()
+        h.core.assignChannel(0, channel("first"))
+        h.core.assignChannel(1, channel("retained"))
+        val retained = h.core.playerAt(1) as FakePlayer
+        h.core.focusPane(1)
+        h.core.removePane(0)
+        assertEquals(MultiviewLayout.ONE, h.core.layout)
+        assertEquals(0, h.core.focusedPane)
+        assertSame(retained, h.core.playerAt(0))
+        assertEquals("retained", h.core.channelAt(0)?.key)
+        assertTrue(retained.audibleValue && retained.playingValue)
+        h.events.clear()
+        for (id in listOf(-1, 0, 1, 4)) h.core.removePane(id)
+        assertTrue(h.events.isEmpty())
+        assertEquals(MultiviewLayout.ONE, h.core.layout)
+        assertSame(retained, h.core.playerAt(0))
+        assertFalse(retained.released)
+    }
+
+    @Test
+    fun `pane removal carries setup failures to the compacted slot and retry repairs that slot only`() {
+        val h = Harness()
+        h.openFour()
+        h.failOnPrepare.add(2)
+        h.core.retryPane(2)
+        val error = h.core.playbackAt(2).error
+        assertTrue(error != null)
+        val last = h.core.playerAt(3)
+        h.core.removePane(1)
+        assertEquals("2", h.core.channelAt(1)?.key)
+        assertNull(h.core.playerAt(1))
+        assertEquals(error, h.core.playbackAt(1).error)
+        assertSame(last, h.core.playerAt(2))
+        assertNull(h.core.playbackAt(3).error)
+        h.failOnPrepare.clear()
+        h.core.retryPane(1)
+        assertEquals("2", (h.core.playerAt(1) as FakePlayer).prepared?.key)
+        assertNull(h.core.playbackAt(1).error)
+        assertSame(last, h.core.playerAt(2))
+    }
+
+    @Test
+    fun `background removal compacts choices then foreground recreates only visible owners`() {
+        val h = Harness()
+        h.openFour()
+        h.core.focusPane(3)
+        h.core.onBackground()
+        h.events.clear()
+        h.core.removePane(1)
+        assertEquals(MultiviewLayout.THREE, h.core.layout)
+        assertEquals(listOf("0", "2", "3"), (0..2).map { h.core.channelAt(it)?.key })
+        assertEquals(2, h.core.focusedPane)
+        assertTrue(h.events.isEmpty())
+        assertTrue(h.active.isEmpty())
+        h.core.onForeground()
+        assertEquals(3, h.active.size)
+        for (id in 0..2) assertEquals(h.core.channelAt(id), (h.core.playerAt(id) as FakePlayer).prepared)
+        assertTrue((h.core.playerAt(2) as FakePlayer).audibleValue)
+        h.core.release()
+        assertTrue(h.active.isEmpty())
+        h.core.removePane(0)
+        assertEquals(MultiviewLayout.THREE, h.core.layout)
+    }
+
+    @Test
+    fun `removing and adding panes retains a bounded buffer allocation and never revives moved owners`() {
+        val total = MultiviewBufferBudget.totalBytes(256)
+        val h = Harness(totalBufferBytes = total)
+        h.openFour()
+        val retained = h.core.playerAt(3)
+        h.core.focusPane(3)
+        repeat(3) {
+            h.core.removePane(0)
+            assertTrue(h.active.sumOf { it.bufferBytes } <= total)
+        }
+        assertEquals(MultiviewLayout.ONE, h.core.layout)
+        assertSame(retained, h.core.playerAt(0))
+        h.core.setLayout(MultiviewLayout.FOUR)
+        for (id in 1..3) h.core.assignChannel(id, channel("new-$id"))
+        assertSame(retained, h.core.playerAt(0))
+        assertEquals(total, h.active.sumOf { it.bufferBytes })
+        assertEquals(4, h.active.size)
+        assertTrue((1..3).all { h.core.channelAt(it)?.key == "new-$it" })
+    }
+
+    @Test
     fun `background releases every player and audio focus while resume preserves choices`() {
         val h = Harness()
         h.openFour()

@@ -84,6 +84,7 @@ class MultiviewPlaybackSession(
     fun setLayout(layout: MultiviewLayout) = onMain { core.setLayout(layout) }
     fun assignChannel(paneId: Int, channel: LiveChannel) = onMain { core.assignChannel(paneId, channel) }
     fun clearPane(paneId: Int) = onMain { core.clearPane(paneId) }
+    fun removePane(paneId: Int) = onMain { core.removePane(paneId) }
     fun focusPane(paneId: Int) = onMain { core.focusPane(paneId) }
     fun retryPane(paneId: Int) = onMain { core.retryPane(paneId) }
     fun validateAllowedChannels(allowed: List<LiveChannel>) = onMain { core.validateAllowedChannels(allowed) }

@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -72,7 +73,7 @@ internal enum class PanelMode { LIVE, CATCHUP, SHIFT }
  * the timeline, back 30, play/pause, forward 30 and the gear; the rest are kept for the keys
  * that still name them, and live in the gear panel.
  */
-internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, PIN, BELL, BACKUPS, MORE }
+internal enum class PanelControl { TIMELINE, BACK, PLAY, FORWARD, LIVE, CC, AUDIO, SIZE, SLEEP, PIN, BELL, BACKUPS, SPORTS, MORE }
 
 /** Timeline: everything in wall-clock milliseconds. */
 internal data class PanelTimeline(
@@ -119,7 +120,7 @@ internal object BarPart {
 }
 
 /** Which controls the bar offers: back 30 / forward 30 only where you can skip, and the gear. */
-internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, bell: Boolean = false, pin: Boolean = false, backups: Boolean = false): List<PanelControl> = buildList {
+internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, bell: Boolean = false, pin: Boolean = false, backups: Boolean = false, sports: Boolean = false): List<PanelControl> = buildList {
     val transport = mode != PanelMode.LIVE || paused
     // The timeline itself can be grabbed (Up from the buttons) and moved with ◀ / ▶.
     if (transport && canSkip) add(PanelControl.TIMELINE)
@@ -132,6 +133,7 @@ internal fun panelControls(mode: PanelMode, paused: Boolean, canSkip: Boolean, b
     if (bell) add(PanelControl.BELL)
     // Other copies of this channel (same name, any quality or playlist), right before the gear.
     if (backups) add(PanelControl.BACKUPS)
+    if (sports) add(PanelControl.SPORTS)
     add(PanelControl.MORE)
 }
 
@@ -220,7 +222,9 @@ internal fun LiveTvPlayerPanel(
     /** The game on this channel is pinned to the corner (the pin button shows filled). */
     pinOn: Boolean = false,
     /** Where the backup button is on screen (bounds in the window), so its list can open right above it. */
-    onBackupsBounds: (androidx.compose.ui.geometry.Rect) -> Unit = {}
+    onBackupsBounds: (androidx.compose.ui.geometry.Rect) -> Unit = {},
+    /** Opens the Sports games, streams and layout controls from the Now Playing bar. */
+    onMultiview: () -> Unit = {},
 ) {
     val colors = NuvioTheme.colors
     val accent = colors.Secondary
@@ -371,6 +375,11 @@ internal fun LiveTvPlayerPanel(
                                     }
                                     Spacer(Modifier.width(8.dp))
                                 }
+                                if (PanelControl.SPORTS in controls) {
+                                    MultiviewButton(focused = focused == PanelControl.SPORTS && !inRow,
+                                        onClick = onMultiview)
+                                    Spacer(Modifier.width(8.dp))
+                                }
                                 RoundButton(Icons.Default.Settings, focused = focused == PanelControl.MORE && !inRow, big = false)
                             }
                         }
@@ -421,9 +430,28 @@ private fun GlassChip(text: String) {
     )
 }
 
+/** A named entry beside the normal playback controls, with the same bar highlight. */
+@Composable
+private fun MultiviewButton(focused: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(15.dp)
+    val foreground = if (focused) Color(0xFF111111) else NuvioTheme.colors.TextPrimary
+    Row(
+        modifier = Modifier.height(29.dp).clip(shape)
+            .background(if (focused) Color.White else Color.White.copy(alpha = 0.10f))
+            .border(if (focused) 2.dp else 1.dp,
+                Color.White.copy(alpha = if (focused) 0.9f else 0.16f), shape)
+            .clickable(onClick = onClick).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Default.GridView, contentDescription = null, tint = foreground, modifier = Modifier.size(15.dp))
+        LiveText("Multiview", size = 11.sp, weight = FontWeight.Bold, color = foreground)
+    }
+}
+
 /** A round icon button on the bar: white when highlighted. */
 @Composable
-private fun RoundButton(icon: ImageVector, focused: Boolean, big: Boolean) {
+private fun RoundButton(icon: ImageVector, focused: Boolean, big: Boolean, contentDescription: String? = null) {
     val colors = NuvioTheme.colors
     val size: Dp = if (big) 32.dp else 27.dp
     Box(
@@ -435,7 +463,7 @@ private fun RoundButton(icon: ImageVector, focused: Boolean, big: Boolean) {
             .border(if (focused) 3.dp else 0.dp, if (focused) Color.White.copy(alpha = 0.25f) else Color.Transparent, CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = null, tint = if (focused) Color(0xFF111111) else colors.TextPrimary, modifier = Modifier.size(if (big) 18.dp else 15.dp))
+        Icon(icon, contentDescription = contentDescription, tint = if (focused) Color(0xFF111111) else colors.TextPrimary, modifier = Modifier.size(if (big) 18.dp else 15.dp))
     }
 }
 

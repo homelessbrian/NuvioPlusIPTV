@@ -240,7 +240,7 @@ fun MultiviewScreen(
 }
 
 @Composable
-private fun MultiviewPane(pane: MultiviewPaneState, audible: Boolean, modifier: Modifier, onClick: () -> Unit) {
+internal fun MultiviewPane(pane: MultiviewPaneState, audible: Boolean, modifier: Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(10.dp)
     Box(modifier.clip(shape).background(NuvioTheme.colors.Background)

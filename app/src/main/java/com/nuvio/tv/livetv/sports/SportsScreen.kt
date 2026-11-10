@@ -118,6 +118,8 @@ object SportsLaunch {
     @Volatile private var returnSetAt = 0L
     fun openedFromSports(eventId: String) { returnTo = eventId; focusEvent = eventId; returnSetAt = System.currentTimeMillis() }
     fun takeReturnToSports(): Boolean = (returnTo != null).also { returnTo = null }
+    val isWatchingFromSports: Boolean get() = returnTo != null
+    val watchingEventId: String? get() = returnTo
     fun clearReturn() { returnTo = null; focusEvent = null }
     /** Live TV closed some other way: Back there no longer goes to Sports. */
     fun dropReturn() {
@@ -164,7 +166,7 @@ fun SportsScreen(
     /** Back on a game opened from another page (the Calendar): that page's route. */
     onReturnTo: (route: String) -> Unit = {},
     viewModel: SportsViewModel = hiltViewModel(),
-    onOpenMultiview: () -> Unit = {}
+    onOpenMultiview: (String?) -> Unit = {}
 ) {
     val events by viewModel.events.collectAsStateWithLifecycle()
     val known by viewModel.known.collectAsStateWithLifecycle()
@@ -417,7 +419,7 @@ fun SportsScreen(
                 onOpen = { ev -> fromRoute = null; fromLabel = null; openId = ev.id },
                 onQuickWatch = ::quickWatch,
                 onPick = { picker = true },
-                onOpenMultiview = onOpenMultiview,
+                onOpenMultiview = { onOpenMultiview(playingKey) },
                 onWatchChannel = { ch -> viewModel.watchChannel(ch); onOpenLive() }
             )
         }
