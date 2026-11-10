@@ -1034,12 +1034,21 @@ class LiveTvRepository @Inject constructor(
         private set
 
     private fun defaultWindow(now: Long = System.currentTimeMillis()) = (now - HOUR) to (now + 4 * HOUR)
-    private class GuidePreRead(val fingerprint: String?)
+    private class GuidePreRead(val fingerprint: String?, val window: Map<String, List<EpgProgram>>)
     private val priorityFile get() = File(baseDir, "guide_priority.txt")
     private fun priorityKeys(): List<String> = runCatching {
         priorityFile.readLines().filter { it.isNotBlank() }.take(GuideWindowCache.MAX_REQUEST_CHANNELS)
     }.getOrDefault(emptyList())
-    private fun preReadGuide(): GuidePreRead? = runCatching { GuidePreRead(guideDb.fingerprint()) }.getOrNull()
+    private suspend fun preReadGuide(): GuidePreRead? = runCatching {
+        val fingerprint = guideDb.fingerprint()
+        val shift = prefs.currentSettings().epgOffsetMinutes * 60_000L
+        val (from, to) = defaultWindow(System.currentTimeMillis() - shift)
+        val keys = priorityKeys()
+        val window = if (keys.isEmpty()) emptyMap() else runCatching {
+            guideDb.range(from, to, light = true, channels = keys)
+        }.getOrDefault(emptyMap())
+        GuidePreRead(fingerprint, window)
+    }.getOrNull()
 
     private fun beginGuideMutation() {
         cacheEpoch.incrementAndGet()
@@ -1193,12 +1202,31 @@ class LiveTvRepository @Inject constructor(
         }
         _autoMatches.value = runCatching { guideDb.autoMatches() }.getOrDefault(emptyMap())
         epgDetailsPending = true
-        publishCommittedGuide()
+        // The first screen must not wait for even the two-listing overview of a huge catalog.
+        // Publish a small priority read immediately; fill the global now/next view in background.
+        val epoch = cacheEpoch.incrementAndGet()
+        val revision = guideDb.revision()
+        rangeMutex.withLock {
+            windowCache.clear()
+            mergedWindows.clear()
+            schedules.clear()
+            overview = pre?.window.orEmpty()
+            _programs.value = overview
+            overviewAt = 0L
+            guideInDb = true
+            lightPrograms = true
+            _guideGeneration.value++
+            _committedGuideRevision.value = revision
+        }
+        ensureRange(0L, 0L)
+        loadChannelsNow(viewportKeys.ifEmpty { priorityKeys() })
         if (_epgSources.value.isEmpty()) scope.launch(Dispatchers.IO) { loadSourceLists(targets) }
         // Availability uses key-only database reads, not whether a channel's RAM tile was visited.
         scope.launch(BackgroundWork.reads) {
-            val epoch = cacheEpoch.get()
             val changes = guideDb.changes
+            val available = guideDb.channelsWithListings()
+            if (cacheEpoch.get() != epoch || guideDb.changes != changes) return@launch
+            _guideChannelsWithListings.value = available
             val now = System.currentTimeMillis()
             val present = guideDb.channelsWithListings(now - 3 * HOUR, now + 18 * HOUR)
             if (cacheEpoch.get() != epoch || guideDb.changes != changes) return@launch
