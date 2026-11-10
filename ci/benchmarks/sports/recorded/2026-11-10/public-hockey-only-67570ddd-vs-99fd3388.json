@@ -1,0 +1,82 @@
+{
+  "experiment": "committed HockeyOnly public-harness reproduction",
+  "recorded_date": "2026-11-10",
+  "before_commit": "67570ddd2f8c21900d99b663170ba023a19eb382",
+  "after_commit": "99fd33887356ac947f2e907acca9388cbabd8c67",
+  "observations_per_revision": 1,
+  "environment": {
+    "java": "Temurin 21.0.12.1+1",
+    "kotlin": "2.3.0",
+    "junit": "4.13.2",
+    "json": "20250517",
+    "okhttp": "4.12.0",
+    "okio": "3.16.4",
+    "platform": "Windows x86_64 host JVM",
+    "measurement": "cumulative calling-thread allocated bytes; not Android PSS",
+    "forced_gc": false,
+    "live_network": false
+  },
+  "runner": {
+    "path": "ci/benchmarks/sports/run.ps1",
+    "commit": "ca91cb2d979680a44557cc4c3870ab85204b877a",
+    "switch": "-HockeyOnly",
+    "sha256": "b18f20a01e2d837d1fdcc313ac2440959ad8981b5fc9b221878a44e6c3def62b"
+  },
+  "class_order": [
+    "com.nuvio.tv.livetv.sports.SportsHockeyTechTest",
+    "com.nuvio.tv.livetv.sports.SportsFeedDateFormattingTest",
+    "com.nuvio.tv.livetv.sports.SportsHockeyTechAllocationBenchmark"
+  ],
+  "tests_before": 7,
+  "tests_after": 7,
+  "result_before": "PASS",
+  "result_after": "PASS",
+  "warmup": "Same three HockeyTech functional tests and three date/defaults/concurrency tests, then the unchanged season allocation diagnostic; cache/loadingKeys/MatchInputs sources excluded from both runs.",
+  "hockey": {
+    "season_games": 3657,
+    "requested_days": 3,
+    "before_allocated_bytes": 142088064,
+    "after_allocated_bytes": 48769344,
+    "before_mib": 135.5057373046875,
+    "after_mib": 46.51007080078125,
+    "returned_events_before": 37,
+    "returned_events_after": 37,
+    "output_bytes_before": 30974,
+    "output_bytes_after": 30974,
+    "output_sha256_before": "1f46d444242c5fbde104291890c933afbafc69a7d6ef4a7914c17c35099dbf8a",
+    "output_sha256_after": "1f46d444242c5fbde104291890c933afbafc69a7d6ef4a7914c17c35099dbf8a"
+  },
+  "before_source_sha256": {
+    "app/src/main/java/com/nuvio/tv/livetv/data/ForkHttp.kt": "5aefc35ed408d9f1263fe8f6134c50a1f262287aaefb8722d2ebad0f637aaee5",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeedCache.kt": "e182d855c2d8b606122cd287fcd239a4add9302a9f28890c3463378ad618735c",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeeds.kt": "eb8c3546e0585c31f578f04b54a5a90de8a7c6b6db8bca38d51eb5cdc137a580",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsModels.kt": "deaa914a2a5ddcd4e1cdf8a1d7617f4190e37e608096d820741817ce90a75758",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsCatalog.kt": "365118de2c921c91b0010127ffba3a2cd635ea2e66c3dd4faa7b63c9541d2f1e",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsEventCodec.kt": "741ed759093a4c1cbbce1fc1467ab543f67cc65891feb559283e46afed1d5643"
+  },
+  "after_source_sha256": {
+    "app/src/main/java/com/nuvio/tv/livetv/data/ForkHttp.kt": "5aefc35ed408d9f1263fe8f6134c50a1f262287aaefb8722d2ebad0f637aaee5",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeedCache.kt": "e587024c4f72b8a8bdde9569ed52f2ac0103154c206bc875cef188e9e8888820",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeeds.kt": "d0076f1145fd3520e723c877ba5d71dde4bcc280319782d0ff453afb629b0d38",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsModels.kt": "deaa914a2a5ddcd4e1cdf8a1d7617f4190e37e608096d820741817ce90a75758",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsCatalog.kt": "365118de2c921c91b0010127ffba3a2cd635ea2e66c3dd4faa7b63c9541d2f1e",
+    "app/src/main/java/com/nuvio/tv/livetv/sports/SportsEventCodec.kt": "741ed759093a4c1cbbce1fc1467ab543f67cc65891feb559283e46afed1d5643"
+  },
+  "test_sha256_before": {
+    "app/src/test/java/com/nuvio/tv/livetv/sports/SportsHockeyTechTest.kt": "5e1dbf9dcfb9e4465dbedd4a6e0ac8f8ae592ac74c9074da885ea4a43e08e8aa",
+    "app/src/test/java/com/nuvio/tv/livetv/sports/SportsFeedDateFormattingTest.kt": "902d7915fae7f16e3a2a9fd7748b87631970dbcc7400fc48c8998fcb0722a6bd",
+    "ci/benchmarks/sports/SportsHockeyTechAllocationBenchmark.kt": "3909a2b9a1a65fabdfd2d2cd249005db2457ddcaeba287697aff43f851d9aef4"
+  },
+  "test_sha256_after": {
+    "app/src/test/java/com/nuvio/tv/livetv/sports/SportsHockeyTechTest.kt": "5e1dbf9dcfb9e4465dbedd4a6e0ac8f8ae592ac74c9074da885ea4a43e08e8aa",
+    "app/src/test/java/com/nuvio/tv/livetv/sports/SportsFeedDateFormattingTest.kt": "902d7915fae7f16e3a2a9fd7748b87631970dbcc7400fc48c8998fcb0722a6bd",
+    "ci/benchmarks/sports/SportsHockeyTechAllocationBenchmark.kt": "3909a2b9a1a65fabdfd2d2cd249005db2457ddcaeba287697aff43f851d9aef4"
+  },
+  "source_hash_note": "Hashes describe the exact source files named in each compiler argument file and the unchanged committed runner/test bytes. Git blobs and checkouts can differ in line endings.",
+  "previous_observation": "overall-hockey-67570ddd-vs-99fd3388.json",
+  "limitations": [
+    "Separate reproduction; original overall and incremental observations are preserved without replacement or pooling.",
+    "One pair, not a distribution, physical-device result, retained-memory measurement or Android PSS claim.",
+    "Six production sources were compiled directly for each revision; compatible cached model dependencies supplied the remaining application types."
+  ]
+}

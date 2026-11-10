@@ -28,7 +28,7 @@
   "selection": "Same six HockeyTech/date/defaults/concurrency warmup tests, then one unchanged allocation diagnostic. Cache/loadingKeys and MatchInputs sources/tests omitted on both sides.",
   "original_runner": "Local selection-only wrapper around ci/benchmarks/sports/run.ps1",
   "committed_reproduction": "ci/benchmarks/sports/run.ps1 -HockeyOnly",
-  "reproduction_status": "HockeyOnly selection prepared for review; public-harness rerun pending release and must retain separate observations.",
+  "reproduction_status": "Completed in a separate committed public-harness reproduction; original observations remain unchanged.",
   "hockey": {
     "season_games": 3657,
     "requested_days": 3,
@@ -64,5 +64,6 @@
     "One observation per revision; no distribution or Android process RAM claim.",
     "Do not pool with the larger 29-test incremental suite or historical 131.63 MiB baseline.",
     "Compatible cached application model dependencies were used; the six listed Sports production sources were compiled from the selected revisions."
-  ]
+  ],
+  "public_reproduction_record": "public-hockey-only-67570ddd-vs-99fd3388.json"
 }

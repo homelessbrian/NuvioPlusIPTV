@@ -34,9 +34,10 @@ Run the committed harness/test sources from the current checkout while pointing 
 ./ci/benchmarks/sports/run.ps1 -HockeyOnly -JavaHome $env:JAVA_HOME -AppClasses /path/to/compatible/app/classes -ProductionSourceRoot /path/to/pinned/99fd3388 -OutputDirectory /path/to/new-overall-after
 ```
 
-Sanitized summaries in `recorded/2026-11-10/` distinguish two completed experiments:
+Sanitized summaries in `recorded/2026-11-10/` distinguish the original experiments and a separate public-harness reproduction:
 
-- Matched upstream HockeyTech-only pair: **142,703,848 → 48,346,440 allocated bytes** (**136.09 → 46.11 MiB**), seven tests per build. Both returned 37 events/30,974 bytes and identical SHA-256. The original run used a local selection-only wrapper; `-HockeyOnly` exposes that same selection/order in the committed harness. A new public-harness run must keep its own results rather than replace those observations.
+- Original matched upstream HockeyTech-only pair: **142,703,848 → 48,346,440 allocated bytes** (**136.09 → 46.11 MiB**), seven tests per build. Both returned 37 events/30,974 bytes and identical SHA-256. The original run used a local selection-only wrapper; its observations remain in `overall-hockey-67570ddd-vs-99fd3388.json`.
+- Committed `-HockeyOnly` public-harness reproduction: **142,088,064 → 48,769,344 bytes** (**135.51 → 46.51 MiB**), seven tests per build, all passing. It preserves the same six-test warmup and final diagnostic, 37 events/30,974 bytes and output SHA. `public-hockey-only-67570ddd-vs-99fd3388.json` records this separate pair, the exact six production source hashes per revision, identical test hashes and committed runner hash. It does not replace the original pair.
 - Incremental `30a5fc7b` → `99fd3388`: **85,077,984 → 49,325,472 bytes** (**81.14 → 47.04 MiB**) for the season diagnostic and **1,901,744 → 381,688 bytes** for the MatchInputs component, with 29 tests per build. Its larger suite/order differs from the seven-test overall pair; do not pool the numbers. The earlier 131.63 MiB source diagnostic remains historical and is not this current-base observation.
 
 These summaries describe one matched pair per experiment, not Android PSS, a cross-device RAM estimate or a benchmark distribution. Source hashes describe actual compiled source bytes; exported Git blobs and Windows checkouts can differ solely in line endings. Recorded summaries contain no application data, private paths, credentials or raw provider responses.
