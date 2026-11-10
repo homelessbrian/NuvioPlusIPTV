@@ -280,7 +280,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         val parts = channels?.toList()?.chunked(400) ?: listOf(null)
         for (part in parts) {
             val filter = if (part == null) "" else " AND ch IN (${part.joinToString(",") { "?" }})"
-            readableDatabase.rawQuery("SELECT DISTINCT ch FROM programs WHERE $conditions$filter", (timeArgs + part.orEmpty()).toTypedArray()).use { c ->
+            readableDatabase.rawQuery("SELECT DISTINCT ch FROM programs WHERE $conditions$filter", (timeArgs + part.orEmpty()).toTypedArray()).forwardOnly().use { c ->
                 while (c.moveToNext()) out += c.getString(0)
             }
         }
@@ -297,7 +297,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             "SELECT ch, start, stop, title, ep, icon FROM programs " +
                 "WHERE start >= ? AND start < ? AND stop > ?$filter ORDER BY start",
             (listOf((atMs - MAX_SHOW_MS).toString(), (atMs + 12 * 3_600_000L).toString(), atMs.toString()) + part.orEmpty()).toTypedArray()
-        ).use { c ->
+        ).forwardOnly().use { c ->
             while (c.moveToNext()) {
                 val key = c.getString(0)
                 val list = out.getOrPut(key) { ArrayList(2) }
@@ -339,7 +339,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         val timeArgs = listOf((fromMs - MAX_SHOW_MS).toString(), toMs.toString(), fromMs.toString())
         fun read(chFilter: String, chArgs: List<String>) {
             val sql = "SELECT $columns FROM programs WHERE $chFilter start >= ? AND start < ? AND stop > ?"
-            readableDatabase.rawQuery(sql, (chArgs + timeArgs).toTypedArray()).use { c ->
+            readableDatabase.rawQuery(sql, (chArgs + timeArgs).toTypedArray()).forwardOnly().use { c ->
                 while (c.moveToNext()) {
                     val p = if (light) EpgProgram(
                         startMs = c.getLong(1),
@@ -378,7 +378,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         if (request.query.length < 2 || (request.channelKeys.isEmpty() && request.currentKeys.isEmpty())) return EpgSearchPrograms()
         val out = EpgSearchAccumulator(request)
         val sql = "SELECT ch, start, stop, title, ep, icon FROM programs WHERE start < ? AND stop > ?"
-        readableDatabase.rawQuery(sql, arrayOf(request.toMs.toString(), request.fromMs.toString()), cancellation).use { c ->
+        readableDatabase.rawQuery(sql, arrayOf(request.toMs.toString(), request.fromMs.toString()), cancellation).forwardOnly().use { c ->
             while (c.moveToNext()) {
                 cancellation?.throwIfCanceled()
                 val ch = c.getString(0)
@@ -426,7 +426,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?) -> Unit
     ) {
         val sql = "SELECT ch, start, stop, title, descr, cat FROM programs WHERE start >= ? AND start < ? AND stop > ?"
-        readableDatabase.rawQuery(sql, arrayOf(fromMs.toString(), toMs.toString(), minStopMs.toString())).use { c ->
+        readableDatabase.rawQuery(sql, arrayOf(fromMs.toString(), toMs.toString(), minStopMs.toString())).forwardOnly().use { c ->
             while (c.moveToNext()) {
                 onRow(
                     c.getString(0), c.getLong(1), c.getLong(2), c.getString(3),
@@ -463,7 +463,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             val args = listOf(fromMs.toString(), toMs.toString(), minStopMs.toString()) +
                 part.flatMap { w -> if (inDescription) listOf(like(w), like(w)) else listOf(like(w)) }
             val sql = "SELECT ch, start, stop, title, descr, cat FROM programs WHERE start >= ? AND start < ? AND stop > ? AND ($conds) LIMIT ${limit - out.size}"
-            readableDatabase.rawQuery(sql, args.toTypedArray()).use { c ->
+            readableDatabase.rawQuery(sql, args.toTypedArray()).forwardOnly().use { c ->
                 while (c.moveToNext()) {
                     val ch = c.getString(0)
                     val start = c.getLong(1)
@@ -971,7 +971,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) -> Unit
     ) {
         val sql = "SELECT ch, start, stop, title, descr, cat, nt, nd FROM sports_rows WHERE start >= ? AND start < ? AND stop > ?"
-        readableDatabase.rawQuery(sql, arrayOf(fromMs.toString(), toMs.toString(), minStopMs.toString())).use { c ->
+        readableDatabase.rawQuery(sql, arrayOf(fromMs.toString(), toMs.toString(), minStopMs.toString())).forwardOnly().use { c ->
             while (c.moveToNext()) {
                 onRow(
                     c.getString(0), c.getLong(1), c.getLong(2), c.getString(3),
