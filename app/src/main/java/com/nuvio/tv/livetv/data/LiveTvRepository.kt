@@ -253,6 +253,7 @@ class LiveTvRepository @Inject constructor(
      * waiting for the full rebuild (which can be queued behind a long guide download).
      */
     private fun dropPlaylistNow(id: String) {
+        builtSegments = builtSegments - id
         val remaining = _channels.value.filterNot { it.sourceId == id }
         if (remaining.size == _channels.value.size) return
         val keys = remaining.mapTo(HashSet()) { it.key }
@@ -682,10 +683,10 @@ class LiveTvRepository @Inject constructor(
         // checked against the channels afterwards), so the two waits overlap.
         val guidePreRead = scope.async(Dispatchers.IO) { preReadGuide() }
         if (!loadSavedChannels()) {
-            setStatus(loading = true, message = "Loading channels…")
+            // No bubble here: buildChannels says so itself for each playlist it has to read.
             buildChannels()
             saveChannels()
-            LIVE_REPORT.add("Channels re-read from playlists: ${_channels.value.size} in ${System.currentTimeMillis() - t0} ms")
+            LIVE_REPORT.add("Channel list updated: ${_channels.value.size} in ${System.currentTimeMillis() - t0} ms")
         } else {
             LIVE_REPORT.add("Saved channel list used: ${_channels.value.size} channels in ${System.currentTimeMillis() - t0} ms")
             carryOverRenamedChannels(null, _channels.value)
@@ -730,14 +731,20 @@ class LiveTvRepository @Inject constructor(
     ): String {
         val sb = StringBuilder().append(CHANNELS_CACHE_VERSION).append('|')
         (playlists ?: prefs.currentPlaylists().filter { it.liveEnabled }).forEach { pl ->
-            val f = playlistFile(pl.id)
-            sb.append(pl.id).append(':').append(pl.name.hashCode()).append(':').append(pl.userAgent.hashCode())
-                .append(':').append(f.length()).append(':').append(contentStamp(f))
-            // M3U links: the chosen stream format changes the channel links (Auto adds nothing,
-            // so lists saved before this setting existed stay valid).
-            if (!pl.isXtream && pl.streamFormat != "auto") sb.append(":fmt=").append(pl.streamFormat)
-            sb.append(',')
+            sb.append(playlistSegment(pl)).append(',')
         }
+        return sb.toString()
+    }
+
+    /** One playlist's part of [channelsFingerprint]: the same value means its channels are unchanged. */
+    private suspend fun playlistSegment(pl: PlaylistSource): String {
+        val f = playlistFile(pl.id)
+        val sb = StringBuilder()
+        sb.append(pl.id).append(':').append(pl.name.hashCode()).append(':').append(pl.userAgent.hashCode())
+            .append(':').append(f.length()).append(':').append(contentStamp(f))
+        // M3U links: the chosen stream format changes the channel links (Auto adds nothing,
+        // so lists saved before this setting existed stay valid).
+        if (!pl.isXtream && pl.streamFormat != "auto") sb.append(":fmt=").append(pl.streamFormat)
         return sb.toString()
     }
 
@@ -750,18 +757,18 @@ class LiveTvRepository @Inject constructor(
         runCatching { File(baseDir, "channels_cache.bin").delete() } // the old zipped format
         val file = savedChannelsFile
         if (!file.exists()) return@withContext false
-        val expected = channelsFingerprint()
+        val livePlaylists = prefs.currentPlaylists().filter { it.liveEnabled }
+        val expected = channelsFingerprint(livePlaylists)
         runCatching {
             java.io.DataInputStream(java.io.BufferedInputStream(file.inputStream(), 256 * 1024)).use { input ->
                 val stored = input.readUTF()
-                // Out of date: the playlists get read again. Its stream links are still read
-                // (same format only) so channels renamed in the playlist keep their favorites etc.
+                // Out of date: only the playlists that changed are read again (see
+                // [buildChannels]); the others' channels are taken from here as they are.
                 val outdated = stored != expected
                 if (outdated) {
                     LIVE_REPORT.add("Saved channel list out of date: ${fingerprintDiff(stored, expected)}")
                     if (stored.substringBefore('|') != expected.substringBefore('|')) return@withContext false
                 }
-                val links = HashMap<String, String>()
                 val epg = HashMap<String, List<String>>()
                 repeat(input.readInt()) {
                     val id = input.readUTF()
@@ -771,10 +778,10 @@ class LiveTvRepository @Inject constructor(
                 fun shared(): String = table[input.readInt()]
                 fun opt(): String? = if (input.readBoolean()) input.readUTF() else null
                 val count = input.readInt()
-                val list = ArrayList<LiveChannel>(if (outdated) 0 else count)
+                val list = ArrayList<LiveChannel>(count)
                 // Channels from a playlist that's turned off (a list saved while one was being
-                // switched off): read the playlists again so the saved copy is put right.
-                val liveIds = prefs.currentPlaylists().filter { it.liveEnabled }.mapTo(HashSet()) { it.id }
+                // switched off): left out, and the saved copy is put right.
+                val liveIds = livePlaylists.mapTo(HashSet()) { it.id }
                 var strayFound = false
                 repeat(count) {
                     val key = input.readUTF()
@@ -787,6 +794,7 @@ class LiveTvRepository @Inject constructor(
                     val groupId = shared()
                     val group = shared()
                     val number = input.readInt()
+                    val autoNumber = input.readBoolean()
                     val url = input.readUTF()
                     val headerCount = input.readInt()
                     val headers: Map<String, String> = if (headerCount == 0) emptyMap()
@@ -799,34 +807,45 @@ class LiveTvRepository @Inject constructor(
                         com.nuvio.tv.livetv.model.DrmInfo(scheme, license, lh, opt())
                     } else null
                     val tvgShift = input.readInt()
-                    if (outdated) links[key] = url
-                    else if (sourceId !in liveIds) strayFound = true
-                    else list += LiveChannel(key, sourceId, sourceName, name, tvgId, tvgName, logo, groupId, group, number, url, headers, catchup, drm, tvgShift)
-                }
-                if (outdated) {
-                    previousLinks = links
-                    return@withContext false
-                }
-                if (strayFound) {
-                    LIVE_REPORT.add("Saved channel list had channels from a turned-off playlist: reading the playlists again")
-                    return@withContext false
+                    if (sourceId !in liveIds) strayFound = true
+                    else list += LiveChannel(key, sourceId, sourceName, name, tvgId, tvgName, logo, groupId, group, number, url, headers, catchup, drm, tvgShift, autoNumber)
                 }
                 embeddedEpgUrls.clear()
-                embeddedEpgUrls.putAll(epg)
+                embeddedEpgUrls.putAll(epg.filterKeys { it in liveIds })
+                if (outdated || strayFound) {
+                    if (strayFound && !outdated) LIVE_REPORT.add("Saved channel list had channels from a turned-off playlist: taking them out")
+                    // Kept for [buildChannels] (it reuses the playlists that haven't changed and
+                    // lets go of this straight after), stream links included for renamed channels.
+                    reusable = Reusable(list, segmentsOf(stored))
+                    return@withContext false
+                }
                 loadGroupOrder()
                 _channels.value = list
+                builtSegments = segmentsOf(stored)
                 true
             }
         }.getOrElse {
             Log.w(TAG, "Saved channel list unreadable", it)
+            reusable = null
             false
         }
     }
 
+    /** Channels from the saved list kept for [buildChannels], with each playlist's fingerprint part. */
+    private class Reusable(val channels: List<LiveChannel>, val segments: Map<String, String>)
+    @Volatile private var reusable: Reusable? = null
+
+    /** Each playlist's part of the fingerprint the current channel list was read with. */
+    @Volatile private var builtSegments: Map<String, String> = emptyMap()
+
+    /** Splits a fingerprint into each playlist's part, by playlist id. */
+    private fun segmentsOf(fingerprint: String): Map<String, String> =
+        fingerprint.substringAfter('|').split(',').filter { it.isNotBlank() }.associateBy { it.substringBefore(':') }
+
     private suspend fun saveChannels() = withContext(BackgroundWork.cpu()) {
         // Labelled with the playlists the list was actually read from, not the ones on now: a
         // playlist switched on or off while it was being read makes the next start read again.
-        val fingerprint = channelsFingerprint(builtFrom)
+        val fingerprint = CHANNELS_CACHE_VERSION.toString() + "|" + builtSegments.values.joinToString("") { "$it," }
         runCatching {
             val list = _channels.value
             // Text shared by many channels, stored once.
@@ -854,6 +873,7 @@ class LiveTvRepository @Inject constructor(
                     opt(c.tvgId); opt(c.tvgName); opt(c.logo)
                     out.writeInt(index.getValue(c.groupId)); out.writeInt(index.getValue(c.group))
                     out.writeInt(c.number)
+                    out.writeBoolean(c.autoNumber)
                     out.writeUTF(c.url)
                     out.writeInt(c.headers.size)
                     c.headers.forEach { (k, v) -> out.writeInt(index.getValue(k)); out.writeUTF(v) }
@@ -1716,9 +1736,6 @@ class LiveTvRepository @Inject constructor(
     /** Channel key → stream link from an out-of-date saved channel list (see [loadSavedChannels]). */
     private var previousLinks: Map<String, String> = emptyMap()
 
-    /** The playlists the current channel list was read from (see [saveChannels]). */
-    @Volatile private var builtFrom: List<PlaylistSource>? = null
-
     /**
      * A channel renamed in the playlist (by the provider or a playlist editor) gets a new key.
      * This moves favorites, hidden channels, groups you made, renames, guide choices and so on
@@ -1750,23 +1767,52 @@ class LiveTvRepository @Inject constructor(
     }
 
     /**
-     * Reads every saved playlist into one channel list (numbers carry on from one playlist to
-     * the next). [fixedMessage]: shown for the whole read instead of naming each playlist, so
-     * adding a playlist doesn't look like the others are being loaded again.
+     * Makes one channel list from every playlist that's on (numbers carry on from one playlist
+     * to the next). Only playlists that changed are read again: the others' channels are taken
+     * from the list already there (or the saved one), so turning a playlist off reads nothing
+     * and turning one on reads just that one. [fixedMessage]: shown for the whole read instead
+     * of naming each playlist, so adding a playlist doesn't look like the others are loading again.
      */
     private suspend fun buildChannels(fixedMessage: String? = null) = withContext(BackgroundWork.cpu()) {
-        val before = (_channels.value.takeIf { it.isNotEmpty() }?.associate { it.key to it.url } ?: previousLinks)
+        val saved = reusable
+        reusable = null
+        val oldChannels = _channels.value.takeIf { it.isNotEmpty() } ?: saved?.channels.orEmpty()
+        val before = (oldChannels.takeIf { it.isNotEmpty() }?.associate { it.key to it.url } ?: previousLinks)
             .takeIf { it.isNotEmpty() }
         previousLinks = emptyMap()
+        // What can be reused: channels by playlist, with the fingerprint part they were read with.
+        val (reuseFrom, reuseSegments) = if (_channels.value.isNotEmpty()) _channels.value to builtSegments
+        else (saved?.channels.orEmpty()) to (saved?.segments.orEmpty())
+        val oldBySource = reuseFrom.groupBy { it.sourceId }
         val playlists = prefs.currentPlaylists().filter { it.liveEnabled }
         val multi = playlists.size > 1
         val out = ArrayList<LiveChannel>()
         val usedKeys = HashSet<String>()
+        // In playlist order, like [channelsFingerprint], so the saved list matches it next time.
+        val segments = LinkedHashMap<String, String>()
+        playlists.forEach { segments[it.id] = playlistSegment(it) }
         var counter = 1
-        for ((plIndex, pl) in playlists.withIndex()) {
+        var read = 0
+        val toRead = playlists.count { reuseSegments[it.id] != segments[it.id] || oldBySource[it.id] == null }
+        for (pl in playlists) {
             val file = playlistFile(pl.id)
             if (!file.exists()) continue
-            if (fixedMessage == null) setStatus(loading = true, message = "Reading channels from \"${pl.name}\"" + (if (playlists.size > 1) " (${plIndex + 1} of ${playlists.size})" else "") + "…")
+            val segment = segments.getValue(pl.id)
+            val old = oldBySource[pl.id]
+            if (reuseSegments[pl.id] == segment && old != null) {
+                // Unchanged: same channels; only numbers (they carry on from the playlists
+                // before it) and group ids (prefixed when there's more than one playlist) follow.
+                for (c in old) {
+                    val number = if (c.autoNumber) counter else c.number
+                    counter = maxOf(counter, number) + 1
+                    usedKeys += c.key
+                    val groupId = if (multi) "${pl.id}::${c.group}" else c.group
+                    out += if (number == c.number && groupId == c.groupId) c else c.copy(number = number, groupId = groupId)
+                }
+                continue
+            }
+            read++
+            if (fixedMessage == null) setStatus(loading = true, message = "Reading channels from \"${pl.name}\"" + (if (toRead > 1) " ($read of $toRead)" else "") + "…")
             val parsed = runCatching { openMaybeGzip(file).bufferedReader().use { M3uParser.parse(it) } }
                 .onFailure { Log.w(TAG, "Parse ${pl.name} failed", it) }
                 .getOrNull() ?: continue
@@ -1803,13 +1849,15 @@ class LiveTvRepository @Inject constructor(
                     headers = headers,
                     catchup = e.catchup,
                     drm = e.drm,
-                    tvgShiftMinutes = e.tvgShiftMinutes
+                    tvgShiftMinutes = e.tvgShiftMinutes,
+                    autoNumber = e.chno == null
                 )
             }
             prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(channelCount = parsed.entries.size) else it } }
         }
         loadGroupOrder()
-        builtFrom = playlists
+        builtSegments = segments
+        if (read < playlists.size) LIVE_REPORT.add("Channel list: read $read playlist(s), kept ${playlists.size - read} unchanged")
         // A playlist switched off while the channels were being read: leave its channels out
         // (it was already taken out of the guide, and this would have put it back).
         val stillOn = prefs.currentPlaylists().filter { it.liveEnabled }.mapTo(HashSet()) { it.id }
@@ -3128,7 +3176,7 @@ class LiveTvRepository @Inject constructor(
          * the file itself hasn't changed, so its later days come in (see buildProgramsInner).
          */
         private const val REUSE_MAX_AGE_MS = 20 * HOUR
-        private const val CHANNELS_CACHE_VERSION = 7
+        private const val CHANNELS_CACHE_VERSION = 8
         private const val MAX_SAVED_LISTINGS = 300_000
         /** Titles guides use when they have no real listing. */
         private val PLACEHOLDER_TITLES = Regex(

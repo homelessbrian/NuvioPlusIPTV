@@ -209,7 +209,9 @@ data class LiveChannel(
     /** Protected (DRM) stream details from the playlist, e.g. MPEG-DASH with a license. */
     val drm: DrmInfo? = null,
     /** The playlist's "tvg-shift" for this channel, in minutes: moves its guide listings. */
-    val tvgShiftMinutes: Int = 0
+    val tvgShiftMinutes: Int = 0,
+    /** Numbered by the app (the playlist gave no number): changes with the playlists before it. */
+    val autoNumber: Boolean = false
 )
 
 /**
@@ -852,7 +854,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-11 02:35"
+    const val KIT_STAMP = "2026-11-11 02:45"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String
