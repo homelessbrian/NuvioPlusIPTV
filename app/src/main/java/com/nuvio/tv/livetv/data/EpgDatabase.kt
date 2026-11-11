@@ -27,7 +27,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
-    SQLiteOpenHelper(context, "livetv_guide2.db", null, 1) {
+    SQLiteOpenHelper(context, "livetv_guide2.db", null, 2) {
 
     /**
      * Goes up whenever listings are written or removed: things worked out from the guide (Sports'
@@ -70,14 +70,59 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         db.execSQL("CREATE INDEX chan_gid ON chan(gid)")
         db.execSQL("CREATE TABLE auto (ch TEXT PRIMARY KEY, source TEXT NOT NULL, xmltv TEXT NOT NULL)")
         db.execSQL("CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT)")
+        if (createSportsSearchIndex(db)) {
+            db.execSQL("INSERT INTO meta (k, v) VALUES ('sports_search_ready', '1')")
+        }
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // Version 1 already holds the guide. Build its search index later, in the background,
+        // so upgrading does not make the app wait or throw away saved listings.
+        if (oldVersion == 1 && newVersion == 2) {
+            createSportsSearchIndex(db)
+            return
+        }
         // Nothing here is the only copy of anything: start again and read the guide files.
-        listOf("listings", "guide_ch", "guide_src", "guide_src_channels", "chan", "auto", "meta", "sports_rows", "sports_words")
+        listOf("listings", "guide_ch", "guide_src", "guide_src_channels", "chan", "auto", "meta", "sports_rows", "sports_words", "listing_search")
             .forEach { db.execSQL("DROP TABLE IF EXISTS $it") }
         onCreate(db)
     }
+
+    /** An inverted index of guide text, independent of today's games and their names. */
+    private fun createSportsSearchIndex(db: SQLiteDatabase): Boolean = runCatching {
+        db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS listing_search USING fts4(title, descr, content='listings', tokenize=unicode61)")
+        db.execSQL("""CREATE TRIGGER IF NOT EXISTS listings_search_insert AFTER INSERT ON listings BEGIN
+            INSERT INTO listing_search(docid, title, descr) VALUES (new.rowid, new.title, new.descr);
+        END""")
+        // FTS4 needs the old text while removing its tokens, so this runs before the row goes.
+        db.execSQL("""CREATE TRIGGER IF NOT EXISTS listings_search_delete BEFORE DELETE ON listings BEGIN
+            DELETE FROM listing_search WHERE docid = old.rowid;
+        END""")
+        true
+    }.onFailure { android.util.Log.w("SportsGuideIndex", "Index unavailable; using guide scan", it) }.getOrDefault(false)
+
+    /** Existing guides get indexed once; new guides are indexed as their rows are imported. */
+    @Synchronized fun buildSportsSearchIndex(): Boolean {
+        if (sportsSearchReady()) return true
+        val started = System.currentTimeMillis()
+        return runCatching {
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                db.execSQL("INSERT INTO listing_search(listing_search) VALUES ('rebuild')")
+                db.insertWithOnConflict("meta", null, ContentValues().apply {
+                    put("k", "sports_search_ready"); put("v", "1")
+                }, SQLiteDatabase.CONFLICT_REPLACE)
+                db.setTransactionSuccessful()
+            } finally { db.endTransaction() }
+            android.util.Log.i("SportsGuideIndex", "Built in ${System.currentTimeMillis() - started} ms")
+            true
+        }.onFailure { android.util.Log.w("SportsGuideIndex", "Build failed", it) }.getOrDefault(false)
+    }
+
+    fun sportsSearchReady(): Boolean = readableDatabase.rawQuery(
+        "SELECT v FROM meta WHERE k = 'sports_search_ready'", null
+    ).use { it.moveToFirst() && it.getString(0) == "1" }
 
     /** A playlist channel's guide: a guide file ([sourceId]), a channel in it, and how far its times are moved. */
     class GuideLink(val sourceId: String, val xmltvId: String, val shiftMs: Long = 0L)
@@ -305,6 +350,77 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                 }
             }
         }
+    }
+
+    /**
+     * Sports: use the guide's inverted text index to read likely shows, then let the caller's
+     * existing matching rules decide which games they actually show. Returns false when an old
+     * guide is still being indexed; the caller then uses [scanListingsGrouped].
+     */
+    fun scanListingsGroupedIndexed(
+        fromMs: Long,
+        toMs: Long,
+        minStopMs: Long,
+        words: Collection<String>,
+        onRow: (channels: List<String>, start: Long, stop: Long, title: String, descr: String?, cat: String?) -> Unit,
+        /** Words the caller only looks for in the title (not the description). */
+        titleOnlyWords: Collection<String> = emptyList()
+    ): Boolean {
+        if (!sportsSearchReady()) return false
+        val started = System.currentTimeMillis()
+        // Each word is searched as the whole phrase (the caller's text is cleaned the same way the
+        // index splits words), so nothing the caller would accept is left out, and far fewer
+        // shows are read than when only one word of a phrase is searched. A phrase the index
+        // can't express exactly (non-ASCII, or "&" which becomes "and") searches its longest plain
+        // word instead (a superset); with no such word the whole guide is scanned.
+        fun term(w: String): String? {
+            val parts = w.trim().split(' ').filter { it.isNotEmpty() }
+            if (parts.isEmpty()) return null
+            val plain = { s: String -> s.all { it in 'a'..'z' || it in '0'..'9' } }
+            if (parts.all(plain) && "and" !in parts) return "\"" + parts.joinToString(" ") + "\""
+            val single = parts.filter { it.length >= 2 && plain(it) && it != "and" }.maxByOrNull { it.length } ?: return null
+            return "\"$single\""
+        }
+        val both = words.map { term(it) ?: return false }.distinct()
+        val titleOnly = titleOnlyWords.map { term(it) ?: return false }.distinct()
+        // (A word is only ever one of the two kinds; a word in both is searched in both columns.)
+        val tokens = both.map { it } + titleOnly.filter { it !in both }.map { "title:$it" }
+        if (tokens.isEmpty()) return false
+        data class Hit(val channels: List<String>, val start: Long, val stop: Long, val title: String, val descr: String?, val cat: String?)
+        val hits = ArrayList<Hit>()
+        try {
+            val db = readableDatabase
+            for (group in allGroups()) {
+                val sh = group.shiftMs
+                val seen = HashSet<Long>()
+                val from = (fromMs - sh).toString()
+                val to = (toMs - sh).toString()
+                val minStop = (minStopMs - sh).toString()
+                for (part in tokens.chunked(80)) {
+                    val query = part.joinToString(" OR ")
+                    db.rawQuery(
+                        """SELECT listings.rowid, listings.gid, listings.start, listings.stop,
+                            listings.title, listings.descr, listings.cat
+                            FROM listing_search JOIN listings ON listings.rowid = listing_search.docid
+                            WHERE listing_search MATCH ? AND listings.start >= ? AND listings.start < ? AND listings.stop > ?""",
+                        arrayOf(query, from, to, minStop)
+                    ).use { c ->
+                        while (c.moveToNext()) {
+                            val channels = group.byGid[c.getLong(1)] ?: continue
+                            if (!seen.add(c.getLong(0))) continue
+                            hits += Hit(channels, c.getLong(2) + sh, c.getLong(3) + sh, c.getString(4),
+                                if (c.isNull(5)) null else c.getString(5), if (c.isNull(6)) null else c.getString(6))
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("SportsGuideIndex", "Search failed; using guide scan", e)
+            return false
+        }
+        hits.forEach { onRow(it.channels, it.start, it.stop, it.title, it.descr, it.cat) }
+        android.util.Log.i("SportsGuideIndex", "Read ${hits.size} candidate shows in ${System.currentTimeMillis() - started} ms")
+        return true
     }
 
     /**

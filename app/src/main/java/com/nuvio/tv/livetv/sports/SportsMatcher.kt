@@ -583,8 +583,11 @@ internal class SportsMatcher(
                         }
                     }
                     if (src == From.GUIDE) {
-                        db.scanListingsGrouped(from, to, from) { channels, start, stop, title, descr, cat ->
+                        val consume: (List<String>, Long, Long, String, String?, String?) -> Unit = { channels, start, stop, title, descr, cat ->
                             consider(channels, start, stop, title, descr, cat, norm(title), if (wantDesc && !descr.isNullOrEmpty()) norm(descr) else "")
+                        }
+                        if (!db.scanListingsGroupedIndexed(from, to, from, followed, consume, titleOnlyWords = titleWords - followed)) {
+                            db.scanListingsGrouped(from, to, from, consume)
                         }
                     } else {
                         readRows(src, from, to, from, wantDesc, gentle = false) { ch, start, stop, title, descr, cat, nt, nd ->
@@ -839,9 +842,12 @@ internal class SportsMatcher(
         }
         if (src == From.GUIDE) {
             var rows = 0
-            db.scanListingsGrouped(from, to, minStop) { channels, start, stop, title, descr, cat ->
+            val consume: (List<String>, Long, Long, String, String?, String?) -> Unit = { channels, start, stop, title, descr, cat ->
                 if (gentle && ++rows % 1000 == 0) Thread.sleep(3)
                 consider(channels, start, stop, title, descr, cat, norm(title), if (descr.isNullOrEmpty()) "" else norm(descr))
+            }
+            if (!db.scanListingsGroupedIndexed(from, to, minStop, words, consume)) {
+                db.scanListingsGrouped(from, to, minStop, consume)
             }
         } else {
             readRows(src, from, to, minStop, wantDesc = true, gentle = gentle) { ch, start, stop, title, descr, cat, nt, nd ->

@@ -60,6 +60,21 @@ class LiveTvRepository @Inject constructor(
     private val guideDb: EpgDatabase
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val sportsSearchScheduled = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Older stored guides need one background pass; new guide rows maintain the index as they arrive. */
+    private fun scheduleSportsSearchIndex() {
+        if (!sportsSearchScheduled.compareAndSet(false, true)) return
+        scope.launch(BackgroundWork.quiet) {
+            try {
+                BackgroundWork.awaitNoHeavy()
+                val t0 = System.currentTimeMillis()
+                if (guideDb.buildSportsSearchIndex()) {
+                    LIVE_REPORT.add("Sports guide index ready in ${System.currentTimeMillis() - t0} ms")
+                }
+            } finally { sportsSearchScheduled.set(false) }
+        }
+    }
 
     // Declared before anything that starts work on [scope] (a playlist update reads them).
     /** Server time zone lookups in progress, per playlist (shared, so a second replay doesn't ask again). */
@@ -1085,6 +1100,7 @@ class LiveTvRepository @Inject constructor(
             }
           } finally {
             rangeBusy.set(false)
+            scheduleSportsSearchIndex()
             pendingRange?.let { (f, t) -> pendingRange = null; ensureRange(f, t) }
           }
         }
@@ -2205,6 +2221,7 @@ class LiveTvRepository @Inject constructor(
             saveSkipped(skipped)
             if (skipped.isNotEmpty()) LIVE_REPORT.add("Guide: ${skipped.size} hidden channels left out")
             scheduleCompact()
+            scheduleSportsSearchIndex()
         } else {
             // Not stored: what was on screen before stays until the next update.
             LIVE_REPORT.add("Guide couldn't be stored: the guide stays as it was until the next update")
