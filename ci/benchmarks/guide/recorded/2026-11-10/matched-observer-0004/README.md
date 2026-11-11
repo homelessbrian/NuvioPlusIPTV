@@ -43,6 +43,17 @@ The candidate has a **worse transient during the browse phase**: sampled Runtime
 
 First-guide observations in seconds after launch: baseline **32.144 / 29.239 / 27.732**, candidate **31.664 / 29.505 / 32.369**. No first-guide latency gain is claimed. Search/Sports correctness and the optional larger shared-guide measurement have separate evidence; the synthetic Sports teams are not a live scoreboard match test.
 
+## Separate 26,716-channel shared-guide case
+
+One baseline then one candidate startup, same observer/frozen execution method and fixed windows, **no additional 600-row traversal**. This is a separate input and a **single pair**, not part of the three-trial primary distribution. The M3U was imported through the normal refresh action to preserve `tvg-shift`, then the same verified loaded state was restored before each observation. There are **26,716 channel bindings / 4,477 guide IDs / 107,448 stored listings / 641,184 projected ten-field rows**. Actual shifts are **0: 8,906; −1 hour: 8,905; +1 hour: 8,905**. A cold post-pair check preserved all those counts/shifts and the complete logical hash `5d04f45de1c6abb60de8bb7cadb75b7859acd6a6c158e83d9a521e42a5775510`.
+
+[Shared summary](shared-summary.json) and both `shared-*.csv` files preserve all samples/GC counters/gaps. Each late window has 30 samples. Every measured fixture catalogue/XML/media request delta is zero; the deliberate setup import is outside the measurements. Guide first-observation upper bounds are **36.82 → 32.18 seconds**. Startup sampled Runtime peaks are **124,636,224 → 120,485,600 bytes** and resident PSS peaks **657,347 → 597,455 KiB**. There were no failed/retried shared attempts or gaps over two seconds.
+
+- Late Runtime used: **87,457,120 → 82,130,192 bytes (83.41 → 78.33 MiB)**.
+- Resident PSS: **506,546 → 476,840 KiB (494.67 → 465.66 MiB)**.
+- **Derived SwapPSS increases: 555 → 25,123 KiB (0.54 → 24.53 MiB)**. This is an unfavorable paging difference and accounts for much of the resident decrease. It must not be hidden or counted as a pure allocation saving.
+- Raw total PSS including SwapPSS: **507,101 → 501,963 KiB (495.22 → 490.20 MiB)**. Report this alongside resident PSS; one sequential pair with uncontrolled system paging cannot establish a general memory gain.
+
 ## Attempt accounting and limits
 
 The accepted series has six complete trials and no retries. Before it, observer pilot 0001 failed at launch and produced only a CSV header because the activity intent lacked `FLAG_ACTIVITY_NEW_TASK`; that failed attempt is preserved privately. A one-line fix produced frozen observer 0004, and pilot 0002 passed 30 samples before this series. Pilot values are not pooled here. All historical full-dump runs, partial captures and unfavorable values remain separately classified as GC-perturbed diagnostics under the correction above.

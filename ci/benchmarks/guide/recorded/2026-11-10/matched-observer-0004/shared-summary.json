@@ -1,0 +1,1110 @@
+{
+  "version": 1,
+  "created_utc": "2026-11-11T01:29:33.972442+00:00",
+  "method": "matched-instrumented-direct-runtime-debug-memoryinfo",
+  "scenario": "shared-26716-4477",
+  "study_kind": "single-pair-case",
+  "complete": true,
+  "errors": [],
+  "order": [
+    "baseline-1",
+    "candidate-1"
+  ],
+  "logical_guide_proof": {
+    "bound_channels": 26716,
+    "bound_guide_ids": 4477,
+    "stored_listing_rows": 107448,
+    "bound_listing_rows": 107448,
+    "logical_rows": 641184,
+    "logical_sha256": "5d04f45de1c6abb60de8bb7cadb75b7859acd6a6c158e83d9a521e42a5775510",
+    "shift_distribution_ms": {
+      "-3600000": 8905,
+      "0": 8906,
+      "3600000": 8905
+    },
+    "fields": [
+      "ch",
+      "start",
+      "stop",
+      "title",
+      "descr",
+      "cat",
+      "ep",
+      "icon",
+      "year",
+      "people"
+    ]
+  },
+  "fixed_window_per_role": {
+    "baseline": {
+      "samples": 30,
+      "complete_samples": 30,
+      "minimum_required": 20,
+      "valid": true,
+      "metrics": {
+        "runtime_used_bytes": {
+          "samples": 30,
+          "median": 87457120.0,
+          "minimum": 76076384,
+          "maximum": 116176224
+        },
+        "runtime_total_bytes": {
+          "samples": 30,
+          "median": 104273248.0,
+          "minimum": 101340512,
+          "maximum": 116176224
+        },
+        "runtime_free_bytes": {
+          "samples": 30,
+          "median": 16400384.0,
+          "minimum": 0,
+          "maximum": 30117888
+        },
+        "runtime_max_bytes": {
+          "samples": 30,
+          "median": 536870912.0,
+          "minimum": 536870912,
+          "maximum": 536870912
+        },
+        "resident_component_pss_kib": {
+          "samples": 30,
+          "median": 506546.0,
+          "minimum": 460786,
+          "maximum": 598574
+        },
+        "derived_swap_pss_kib": {
+          "samples": 30,
+          "median": 555.0,
+          "minimum": 555,
+          "maximum": 555
+        },
+        "raw_total_pss_kib": {
+          "samples": 30,
+          "median": 507101.0,
+          "minimum": 461341,
+          "maximum": 599129
+        },
+        "swap_total_kib": {
+          "samples": 30,
+          "median": 22384.0,
+          "minimum": 22384,
+          "maximum": 22384
+        },
+        "dalvik_pss_kib": {
+          "samples": 30,
+          "median": 82693.0,
+          "minimum": 33793,
+          "maximum": 170905
+        },
+        "native_pss_kib": {
+          "samples": 30,
+          "median": 56698.0,
+          "minimum": 53692,
+          "maximum": 58300
+        },
+        "other_pss_kib": {
+          "samples": 30,
+          "median": 367181.0,
+          "minimum": 365593,
+          "maximum": 371805
+        },
+        "native_heap_allocated_bytes": {
+          "samples": 30,
+          "median": 46700200.0,
+          "minimum": 39842656,
+          "maximum": 54341424
+        },
+        "native_heap_size_bytes": {
+          "samples": 30,
+          "median": 212017152.0,
+          "minimum": 212017152,
+          "maximum": 212017152
+        },
+        "native_heap_free_bytes": {
+          "samples": 30,
+          "median": 161170888.0,
+          "minimum": 153529664,
+          "maximum": 168028368
+        }
+      },
+      "gc_changed_during_sample": 8,
+      "gc_count_before_range": {
+        "samples": 30,
+        "median": 66.5,
+        "minimum": 57,
+        "maximum": 77
+      },
+      "gc_count_after_range": {
+        "samples": 30,
+        "median": 67.0,
+        "minimum": 57,
+        "maximum": 77
+      }
+    },
+    "candidate": {
+      "samples": 30,
+      "complete_samples": 30,
+      "minimum_required": 20,
+      "valid": true,
+      "metrics": {
+        "runtime_used_bytes": {
+          "samples": 30,
+          "median": 82130192.0,
+          "minimum": 65676560,
+          "maximum": 103683344
+        },
+        "runtime_total_bytes": {
+          "samples": 30,
+          "median": 93869328.0,
+          "minimum": 90719504,
+          "maximum": 103683344
+        },
+        "runtime_free_bytes": {
+          "samples": 30,
+          "median": 11730944.0,
+          "minimum": 0,
+          "maximum": 30306304
+        },
+        "runtime_max_bytes": {
+          "samples": 30,
+          "median": 536870912.0,
+          "minimum": 536870912,
+          "maximum": 536870912
+        },
+        "resident_component_pss_kib": {
+          "samples": 30,
+          "median": 476840.0,
+          "minimum": 421530,
+          "maximum": 522086
+        },
+        "derived_swap_pss_kib": {
+          "samples": 30,
+          "median": 25123.0,
+          "minimum": 25123,
+          "maximum": 25123
+        },
+        "raw_total_pss_kib": {
+          "samples": 30,
+          "median": 501963.0,
+          "minimum": 446653,
+          "maximum": 547209
+        },
+        "swap_total_kib": {
+          "samples": 30,
+          "median": 47036.0,
+          "minimum": 47036,
+          "maximum": 47036
+        },
+        "dalvik_pss_kib": {
+          "samples": 30,
+          "median": 75817.0,
+          "minimum": 18157,
+          "maximum": 116405
+        },
+        "native_pss_kib": {
+          "samples": 30,
+          "median": 57242.0,
+          "minimum": 55652,
+          "maximum": 58516
+        },
+        "other_pss_kib": {
+          "samples": 30,
+          "median": 344267.0,
+          "minimum": 342629,
+          "maximum": 348705
+        },
+        "native_heap_allocated_bytes": {
+          "samples": 30,
+          "median": 48775592.0,
+          "minimum": 42933792,
+          "maximum": 54131104
+        },
+        "native_heap_size_bytes": {
+          "samples": 30,
+          "median": 163962880.0,
+          "minimum": 163962880,
+          "maximum": 163962880
+        },
+        "native_heap_free_bytes": {
+          "samples": 30,
+          "median": 111214056.0,
+          "minimum": 105803264,
+          "maximum": 117055856
+        }
+      },
+      "gc_changed_during_sample": 2,
+      "gc_count_before_range": {
+        "samples": 30,
+        "median": 65.5,
+        "minimum": 54,
+        "maximum": 75
+      },
+      "gc_count_after_range": {
+        "samples": 30,
+        "median": 65.5,
+        "minimum": 54,
+        "maximum": 75
+      }
+    }
+  },
+  "limits": [
+    "One120s startup observation per build; no repeatability/median-of-three claim",
+    "Separate shared-binding M3U case; primary600Down trial supplies browsing evidence",
+    "Matched instrumentation observer with overhead and no explicit source-requested GC",
+    "Runtime bytes and resident/derived/raw PSS KiB remain distinct; all GC-coincident samples/gaps/outliers retained"
+  ],
+  "trials": [
+    {
+      "label": "baseline-1",
+      "complete": true,
+      "errors": [],
+      "cadence": {
+        "gaps_seconds": {
+          "samples": 121,
+          "median": 0.9996853,
+          "minimum": 0.9507572,
+          "maximum": 1.0500479
+        },
+        "gaps_over_two_seconds": 0,
+        "gaps_over_five_seconds": 0,
+        "all_samples_retained": true
+      },
+      "summary": {
+        "prelaunch": {
+          "samples": 1,
+          "complete_samples": 1,
+          "minimum_required": 20,
+          "valid": false,
+          "metrics": {
+            "runtime_used_bytes": {
+              "samples": 1,
+              "median": 4317808,
+              "minimum": 4317808,
+              "maximum": 4317808
+            },
+            "runtime_total_bytes": {
+              "samples": 1,
+              "median": 50331648,
+              "minimum": 50331648,
+              "maximum": 50331648
+            },
+            "runtime_free_bytes": {
+              "samples": 1,
+              "median": 46013840,
+              "minimum": 46013840,
+              "maximum": 46013840
+            },
+            "runtime_max_bytes": {
+              "samples": 1,
+              "median": 536870912,
+              "minimum": 536870912,
+              "maximum": 536870912
+            },
+            "resident_component_pss_kib": {
+              "samples": 1,
+              "median": 327331,
+              "minimum": 327331,
+              "maximum": 327331
+            },
+            "derived_swap_pss_kib": {
+              "samples": 1,
+              "median": 475,
+              "minimum": 475,
+              "maximum": 475
+            },
+            "raw_total_pss_kib": {
+              "samples": 1,
+              "median": 327806,
+              "minimum": 327806,
+              "maximum": 327806
+            },
+            "swap_total_kib": {
+              "samples": 1,
+              "median": 23552,
+              "minimum": 23552,
+              "maximum": 23552
+            },
+            "dalvik_pss_kib": {
+              "samples": 1,
+              "median": 1715,
+              "minimum": 1715,
+              "maximum": 1715
+            },
+            "native_pss_kib": {
+              "samples": 1,
+              "median": 8955,
+              "minimum": 8955,
+              "maximum": 8955
+            },
+            "other_pss_kib": {
+              "samples": 1,
+              "median": 316661,
+              "minimum": 316661,
+              "maximum": 316661
+            },
+            "native_heap_allocated_bytes": {
+              "samples": 1,
+              "median": 5867328,
+              "minimum": 5867328,
+              "maximum": 5867328
+            },
+            "native_heap_size_bytes": {
+              "samples": 1,
+              "median": 12800000,
+              "minimum": 12800000,
+              "maximum": 12800000
+            },
+            "native_heap_free_bytes": {
+              "samples": 1,
+              "median": 2196880,
+              "minimum": 2196880,
+              "maximum": 2196880
+            }
+          },
+          "gc_changed_during_sample": 0,
+          "gc_count_before_range": {
+            "samples": 1,
+            "median": 0,
+            "minimum": 0,
+            "maximum": 0
+          },
+          "gc_count_after_range": {
+            "samples": 1,
+            "median": 0,
+            "minimum": 0,
+            "maximum": 0
+          }
+        },
+        "startup_fixed_90_to_120s": {
+          "samples": 30,
+          "complete_samples": 30,
+          "minimum_required": 20,
+          "valid": true,
+          "metrics": {
+            "runtime_used_bytes": {
+              "samples": 30,
+              "median": 87457120.0,
+              "minimum": 76076384,
+              "maximum": 116176224
+            },
+            "runtime_total_bytes": {
+              "samples": 30,
+              "median": 104273248.0,
+              "minimum": 101340512,
+              "maximum": 116176224
+            },
+            "runtime_free_bytes": {
+              "samples": 30,
+              "median": 16400384.0,
+              "minimum": 0,
+              "maximum": 30117888
+            },
+            "runtime_max_bytes": {
+              "samples": 30,
+              "median": 536870912.0,
+              "minimum": 536870912,
+              "maximum": 536870912
+            },
+            "resident_component_pss_kib": {
+              "samples": 30,
+              "median": 506546.0,
+              "minimum": 460786,
+              "maximum": 598574
+            },
+            "derived_swap_pss_kib": {
+              "samples": 30,
+              "median": 555.0,
+              "minimum": 555,
+              "maximum": 555
+            },
+            "raw_total_pss_kib": {
+              "samples": 30,
+              "median": 507101.0,
+              "minimum": 461341,
+              "maximum": 599129
+            },
+            "swap_total_kib": {
+              "samples": 30,
+              "median": 22384.0,
+              "minimum": 22384,
+              "maximum": 22384
+            },
+            "dalvik_pss_kib": {
+              "samples": 30,
+              "median": 82693.0,
+              "minimum": 33793,
+              "maximum": 170905
+            },
+            "native_pss_kib": {
+              "samples": 30,
+              "median": 56698.0,
+              "minimum": 53692,
+              "maximum": 58300
+            },
+            "other_pss_kib": {
+              "samples": 30,
+              "median": 367181.0,
+              "minimum": 365593,
+              "maximum": 371805
+            },
+            "native_heap_allocated_bytes": {
+              "samples": 30,
+              "median": 46700200.0,
+              "minimum": 39842656,
+              "maximum": 54341424
+            },
+            "native_heap_size_bytes": {
+              "samples": 30,
+              "median": 212017152.0,
+              "minimum": 212017152,
+              "maximum": 212017152
+            },
+            "native_heap_free_bytes": {
+              "samples": 30,
+              "median": 161170888.0,
+              "minimum": 153529664,
+              "maximum": 168028368
+            }
+          },
+          "gc_changed_during_sample": 8,
+          "gc_count_before_range": {
+            "samples": 30,
+            "median": 66.5,
+            "minimum": 57,
+            "maximum": 77
+          },
+          "gc_count_after_range": {
+            "samples": 30,
+            "median": 67.0,
+            "minimum": 57,
+            "maximum": 77
+          }
+        },
+        "startup_peak_0_to_120s": {
+          "runtime_used_bytes": 124636224,
+          "runtime_total_bytes": 124636224,
+          "runtime_free_bytes": 43771888,
+          "runtime_max_bytes": 536870912,
+          "resident_component_pss_kib": 657347,
+          "derived_swap_pss_kib": 567,
+          "raw_total_pss_kib": 657902,
+          "swap_total_kib": 23508,
+          "dalvik_pss_kib": 227077,
+          "native_pss_kib": 176184,
+          "other_pss_kib": 372642,
+          "native_heap_allocated_bytes": 148576144,
+          "native_heap_size_bytes": 212017152,
+          "native_heap_free_bytes": 168028368
+        },
+        "post_browse_fixed_30_to_60s": null,
+        "gc_counter_intervals": {
+          "gc_count": {
+            "first_before": 0,
+            "last_after": 78,
+            "delta": 78,
+            "changed_during_sample": 12
+          },
+          "gc_blocking_count": {
+            "first_before": 0,
+            "last_after": 1,
+            "delta": 1,
+            "changed_during_sample": 1
+          },
+          "gc_time_ms": {
+            "first_before": 0,
+            "last_after": 45461,
+            "delta": 45461,
+            "changed_during_sample": 12
+          },
+          "gc_blocking_time_ms": {
+            "first_before": 0,
+            "last_after": 560,
+            "delta": 560,
+            "changed_during_sample": 1
+          }
+        }
+      },
+      "main_launch_requested_elapsed_ns": 47676660068300,
+      "expected_pid": 11332,
+      "expected_uid": 10090,
+      "first_guide_upper_bound_seconds": 36.8199317,
+      "provenance": {
+        "source_commit": "67570ddd",
+        "apk_sha256": "1fde1a86c757c4998c34f4bf02663203ece814554fd7e9effaf51d23da87967f",
+        "observer_sha256": "09977bbfac81adf91991da98ef895f5d67a2ab693785696a400ed106d4d99f0f",
+        "fixture_manifest_sha256": "93860c93668253e42e5933e2798ab3893492a6c5e0b96c90d3ad46a131182a46"
+      },
+      "fixture_request_delta": {
+        "get.php": 0,
+        "player_api.php": 0,
+        "xmltv.php": 0
+      },
+      "fixture_xml_transfer_delta": {
+        "completed": 0,
+        "bytes": 0
+      },
+      "sample_read_duration_ns": {
+        "samples": 122,
+        "median": 79870000.0,
+        "minimum": 23788000,
+        "maximum": 573394700
+      },
+      "clock_events": [
+        {
+          "event": "main-origin-verified",
+          "device_elapsed_ns": 47677240000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 64856400,
+          "host_before_monotonic_ns": 1140713194554100,
+          "host_after_monotonic_ns": 1140713259410500,
+          "since_main_launch_s": 0.5799317
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 47677300000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 61766100,
+          "host_before_monotonic_ns": 1140713260306900,
+          "host_after_monotonic_ns": 1140713322073000,
+          "since_main_launch_s": 0.6399317
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 47684750000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 69802800,
+          "host_before_monotonic_ns": 1140720703230900,
+          "host_after_monotonic_ns": 1140720773033700,
+          "since_main_launch_s": 8.0899317
+        },
+        {
+          "event": "home-hierarchy-invalid-read",
+          "device_elapsed_ns": 47688580000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 203408100,
+          "host_before_monotonic_ns": 1140724424802100,
+          "host_after_monotonic_ns": 1140724628210200,
+          "since_main_launch_s": 11.9199317
+        },
+        {
+          "event": "home-readiness-observation",
+          "device_elapsed_ns": 47688770000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 161483900,
+          "host_before_monotonic_ns": 1140724628933300,
+          "host_after_monotonic_ns": 1140724790417200,
+          "since_main_launch_s": 12.1099317
+        },
+        {
+          "event": "home-hierarchy-invalid-read",
+          "device_elapsed_ns": 47693170000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 103031700,
+          "host_before_monotonic_ns": 1140729089620200,
+          "host_after_monotonic_ns": 1140729192651900,
+          "since_main_launch_s": 16.5099317
+        },
+        {
+          "event": "home-readiness-observation",
+          "device_elapsed_ns": 47693260000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 90710800,
+          "host_before_monotonic_ns": 1140729193253100,
+          "host_after_monotonic_ns": 1140729283963900,
+          "since_main_launch_s": 16.5999317
+        },
+        {
+          "event": "home-readiness-observation",
+          "device_elapsed_ns": 47698090000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 72445700,
+          "host_before_monotonic_ns": 1140734042006700,
+          "host_after_monotonic_ns": 1140734114452400,
+          "since_main_launch_s": 21.4299317
+        },
+        {
+          "event": "sidebar-home-focus-verified",
+          "device_elapsed_ns": 47702330000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 56360000,
+          "host_before_monotonic_ns": 1140738289021600,
+          "host_after_monotonic_ns": 1140738345381600,
+          "since_main_launch_s": 25.6699317
+        },
+        {
+          "event": "first-guide-row-verified",
+          "device_elapsed_ns": 47713470000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 96847200,
+          "host_before_monotonic_ns": 1140749387876200,
+          "host_after_monotonic_ns": 1140749484723400,
+          "since_main_launch_s": 36.8099317
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 47714320000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 128291400,
+          "host_before_monotonic_ns": 1140750218860700,
+          "host_after_monotonic_ns": 1140750347152100,
+          "since_main_launch_s": 37.6599317
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 47744440000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 116785900,
+          "host_before_monotonic_ns": 1140780348201100,
+          "host_after_monotonic_ns": 1140780464987000,
+          "since_main_launch_s": 67.7799317
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 47774580000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 141801200,
+          "host_before_monotonic_ns": 1140810465931000,
+          "host_after_monotonic_ns": 1140810607732200,
+          "since_main_launch_s": 97.9199317
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 47797820000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 153374600,
+          "host_before_monotonic_ns": 1140833709701600,
+          "host_after_monotonic_ns": 1140833863076200,
+          "since_main_launch_s": 121.1599317
+        },
+        {
+          "event": "startup-120s-complete",
+          "device_elapsed_ns": 47797970000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 121203600,
+          "host_before_monotonic_ns": 1140833863601900,
+          "host_after_monotonic_ns": 1140833984805500,
+          "since_main_launch_s": 121.3099317
+        },
+        {
+          "event": "trial-observation-finished",
+          "device_elapsed_ns": 47798100000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 136084600,
+          "host_before_monotonic_ns": 1140833985481400,
+          "host_after_monotonic_ns": 1140834121566000,
+          "since_main_launch_s": 121.4399317
+        }
+      ],
+      "csv": "shared-baseline-1.csv"
+    },
+    {
+      "label": "candidate-1",
+      "complete": true,
+      "errors": [],
+      "cadence": {
+        "gaps_seconds": {
+          "samples": 121,
+          "median": 1.0001022,
+          "minimum": 0.9070005,
+          "maximum": 1.095586
+        },
+        "gaps_over_two_seconds": 0,
+        "gaps_over_five_seconds": 0,
+        "all_samples_retained": true
+      },
+      "summary": {
+        "prelaunch": {
+          "samples": 1,
+          "complete_samples": 1,
+          "minimum_required": 20,
+          "valid": false,
+          "metrics": {
+            "runtime_used_bytes": {
+              "samples": 1,
+              "median": 4342384,
+              "minimum": 4342384,
+              "maximum": 4342384
+            },
+            "runtime_total_bytes": {
+              "samples": 1,
+              "median": 50331648,
+              "minimum": 50331648,
+              "maximum": 50331648
+            },
+            "runtime_free_bytes": {
+              "samples": 1,
+              "median": 45989264,
+              "minimum": 45989264,
+              "maximum": 45989264
+            },
+            "runtime_max_bytes": {
+              "samples": 1,
+              "median": 536870912,
+              "minimum": 536870912,
+              "maximum": 536870912
+            },
+            "resident_component_pss_kib": {
+              "samples": 1,
+              "median": 328070,
+              "minimum": 328070,
+              "maximum": 328070
+            },
+            "derived_swap_pss_kib": {
+              "samples": 1,
+              "median": 472,
+              "minimum": 472,
+              "maximum": 472
+            },
+            "raw_total_pss_kib": {
+              "samples": 1,
+              "median": 328542,
+              "minimum": 328542,
+              "maximum": 328542
+            },
+            "swap_total_kib": {
+              "samples": 1,
+              "median": 23628,
+              "minimum": 23628,
+              "maximum": 23628
+            },
+            "dalvik_pss_kib": {
+              "samples": 1,
+              "median": 1719,
+              "minimum": 1719,
+              "maximum": 1719
+            },
+            "native_pss_kib": {
+              "samples": 1,
+              "median": 9015,
+              "minimum": 9015,
+              "maximum": 9015
+            },
+            "other_pss_kib": {
+              "samples": 1,
+              "median": 317336,
+              "minimum": 317336,
+              "maximum": 317336
+            },
+            "native_heap_allocated_bytes": {
+              "samples": 1,
+              "median": 5866512,
+              "minimum": 5866512,
+              "maximum": 5866512
+            },
+            "native_heap_size_bytes": {
+              "samples": 1,
+              "median": 12800000,
+              "minimum": 12800000,
+              "maximum": 12800000
+            },
+            "native_heap_free_bytes": {
+              "samples": 1,
+              "median": 2221952,
+              "minimum": 2221952,
+              "maximum": 2221952
+            }
+          },
+          "gc_changed_during_sample": 0,
+          "gc_count_before_range": {
+            "samples": 1,
+            "median": 0,
+            "minimum": 0,
+            "maximum": 0
+          },
+          "gc_count_after_range": {
+            "samples": 1,
+            "median": 0,
+            "minimum": 0,
+            "maximum": 0
+          }
+        },
+        "startup_fixed_90_to_120s": {
+          "samples": 30,
+          "complete_samples": 30,
+          "minimum_required": 20,
+          "valid": true,
+          "metrics": {
+            "runtime_used_bytes": {
+              "samples": 30,
+              "median": 82130192.0,
+              "minimum": 65676560,
+              "maximum": 103683344
+            },
+            "runtime_total_bytes": {
+              "samples": 30,
+              "median": 93869328.0,
+              "minimum": 90719504,
+              "maximum": 103683344
+            },
+            "runtime_free_bytes": {
+              "samples": 30,
+              "median": 11730944.0,
+              "minimum": 0,
+              "maximum": 30306304
+            },
+            "runtime_max_bytes": {
+              "samples": 30,
+              "median": 536870912.0,
+              "minimum": 536870912,
+              "maximum": 536870912
+            },
+            "resident_component_pss_kib": {
+              "samples": 30,
+              "median": 476840.0,
+              "minimum": 421530,
+              "maximum": 522086
+            },
+            "derived_swap_pss_kib": {
+              "samples": 30,
+              "median": 25123.0,
+              "minimum": 25123,
+              "maximum": 25123
+            },
+            "raw_total_pss_kib": {
+              "samples": 30,
+              "median": 501963.0,
+              "minimum": 446653,
+              "maximum": 547209
+            },
+            "swap_total_kib": {
+              "samples": 30,
+              "median": 47036.0,
+              "minimum": 47036,
+              "maximum": 47036
+            },
+            "dalvik_pss_kib": {
+              "samples": 30,
+              "median": 75817.0,
+              "minimum": 18157,
+              "maximum": 116405
+            },
+            "native_pss_kib": {
+              "samples": 30,
+              "median": 57242.0,
+              "minimum": 55652,
+              "maximum": 58516
+            },
+            "other_pss_kib": {
+              "samples": 30,
+              "median": 344267.0,
+              "minimum": 342629,
+              "maximum": 348705
+            },
+            "native_heap_allocated_bytes": {
+              "samples": 30,
+              "median": 48775592.0,
+              "minimum": 42933792,
+              "maximum": 54131104
+            },
+            "native_heap_size_bytes": {
+              "samples": 30,
+              "median": 163962880.0,
+              "minimum": 163962880,
+              "maximum": 163962880
+            },
+            "native_heap_free_bytes": {
+              "samples": 30,
+              "median": 111214056.0,
+              "minimum": 105803264,
+              "maximum": 117055856
+            }
+          },
+          "gc_changed_during_sample": 2,
+          "gc_count_before_range": {
+            "samples": 30,
+            "median": 65.5,
+            "minimum": 54,
+            "maximum": 75
+          },
+          "gc_count_after_range": {
+            "samples": 30,
+            "median": 65.5,
+            "minimum": 54,
+            "maximum": 75
+          }
+        },
+        "startup_peak_0_to_120s": {
+          "runtime_used_bytes": 120485600,
+          "runtime_total_bytes": 120485600,
+          "runtime_free_bytes": 40368112,
+          "runtime_max_bytes": 536870912,
+          "resident_component_pss_kib": 597455,
+          "derived_swap_pss_kib": 25482,
+          "raw_total_pss_kib": 599801,
+          "swap_total_kib": 47572,
+          "dalvik_pss_kib": 168085,
+          "native_pss_kib": 140720,
+          "other_pss_kib": 377505,
+          "native_heap_allocated_bytes": 139941120,
+          "native_heap_size_bytes": 164679680,
+          "native_heap_free_bytes": 118144016
+        },
+        "post_browse_fixed_30_to_60s": null,
+        "gc_counter_intervals": {
+          "gc_count": {
+            "first_before": 0,
+            "last_after": 76,
+            "delta": 76,
+            "changed_during_sample": 7
+          },
+          "gc_blocking_count": {
+            "first_before": 0,
+            "last_after": 3,
+            "delta": 3,
+            "changed_during_sample": 0
+          },
+          "gc_time_ms": {
+            "first_before": 0,
+            "last_after": 41924,
+            "delta": 41924,
+            "changed_during_sample": 7
+          },
+          "gc_blocking_time_ms": {
+            "first_before": 0,
+            "last_after": 1590,
+            "delta": 1590,
+            "changed_during_sample": 0
+          }
+        }
+      },
+      "main_launch_requested_elapsed_ns": 48005107938500,
+      "expected_pid": 11942,
+      "expected_uid": 10090,
+      "first_guide_upper_bound_seconds": 32.1820615,
+      "provenance": {
+        "source_commit": "ac39dab9c89ca59066c4065ba97afb536200984a",
+        "apk_sha256": "2640fdd257ae47339f3f5315b48e2d1aee90519cf9a89d6e4667a963c26794b0",
+        "observer_sha256": "09977bbfac81adf91991da98ef895f5d67a2ab693785696a400ed106d4d99f0f",
+        "fixture_manifest_sha256": "93860c93668253e42e5933e2798ab3893492a6c5e0b96c90d3ad46a131182a46"
+      },
+      "fixture_request_delta": {
+        "get.php": 0,
+        "player_api.php": 0,
+        "xmltv.php": 0
+      },
+      "fixture_xml_transfer_delta": {
+        "completed": 0,
+        "bytes": 0
+      },
+      "sample_read_duration_ns": {
+        "samples": 122,
+        "median": 85338600.0,
+        "minimum": 24841600,
+        "maximum": 777194000
+      },
+      "clock_events": [
+        {
+          "event": "main-origin-verified",
+          "device_elapsed_ns": 48005410000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 73835300,
+          "host_before_monotonic_ns": 1141041352230700,
+          "host_after_monotonic_ns": 1141041426066000,
+          "since_main_launch_s": 0.3020615
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 48005480000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 72921700,
+          "host_before_monotonic_ns": 1141041427236000,
+          "host_after_monotonic_ns": 1141041500157700,
+          "since_main_launch_s": 0.3720615
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 48013220000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 92883800,
+          "host_before_monotonic_ns": 1141049149263200,
+          "host_after_monotonic_ns": 1141049242147000,
+          "since_main_launch_s": 8.1120615
+        },
+        {
+          "event": "home-readiness-observation",
+          "device_elapsed_ns": 48018920000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 118667300,
+          "host_before_monotonic_ns": 1141054824067100,
+          "host_after_monotonic_ns": 1141054942734400,
+          "since_main_launch_s": 13.8120615
+        },
+        {
+          "event": "sidebar-home-focus-verified",
+          "device_elapsed_ns": 48025380000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 62336100,
+          "host_before_monotonic_ns": 1141061334755800,
+          "host_after_monotonic_ns": 1141061397091900,
+          "since_main_launch_s": 20.2720615
+        },
+        {
+          "event": "first-guide-row-verified",
+          "device_elapsed_ns": 48037280000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 181168200,
+          "host_before_monotonic_ns": 1141073149492400,
+          "host_after_monotonic_ns": 1141073330660600,
+          "since_main_launch_s": 32.1720615
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 48038480000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 142430400,
+          "host_before_monotonic_ns": 1141074363020200,
+          "host_after_monotonic_ns": 1141074505450600,
+          "since_main_launch_s": 33.3720615
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 48068620000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 135457000,
+          "host_before_monotonic_ns": 1141104506807200,
+          "host_after_monotonic_ns": 1141104642264200,
+          "since_main_launch_s": 63.5120615
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 48098750000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 128295700,
+          "host_before_monotonic_ns": 1141134644980800,
+          "host_after_monotonic_ns": 1141134773276500,
+          "since_main_launch_s": 93.6420615
+        },
+        {
+          "event": "clock-wait-observation",
+          "device_elapsed_ns": 48126280000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 147623700,
+          "host_before_monotonic_ns": 1141162157856300,
+          "host_after_monotonic_ns": 1141162305480000,
+          "since_main_launch_s": 121.1720615
+        },
+        {
+          "event": "startup-120s-complete",
+          "device_elapsed_ns": 48126390000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 105683000,
+          "host_before_monotonic_ns": 1141162306186100,
+          "host_after_monotonic_ns": 1141162411869100,
+          "since_main_launch_s": 121.2820615
+        },
+        {
+          "event": "trial-observation-finished",
+          "device_elapsed_ns": 48126500000000,
+          "clock_resolution_ns": 10000000,
+          "adb_latency_ns": 109670800,
+          "host_before_monotonic_ns": 1141162412795700,
+          "host_after_monotonic_ns": 1141162522466500,
+          "since_main_launch_s": 121.3920615
+        }
+      ],
+      "csv": "shared-candidate-1.csv"
+    }
+  ],
+  "cold_after_logical_equivalence_passed": true,
+  "paging_caveat": "Candidate derived SwapPSS increases from 555 to 25123 KiB; report raw total alongside resident PSS and do not count paging as a pure allocation saving."
+}
