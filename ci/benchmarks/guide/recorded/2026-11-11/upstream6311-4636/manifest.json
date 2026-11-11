@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "study": "upstream6311-merged-candidate",
+  "cases": [
+    "primary",
+    "shared"
+  ],
+  "planned_cases": [
+    "primary",
+    "shared"
+  ],
+  "expected_runtime_max_bytes": 536870912,
+  "source_pins": {
+    "baseline": {
+      "source_commit": "6311c16e9d7361be54cf4b74ae84afa619dbd587",
+      "apk_sha256": "d5d19e54a6ad0f119d3033288f85bcceb2fc294097d0f4be7dd8e7d24573f331"
+    },
+    "candidate": {
+      "source_commit": "4636df605eb111897bfbb91913300188719399e0",
+      "apk_sha256": "631bf8e80f43ad7c21c64652f4ac68eb0dd55d6d50938382e5848cd98096d19a"
+    }
+  },
+  "input_pins": {
+    "primary": {
+      "case_plan_sha256": "7075250b8d29d45bf8f7f53d5361b95563ce1e8f9aacb339973c3c1d8a61aee0",
+      "common_record_sha256": "ca5995e99d6a61f95b16f3d4054ea5dcf617ae339861ffc89aa58d42950b54d1",
+      "common_snapshot_sha256": "3cee0906b2a7bcf71fb45b65a215aba5a1f1d726d23b189f444501595eb0a880",
+      "fixture_manifest_sha256": "9be793b3511fef89ea1a2bac53f47bc4d6fbc5df9ad2946666fd4e87d26caedd",
+      "logical_proof_sha256": "ba9f9a6ec5431770c1b3e2ded27dd9fca011b148ea37f57741ce9859ddbad04e"
+    },
+    "shared": {
+      "case_plan_sha256": "b8e4aed347f31229c025bf6f300360b39bb5182e4d0c11518207f75a15fab072",
+      "common_record_sha256": "4764fe3f88b5ac449337541c5bad8de973ca15a4988b26d917eb61f596703e1e",
+      "common_snapshot_sha256": "086a7893764a0a026984c3f0819ac5cf6d1ef12c1ec7f049315b9a90d6ab2faa",
+      "fixture_manifest_sha256": "93860c93668253e42e5933e2798ab3893492a6c5e0b96c90d3ad46a131182a46",
+      "logical_proof_sha256": "0ff9dbf4d352278ba8fdd1a626c6d23ebcc83cd0ece30b9266efcfb3ed85ab4f"
+    }
+  },
+  "trials": [
+    {
+      "case": "primary",
+      "role": "baseline",
+      "label": "baseline-1",
+      "file": "primary-baseline-1.csv",
+      "sha256": "109258e5704e2abd110f1f733b9d8819e2942de2d66005b4428497903968a1f3",
+      "bytes": 28241,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 64305400927700,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "case": "primary",
+      "role": "candidate",
+      "label": "candidate-1",
+      "file": "primary-candidate-1.csv",
+      "sha256": "655c4f463fccfa016fec5602edec0ef496d3c4fe4352c4ef2540df74176de186",
+      "bytes": 28123,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 65068805685400,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "case": "primary",
+      "role": "baseline",
+      "label": "baseline-2",
+      "file": "primary-baseline-2.csv",
+      "sha256": "1991f23bdcf89cf3ff180ed854c8c56bd6afbc22814d4f6a5dcd293f35d9199b",
+      "bytes": 28225,
+      "rows": 121,
+      "main_launch_requested_elapsed_ns": 65233014816500,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "case": "primary",
+      "role": "candidate",
+      "label": "candidate-2",
+      "file": "primary-candidate-2.csv",
+      "sha256": "3f381f32d17b270b943678bda40f8fdbc3f01bce8fa3455142a0df66174acf92",
+      "bytes": 28257,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 65414985003500,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "case": "primary",
+      "role": "baseline",
+      "label": "baseline-3",
+      "file": "primary-baseline-3.csv",
+      "sha256": "6a921937dc52a0eb9cffa0678a00e10c9b61c406b1e47d0acb21b17e375afba1",
+      "bytes": 71130,
+      "rows": 303,
+      "main_launch_requested_elapsed_ns": 65567783988600,
+      "browse_begin_elapsed_ns": 65689300000000,
+      "browse_end_elapsed_ns": 65801830000000
+    },
+    {
+      "case": "primary",
+      "role": "candidate",
+      "label": "candidate-3",
+      "file": "primary-candidate-3.csv",
+      "sha256": "d978b6d0752e55b25678854018f80b5088e3bd23287553c1f11ef40e9b701ba0",
+      "bytes": 65834,
+      "rows": 283,
+      "main_launch_requested_elapsed_ns": 65914390037100,
+      "browse_begin_elapsed_ns": 66035920000000,
+      "browse_end_elapsed_ns": 66130890000000
+    },
+    {
+      "case": "shared",
+      "role": "baseline",
+      "label": "baseline-1",
+      "file": "shared-baseline-1.csv",
+      "sha256": "1cc6bb2449a73356d8886152dc767b99f0282b7609bb53a69ccd0ee284d550b0",
+      "bytes": 28491,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 66343323201000,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "case": "shared",
+      "role": "candidate",
+      "label": "candidate-1",
+      "file": "shared-candidate-1.csv",
+      "sha256": "1f0878f345273306c343fe68ad1bdc0df480e5d920128e7f0066e45c06f2d8fd",
+      "bytes": 28543,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 66511447051800,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    }
+  ],
+  "protocol_failures": {
+    "manifest": "protocol-failures/manifest.json",
+    "attempts": 1,
+    "partial_rows_in_accepted_statistics": false
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "scope": "Additive documentation and reviewed non-RAM supplements; original files.json and frozen numeric artifacts unchanged",
+  "original_files_manifest_sha256": "abd9f7b04fa469528994987a9d8b91d467b163e376c638e88867c7c0bef302e7",
+  "runtime_allowlist_source_sha256": "e69739597ebdd11b23568330caf6a8e9d9b6efaf7742ad08013ab25dad1c724a",
+  "self_included": false,
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 9039,
+      "sha256": "983735e437637a28340de15a8e2ccf99ef29d043c900a61bd62cec827a23f9c6"
+    },
+    {
+      "file": "runtime-smoke.json",
+      "bytes": 3826,
+      "sha256": "e69739597ebdd11b23568330caf6a8e9d9b6efaf7742ad08013ab25dad1c724a"
+    },
+    {
+      "file": "expressvpn-options-only.json",
+      "bytes": 2643,
+      "sha256": "e384eae5de07dd7444c32d488f08678c4144b95ff5dd92d79ac2d5cc89edea46"
+    },
+    {
+      "file": ".gitattributes",
+      "bytes": 75,
+      "sha256": "1090b1c1bea208b2a3e76c7d78490ece243c169d6e3948f92459b6ac90e7c014"
+    }
+  ]
+}

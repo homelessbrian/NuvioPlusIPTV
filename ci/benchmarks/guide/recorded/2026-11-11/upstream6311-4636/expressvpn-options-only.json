@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "purpose": "Local supplied-profile import/preparation and native option checks only",
+  "roles": {
+    "baseline": {
+      "complete": true,
+      "apk_sha256": "d5d19e54a6ad0f119d3033288f85bcceb2fc294097d0f4be7dd8e7d24573f331",
+      "source_commit": "6311c16e9d7361be54cf4b74ae84afa619dbd587",
+      "runner_sha256": "c37c769071043785295b51ac6e3876308864e9ffef9366bc92bd7640b9d7d117",
+      "provider_connection_attempted": false,
+      "credentials_supplied": false,
+      "ui_or_vpn_service_started": false,
+      "host_vpn_changed": false,
+      "native_options_only": [
+        {
+          "case": "unmodified_actual",
+          "status": "PASS",
+          "exit_code": 0
+        },
+        {
+          "case": "fixed_exact_prepared",
+          "status": "PASS",
+          "exit_code": 0
+        }
+      ],
+      "apk_uid_and_native_identity_verified": true,
+      "java_import_and_preparation_passed": true,
+      "owned_device_files_removed": true,
+      "host_private_configuration_exports_removed": true,
+      "source_file_unchanged": true,
+      "preview_remains_stopped": true,
+      "cleanup_errors": [],
+      "private_result_sha256": "f1696c1eade7b8711d2da1b2bede2b87443832ffb1d0e0620a87f6056297b47a"
+    },
+    "candidate": {
+      "complete": true,
+      "apk_sha256": "631bf8e80f43ad7c21c64652f4ac68eb0dd55d6d50938382e5848cd98096d19a",
+      "source_commit": "4636df605eb111897bfbb91913300188719399e0",
+      "runner_sha256": "c37c769071043785295b51ac6e3876308864e9ffef9366bc92bd7640b9d7d117",
+      "provider_connection_attempted": false,
+      "credentials_supplied": false,
+      "ui_or_vpn_service_started": false,
+      "host_vpn_changed": false,
+      "native_options_only": [
+        {
+          "case": "unmodified_actual",
+          "status": "PASS",
+          "exit_code": 0
+        },
+        {
+          "case": "fixed_exact_prepared",
+          "status": "PASS",
+          "exit_code": 0
+        }
+      ],
+      "apk_uid_and_native_identity_verified": true,
+      "java_import_and_preparation_passed": true,
+      "owned_device_files_removed": true,
+      "host_private_configuration_exports_removed": true,
+      "source_file_unchanged": true,
+      "preview_remains_stopped": true,
+      "cleanup_errors": [],
+      "private_result_sha256": "185a0b0b3a903ff7a6bc15479e913df610561d110daf85a2b25189441c788907"
+    }
+  },
+  "limits": [
+    "No provider connection or authentication attempt occurred.",
+    "TLS, tunnel establishment, provider media and physical-device behavior remain unverified.",
+    "Profile contents, endpoints, certificates, keys and credentials remain private."
+  ]
+}

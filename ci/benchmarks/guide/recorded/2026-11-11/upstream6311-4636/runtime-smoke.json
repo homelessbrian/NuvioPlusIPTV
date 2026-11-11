@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "purpose": "Paired runtime smoke after all RAM samples and full cold proofs were frozen; no runtime RAM or Sports speed benchmark",
+  "roles": {
+    "baseline": {
+      "source_commit": "6311c16e9d7361be54cf4b74ae84afa619dbd587",
+      "apk_sha256": "d5d19e54a6ad0f119d3033288f85bcceb2fc294097d0f4be7dd8e7d24573f331",
+      "future_query": "Team 9 vs Team 17",
+      "programme_start_utc": "2026-11-11T12:00:00+00:00",
+      "query_checked_utc": "2026-11-11T06:45:20.096648+00:00",
+      "horizon_hours_at_query": 5.24562615301874,
+      "search": {
+        "result": "PASS",
+        "same_card_focus_observed_after_seconds": 38.7731134,
+        "right_keys": 20,
+        "focused_channel_number": 650,
+        "channel_previously_unvisited_from_guide": true,
+        "no_card_activation": true,
+        "identity_evidence": "Real focused poster plus uniquely aligned channel caption in the flattened accessibility layout; exact20Right from first result"
+      },
+      "sports": {
+        "matching_busy_to_idle_observed": true,
+        "last_busy_observed_seconds": 97.7517796,
+        "idle_with_hub_observed_seconds": 115.8761198,
+        "observation_bound_seconds": 180,
+        "final_game_count": 173,
+        "visible_error_label_count": 0,
+        "backend_or_network_failure_count": null
+      },
+      "local_fixture_catalogue_xml_media_request_deltas": {
+        "media404": 0
+      },
+      "no_media_activation": true
+    },
+    "candidate": {
+      "source_commit": "4636df605eb111897bfbb91913300188719399e0",
+      "apk_sha256": "631bf8e80f43ad7c21c64652f4ac68eb0dd55d6d50938382e5848cd98096d19a",
+      "future_query": "Team 9 vs Team 17",
+      "programme_start_utc": "2026-11-11T12:00:00+00:00",
+      "query_checked_utc": "2026-11-11T06:54:42.336870+00:00",
+      "horizon_hours_at_query": 5.089419792162047,
+      "search": {
+        "result": "PASS",
+        "same_card_focus_observed_after_seconds": 38.8395077,
+        "right_keys": 20,
+        "focused_channel_number": 650,
+        "channel_previously_unvisited_from_guide": true,
+        "no_card_activation": true,
+        "identity_evidence": "Real focused poster plus uniquely aligned channel caption in the flattened accessibility layout; exact20Right from first result"
+      },
+      "sports": {
+        "matching_busy_to_idle_observed": true,
+        "last_busy_observed_seconds": 74.1572911,
+        "idle_with_hub_observed_seconds": 92.5482326,
+        "observation_bound_seconds": 180,
+        "final_game_count": 173,
+        "visible_error_label_count": 0,
+        "backend_or_network_failure_count": null
+      },
+      "local_fixture_catalogue_xml_media_request_deltas": {
+        "media404": 0
+      },
+      "no_media_activation": true
+    }
+  },
+  "limits": [
+    "Same future programme query was4-6hours ahead in both builds, beyond now-next, and channel650 was unvisited from the initial guide row.",
+    "Card focus was observed at endpoints more than35seconds apart across the periodic refresh; this is not a continuous focus trace.",
+    "The baseline ancestor-only identity extractor initially found no caption because poster and caption are flattened siblings. Its preliminary result is preserved; unique aligned-caption geometry and exact20Right establish identity in frozen observations.",
+    "Sports completion is a visible busy-to-idle UI transition with hub content. Backend matching success and network failure totals are not asserted.",
+    "External Sports network requests were not instrumented. Initial candidate game count170 subsequently filled to173.",
+    "Synthetic playlist data does not prove a real event-channel match, playback, provider login or physical SHIELD behavior.",
+    "All old negative traces and the49-row host-ADB-server failed attempt remain separately preserved."
+  ]
+}

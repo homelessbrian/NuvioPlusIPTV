@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "study": "upstream6311-merged-candidate",
+  "accepted_comparison": false,
+  "attempts": [
+    {
+      "id": "primary-candidate-1-host-adb-0001",
+      "case": "primary",
+      "trial": "candidate-1",
+      "status": "PROTOCOL_INVALID_BEFORE_LATE_WINDOW",
+      "reason": "HOST_ADB_START_CONNECT_FAILURE",
+      "app_or_ram_cause_established": false,
+      "stage": "guide_navigation_before_fixed_startup_window",
+      "failed_input_action": "DPAD_UP",
+      "failure_command_exit_code": 1,
+      "failure_command_host_before_ns": 1157534340735800,
+      "failure_command_host_after_ns": 1157558784047000,
+      "failure_command_elapsed_seconds": 24.4433112,
+      "source_pins": {
+        "source_commit": "4636df605eb111897bfbb91913300188719399e0",
+        "apk_sha256": "631bf8e80f43ad7c21c64652f4ac68eb0dd55d6d50938382e5848cd98096d19a"
+      },
+      "input_pins": {
+        "observer_sha256": "09977bbfac81adf91991da98ef895f5d67a2ab693785696a400ed106d4d99f0f",
+        "pilot_result_sha256": "cd1dcbad57e525464cffa926e94c967bbe6b60e1f0bdbbced7ac258d79841472",
+        "common_snapshot_sha256": "3cee0906b2a7bcf71fb45b65a215aba5a1f1d726d23b189f444501595eb0a880",
+        "fixture_manifest_sha256": "9be793b3511fef89ea1a2bac53f47bc4d6fbc5df9ad2946666fd4e87d26caedd",
+        "series_plan_sha256": "7075250b8d29d45bf8f7f53d5361b95563ce1e8f9aacb339973c3c1d8a61aee0",
+        "runner_sha256": "ced028a541f636fc918968ad866c42247c64c732402bff8a5a24c35d6888a858",
+        "summary_core_sha256": "ef36425b494556f800b5ce19801c090a6306b79f0786583fe92bb18126d11a5d",
+        "adapter_sha256": "46dc17ce5331e689b67d00e0133daa05a172abc983159539273aa243512982fb"
+      },
+      "source_inventory_sha256": "a954b4dd94bc0fcb48ca285b1cb5c585c6be979eeac4db8c2518b6c84fbffbd9",
+      "root_recovery_record_sha256": "0db3b7475807c4a218d29eeb9be6ed3a1051fe48cb52e9d3fc3776906ccf5656",
+      "before_move_record_sha256": "06f51c718ca35ca8db79237ff1e177ba935c7119ca3b3b1bb01b4df3388b5962",
+      "whole_tree_move_record_sha256": "b0a1f789248b137698cba3aa1956006b9d5dcc58fa7579ec0d8b181537a14b4a",
+      "before_and_after_canonical_tree_sha256": "abdd38a8cf98c6b42fb98cf3cf76094d0e007440802fcc5a50888b9d8ca1db02",
+      "preserved_tree_files": 35,
+      "preserved_tree_directories": 2,
+      "complete_tree_preserved_without_changes": true,
+      "original_trial_label": "candidate-1",
+      "preserved_attempt_label": "primary-candidate-1-host-adb-0001",
+      "exact_failed_command_record_sha256": "0b8b83f4872b1941f3f73ef486d8d75e28e7fe78d184c7b8f45342fd406daffb",
+      "exact_failed_stderr_sha256": "abe19215b0128c23c6b6a7acf88b97c887699d3d59163ead6b2a50cb298ade36",
+      "main_launch_requested_elapsed_ns": 64474422378500,
+      "first_sample_device_elapsed_ns": 64474422014400,
+      "last_sample_device_elapsed_ns": 64522402806600,
+      "final_partial_numeric_rows": 49,
+      "valid_fixed_90_to_120_samples": 0,
+      "excluded_reason": "Protocol-invalid host ADB failure before the fixed90s window; exclusion is independent of RAM values.",
+      "ram_value_threshold_or_outlier_filter": false,
+      "root_authorized_whole_trial_retry_limit": 1,
+      "completed_accepted_retry_file": "primary-candidate-1.csv",
+      "completed_accepted_retry_csv_sha256": "655c4f463fccfa016fec5602edec0ef496d3c4fe4352c4ef2540df74176de186",
+      "completed_accepted_retry_main_origin_ns": 65068805685400,
+      "same_case_plan_source_inputs_and_sampling_method": true,
+      "csv_files": [
+        {
+          "file": "protocol-failures/primary-candidate-1-host-adb-0001-samples.csv",
+          "kind": "final_partial",
+          "rows": 49,
+          "bytes": 11423,
+          "sha256": "76a200eed22317fb9a5dd370f8982da1e4f0f8bac55df6f1087d2e92ba0b3184",
+          "valid_fixed_90_to_120_samples": 0,
+          "excluded_from_accepted_comparison": true,
+          "all_rows_retained": true
+        },
+        {
+          "file": "protocol-failures/primary-candidate-1-host-adb-0001-startup-prefix.csv",
+          "kind": "startup_prefix",
+          "rows": 1,
+          "bytes": 823,
+          "sha256": "2653b47375a87fc5cf3c7d45f886ddffef3916e796c2276d6f3f841734396392",
+          "valid_fixed_90_to_120_samples": 0,
+          "excluded_from_accepted_comparison": true,
+          "all_rows_retained": true
+        }
+      ]
+    }
+  ],
+  "scope": "Separate protocol-failure evidence; no rows pooled with the eight accepted trial statistics.",
+  "raw_host_diagnostics_ui_logs_and_appdata_excluded": true
+}

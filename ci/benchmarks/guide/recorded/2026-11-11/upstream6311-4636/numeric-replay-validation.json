@@ -1,0 +1,21 @@
+{
+  "complete": true,
+  "cases": [
+    "primary",
+    "shared"
+  ],
+  "trials": 8,
+  "numeric_rows": 1317,
+  "all_rows_retained": true,
+  "all_fixed_windows_peaks_gc_cadence_caps_and_chronology_match": true,
+  "all_grouped_medians_and_ranges_match": true,
+  "fresh_cold_proofs_and_full_guide_equivalence_validated": true,
+  "separate_protocol_failure_attempts": 1,
+  "separate_final_partial_rows_retained": 49,
+  "partial_failure_rows_excluded_from_accepted_statistics": true,
+  "full_study_input_and_afterproof_gates_checked_separately_from_numeric_replay": true,
+  "public_replay_source_sha256": "04ecfa412f3cbfbbbb815cd2d7c1100b510174b3a9e1feec97504ded4510a745",
+  "manifest_sha256": "c6df42c8cd95af51ea9d2f2281dcb288a9537b5b3b53b588e276e8d5f2275cc7",
+  "summary_sha256": "d3eccdf2c85fbcd334a57ef6f12ceddefd57845d6feec12f3c0f497b82327ded",
+  "provenance_sha256": "4e93ccece69e59c4f45c2f29ed70d1c7708adefc482f42a833adbbbab5bea789"
+}
