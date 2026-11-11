@@ -1,0 +1,97 @@
+{
+  "date_utc": "20261111T001251Z",
+  "source_sha256": "85db332389df517475ad80c0926f3355a7722426902402285189c99339413a8b",
+  "device_actions": false,
+  "listeners_started": false,
+  "cases": [
+    {
+      "case": "primary",
+      "frozen_at_epoch": 1794348966,
+      "base_epoch": 1794340800,
+      "xml_counts": {
+        "channel": 4000,
+        "programme": 96000
+      },
+      "files": {
+        "guide.xml": {
+          "bytes": 33237644,
+          "sha256": "5d212bd4f2bf342c2f70f8287ce8faddc823b954090454103fcf76c61e8028ae",
+          "matches_frozen_input": true
+        },
+        "playlist.m3u": {
+          "bytes": 645411,
+          "sha256": "b52c6701ae9da07693cb7fabca5446ad5bbcc3d6453e5b256ed314dcb68a50e8",
+          "matches_frozen_input": true
+        },
+        "streams.json": {
+          "bytes": 1037560,
+          "sha256": "47ef9fc86f2feb4e69b73759b905be7780d3b092942c50b41ea1e380c78a00ba",
+          "matches_frozen_input": true
+        },
+        "bindings.json": {
+          "bytes": 258894,
+          "sha256": "e0f07c3400acbe1fd566f93c31162fa4b0c58eaea561d4ad71c3ddfaf2f2abf8",
+          "matches_frozen_input": true
+        }
+      },
+      "freshness_verified": true,
+      "existing_output_refused": true,
+      "input_bindings": {
+        "channels": 4000,
+        "guide_ids": 4000,
+        "shift_distribution_ms": {
+          "0": 4000
+        }
+      }
+    },
+    {
+      "case": "shared-m3u",
+      "frozen_at_epoch": 1794348966,
+      "base_epoch": 1794340800,
+      "xml_counts": {
+        "channel": 4477,
+        "programme": 107448
+      },
+      "files": {
+        "guide.xml": {
+          "bytes": 37201340,
+          "sha256": "fd241cdda0b463698aa1ea8a22a857599094d7912c2b2c275e9fb3c404422215",
+          "matches_frozen_input": true
+        },
+        "playlist.m3u": {
+          "bytes": 4335881,
+          "sha256": "84bd7fdfbdbca47920f0c05269f160b1d1892ef2a04add28fbefb42a0a09c997",
+          "matches_frozen_input": true
+        },
+        "streams.json": {
+          "bytes": 6969582,
+          "sha256": "54c0815f7c596f84389eb292bde2a7034a9c2fae32e51749a0326b1eadd75e1e",
+          "matches_frozen_input": true
+        },
+        "bindings.json": {
+          "bytes": 1867916,
+          "sha256": "003548c4bbc1f670083346bab4072ee97a6cd258f3afb201958d5787f432fca9",
+          "matches_frozen_input": true
+        }
+      },
+      "freshness_verified": true,
+      "existing_output_refused": true,
+      "input_bindings": {
+        "channels": 26716,
+        "guide_ids": 4477,
+        "shift_distribution_ms": {
+          "-3600000": 8905,
+          "0": 8906,
+          "3600000": 8905
+        }
+      }
+    }
+  ],
+  "guards": {
+    "changed_payload_rejected": true,
+    "expired_run_rejected": true,
+    "serve_without_execute_rejected_before_listener": true
+  },
+  "five_generator_functions_ast_identical": true,
+  "complete": true
+}

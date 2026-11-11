@@ -1,6 +1,10 @@
 # Guide query benchmark
 
-This is an isolated Android SQLite query, Java programme-decoding and retention benchmark. It reproduces the guide's SQL and materialization strategy; it does **not** measure app startup, remote-button latency, frame time, playback, provider authentication or a real household playlist. It never opens the app or its databases.
+Historical APK full-dump RAM observations are diagnostic; read the [measurement correction](recorded/2026-11-10/RAM-MEASUREMENT-CORRECTION.md).
+
+The Java SQL/decoder timings below are **historical component results** reproducing the legacy `1049818f` `programs` schema. They are not measurements of the current normalized `67570ddd` Kotlin implementation. Current source keeps `listings` / `guide_ch` / `chan`, shared guide bindings and per-channel shifts, per-source atomic swaps, and unchanged-source-file reuse. The current normalized actual-app RAM comparison remains **pending**.
+
+This is an isolated Android SQLite query, Java programme-decoding and retention benchmark. It reproduces that legacy guide's SQL and materialization strategy; it does **not** measure app startup, remote-button latency, frame time, playback, provider authentication or a real household playlist. It never opens the app or its databases. The separately documented actual-app generators below provide synthetic input; generating input is not a performance measurement.
 
 ## Strategies
 
@@ -12,7 +16,7 @@ The Java `Program` has the same fields and light defaults as `EpgProgram`. Descr
 
 ## Fixture and environment
 
-Each channel has the same 30-minute schedule covering 12 past hours and three future days. The schema and `(ch,start)`, `start`, and `stop` indexes match the app. Both strategies read the **same complete, read-only database**.
+Each channel has the same 30-minute schedule covering 12 past hours and three future days. The schema and `(ch,start)`, `start`, and `stop` indexes match the legacy `1049818f` app, rather than the current normalized database. Both strategies read the **same complete, read-only database**.
 
 - 4,000 channels: 672,000 listings; database 236,285,952 bytes.
 - 16,000 channels: 2,688,000 listings; database 947,130,368 bytes.
@@ -62,7 +66,7 @@ python summarize.py /path/to/new-results
 
 The portable runner adds bounded process timeout handling and a unique scratch directory. It preserves the measured SQL/decoder configuration; exact sources used for the recorded runs are retained under `recorded-sources/`, with SHA-256 hashes in the recorded directory. Source compilation and the portable CLI were checked without repeating device measurements after packaging.
 
-## Actual-app RAM fixture
+## Historical 12-hour actual-app RAM fixture
 
 `app-fixture/server.py` is a separate, self-contained Python 3 fixture for actual-app comparisons: 4,000 live channels, 96,000 programmes, three live groups, and small synthetic movie/series metadata. It uses only the standard library and the adjacent `small_fixture.py`; there is no dependency on another checkout. The small helper still defaults to six live channels when used on its own. Neither helper reads app data or serves playable media: every media URL returns HTTP 404. The only credentials are the synthetic `demo` / `demo` pair.
 
@@ -90,3 +94,40 @@ That epoch is **2026-11-10 07:00:00 UTC**, and the frozen guide ends at 19:00:00
 - Canonical live-stream metadata: SHA-256 `b4d5551ae1f31aa79f61dd6fd8e035f4814c0725f2edf5799555b98217b87223`.
 
 Use current-time generation for a new interactive RAM measurement; the historical epoch exists to reproduce the recorded input. This fixture has a different schedule and listing count from the isolated SQLite benchmark above. Keep actual-app RAM observations separate from those component results. Commit only sanitized measurement records and fixture sources; generated XML, private app data, archives, and HPROF files are not benchmark artifacts to publish.
+
+## Normalized 48-hour actual-app input
+
+`app-fixture/normalized_fixture.py` is the self-contained standard-library generator for the newer normalized comparison input. It contains no snapshot, restore, app-data, ADB or measurement helpers and does not contact a device. Preparation and verification use only the explicitly supplied fixture directory. Serving is a separate action requiring `--execute`, binds only `127.0.0.1:18081`, and serves no playable media. The fixed port is part of the frozen playlist bytes; run only one fixture server at a time. The only credentials are the synthetic `demo` / `demo` pair.
+
+The cases use 24 **two-hour** programmes per guide ID, covering 48 hours from `floor(frozen_epoch / 7200) * 7200 - 7200`. This differs from the historical generator's 24 half-hour programmes and 12-hour coverage even though the primary channel/programme counts are the same.
+
+- `primary`: 4,000 channels and guide IDs, 96,000 stored/logical programmes, Xtream ingestion, and zero binding shifts.
+- `shared-m3u`: 26,716 logical channels sharing 4,477 guide IDs, 107,448 stored listings and 641,184 projected programmes. Import `playlist.m3u` through the M3U path for its `tvg-shift` values of -1/0/+1 hour. `bindings.json` records the expected mapping; actual native import must verify `chan.sh` before claiming shift coverage. Its companion Xtream stream metadata does not itself establish those shifts.
+
+From the repository root, prepare a **new** directory and verify it before use:
+
+```sh
+python ci/benchmarks/guide/app-fixture/normalized_fixture.py prepare --case primary --out ci/benchmarks/guide/.run/normalized-primary-01
+python ci/benchmarks/guide/app-fixture/normalized_fixture.py verify --fixture ci/benchmarks/guide/.run/normalized-primary-01 --for-run
+```
+
+On Windows, `py -3` can replace `python`. `prepare` refuses every existing output directory, including an empty one; it never regenerates an existing fixture. Use the **same frozen directory for both APK versions**. `--epoch EPOCH_SECONDS` fixes the generation epoch when reproducing an existing input into a different new directory. For the same case and epoch, `guide.xml`, `playlist.m3u`, `streams.json` and `bindings.json` retain exactly the private normalized generator's payload bytes. Independently generated `fixture.json` files can differ in `created_utc`; each records the four payload byte counts and SHA-256 hashes. Packaging validation reproduced all eight payload files byte-for-byte across both frozen cases; actual XML counts, existing-output refusal, tamper/expiry rejection and the no-execute serving guard passed. See the [sanitized validation record](recorded/2026-11-10/normalized-fixture-validation.json).
+
+Serving requires a separate explicit command after verification:
+
+```sh
+python ci/benchmarks/guide/app-fixture/normalized_fixture.py serve --fixture ci/benchmarks/guide/.run/normalized-primary-01 --execute
+```
+
+Stop it with Ctrl+C. Omitting `--execute` fails before starting a listener. A separately selected test device needs its own explicit loopback forwarding; this generator neither configures nor contacts it. Use `http://127.0.0.1:18081` with `demo` / `demo` for the primary Xtream case, or `http://127.0.0.1:18081/get.php?username=demo&password=demo` for the shared M3U case. The unauthenticated `/health` endpoint reports fixture identity and local request/transfer counters. No directory listing or arbitrary-file endpoint is provided.
+
+To prepare the optional shared case, use a different new directory:
+
+```sh
+python ci/benchmarks/guide/app-fixture/normalized_fixture.py prepare --case shared-m3u --out ci/benchmarks/guide/.run/normalized-shared-01
+python ci/benchmarks/guide/app-fixture/normalized_fixture.py verify --fixture ci/benchmarks/guide/.run/normalized-shared-01 --for-run
+```
+
+Both `verify` and `serve` check the declared case, shape, endpoint, all four file sizes and SHA-256 hashes. `verify --for-run` and `serve` also reject dates before the fixture base or at/after `base + 24 hours`, and require at least 24 future hours of coverage. Configure `epgPastHours = 24` and `epgFutureDays >= 2` for complete import. If either comparison version outlasts that conservative import window, prepare a **new pair** in a new directory; never overwrite or refresh only one side. Plain `verify` omits the expiry check so historical frozen input can still be checked.
+
+The manifest's static `Team 9 vs Team 12` Search probe is only an example; it can age into current/next. The actual primary-case smoke freezes one common target four to six hours ahead for both builds: `slot = floor((now - base) / 7200) + 3`, `target = base + slot * 7200`, query `Team 9 vs Team ((9 + slot) % 32)`, channel 650. Recheck at execution that this target remains beyond current/next and within the six-hour Search horizon. If it has aged out, record a new common target for **both builds**. Viewport prefetch after 600 browsed rows ends below channel 650. Finding that unbrowsed channel in Search is **not a real Sports-event matching proof**. The fixture's synthetic teams and Sports category do not establish a match to a live scoreboard event. The separate 26,716-channel source matcher test remains the full-catalogue Sports proof; eventual app/device observations are separate evidence. The normalized current-base/final app RAM results remain pending; this generator alone makes no RAM, latency or playback claim.
