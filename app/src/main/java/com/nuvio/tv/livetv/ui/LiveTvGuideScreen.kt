@@ -1128,7 +1128,7 @@ private fun LiveTvGuideScreenBody(
                 playbackBuffering = playback.isBuffering,
                 playbackError = playback.error,
                 catchupTitle = playback.catchupTitle,
-                status = status.message.takeIf { settings.showImportProgress && status.loading }
+                status = status.message.takeIf { settings.showImportProgress && status.loading && !status.silent }
             )
 
             // ---------------------------------------------------------------- groups + guide
@@ -1832,7 +1832,7 @@ private fun LiveTvGuideScreenBody(
                 }
             }
         }
-        if (settings.showImportProgress && !fullscreen && (settings.showProgramDetails || settings.showPreview) && status.loading) {
+        if (settings.showImportProgress && !fullscreen && (settings.showProgramDetails || settings.showPreview) && status.loading && !status.silent) {
             status.message?.let {
                 LiveText(
                     it,
@@ -2017,7 +2017,7 @@ private fun LiveTvGuideScreenBody(
                 current = user.epgOverrides[ch.key],
                 automatic = epgAutoMatches[ch.key],
                 loading = status.loading || epgListsLoading,
-                statusMessage = status.message.takeIf { status.loading }
+                statusMessage = status.message.takeIf { status.loading && !status.silent }
                     ?: "Reading the guides' channel lists…".takeIf { epgListsLoading },
                 unassignedOnly = epgUnassignedOnly,
                 onToggleUnassigned = { epgUnassignedOnly = !epgUnassignedOnly },

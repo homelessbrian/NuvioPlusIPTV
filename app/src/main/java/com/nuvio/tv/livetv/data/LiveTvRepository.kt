@@ -3,6 +3,7 @@ package com.nuvio.tv.livetv.data
 import android.content.Context
 import android.util.Log
 import com.nuvio.tv.livetv.model.EpgAssignment
+import com.nuvio.tv.livetv.record.LiveTvNotice
 import com.nuvio.tv.livetv.model.EpgChannelEntry
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.EpgSourceChannels
@@ -50,7 +51,9 @@ data class LiveTvStatus(
     val error: String? = null,
     val loadedOnce: Boolean = false,
     /** Busy, but nothing worth announcing (reading the saved channels at start-up). */
-    val quiet: Boolean = false
+    val quiet: Boolean = false,
+    /** A routine update (scheduled check, start-up): no "working on it" pill; failures still get their own. */
+    val silent: Boolean = false
 )
 
 @Singleton
@@ -498,8 +501,11 @@ class LiveTvRepository @Inject constructor(
         if (!automatic) manualQueued.value = false
         val t0Update = System.currentTimeMillis()
         LIVE_REPORT.add(if (automatic) "Update check started" else "Update started")
+        // A scheduled check works without a pill; an update you asked for (or a new playlist) shows it.
+        routineRun = automatic
         try { refreshBody(forcePlaylists, forceEpg, forceIds, automatic) }
         finally {
+            routineRun = false
             if (automatic) lastAutoCheckAt = System.currentTimeMillis()
             LIVE_REPORT.add("Update finished in ${(System.currentTimeMillis() - t0Update) / 1000} s")
         }
@@ -593,6 +599,7 @@ class LiveTvRepository @Inject constructor(
                     }
                 }
                 if (err != null) {
+                    LiveTvNotice.show("Playlist \"${pl.name}\" couldn't update. $err")
                     Log.w(TAG, "Playlist ${pl.name} failed: $err")
                     LIVE_REPORT.add("Playlist \"${pl.name}\" failed: $err" + if (pl.isXtream) " (Xtream login: server ${if (pl.xtreamServer.isBlank()) "missing" else "set"}, user ${if (pl.xtreamUsername.isBlank()) "missing" else "set"}, password ${if (pl.xtreamPassword.isBlank()) "missing" else "set"})" else "")
                 }
@@ -640,6 +647,7 @@ class LiveTvRepository @Inject constructor(
                     }
                 }
                 if (err != null) {
+                    LiveTvNotice.show("Guide \"${target.name}\" couldn't update. ${result.exceptionOrNull()?.let { plainDownloadError(it) }.orEmpty()}")
                     Log.w(TAG, "EPG ${target.name} failed: $err")
                     LIVE_REPORT.add("Guide \"${target.name}\" failed: $err")
                 }
@@ -681,7 +689,10 @@ class LiveTvRepository @Inject constructor(
         } else {
             LIVE_REPORT.add("Saved channel list used: ${_channels.value.size} channels in ${System.currentTimeMillis() - t0} ms")
             carryOverRenamedChannels(null, _channels.value)
+            // Channels are already there: reading the guide again at start-up isn't announced.
+            routineRun = true
         }
+        try {
         val targets = collectEpgTargets()
         val settings = prefs.currentSettings()
         // The guide as it was last matched, if nothing it depends on has changed: the guide
@@ -697,6 +708,7 @@ class LiveTvRepository @Inject constructor(
         } else {
             LIVE_REPORT.add("Stored guide used: ${_programs.value.size} channels with listings in ${System.currentTimeMillis() - t0} ms")
         }
+        } finally { routineRun = false }
         _status.value = LiveTvStatus(loading = false, loadedOnce = true)
     }
 
@@ -1603,8 +1615,18 @@ class LiveTvRepository @Inject constructor(
         if (value != null) out.writeUTF(value)
     }
 
-    private fun setStatus(loading: Boolean, message: String?, quiet: Boolean = false) {
-        _status.value = _status.value.copy(loading = loading, message = message, quiet = quiet)
+    /** True while a routine update runs (see [refreshLocked], [rebuildLocked]): its progress isn't announced. */
+    @Volatile private var routineRun = false
+
+    private fun setStatus(loading: Boolean, message: String?, quiet: Boolean = false, loud: Boolean = false) {
+        _status.value = _status.value.copy(loading = loading, message = message, quiet = quiet, silent = routineRun && !loud)
+    }
+
+    /** What went wrong with a download, in plain words (for the pill). */
+    private fun plainDownloadError(e: Throwable): String = when (e) {
+        is java.net.UnknownHostException -> "Couldn't find the provider's server."
+        is java.net.SocketTimeoutException -> "The provider took too long to answer."
+        else -> e.message?.takeIf { it.isNotBlank() } ?: "Something went wrong."
     }
 
     private data class EpgTarget(
@@ -1959,7 +1981,7 @@ class LiveTvRepository @Inject constructor(
                 if (used() > rt.maxMemory() * 0.85) System.gc()
                 if (used() > rt.maxMemory() * 0.85) {
                     LIVE_REPORT.add("Guide \"${target.name}\" skipped: memory nearly full (${used() / 1048576} of ${rt.maxMemory() / 1048576} MB)")
-                    setStatus(loading = true, message = "Not enough memory for guide \"${target.name}\" — skipped")
+                    setStatus(loading = true, message = "Not enough memory for guide \"${target.name}\" — skipped", loud = true)
                     return fallBack()
                 }
             }
