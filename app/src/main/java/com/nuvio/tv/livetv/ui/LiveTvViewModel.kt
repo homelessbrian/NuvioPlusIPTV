@@ -1065,12 +1065,14 @@ class LiveTvViewModel @Inject constructor(
     fun ensureChannelSchedule(channelKey: String, anchorMs: Long = System.currentTimeMillis(), backwards: Boolean = false,
                                continuation: Boolean = false, dayStart: Boolean = false) {
         val shift = settings.value.epgOffsetMinutes * 60_000L
-        repository.ensureChannelSchedule(channelKey, anchorMs - shift, backwards, continuation, dayStart)
+        repository.ensureChannelSchedule(channelKey, anchorMs - shift, backwards, continuation, dayStart, shift)
         displayChannels.value.firstOrNull { it.key == channelKey }?.let { repository.loadXtreamArchive(listOf(it)) }
     }
 
-    fun ensureGuideFocus(channelKey: String, atMs: Long) =
-        repository.ensureGuideFocus(channelKey, atMs - settings.value.epgOffsetMinutes * 60_000L)
+    fun ensureGuideFocus(channelKey: String, atMs: Long) {
+        val shift = settings.value.epgOffsetMinutes * 60_000L
+        repository.ensureGuideFocus(channelKey, atMs - shift, shift)
+    }
 
     fun isGuideFocusPending(channelKey: String, anchorMs: Long, displayedPrograms: Map<String, List<EpgProgram>> = programs.value): Boolean {
         if (repository.status.value.loadedOnce && !repository.lightPrograms && repository.committedGuideRevision.value == null) return false

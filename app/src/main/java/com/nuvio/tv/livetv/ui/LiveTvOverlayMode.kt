@@ -281,7 +281,8 @@ private fun OverlayModeContent(
         level = OverlayLevel.SCHEDULE
         if (sameChannel) requestSchedulePage(now, backwards = false)
     }
-    LaunchedEffect(scheduleChannel?.key) {
+    LaunchedEffect(scheduleChannel?.key, settings.epgOffsetMinutes) {
+        schedulePageRequest = null
         scheduleChannel?.let { requestSchedulePage(scheduleAnchor, backwards = false) }
     }
     // Keep the highlighted programme when pages arrive or earlier pages leave the cache.

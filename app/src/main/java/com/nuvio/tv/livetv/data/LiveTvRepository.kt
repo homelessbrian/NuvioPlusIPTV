@@ -1457,9 +1457,8 @@ class LiveTvRepository @Inject constructor(
     }
 
     /** A focused row can request a dense tile's continuation without decoding the whole tile. */
-    fun ensureGuideFocus(channel: String, atMs: Long) {
-        val shift = prefs.currentSettings().epgOffsetMinutes * 60_000L
-        _guideFocusPage.value = GuideFocusPageState(channel, atMs + shift, true)
+    fun ensureGuideFocus(channel: String, atMs: Long, displayOffsetMs: Long = 0L) {
+        _guideFocusPage.value = GuideFocusPageState(channel, atMs + displayOffsetMs, true)
         synchronized(browseDemandLock) { viewportFocus = channel to atMs }
         if (viewportKeys.isNotEmpty()) requestWindow(viewportKeys, viewportFrom, viewportTo, replace = true)
     }
@@ -1766,15 +1765,14 @@ class LiveTvRepository @Inject constructor(
     }
 
     fun ensureChannelSchedule(channelKey: String, anchorMs: Long = System.currentTimeMillis(), backwards: Boolean = false,
-                               continuation: Boolean = false, dayStart: Boolean = false) {
-        val shift = prefs.currentSettings().epgOffsetMinutes * 60_000L
+                               continuation: Boolean = false, dayStart: Boolean = false, displayOffsetMs: Long = 0L) {
         val request = synchronized(browseDemandLock) {
             val demand = ScheduleDemand(channelKey, anchorMs, backwards, ++scheduleDemandSerial, continuation, dayStart)
             desiredSchedules.remove(channelKey)
             desiredSchedules[channelKey] = demand
             while (desiredSchedules.size > 2) desiredSchedules.remove(desiredSchedules.keys.first())
             _schedulePages.value = (_schedulePages.value + (channelKey to
-                (_schedulePages.value[channelKey] ?: GuideSchedulePageState()).copy(loading = true, anchorMs = anchorMs + shift, errorMessage = null)))
+                (_schedulePages.value[channelKey] ?: GuideSchedulePageState()).copy(loading = true, anchorMs = anchorMs + displayOffsetMs, errorMessage = null)))
                 .filterKeys { it in desiredSchedules }
             BrowseDemand(viewportKeys, viewportFrom, viewportTo, viewportFocus, desiredSchedules.values.toList())
         }
