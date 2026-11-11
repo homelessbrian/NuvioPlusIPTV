@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "purpose": "Runtime Search and Sports smoke; separate from RAM measurements",
+  "common_future_query": {
+    "query": "Team 9 vs Team 14",
+    "programme_start_utc": "2026-11-11T06:00:00+00:00",
+    "programme_slot": 5,
+    "required_horizon_hours": [
+      4,
+      6
+    ],
+    "target_channel_number": 650,
+    "target_result_index": 20
+  },
+  "artifacts": {
+    "baseline": {
+      "source_commit": "67570ddd",
+      "apk_sha256": "1fde1a86c757c4998c34f4bf02663203ece814554fd7e9effaf51d23da87967f",
+      "query_checked_utc": "2026-11-11T01:33:58.071886+00:00",
+      "programme_ahead_seconds_at_query": 15961.928120851517,
+      "guide_channels_browsed_before_search": [
+        1
+      ],
+      "search": {
+        "upcoming_cards_returned": true,
+        "dpad_channel650_focus_passed": true,
+        "channel650_observed": true,
+        "outcome": "PASS: channel 650 observed through focus-only Right navigation."
+      },
+      "sports": {
+        "channel_matching_complete_observed": false,
+        "actual_observation_seconds": 104.9335992,
+        "final_public_banner": "Finding channels for today's games\u2026",
+        "real_event_match_verified": false,
+        "first_visit_picker_closed_without_follow_changes": true
+      },
+      "fixture_http_deltas": {
+        "media_requests": 0,
+        "xml_requests": 0,
+        "catalogue_requests": 0
+      },
+      "event_or_programme_activated": false
+    },
+    "candidate": {
+      "source_commit": "ac39dab9c89ca59066c4065ba97afb536200984a",
+      "apk_sha256": "2640fdd257ae47339f3f5315b48e2d1aee90519cf9a89d6e4667a963c26794b0",
+      "query_checked_utc": "2026-11-11T01:39:52.797006+00:00",
+      "programme_ahead_seconds_at_query": 15607.203027963638,
+      "guide_channels_browsed_before_search": [
+        1
+      ],
+      "search": {
+        "upcoming_cards_returned": true,
+        "dpad_channel650_focus_passed": false,
+        "channel650_observed": false,
+        "outcome": "FAIL: card focus returned to the search field and IME reopened during both Right-navigation attempts; channel 650 remains unconfirmed."
+      },
+      "sports": {
+        "channel_matching_complete_observed": false,
+        "actual_observation_seconds": 97.7952215,
+        "final_public_banner": "Finding channels for today's games\u2026",
+        "real_event_match_verified": false,
+        "first_visit_picker_closed_without_follow_changes": true
+      },
+      "fixture_http_deltas": {
+        "media_requests": 0,
+        "xml_requests": 0,
+        "catalogue_requests": 0
+      },
+      "event_or_programme_activated": false
+    }
+  },
+  "limits": [
+    "Synthetic guide programme results do not prove a real Sports event/channel match.",
+    "Sports did not finish channel matching within either bounded observation.",
+    "Candidate D-pad navigation failed; returning upcoming cards or swiping does not constitute a full Search pass.",
+    "The later Search-only follow-up will be reported separately and will not replace these observations or RAM artifacts."
+  ],
+  "follow_up_search_only": {
+    "source_commit": "84a3b3b6",
+    "guide_commit": "c30f5edc",
+    "apk_sha256": "c8c98764dd51cf0f6b022c30cdb866d10f397e28c4310aca4215cea79174a165",
+    "separate_query": "Team 9 vs Team 15",
+    "programme_start_utc": "2026-11-11T08:00:00+00:00",
+    "query_checked_utc": "2026-11-11T02:04:03.961161+00:00",
+    "programme_ahead_seconds_at_query": 21358.392253160477,
+    "card_focus_observation_interval_seconds": 68.7859245,
+    "same_card_focus_retained": true,
+    "right_navigation_keys": 20,
+    "channel650_observed_with_card_focus": true,
+    "ime_absent_after_navigation": true,
+    "outcome": "PASS: card focus retained across the observation interval, then 20 Right keys reached channel 650.",
+    "fixture_http_deltas": {
+      "media_requests": 0,
+      "xml_requests": 0,
+      "catalogue_requests": 0
+    },
+    "event_or_programme_activated": false,
+    "instrumented": false,
+    "ram_or_sports_speed_measurement": false,
+    "prior_baseline_and_ac39_entries_unchanged": true
+  },
+  "follow_up_build": {
+    "source_commit": "84a3b3b691d4a7c36cf70f72cb8bedb1c387c51b",
+    "guide_search_fix_commit": "c30f5edccedcccfb40c6b477547659737efb39e0",
+    "previous_measured_source": "ac39dab9c89ca59066c4065ba97afb536200984a",
+    "apk_bytes": 115721188,
+    "apk_sha256": "c8c98764dd51cf0f6b022c30cdb866d10f397e28c4310aca4215cea79174a165",
+    "native_openvpn_payloads_identical_to_actual_profile_test_and_ac39": true,
+    "native_openvpn_payload_count": 3,
+    "ram_remeasured": false,
+    "build_seconds": 744,
+    "test_summary": {
+      "tests": 345,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "suites": 39
+    },
+    "signature_v2_verified": true,
+    "zip_alignment_16k_verified": true,
+    "package": "com.nuvio.livetv.groupvpnpreview",
+    "version_code": 200451216,
+    "abi": "x86_64"
+  },
+  "sports_diagnostic_limits": {
+    "both_builds_channel": "test",
+    "existing_sports_table_build_and_full_guide_verification_enabled_on_both": true,
+    "candidate_local_guide_processing_observed_after_bounded_ui_endpoint_seconds": 14.45,
+    "candidate_score_fetch_also_observed": true,
+    "baseline_stage_at_ui_endpoint": "Not established by sparse saved stacks",
+    "conclusion": "Candidate stacks support genuinely unfinished local-guide work, not proof of a stale banner; they do not prove a healthy completion time or the reported SHIELD cause."
+  },
+  "final_cleanup": {
+    "original_app_inventory_verified_files": 643,
+    "original_app_inventory_verified_directories": 19,
+    "target_stopped_after_original_data_restore": true,
+    "latest_verified_focus_fix_apk_retained": true,
+    "owned_observer_absent": true,
+    "owned_fixture_stopped": true,
+    "owned_reverse_removed": true,
+    "owned_build_daemon_stopped": true,
+    "other_apps_and_devices_untouched": true
+  }
+}

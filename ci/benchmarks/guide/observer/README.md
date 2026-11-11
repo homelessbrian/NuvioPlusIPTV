@@ -21,6 +21,8 @@ The fixed instrumentation package is `com.nuvio.bench.ram20261110`, targeting on
 
 The observer does not rewrite either original built target APK. Trial launch uses `am instrument --no-test-api-access -e duration_seconds 900` with the fixed component. This explicitly disables test-API access; there is no profiling, no-restart, animation, hidden-API exemption or UI-automation flag. The build script does not issue that command.
 
+Both target builds use `:app:assembleFullDebug -Pdebuggable=true -PlivetvTestBuild=true -Pandroid.injected.build.abi=x86_64`. The test flag sets `NUVIO_CHANNEL=test`, which also enables the existing Sports-table build/full-guide verification path in both revisions. It is additional test-channel work, not a stable-channel configuration. The observer build itself does not set or change these app flags.
+
 ## Measurements and lifetime
 
 `onCreate` checks the target package and application UID against the executing VM's UID, then exclusively creates `cache/guide_ram_nogc_20261110.csv`. Existing files/links fail. A background daemon logs about once per second, flushing each numeric row and skipping missed ticks. One MemoryInfo, builder, character buffer and writer are reused. `onStart` requests the normal MainActivity through `Intent.makeMainActivity` plus `FLAG_ACTIVITY_NEW_TASK`. No instrumentation `finish` is called; the bounded logger stops after its duration (default 600 seconds, allowed 2..1800), while the trial operator later force-stops the target. Partial final rows, gaps and failed captures must be preserved and labelled.

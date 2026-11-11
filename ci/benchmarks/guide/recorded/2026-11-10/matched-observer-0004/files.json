@@ -54,5 +54,9 @@
   "shared-summary.json": {
     "bytes": 34481,
     "sha256": "1a60e369a36d7502f9281af639d69b0320996b9814835a2f99c169dd6acbab23"
+  },
+  "runtime-smoke.json": {
+    "bytes": 5906,
+    "sha256": "29b24726acbb0e378f3d0feecb22c2d15ec8e8bc61a0eb36ea5ce7fcb2a2081f"
   }
 }

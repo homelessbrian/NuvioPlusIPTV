@@ -7,6 +7,7 @@ This is a new, separate comparison after the [full-dump measurement correction](
 - Baseline: normalized upstream `67570ddd`, APK SHA-256 `1fde1a86c757c4998c34f4bf02663203ece814554fd7e9effaf51d23da87967f`.
 - Candidate: combined preview `ac39dab9c89ca59066c4065ba97afb536200984a`, guide production `99fd3388` plus the frame-rate fix, APK SHA-256 `2640fdd257ae47339f3f5315b48e2d1aee90519cf9a89d6e4667a963c26794b0`. These are combined-artifact observations, not an isolated causal estimate for one PR.
 - Same x86_64 Android 16 emulator, 512 MiB managed-heap cap, version code/signing/test application ID, observer and fixture on both sides. No video was playing. This is not the reported SHIELD Android 11 long-session workload.
+- Both are full-debug **test-channel** builds (`-Pdebuggable=true -PlivetvTestBuild=true -Pandroid.injected.build.abi=x86_64`). The existing test-channel Sports-table build and full-guide verification are enabled on both sides. This adds work compared with the stable channel and must remain part of the workload boundary.
 - Synthetic primary input: 4,000 channels/guide IDs, 96,000 stored listings, 48-hour schedule. Before/after all ten programme fields and all bindings hashed identically: `450149e798a310d5e1f922c642d4e00a978c45714631eea9c17874b75d1044d1`. All six fixture request/XML-transfer deltas were zero during measurement. The full guide remained stored; no pruning or clearing was used to improve the result.
 - The baseline already contains upstream normalized one-copy storage. These numbers do **not** measure Beta.13.2 to current development, nor attribute upstream deduplication to this PR.
 
@@ -53,6 +54,18 @@ One baseline then one candidate startup, same observer/frozen execution method a
 - Resident PSS: **506,546 → 476,840 KiB (494.67 → 465.66 MiB)**.
 - **Derived SwapPSS increases: 555 → 25,123 KiB (0.54 → 24.53 MiB)**. This is an unfavorable paging difference and accounts for much of the resident decrease. It must not be hidden or counted as a pure allocation saving.
 - Raw total PSS including SwapPSS: **507,101 → 501,963 KiB (495.22 → 490.20 MiB)**. Report this alongside resident PSS; one sequential pair with uncontrolled system paging cannot establish a general memory gain.
+
+## Runtime smoke and later Search-only focus fix
+
+[Sanitized runtime observations/build provenance/cleanup](runtime-smoke.json) are separate from RAM. The original paired `Team 9 vs Team 14` / 06:00 UTC query was four to six hours ahead on both builds, with only channel 1 browsed. Baseline D-pad navigation reached channel 650. Candidate `ac39dab9` returned upcoming cards, but **failed both D-pad attempts** by returning focus to the field/reopening the IME; channel 650 was not confirmed. Those failed observations remain unchanged.
+
+Source review found the new Search producer cleared its publication on each 30-second clock refresh, conditionally unmounting the focused row. Follow-up guide commit `c30f5edc`, combined preview `84a3b3b6`, changes only `LiveTvSearch.kt` relative to the measured preview: retain valid cards during replacement, with profile-ready/access/catalogue/revision gates and fresh activation checks intact. Query-loading retention preserves the earlier baseline behavior. Its **345 Live TV tests / 39 suites** passed again with zero failures/errors/skips; build **12m 24s**, signature v2 and 16 KiB ZIP alignment passed. The three OpenVPN payloads are byte-identical to the actual-file test/measured artifact. APK SHA-256 `c8c98764dd51cf0f6b022c30cdb866d10f397e28c4310aca4215cea79174a165`, **115,721,188 bytes**.
+
+The uninstrumented follow-up uses a **separate** valid four-to-six-hour query, `Team 9 vs Team 15` / 08:00 UTC. The same card retained focus across **68.7859245 seconds** between observations; then 20 Right keys reached channel 650 with card focus and the IME absent. No media/result was activated, and fixture request deltas remained zero. **RAM was not remeasured after this Search-only fix.** All memory figures and CSVs above remain tied to `ac39dab9`; the newer UI check cannot relabel that artifact.
+
+Sports was still displaying “Finding channels for today's games…” at the bounded endpoints, **104.93 s baseline / 97.80 s candidate**. Neither completed. Sparse candidate stacks show local-guide normalization/table work even after its endpoint, alongside score fetching; baseline's exact endpoint stage remains unresolved. Both test-channel builds enable the existing Sports-table/full-guide verification path. This does not establish a stale-banner-only failure, a healthy completion time, a real event/channel match or a Sports speedup. The source-level full-catalogue matcher proof is separate.
+
+After the follow-up, the original **643-file / 19-directory** app inventory was restored and verified with the latest APK retained and app stopped. The owned observer, fixture listener, reverse mapping and build daemon are absent/stopped. No other apps/devices were changed.
 
 ## Attempt accounting and limits
 
