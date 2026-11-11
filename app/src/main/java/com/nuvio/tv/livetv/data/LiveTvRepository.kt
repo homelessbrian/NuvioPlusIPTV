@@ -583,7 +583,7 @@ class LiveTvRepository @Inject constructor(
                         if (!unchanged) markChanged(file)
                         LIVE_REPORT.add(if (unchanged) "Playlist \"${pl.name}\": no changes" else "Playlist \"${pl.name}\": new content")
                         !unchanged
-                    } else download(pl.resolvedUrl(), file, pl.userAgent, progressLabel = "Downloading playlist \"${pl.name}\"")
+                    } else downloadM3u(pl, file)
                 }
                 // M3U links from Xtream providers (get.php with a login): the account's details.
                 if (!pl.isXtream) refreshM3uAccount(pl)
@@ -740,7 +740,7 @@ class LiveTvRepository @Inject constructor(
     private suspend fun playlistSegment(pl: PlaylistSource): String {
         val f = playlistFile(pl.id)
         val sb = StringBuilder()
-        sb.append(pl.id).append(':').append(pl.name.hashCode()).append(':').append(pl.userAgent.hashCode())
+        sb.append(pl.id).append(':').append(pl.name.hashCode()).append(':').append(pl.effectiveUserAgent.hashCode())
             .append(':').append(f.length()).append(':').append(contentStamp(f))
         // M3U links: the chosen stream format changes the channel links (Auto adds nothing,
         // so lists saved before this setting existed stay valid).
@@ -1707,9 +1707,9 @@ class LiveTvRepository @Inject constructor(
         prefs.currentEpgSources().filter { it.enabled && it.url.isNotBlank() }.forEach { src ->
             val host = hostOf(src.url)
             val ua = allPlaylists.firstOrNull { pl ->
-                pl.userAgent.isNotBlank() && host != null &&
+                pl.effectiveUserAgent.isNotBlank() && host != null &&
                     hostOf(if (pl.isXtream) pl.xtreamBase() else pl.url) == host
-            }?.userAgent.orEmpty()
+            }?.effectiveUserAgent.orEmpty()
             targets += EpgTarget(src.id, src.id, src.name, src.url, ua, shiftMs = src.shiftMinutes * 60_000L)
         }
         val playlists = prefs.currentPlaylists().filter { it.liveEnabled && it.useEmbeddedEpg }
@@ -1720,7 +1720,7 @@ class LiveTvRepository @Inject constructor(
             urls.distinct().forEach { url ->
                 if (targets.none { it.url == url }) {
                     targets += EpgTarget(
-                        "auto_" + sha1(url), null, "${pl.name} (built-in)", url, pl.userAgent,
+                        "auto_" + sha1(url), null, "${pl.name} (built-in)", url, pl.effectiveUserAgent,
                         playlistId = pl.id, shiftMs = pl.guideShiftMinutes * 60_000L
                     )
                 }
@@ -1829,8 +1829,8 @@ class LiveTvRepository @Inject constructor(
                 while (!usedKeys.add(key)) { key = "$baseKey#${n++}" }
                 val number = e.chno ?: counter
                 counter = maxOf(counter, number) + 1
-                val headers = if (pl.userAgent.isNotBlank() && "User-Agent" !in e.headers) {
-                    e.headers + ("User-Agent" to pl.userAgent)
+                val headers = if (pl.effectiveUserAgent.isNotBlank() && "User-Agent" !in e.headers) {
+                    e.headers + ("User-Agent" to pl.effectiveUserAgent)
                 } else e.headers
                 out += LiveChannel(
                     key = key,
@@ -2574,7 +2574,10 @@ class LiveTvRepository @Inject constructor(
          *  answers "not changed" otherwise keeps an old guide forever). */
         full: Boolean = false,
         /** Name for the Start-Up Report line saying what came back (guides only). */
-        reportAs: String? = null
+        reportAs: String? = null,
+        /** M3U links: refuse (with [NotAPlaylistException]) a reply that is clearly not a
+         *  channel list, like a video or web page, or a "forbidden" answer, without saving it. */
+        checkPlaylist: Boolean = false
     ): Boolean = withContext(Dispatchers.IO) {
         require(url.isNotBlank()) { "No URL set" }
         target.parentFile?.mkdirs()
@@ -2596,6 +2599,9 @@ class LiveTvRepository @Inject constructor(
                 reportAs?.let { LIVE_REPORT.add("Guide \"$it\": server said not changed since last time; kept the copy we have") }
                 return@withContext false
             }
+            if (checkPlaylist && (response.code == 403 || response.code == 406)) {
+                throw NotAPlaylistException("an error (${httpError(response.code)})")
+            }
             if (!response.isSuccessful) error(httpError(response.code))
             val body = response.body ?: error("Empty response")
             val tmp = File(target.parentFile, target.name + ".tmp")
@@ -2606,6 +2612,7 @@ class LiveTvRepository @Inject constructor(
                 // and plain guides of several hundred MB made the app take up close to 1 GB.
                 // Ones that already arrive zipped (.xml.gz) are kept as they are.
                 val input = BufferedInputStream(raw, 64 * 1024)
+                if (checkPlaylist) notAPlaylist(input)?.let { throw NotAPlaylistException(it) }
                 input.mark(2)
                 val alreadyZipped = input.read() == 0x1f && input.read() == 0x8b
                 input.reset()
@@ -2655,6 +2662,83 @@ class LiveTvRepository @Inject constructor(
             markChanged(target)
             true
         }
+    }
+
+    /** An M3U link answered with something other than channels; [what] says what came back. */
+    private class NotAPlaylistException(val what: String) : Exception(what)
+
+    /**
+     * Downloads an M3U link. With no user agent set for it: if the link answers the app's
+     * default (browser-style) user agent with a video, web page or "forbidden" instead of
+     * channels, it's asked again as a media player (VLC), like other IPTV apps. The one that
+     * worked is remembered for this playlist (and used for its channels and guide), and
+     * checked again the same way whenever it stops working.
+     */
+    private suspend fun downloadM3u(pl: PlaylistSource, file: File): Boolean {
+        val label = "Downloading playlist \"${pl.name}\""
+        val url = pl.resolvedUrl()
+        if (pl.userAgent.isNotBlank()) return download(url, file, pl.userAgent, progressLabel = label)
+        val first = pl.fallbackUserAgent.ifBlank { DEFAULT_UA }
+        val second = if (first == DEFAULT_UA) PLAYER_UA else DEFAULT_UA
+        fun nameOf(ua: String) = if (ua == DEFAULT_UA) "the app's default user agent" else "a media-player user agent (VLC)"
+        val firstProblem = try {
+            return download(url, file, first, progressLabel = label, checkPlaylist = true)
+        } catch (e: NotAPlaylistException) {
+            e.what
+        }
+        LIVE_REPORT.add("Playlist \"${pl.name}\": ${nameOf(first)} got $firstProblem, not channels; trying ${nameOf(second)}")
+        val changed = try {
+            download(url, file, second, progressLabel = label, full = true, checkPlaylist = true)
+        } catch (e: NotAPlaylistException) {
+            error("The link sent $firstProblem instead of a channel list. If the provider asks for a specific user agent, enter it in this playlist's settings.")
+        }
+        val remember = if (second == DEFAULT_UA) "" else second
+        prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(fallbackUserAgent = remember) else it } }
+        LIVE_REPORT.add("Playlist \"${pl.name}\": loaded with ${nameOf(second)}; using it for this playlist from now on")
+        // Its channels' user agent changed too, so they're rebuilt even if the list is the same.
+        return changed || remember != pl.fallbackUserAgent
+    }
+
+    /**
+     * Looks at the start of a download (left unread) and says what it is when it's clearly not
+     * an M3U: a video or other binary file, or a web page. Anything else, including lists
+     * without the usual header, is let through as before.
+     */
+    private fun notAPlaylist(input: BufferedInputStream): String? {
+        val peekSize = 16 * 1024
+        input.mark(peekSize + 1)
+        val raw = ByteArray(peekSize)
+        var n = 0
+        while (n < peekSize) {
+            val r = input.read(raw, n, peekSize - n)
+            if (r < 0) break
+            n += r
+        }
+        input.reset()
+        if (n == 0) return null // empty: reported as an empty response as before
+        var bytes = raw.copyOf(n)
+        if (n >= 2 && (bytes[0].toInt() and 0xff) == 0x1f && (bytes[1].toInt() and 0xff) == 0x8b) {
+            // Zipped: look at what's inside (as much as unzips from the part we have).
+            val out = java.io.ByteArrayOutputStream()
+            runCatching {
+                java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).use { z ->
+                    val buf = ByteArray(4096)
+                    while (out.size() < peekSize) {
+                        val r = z.read(buf)
+                        if (r < 0) break
+                        out.write(buf, 0, r)
+                    }
+                }
+            }
+            bytes = out.toByteArray()
+            if (bytes.isEmpty()) return null
+        }
+        val text = String(bytes, Charsets.UTF_8)
+        if (text.contains("#EXTM3U", ignoreCase = true) || text.contains("#EXTINF", ignoreCase = true)) return null
+        val binary = bytes.take(1024).any { val c = it.toInt() and 0xff; c == 0 || c < 0x09 }
+        if (binary) return "a video or other file"
+        if (text.trimStart('\uFEFF', ' ', '\t', '\r', '\n').startsWith("<")) return "a web page"
+        return null
     }
 
     /**
@@ -2929,7 +3013,7 @@ class LiveTvRepository @Inject constructor(
                 .find(channelUrl) ?: return null
             Triple(m.groupValues[1], m.groupValues[2], m.groupValues[3])
         }
-        val ua = pl.userAgent.ifBlank { DEFAULT_UA }
+        val ua = pl.effectiveUserAgent.ifBlank { DEFAULT_UA }
         val login = "username=" + java.net.URLEncoder.encode(user, "UTF-8") + "&password=" + java.net.URLEncoder.encode(pass, "UTF-8")
         val notes = ArrayList<String>()
         // 1 and 2: the server's account info (its time zone, else its clock).
@@ -3062,7 +3146,7 @@ class LiveTvRepository @Inject constructor(
     private suspend fun refreshM3uAccount(pl: PlaylistSource) = withContext(Dispatchers.IO) {
         val api = m3uAccountUrl(pl.url) ?: return@withContext
         runCatching {
-            val ui = JSONObject(getText(api, pl.userAgent.ifBlank { DEFAULT_UA })).optJSONObject("user_info")
+            val ui = JSONObject(getText(api, pl.effectiveUserAgent.ifBlank { DEFAULT_UA })).optJSONObject("user_info")
                 ?: return@runCatching
             accountOf(ui)?.let { saveAccount(pl, it) }
         }
@@ -3194,6 +3278,8 @@ class LiveTvRepository @Inject constructor(
         fun isPlaceholderTitle(title: String): Boolean = PLACEHOLDER_TITLES.matches(title.trim().lowercase())
 
         const val DEFAULT_UA = "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+        /** Tried for M3U links that don't send channels to [DEFAULT_UA] (see downloadM3u). */
+        const val PLAYER_UA = "VLC/3.0.20 LibVLC/3.0.20"
 
         private val qualityTokens = Regex("""\b(fhd|uhd|hd|sd|4k|8k|hevc|h265|h264|1080p|720p|backup|raw)\b""")
         private val prefixToken = Regex("""^[a-z]{2,3}\s*[:|]\s*""")

@@ -1488,7 +1488,8 @@ class LiveTvPreferences @Inject constructor(
                                     ) changed += r.id
                                     r.copy(
                                         lastUpdatedMs = l.lastUpdatedMs, lastError = l.lastError, channelCount = l.channelCount,
-                                        serverTimezone = l.serverTimezone, catchupNoHlsSince = l.catchupNoHlsSince
+                                        serverTimezone = l.serverTimezone, catchupNoHlsSince = l.catchupNoHlsSince,
+                                        fallbackUserAgent = l.fallbackUserAgent.ifBlank { r.fallbackUserAgent }
                                     )
                                 } ?: r
                             })
@@ -1523,6 +1524,7 @@ class LiveTvPreferences @Inject constructor(
                     url = o.optString("url"),
                     enabled = o.optBoolean("enabled", true),
                     userAgent = o.optString("userAgent"),
+                    fallbackUserAgent = o.optString("fallbackUserAgent"),
                     useEmbeddedEpg = o.optBoolean("useEmbeddedEpg", true),
                     xtreamServer = o.optString("xtreamServer"),
                     xtreamUsername = o.optString("xtreamUsername"),
@@ -1552,6 +1554,7 @@ class LiveTvPreferences @Inject constructor(
                 JSONObject()
                     .put("id", s.id).put("name", s.name).put("url", s.url)
                     .put("enabled", s.enabled).put("userAgent", s.userAgent)
+                    .put("fallbackUserAgent", s.fallbackUserAgent)
                     .put("useEmbeddedEpg", s.useEmbeddedEpg)
                     .put("xtreamServer", s.xtreamServer).put("xtreamUsername", s.xtreamUsername)
                     .put("xtreamPassword", s.xtreamPassword)

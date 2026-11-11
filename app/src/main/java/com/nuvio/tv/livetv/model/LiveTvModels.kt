@@ -10,6 +10,12 @@ data class PlaylistSource(
     val url: String,
     val enabled: Boolean = true,
     val userAgent: String = "",
+    /**
+     * Found automatically: a media-player user agent this M3U link needed because it sent
+     * a web page or video (not channels) to the app's default one. Used only while
+     * [userAgent] is blank; "" = the default works.
+     */
+    val fallbackUserAgent: String = "",
     /** Also load the EPG URL advertised in the playlist header (url-tvg / x-tvg-url). */
     val useEmbeddedEpg: Boolean = true,
     val xtreamServer: String = "",
@@ -60,6 +66,8 @@ data class PlaylistSource(
      */
     val catchupShiftMinutes: Int = 0
 ) {
+    /** The user agent requests for this playlist go out with ("" = the app default). */
+    val effectiveUserAgent: String get() = userAgent.ifBlank { fallbackUserAgent }
     val isXtream: Boolean get() = xtreamServer.isNotBlank()
 
     /** The time zone catch-up links are written in: the one picked in settings, else the server's. */
@@ -854,7 +862,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-11 02:45"
+    const val KIT_STAMP = "2026-11-11 04:10"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String
