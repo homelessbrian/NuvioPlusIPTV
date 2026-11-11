@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "root_failure_index_sha256": "5260d8732bf1c2179761a40845fd2a37464bcba584e66e78e20821f69f0efb07",
+  "attempts": [
+    {
+      "id": "fixture-primary-manifest-path-07672516-0001",
+      "case": "shared",
+      "trial_label": "baseline-1",
+      "classification": "SETUP_FAILURE",
+      "app_or_ram_cause_established": false,
+      "exclusion_independent_of_ram_values": true,
+      "whole_private_file_tree_sha256": "f59bda0918817c14bf469bd72bff4763c94e5f648efd186fe8cb0f28768cf104",
+      "private_files_preserved": 1,
+      "associated_record_sha256s": [
+        "3cfe3b16b3aa96d952130f605326b5e4be397457111e0434337816925ff7ca08",
+        "4527e981a634af51ca33df97450da712df5667413cb6c11a55b8582cbaa98c51"
+      ],
+      "accepted_comparison": false,
+      "csv_files": []
+    },
+    {
+      "id": "fixture-primary-stop-07672516-0001",
+      "case": "shared",
+      "trial_label": "baseline-1",
+      "classification": "SETUP_FAILURE",
+      "app_or_ram_cause_established": false,
+      "exclusion_independent_of_ram_values": true,
+      "whole_private_file_tree_sha256": "4160e6fef2a81d11514c7bbd058a8e9d8ac9fc8486b68b46638146f48a1ec84e",
+      "private_files_preserved": 3,
+      "associated_record_sha256s": [
+        "3cfe3b16b3aa96d952130f605326b5e4be397457111e0434337816925ff7ca08",
+        "4527e981a634af51ca33df97450da712df5667413cb6c11a55b8582cbaa98c51"
+      ],
+      "accepted_comparison": false,
+      "csv_files": []
+    },
+    {
+      "id": "setup-combined-policy-0001",
+      "case": "primary",
+      "trial_label": "baseline-1",
+      "classification": "SETUP_FAILURE",
+      "app_or_ram_cause_established": false,
+      "exclusion_independent_of_ram_values": true,
+      "whole_private_file_tree_sha256": "dd5f7a6c67d657bd65594fafb0e325beaaf26f5723942e3fb52ce1ad9bb60944",
+      "private_files_preserved": 2,
+      "associated_record_sha256s": [],
+      "accepted_comparison": false,
+      "csv_files": []
+    }
+  ],
+  "partial_rows_enter_accepted_statistics": false,
+  "prefix_and_other_partial_snapshots_may_overlap_and_are_not_independent": true,
+  "raw_ui_logs_archives_and_provider_material_excluded": true
+}

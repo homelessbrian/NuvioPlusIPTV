@@ -1,0 +1,37 @@
+{
+  "source_commit": "96f9d91114394e7a709985e818b3bb6d866b6630",
+  "apk_sha256": "0271fb71947e628b162710f58b30219ee61c13d17042306477dfcacb31005c44",
+  "apk_bytes": 114122684,
+  "target": "Android16 x86_64 emulator build; physical Android11 SHIELD and phone acceptance not established",
+  "signature_alignment_and_source_association_verified": true,
+  "matching_source_inputs": 2037,
+  "text_line_ending_only_differences": 45,
+  "production_vpn_payloads_unchanged": 3,
+  "full_app_tests": {
+    "tests": 460,
+    "suites": 53,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "selected_source_checks": {
+    "actual_tests": 153,
+    "test_classes": 19,
+    "selected_source_test_files": 46,
+    "native_sqlite_cases": 23,
+    "sports_cases": 29,
+    "guide_core_lifecycle_cases": 101,
+    "junit_seconds": 12.584,
+    "all_sources_unchanged_after_compile": true,
+    "all_sources_unchanged_after_tests": true
+  },
+  "overlapping_suites_are_not_additive": true,
+  "selected_fixture_catalogue_channels": 26716,
+  "selected_test_limit": "Synthetic full catalogue including final channel; not every Search query or real Sports event association",
+  "source_artifact_proof_sha256": "c86a401e3266c0ee7653eae0965e49c5db5649f594eafa06b62c59350be656ed",
+  "full_unit_result_sha256": "71290913370e57acc190940c630fcd6c0f9062eea820e2122d3e190b29980605",
+  "focused_validation_sha256": "4699d22f08dba6415459274969c0492053f239f25c29babecddc445e36eb6061",
+  "actual_build_log_sha256": "633329b448f6aaf750fa726f69f132ec0de54864bf87c772e908a2fd284651ef",
+  "counter_scope": "Registered owners/reservations, last persisted5s snapshot; estimated model bytes rather than whole-app RAM",
+  "ram_and_runtime_acceptance": "Recorded separately after frozen final cohort; no performance claim from these source checks"
+}
