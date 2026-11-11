@@ -4,7 +4,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import com.nuvio.tv.livetv.data.retainGuideBrowsePublication
 import com.nuvio.tv.livetv.data.notifyGuideBrowsePublicationRelease
+import com.nuvio.tv.livetv.data.retainGuideTargetOwnership
+import com.nuvio.tv.livetv.data.GuideTargetOwnership
+import com.nuvio.tv.livetv.data.UntrackedGuideTargetOwnership
 import com.nuvio.tv.livetv.model.EpgProgram
+
+/** Borrow the event's already-owned frame before any asynchronous projection read. */
+internal fun Map<String, List<EpgProgram>>.retainGuideActionOwnership(program: EpgProgram?): GuideTargetOwnership? {
+    retainGuideTargetOwnership()?.let { return it }
+    if (program?.isDisplayProjection != true) return UntrackedGuideTargetOwnership
+    com.nuvio.tv.livetv.record.LiveTvNotice.show("Programme details are unavailable. Please try again.")
+    return null
+}
 
 /** Keep the preceding frame's display payload charged until composition replaces it. */
 @Composable

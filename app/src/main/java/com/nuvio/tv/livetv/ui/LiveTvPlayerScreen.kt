@@ -412,7 +412,9 @@ fun LiveTvPlayerScreen(
     val nowProgram = rememberShowDetails(current?.key, current?.let { ch -> programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs } })
     val watchingTitle = playback.catchupTitle ?: nowProgram?.title
     // The Calendar's bell for what's on (play bar and the full-screen menu).
-    val liveBell = com.nuvio.tv.livetv.calendar.rememberLiveBell(nowProgram.takeIf { playback.catchupTitle == null }, current)
+    val liveBell = com.nuvio.tv.livetv.calendar.rememberLiveBell(nowProgram.takeIf { playback.catchupTitle == null }, current) {
+        programs.retainGuideActionOwnership(nowProgram)
+    }
     val bellInBar = liveBell != null && BarPart.BELL !in BarPart.parse(settings.barHidden)
     // Sports: the live game on this channel, if it can be pinned to the corner.
     val pinGame = com.nuvio.tv.livetv.sports.rememberPinnableGame(current?.key).takeIf { playback.catchupTitle == null }
@@ -1511,6 +1513,7 @@ fun LiveTvPlayerScreen(
         BackupChannelMenu(
             channel = ch,
             viewModel = viewModel,
+            programs = programs,
             playing = ch.key == playback.channelKey,
             onSwitch = {
                 val fromBar = dialog == PlayerDialog.BACKUPS

@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.livetv.data.CatchupUrlBuilder
 import com.nuvio.tv.livetv.data.GuideSchedulePageState
 import com.nuvio.tv.livetv.data.guideBrowsePublicationId
+import com.nuvio.tv.livetv.data.retainGuideTargetOwnership
 import com.nuvio.tv.livetv.model.ChannelGroup
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
@@ -198,6 +199,20 @@ private fun OverlayModeContent(
     var futurePrompt by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
     // Holding OK on a channel or a show: Record / Record series, as in the guide.
     var recordMenu by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
+    val targetOwners = remember { GuideTargetRegistry<Pair<LiveChannel, EpgProgram>>() }
+    androidx.compose.runtime.SideEffect { targetOwners.commit(listOf(futurePrompt, recordMenu)) }
+    androidx.compose.runtime.DisposableEffect(targetOwners) { onDispose { targetOwners.close() } }
+    fun ownTarget(target: Pair<LiveChannel, EpgProgram>): Pair<LiveChannel, EpgProgram>? {
+        if (targetOwners.capture(target, listOf(futurePrompt, recordMenu), target.second.isDisplayProjection) {
+                programs.retainGuideTargetOwnership()
+            }) return target
+        com.nuvio.tv.livetv.record.LiveTvNotice.show("Programme details are unavailable. Please try again.")
+        return null
+    }
+    fun forkTarget(target: Pair<LiveChannel, EpgProgram>): com.nuvio.tv.livetv.data.GuideTargetOwnership? =
+        targetOwners.fork(target).also {
+            if (it == null) com.nuvio.tv.livetv.record.LiveTvNotice.show("Programme details are unavailable. Please try again.")
+        }
     val recordingsList by viewModel.recordings.collectAsStateWithLifecycle()
     val schedulesList by viewModel.schedules.collectAsStateWithLifecycle()
     val seriesList by viewModel.seriesRules.collectAsStateWithLifecycle()
@@ -394,9 +409,12 @@ private fun OverlayModeContent(
         when {
             now >= p.startMs && now < p.stopMs -> { viewModel.preview(ch); onClose() }
             p.stopMs <= now && CatchupUrlBuilder.isAvailable(ch.catchup, p.startMs, now) -> {
-                if (viewModel.playCatchup(ch, p)) onClose()
+                val ownership = programs.retainGuideTargetOwnership()
+                if (p.isDisplayProjection && ownership == null)
+                    com.nuvio.tv.livetv.record.LiveTvNotice.show("Programme details are unavailable. Please try again.")
+                else if (viewModel.playCatchup(ch, p, ownership = ownership)) onClose()
             }
-            p.startMs > now -> futurePrompt = ch to p
+            p.startMs > now -> futurePrompt = ownTarget(ch to p)
             else -> Unit // already over, and this channel has no catch-up
         }
     }
@@ -454,7 +472,7 @@ private fun OverlayModeContent(
             }
             else -> null
         } ?: return
-        recordMenu = target
+        recordMenu = ownTarget(target)
     }
     /** OK is acted on when released, so holding it can open the record menu instead. */
     fun armOk() {
@@ -627,9 +645,10 @@ private fun OverlayModeContent(
         }
     }
 
-    futurePrompt?.let { (ch, p) ->
+    futurePrompt?.let { target ->
+        val (ch, p) = target
         val first = remember { FocusRequester() }
-        val bell = com.nuvio.tv.livetv.calendar.rememberLiveBell(p, ch)
+        val bell = com.nuvio.tv.livetv.calendar.rememberLiveBell(p, ch) { forkTarget(target) }
         LiveDialog(onDismiss = { futurePrompt = null; activity++ }, width = 460.dp) {
             LiveText(p.title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
             LiveText(
@@ -645,7 +664,7 @@ private fun OverlayModeContent(
                 MenuItem(
                     if (user.reminders.any { it.channelKey == ch.key && it.startMs == p.startMs }) "Cancel reminder" else "Remind me"
                 ) {
-                    viewModel.toggleReminder(ch, p)
+                    forkTarget(target)?.let { viewModel.toggleReminder(ch, p, it) }
                     futurePrompt = null
                     activity++
                 }
@@ -667,7 +686,8 @@ private fun OverlayModeContent(
     LaunchedEffect(futurePrompt) {
         if (futurePrompt == null) { delay(60); runCatching { focus.requestFocus() } }
     }
-    recordMenu?.let { (ch, p) ->
+    recordMenu?.let { target ->
+        val (ch, p) = target
         val first = remember { FocusRequester() }
         val onNow = now >= p.startMs && now < p.stopMs
         val recordingNow = recordingsList.any { it.channelKey == ch.key && it.isRecording }
@@ -690,13 +710,16 @@ private fun OverlayModeContent(
             Spacer(Modifier.height(14.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (recordLabel != null) MenuItem(recordLabel, Modifier.focusRequester(first)) {
-                    val msg = if (onNow && recordingNow) viewModel.toggleRecording(ch) else viewModel.toggleScheduled(ch, p)
-                    com.nuvio.tv.livetv.record.LiveTvNotice.show(msg)
+                    forkTarget(target)?.let { ownership ->
+                        val msg = if (onNow && recordingNow) withGuideOwnership(ownership) { viewModel.toggleRecording(ch) }
+                            else viewModel.toggleScheduled(ch, p, ownership)
+                        com.nuvio.tv.livetv.record.LiveTvNotice.show(msg)
+                    }
                     recordMenu = null
                     activity++
                 }
                 if (seriesLabel != null) MenuItem(seriesLabel, if (recordLabel == null) Modifier.focusRequester(first) else Modifier) {
-                    com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.toggleSeries(ch, p))
+                    forkTarget(target)?.let { com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.toggleSeries(ch, p, it)) }
                     recordMenu = null
                     activity++
                 }

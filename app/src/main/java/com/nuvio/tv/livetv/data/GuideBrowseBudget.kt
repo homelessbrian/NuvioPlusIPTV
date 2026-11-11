@@ -87,8 +87,19 @@ internal class GuideBrowseBudget(
             retainOwnership()
         }
 
+        /** Optional user actions may decline at the prepaid handle ceiling without mutation. */
+        internal fun tryRetain(): Lease? = synchronized(lock) {
+            if (!open || ownership.references >= OPTIONAL_HANDLE_LIMIT) return@synchronized null
+            retainOwnership()
+        }
+
         /** A publication factory remains usable while any mounted consumer owns this group. */
         internal fun retainPublication(): Lease? = synchronized(lock) { retainOwnership() }
+
+        internal fun tryRetainPublication(): Lease? = synchronized(lock) {
+            if (ownership.references >= OPTIONAL_HANDLE_LIMIT) return@synchronized null
+            retainOwnership()
+        }
 
         internal fun markPublication() = synchronized(lock) {
             if (!ownership.publication && ownership.references > 0) {
@@ -195,6 +206,9 @@ internal class GuideBrowseBudget(
         const val PAGE_RESERVATION_BYTES = PAGE_BYTES + DECODE_HEADROOM_BYTES
         /** Includes the original owner: at most 63 additional live consumer handles. */
         const val MAX_HANDLES_PER_OWNERSHIP = 64
+        // Optional modal/action forks cannot consume the frame/flow consumers' prepaid slots.
+        const val MANDATORY_HANDLE_HEADROOM = 16
+        const val OPTIONAL_HANDLE_LIMIT = MAX_HANDLES_PER_OWNERSHIP - MANDATORY_HANDLE_HEADROOM
         const val HANDLE_POOL_BYTES = MAX_HANDLES_PER_OWNERSHIP * 64L
 
         internal fun programWeight(program: EpgProgram): Long = guideBrowseProgramWeight(program) + 64L

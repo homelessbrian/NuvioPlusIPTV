@@ -276,14 +276,14 @@ class LiveTvViewModel @Inject constructor(
     // ------------------------------------------------------------ reminders
 
     /** Sets or cancels "Remind me" for an upcoming show. */
-    fun toggleReminder(channel: LiveChannel, program: EpgProgram) = viewModelScope.launch {
+    fun toggleReminder(channel: LiveChannel, program: EpgProgram, ownership: AutoCloseable? = null) = viewModelScope.launch {
         val exists = userState.value.reminders.any { it.channelKey == channel.key && it.startMs == program.startMs }
         if (exists) prefs.removeReminder(channel.key, program.startMs)
         else {
             val full = canonicalActionProgram(channel.key, program) ?: return@launch
             prefs.addReminder(com.nuvio.tv.livetv.model.Reminder(channel.key, channel.name, full.title, full.startMs))
         }
-    }
+    }.releaseGuideOwnershipOnCompletion(ownership)
 
     // ------------------------------------------------------------ parental controls
 
@@ -634,10 +634,11 @@ class LiveTvViewModel @Inject constructor(
     }
 
     /** Plays [program] from the archive, starting [offsetMs] into it. */
-    fun playCatchup(channel: LiveChannel, program: EpgProgram, offsetMs: Long = 0L): Boolean {
-        val catchup = channel.catchup ?: return false
+    fun playCatchup(channel: LiveChannel, program: EpgProgram, offsetMs: Long = 0L,
+                    ownership: AutoCloseable? = null): Boolean {
+        val catchup = channel.catchup ?: return withGuideOwnership(ownership) { false }
         val now = System.currentTimeMillis()
-        if (!CatchupUrlBuilder.isAvailable(catchup, program.startMs, now)) return false
+        if (!CatchupUrlBuilder.isAvailable(catchup, program.startMs, now)) return withGuideOwnership(ownership) { false }
         val request = ++catchupRequest
         catchupStartJob?.cancel()
         if (program.isDisplayProjection) {
@@ -645,10 +646,10 @@ class LiveTvViewModel @Inject constructor(
                 val full = canonicalActionProgram(channel.key, program) ?: return@launch
                 if (request != catchupRequest) return@launch
                 playCatchupResolved(channel, catchup, full, offsetMs, request)
-            }
+            }.releaseGuideOwnershipOnCompletion(ownership)
             return true
         }
-        return playCatchupResolved(channel, catchup, program, offsetMs, request)
+        return withGuideOwnership(ownership) { playCatchupResolved(channel, catchup, program, offsetMs, request) }
     }
 
     private fun playCatchupResolved(
@@ -1244,12 +1245,13 @@ class LiveTvViewModel @Inject constructor(
         channel: LiveChannel,
         program: EpgProgram,
         preparingMessage: String,
+        ownership: AutoCloseable? = null,
         action: (EpgProgram) -> String
     ): String {
         viewModelScope.launch {
             val full = canonicalActionProgram(channel.key, program) ?: return@launch
             com.nuvio.tv.livetv.record.LiveTvNotice.show(action(full))
-        }
+        }.releaseGuideOwnershipOnCompletion(ownership)
         return preparingMessage
     }
 
@@ -1465,33 +1467,36 @@ class LiveTvViewModel @Inject constructor(
     val seriesRules = scheduler.series
 
     /** Record a show from the guide (or cancel it if it's already set). Returns a message. */
-    fun toggleScheduled(channel: LiveChannel, program: EpgProgram): String {
-        if (scheduler.isScheduled(channel.key, program)) {
+    fun toggleScheduled(channel: LiveChannel, program: EpgProgram, ownership: AutoCloseable? = null): String {
+        if (scheduler.isScheduled(channel.key, program)) return withGuideOwnership(ownership) {
             scheduler.cancel(channel.key, program.startMs)
-            return "Recording cancelled"
+            "Recording cancelled"
         }
-        if (program.isDisplayProjection) return canonicalAction(channel, program, "Preparing recording…") {
+        if (program.isDisplayProjection) return canonicalAction(channel, program, "Preparing recording…", ownership) {
             toggleScheduled(channel, it)
         }
         // On now, on a channel without catch-up: record it now (sharing the connection if you're
         // watching it). With catch-up, the whole show is saved from catch-up after it ends.
-        val now = System.currentTimeMillis()
-        if (channel.catchup == null && now >= program.startMs && now < program.stopMs && recorder.activeFor(channel.key) == null) {
-            return toggleRecording(channel)
+        return withGuideOwnership(ownership) {
+            val now = System.currentTimeMillis()
+            if (channel.catchup == null && now >= program.startMs && now < program.stopMs && recorder.activeFor(channel.key) == null) {
+                toggleRecording(channel)
+            } else scheduler.add(channel, program)
         }
-        return scheduler.add(channel, program)
     }
 
     /** Record every airing of this show on this channel (or stop that). Returns a message. */
-    fun toggleSeries(channel: LiveChannel, program: EpgProgram): String {
-        if (program.isDisplayProjection) return canonicalAction(channel, program, "Preparing series recording…") {
+    fun toggleSeries(channel: LiveChannel, program: EpgProgram, ownership: AutoCloseable? = null): String {
+        if (program.isDisplayProjection) return canonicalAction(channel, program, "Preparing series recording…", ownership) {
             toggleSeries(channel, it)
         }
-        scheduler.seriesFor(channel.key, titleMarks(program.title).title)?.let {
-            scheduler.removeSeries(it.id)
-            return "Stopped recording \"${it.title}\""
+        return withGuideOwnership(ownership) {
+            val series = scheduler.seriesFor(channel.key, titleMarks(program.title).title)
+            if (series != null) {
+                scheduler.removeSeries(series.id)
+                "Stopped recording \"${series.title}\""
+            } else scheduler.addSeries(channel, program)
         }
-        return scheduler.addSeries(channel, program)
     }
 
     fun isSeries(channel: LiveChannel, program: EpgProgram): Boolean {

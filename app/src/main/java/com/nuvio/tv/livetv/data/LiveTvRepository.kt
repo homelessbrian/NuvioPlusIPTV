@@ -1286,6 +1286,7 @@ class LiveTvRepository @Inject constructor(
             val current = if (shown.containsKey(key)) shown[key].orEmpty() else base.snapshot[key].orEmpty()
             shown[key] = mergeGuideSchedules(list, current)
         }
+        reusePublishedGuideProgramIdentities(_programs.value, shown)
         val snapshot = GuideMapSnapshot(base, shown)
         if (_programs.value == snapshot) { publicationGate.unchanged(); return true }
         val lease = windowCache.snapshotLease(shown) ?: return false

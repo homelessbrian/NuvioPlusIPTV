@@ -19,6 +19,10 @@ internal class GuideBrowsePublication(
 ) : Map<String, List<EpgProgram>> by snapshot, AutoCloseable {
     init { lease.markPublication() }
     fun retain(): GuideBrowseBudget.Lease? = lease.retainPublication()
+    fun retainTargetOwnership(): GuideTargetOwnership? = lease.tryRetainPublication()?.let {
+        // Pass the original callback value, not a method reference bound to this map.
+        DetachedGuideTargetOwnership(it, onConsumerReleased)
+    }
     fun notifyConsumerReleased() = onConsumerReleased()
     override fun close() = lease.close()
     override fun equals(other: Any?): Boolean =
@@ -26,6 +30,25 @@ internal class GuideBrowsePublication(
     override fun hashCode(): Int = snapshot.hashCode()
     override fun toString(): String = snapshot.toString()
 }
+
+private class DetachedGuideTargetOwnership(
+    private val lease: GuideBrowseBudget.Lease,
+    private val released: () -> Unit
+) : GuideTargetOwnership {
+    private var open = true
+    @Synchronized override fun retain(): GuideTargetOwnership? =
+        if (open) lease.tryRetain()?.let { DetachedGuideTargetOwnership(it, released) } else null
+
+    override fun close() {
+        val release = synchronized(this) {
+            if (!open) false else { open = false; true }
+        }
+        if (release) { lease.close(); released() }
+    }
+}
+
+internal fun Map<String, List<EpgProgram>>.retainGuideTargetOwnership(): GuideTargetOwnership? =
+    (underlyingBrowsePublication() as? GuideBrowsePublication)?.retainTargetOwnership()
 
 internal fun Map<String, List<EpgProgram>>.retainGuideBrowsePublication(): GuideBrowseBudget.Lease? {
     return (underlyingBrowsePublication() as? GuideBrowsePublication)?.retain()
