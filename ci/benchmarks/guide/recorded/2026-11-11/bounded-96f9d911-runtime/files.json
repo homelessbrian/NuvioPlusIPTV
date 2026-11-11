@@ -1,0 +1,35 @@
+{
+  "self_included": false,
+  "files": [
+    {
+      "file": ".gitattributes",
+      "bytes": 75,
+      "sha256": "be252e768175392982110f29f035580777890e002c4f9229f53c39a1b2da1567"
+    },
+    {
+      "file": "baseline-search650.png",
+      "bytes": 135607,
+      "sha256": "60818c41d2e3c3ec5a04e07df004f0e015fb3d024d935e39b9c46673891141c4"
+    },
+    {
+      "file": "candidate-guide-next-day.png",
+      "bytes": 466867,
+      "sha256": "c6785d480da844c4fadfb92a7f404184fddb459a35cc312c54a0fb91ae7e8f9f"
+    },
+    {
+      "file": "candidate-search650.png",
+      "bytes": 135714,
+      "sha256": "853b33c96e12862c94e7cce375f99cad34fad4fe809daa820ff9b58b3076c436"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2816,
+      "sha256": "c93f1e584ddda134755923bc9b4faf0f6efe051665e77851223a28096f2b8674"
+    },
+    {
+      "file": "runtime-smoke.json",
+      "bytes": 8207,
+      "sha256": "3c1677b87fc419397dcb04906299e0e18cbef039d1f4d597f2bc4caeaac3bb4c"
+    }
+  ]
+}

@@ -1,0 +1,139 @@
+{
+  "kind": "targeted-synthetic-ui-runtime-after-frozen-ram-study",
+  "runtime_source_targets_sha256": "33107f880bf1e88dd563e101f4434894fde42f3fd08fa5dc73a3b61b945bd4d1",
+  "private_runtime_receipts_sha256": "fef07c32581770f537fee2fb8f531181893cb8ad9365804c997a4bb5a6756934",
+  "private_final_handoff_sha256": "223e57268cb4b587bff43fee57dabb5b06dd08485dab81021aa714be1d9f378a",
+  "query_target": {
+    "frozen_utc": "2026-11-11T13:32:42.039312+00:00",
+    "common_archive_sha256": "3cee0906b2a7bcf71fb45b65a215aba5a1f1d726d23b189f444501595eb0a880",
+    "fixture_manifest_sha256": "9be793b3511fef89ea1a2bac53f47bc4d6fbc5df9ad2946666fd4e87d26caedd",
+    "channel_number": 650,
+    "epg_id": "fixture.v2.00649",
+    "query": "Team 9 vs Team 20",
+    "actual_programme_title": "Team 9 vs Team 20 (1999)",
+    "event_start_epoch": 1794420000,
+    "event_start_utc": "2026-11-11T18:00:00+00:00",
+    "event_stop_utc": "2026-11-11T20:00:00+00:00",
+    "future_seconds_at_freeze": 16038.030478954315,
+    "focus_hold_seconds": 35,
+    "search_result_right_steps": 20,
+    "expected_first_matching_channel": 10,
+    "expected_channel_after20Right": 650,
+    "sports_max_wait_seconds": 180
+  },
+  "roles": {
+    "baseline": {
+      "artifact_source": "4636df605eb111897bfbb91913300188719399e0",
+      "apk_sha256": "631bf8e80f43ad7c21c64652f4ac68eb0dd55d6d50938382e5848cd98096d19a",
+      "same_full_common_plain_cold_launch": true,
+      "actual_frozen_query_verified": true,
+      "unvisited650_search_result_visible_and_focused_after_exact20Right": true,
+      "focus_retained": true,
+      "actual_focus_hold_seconds": 37.8931607,
+      "sports_busy_initial_then_idle_within180s": true,
+      "sports_idle_observed_by_seconds": 52.1620007,
+      "sports_is_sampled_ui_readiness_not_exact_duration": true,
+      "external_backend_failure_totals": null,
+      "external_backend_failure_totals_known": false,
+      "first_home_hierarchy_acquisition_failed_and_same_launch_recovered": true,
+      "raw_invalid_dump_preserved_sha256": "8b680fcd47a0c3bd05fdd1712b1beb887040e3e74d55ebf8aaa60822c0663d41",
+      "media_activated_by_actions": false,
+      "ram_sampling": false,
+      "evidence_sha256s": {
+        "artifact.json": "b48e0540d71dbaef4c6c35590cc3b758a9cdc4de10930059bda3baee5dfeda6e",
+        "plain-launch.json": "1bd831d1b314217cb9bc0adb8548ca17ca27dc7cf05ab660c2b40d3a1bcc8e2d",
+        "exact-frozen-query-results.observation.json": "384b6b6ff2f8e286e6e088111e2dee02d27dd8ef204e0e185a9d57c9dce48ea3",
+        "focus-retention.json": "0905784ae2378a5fdf2e5f8e535c8c29b7a11c53d3db63847112a6e2c6ad18e6",
+        "search-channel650.observation.json": "066a7b4354b6a3d8f17ce092fe4fd0431f0ab4189d0f50456a5b1db8e51e33ac",
+        "search-channel650.png": "60818c41d2e3c3ec5a04e07df004f0e015fb3d024d935e39b9c46673891141c4",
+        "sports-runtime.json": "87e7e2b741ab6018bc4b33aef6b251ee695d9bbaed34b145b9a49b3268816ca8",
+        "runtime-prepare-failure.json": "3ce492b922e3095859530f121815eb016e2d69ab3bc90619318fb90f57351699"
+      }
+    },
+    "candidate": {
+      "artifact_source": "96f9d91114394e7a709985e818b3bb6d866b6630",
+      "apk_sha256": "0271fb71947e628b162710f58b30219ee61c13d17042306477dfcacb31005c44",
+      "same_full_common_plain_cold_launch": true,
+      "actual_frozen_query_verified": true,
+      "unvisited650_search_result_visible_and_focused_after_exact20Right": true,
+      "focus_retained": true,
+      "actual_focus_hold_seconds": 38.1304013,
+      "sports_busy_initial_then_idle_within180s": true,
+      "sports_idle_observed_by_seconds": 51.8918207,
+      "sports_is_sampled_ui_readiness_not_exact_duration": true,
+      "external_backend_failure_totals": null,
+      "external_backend_failure_totals_known": false,
+      "first_home_hierarchy_acquisition_failed_and_same_launch_recovered": true,
+      "raw_invalid_dump_preserved_sha256": "54c03ae423737134be60ce85b6df87e9d9482fa368c0f5a9311d0c18ed6d2870",
+      "media_activated_by_actions": false,
+      "ram_sampling": false,
+      "evidence_sha256s": {
+        "artifact.json": "b1ebb44f8ba6e002d45d70f73dec6902ae7c9afeff82b2f2712d07f4b5d49e1b",
+        "plain-launch.json": "8542092d442efb79f6bb0c5e1f7cf22cd1b1540ac426b8ff2bc7d544d719632c",
+        "exact-frozen-query-results.observation.json": "15d0db44edc6aa9c61071e65a992ee5d8f049f2580cde0118f7a9ff176312708",
+        "focus-retention.json": "6cce7e324cd3a759f84aa11811cfddd3a77ec9b44d6f7e58d510d6859d1d2c59",
+        "search-channel650.observation.json": "f5a909362420d7076bad6fd717e513bb1d18950e566b5a7660d31331569f77f4",
+        "search-channel650.png": "853b33c96e12862c94e7cce375f99cad34fad4fe809daa820ff9b58b3076c436",
+        "sports-runtime.json": "06820ff261033c7314ebcf53a46eab0f14bcd0d9e581957e30f4ca0fd733956f",
+        "runtime-prepare-failure.json": "bfca6974366d57e404df2efa816ac28a8d864605e0cb8f96264fee705b3cf14d"
+      }
+    }
+  },
+  "candidate_guide": {
+    "sixRight_advanced_firstchannel_selection_from7AM_to7PM": true,
+    "up_wrapped_to4000_retaining7PM_future_details": true,
+    "fourMoreRight_crossed_toTomorrow_Thu3to5AM_Round18_details": true,
+    "dedicated_datepicker_exercised": false,
+    "actual_test": "Horizontal day-boundary continuation; Today ruler text was not a clickable datepicker",
+    "player_schedule_overlay_exercised": false,
+    "player_overlay_limit": "Not reached because it requires media activation",
+    "screenshot_sha256": "c6785d480da844c4fadfb92a7f404184fddb459a35cc312c54a0fb91ae7e8f9f"
+  },
+  "observation_issues_preserved": {
+    "both_roles_first_home_dump_not_created_then_same_launch_fresh_observation_succeeded": true,
+    "baseline_first_bulk_injection_omitted_digit9_then_exact_same_query_verified_after_input_correction": true,
+    "precondition_focus_guards_prevented_typing_or_card_traversal_before_screen_edit_focus_ready": true,
+    "no_cold_launch_or_ram_trial_rerun": true,
+    "no_established_app_or_Search_failure_from_these_acquisition_input_or_navigation_preconditions": true,
+    "candidate_empty_group_route_Back_reopened_groups_and_Allchannels_restored": true,
+    "empty_group_Left_focus_not_changed_in_saved_observation_baseline_state_not_compared": true
+  },
+  "sports_initial_hub_counts": {
+    "baseline": {
+      "games": 172,
+      "leagues": 51
+    },
+    "candidate": {
+      "games": 169,
+      "leagues": 46
+    }
+  },
+  "external_sports_results_identical": false,
+  "screenshots_visually_reviewed_and_copied_without_edits": true,
+  "screenshot_sha256s": {
+    "baseline-search650.png": "60818c41d2e3c3ec5a04e07df004f0e015fb3d024d935e39b9c46673891141c4",
+    "candidate-search650.png": "853b33c96e12862c94e7cce375f99cad34fad4fe809daa820ff9b58b3076c436",
+    "candidate-guide-next-day.png": "c6785d480da844c4fadfb92a7f404184fddb459a35cc312c54a0fb91ae7e8f9f"
+  },
+  "restored_final_state": {
+    "original_app_inventory_exactly_restored": true,
+    "files": 643,
+    "directories": 19,
+    "source_commit": "96f9d91114394e7a709985e818b3bb6d866b6630",
+    "installed_apk_sha256": "0271fb71947e628b162710f58b30219ee61c13d17042306477dfcacb31005c44",
+    "enabled_stopped": true,
+    "activity_started_after_restore": false,
+    "owned_cleanup_complete": true,
+    "other_reverse_mappings_unchanged": true,
+    "device_lease_released": true
+  },
+  "limits": [
+    "Not a latency or RAM benchmark; all timed sampling and both full proofs were already frozen",
+    "Synthetic Search650 and Guide4000 checks do not prove every Search query or real-provider/Sports association",
+    "External Sports failure totals are unknown; sampled UI readiness times are not exact completion times or a speed comparison",
+    "Return from Search showed an empty group; opening groups and selecting All channels restored it. The exact baseline state was not compared, so regression attribution remains unknown",
+    "Day-boundary navigation was exercised; no separate datepicker was exposed. Player schedule overlay requires media and was not runtime-tested",
+    "Physical Android11 SHIELD, long-session playback and actual-phone acceptance remain unproven",
+    "Raw UI XML, logs, app archives, profiles and detailed recovery receipts remain private; only their selected hashes are included"
+  ]
+}
