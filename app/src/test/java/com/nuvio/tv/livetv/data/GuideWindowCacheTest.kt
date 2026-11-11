@@ -30,6 +30,79 @@ class GuideWindowCacheTest {
     private val hour = 3_600_000L
     private fun program(start: Long, stop: Long = start + hour) = EpgProgram(startMs = start, stopMs = stop, title = "Game $start")
 
+
+    @Test fun focusedCoveragePeekPreservesViewportCombinedIdentityAndOwnership() {
+        val budget = GuideBrowseBudget()
+        val cache = GuideWindowCache(budget = budget)
+        val tile = GuideWindowCache.Tile("one", 0)
+        cache.put(tile, listOf(program(0, 2 * hour)))
+        cache.put(GuideWindowCache.Tile("one", 4 * hour), listOf(program(4 * hour)))
+        val before = cache.programs(setOf("one"), 0, 6 * hour).getValue("one")
+        val ownership = budget.stats()
+        repeat(20) { assertTrue(cache.isFocusKnown(tile, hour)) }
+        assertEquals(ownership, budget.stats())
+        assertSame(before, cache.programs(setOf("one"), 0, 6 * hour).getValue("one"))
+    }
+
+    @Test fun combinedEarlyHitInvalidatesOnReplacementEvictionRemovalAndClear() {
+        val cache = GuideWindowCache(capacity = 1)
+        val tile = GuideWindowCache.Tile("one", 0)
+        cache.put(tile, listOf(program(0)))
+        val before = cache.programs(setOf("one"), 0, 6 * hour).getValue("one")
+        assertSame(before, cache.programs(setOf("one"), 0, 6 * hour).getValue("one"))
+        cache.put(tile, listOf(program(2 * hour)))
+        assertTrue(cache.isFocusKnown(tile, hour / 2)) // Complete known gap stays known.
+        val replaced = cache.programs(setOf("one"), 0, 6 * hour).getValue("one")
+        assertNotSame(before, replaced)
+        assertEquals(listOf(2 * hour), replaced.map { it.startMs })
+        cache.put(GuideWindowCache.Tile("other", 0), listOf(program(0)))
+        assertFalse(cache.isFocusKnown(tile, 2 * hour))
+        assertTrue(cache.programs(setOf("one"), 0, 6 * hour).isEmpty())
+        cache.put(tile, listOf(program(0)))
+        cache.programs(setOf("one"), 0, 6 * hour)
+        cache.removeChannels(setOf("one"))
+        assertFalse(cache.isFocusKnown(tile, 0))
+        assertTrue(cache.programs(setOf("one"), 0, 6 * hour).isEmpty())
+        cache.put(tile, listOf(program(0)))
+        cache.programs(setOf("one"), 0, 6 * hour)
+        cache.clear()
+        assertFalse(cache.isFocusKnown(tile, 0))
+        assertTrue(cache.programs(setOf("one"), 0, 6 * hour).isEmpty())
+    }
+
+    @Test fun changedTimeBoundsCannotReuseACombinedResultFromAnotherWindow() {
+        val cache = GuideWindowCache()
+        cache.put(GuideWindowCache.Tile("one", 0), listOf(program(0)))
+        cache.put(GuideWindowCache.Tile("one", 4 * hour), listOf(program(4 * hour)))
+        val broad = cache.programs(setOf("one"), 0, 6 * hour).getValue("one")
+        val later = cache.programs(setOf("one"), 4 * hour, 6 * hour).getValue("one")
+        assertNotSame(broad, later)
+        assertEquals(listOf(4 * hour), later.map { it.startMs })
+    }
+
+    @Test fun focusPeekKeepsIncompleteGapAndFirstStartWinnerSemantics() {
+        val cache = GuideWindowCache()
+        val tile = GuideWindowCache.Tile("one", 0)
+        val cursor = GuideBrowseCursor(1, 0, 1, 3 * hour, 3)
+        // The longer duplicate is intentionally non-adjacent, as a legacy reader may supply.
+        val rows = listOf(program(0, hour / 2), program(3 * hour), program(0, 2 * hour))
+        assertTrue(cache.putPage(tile, GuideBrowsePage(mapOf("one" to rows), cursor, rows.size, 4096),
+            cache.reservePage(tile)!!))
+        assertTrue(cache.isFocusKnown(tile, hour / 4))
+        assertFalse(cache.isFocusKnown(tile, hour)) // The first start winner does not cover this gap.
+        assertFalse(cache.isFocusKnown(tile, 2 * hour))
+        assertTrue(cache.isFocusKnown(tile, 3 * hour))
+        cache.clear()
+        val later = listOf(program(hour, 2 * hour))
+        assertTrue(cache.putPage(tile, GuideBrowsePage(mapOf("one" to later), cursor, 1, 4096),
+            cache.reservePage(tile)!!))
+        assertTrue(cache.isFocusKnown(tile, hour / 2)) // A known gap before the first decoded row.
+        assertFalse(cache.isFocusKnown(tile, 3 * hour)) // Continuation remains unknown.
+        cache.clear()
+        cache.put(tile, emptyList())
+        assertTrue(cache.isFocusKnown(tile, hour))
+    }
+
     @Test fun coverageBelongsToEachChannelAndTimeTile() {
         val cache = GuideWindowCache()
         val first = cache.missing(listOf("one"), 0, hour).single()

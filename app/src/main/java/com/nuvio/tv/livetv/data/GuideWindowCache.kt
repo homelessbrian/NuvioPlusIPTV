@@ -88,6 +88,30 @@ internal class GuideWindowCache(
 
     fun pageInfo(tile: Tile): PageInfo? = tiles[tile]?.info
 
+
+    /** Focus knowledge without rebuilding or replacing a Combined viewport list. */
+    fun isFocusKnown(tile: Tile, atMs: Long): Boolean {
+        val entry = tiles[tile] ?: return false
+        val rows = entry.programs
+        for (index in rows.indices) {
+            val program = rows[index]
+            if (program.startMs >= tile.endMs || program.stopMs <= tile.startMs ||
+                atMs < program.startMs || atMs >= program.stopMs) continue
+            // Match programs(tile bounds)'s first-start winner, including legacy input order.
+            // Only a covering candidate needs this bounded, allocation-free duplicate check.
+            var shadowed = false
+            for (earlierIndex in 0 until index) {
+                val earlier = rows[earlierIndex]
+                if (earlier.startMs == program.startMs && earlier.startMs < tile.endMs &&
+                    earlier.stopMs > tile.startMs) { shadowed = true; break }
+            }
+            if (!shadowed) return true
+        }
+        val info = entry.info
+        return atMs >= info.fromMs && atMs < info.toMs &&
+            (info.complete || (info.firstStartMs?.let { atMs < it } == true))
+    }
+
     private fun admit(tile: Tile, programs: List<EpgProgram>, lease: GuideBrowseBudget.Lease,
                       info: PageInfo): Boolean {
         val payloadLimit = (maxBytes - COMBINED_HEADROOM_BYTES).coerceAtLeast(maxBytes / 2)
@@ -141,14 +165,14 @@ internal class GuideWindowCache(
         val channels = keys ?: tiles.keys.mapTo(LinkedHashSet()) { it.channel }
         val shown = LinkedHashMap<String, List<EpgProgram>>()
         for (channel in channels) {
-            val entries = tiles.entries.filter { it.key.channel == channel &&
-                it.key.startMs < toMs && it.key.endMs > fromMs }
-            if (entries.isEmpty()) continue
             val prior = combined[channel]
             if (prior != null && prior.fromMs == fromMs && prior.toMs == toMs) {
                 shown[channel] = prior.programs
                 continue
             }
+            val entries = tiles.entries.filter { it.key.channel == channel &&
+                it.key.startMs < toMs && it.key.endMs > fromMs }
+            if (entries.isEmpty()) continue
             val list = entries.flatMap { it.value.programs }.asSequence()
                 .filter { it.startMs < toMs && it.stopMs > fromMs }
                 .distinctBy { it.startMs }.sortedBy { it.startMs }.toList()

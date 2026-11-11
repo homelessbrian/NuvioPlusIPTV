@@ -22,16 +22,42 @@ internal class GuideWindowLoader(
     private val currentVersion: () -> GuideReadVersion?,
     private val read: (suspend (Long, Long, List<String>) -> Map<String, List<EpgProgram>>)? = null,
     private val onPublished: () -> Unit,
-    private val readPage: GuideBrowsePageReader? = null
+    private val readPage: GuideBrowsePageReader? = null,
+    private val onDeferred: () -> Unit = {}
 ) {
     suspend fun load(keys: List<String>, fromMs: Long, toMs: Long,
                      cancellation: GuideReadCancellation = GuideReadCancellation()) {
         if (readPage != null) {
+            val version = currentVersion() ?: return
             val missing = mutex.withLock { cache.setDemand(keys); cache.missing(keys, fromMs, toMs) }
-            for (tile in missing) {
+            var unpublished = 0
+            suspend fun publishProgress(deferred: Boolean = false) {
+                if (unpublished == 0 && !deferred) return
+                currentCoroutineContext().ensureActive()
                 cancellation.throwIfCancelled()
-                loadPage(tile, cancellation = cancellation)
+                mutex.withLock {
+                    currentCoroutineContext().ensureActive()
+                    cancellation.throwIfCancelled()
+                    if (currentVersion() == version) {
+                        if (deferred) onDeferred()
+                        if (unpublished > 0) onPublished()
+                    }
+                }
+                unpublished = 0
             }
+            for (tile in missing) {
+                currentCoroutineContext().ensureActive()
+                cancellation.throwIfCancelled()
+                if (!loadPage(tile, cancellation = cancellation, notifyPublication = false,
+                        expectedVersion = version)) {
+                    // Mark demand before notifying: consumer release may otherwise outrun it.
+                    publishProgress(deferred = true)
+                    return
+                }
+                unpublished++
+                if (unpublished == PUBLICATION_BATCH_TILES) publishProgress()
+            }
+            publishProgress()
             return
         }
         // Compatibility for old in-memory readers. Repository production reads use readPage.
@@ -56,10 +82,13 @@ internal class GuideWindowLoader(
     suspend fun loadPage(
         tile: GuideWindowCache.Tile, fromMs: Long = tile.startMs, toMs: Long = tile.endMs,
         after: GuideBrowseCursor? = null, backwards: Boolean = false,
-        cancellation: GuideReadCancellation = GuideReadCancellation()
+        cancellation: GuideReadCancellation = GuideReadCancellation(),
+        notifyPublication: Boolean = true,
+        expectedVersion: GuideReadVersion? = null
     ): Boolean {
         val reader = checkNotNull(readPage) { "A bounded guide page reader is required" }
         val version = currentVersion() ?: return false
+        if (expectedVersion != null && version != expectedVersion) return false
         currentCoroutineContext().ensureActive()
         cancellation.throwIfCancelled()
         val reservation = mutex.withLock { cache.reservePage(tile) } ?: return false
@@ -73,11 +102,17 @@ internal class GuideWindowLoader(
             }
             return mutex.withLock {
                 if (currentVersion() != version || cancellation.isCancelled) return@withLock false
-                cache.putPage(tile, page, reservation, fromMs, toMs, backwards).also { if (it) onPublished() }
+                cache.putPage(tile, page, reservation, fromMs, toMs, backwards).also {
+                    if (it && notifyPublication) onPublished()
+                }
             }
         } finally {
             reservation.close()
         }
+    }
+
+    companion object {
+        const val PUBLICATION_BATCH_TILES = 32
     }
 
     /** Bring a time near the focused cell into the bounded page, without draining a tile. */

@@ -1073,7 +1073,8 @@ class LiveTvRepository @Inject constructor(
                 _committedGuideRevision.value?.let { GuideReadVersion(cacheEpoch.get(), guideDb.changes, it) }
             },
             readPage = ::readBrowsePage,
-            onPublished = ::scheduleWindowPublication)
+            onPublished = ::scheduleWindowPublication,
+            onDeferred = { browseDeferred.set(true) })
     }
     private var overview: Map<String, List<EpgProgram>> = emptyMap()
     private var publishedOverviewSource: Map<String, List<EpgProgram>>? = null
@@ -1388,10 +1389,7 @@ class LiveTvRepository @Inject constructor(
     private suspend fun acknowledgeFocusedPage(channel: String, at: Long, version: GuideReadVersion) = rangeMutex.withLock {
         if (currentBrowseVersion() != version || synchronized(browseDemandLock) { viewportFocus != (channel to at) }) return@withLock
         val tile = GuideWindowCache.Tile(channel, Math.floorDiv(at, GuideWindowCache.TILE_MS) * GuideWindowCache.TILE_MS)
-        val info = windowCache.pageInfo(tile)
-        val rows = windowCache.programs(setOf(channel), tile.startMs, tile.endMs)[channel].orEmpty()
-        val known = info != null && (rows.any { at >= it.startMs && at < it.stopMs } ||
-            (at >= info.fromMs && at < info.toMs && (info.complete || (info.firstStartMs?.let { at < it } == true))))
+        val known = windowCache.isFocusKnown(tile, at)
         if (known && publishWindows()) {
             val shift = prefs.currentSettings().epgOffsetMinutes * 60_000L
             _guideFocusPage.value = GuideFocusPageState(channel, at + shift, false, _programs.value.guideBrowsePublicationId())
