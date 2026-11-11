@@ -924,6 +924,8 @@ class LiveTvViewModel @Inject constructor(
     val epgListsLoading: StateFlow<Boolean> = repository.epgListsLoading
     /** Assign EPG opened: makes sure it has the guides' channel lists. */
     fun ensureEpgLists() = repository.ensureSourceLists()
+    /** Assign EPG and the logo picker both closed: the guides' channel lists aren't kept in memory. */
+    fun releaseEpgLists() = repository.releaseSourceLists()
 
     // ------------------------------------------------------------ home screen row
 
