@@ -1065,42 +1065,67 @@ private fun LeaguesBar(line: String, modifier: Modifier = Modifier, onClick: () 
 }
 
 /**
- * The leagues on All Events: OK turns one on or off. The ones on (and the ones you follow) are
- * listed first, then every other league; the order is fixed while the list is open so a league
+ * The leagues on All Events, grouped by sport (each group closed to begin with) with a search box
+ * on top. OK on a sport opens or closes it; OK on a league turns it on or off. Searching opens
+ * every sport that has a match. The order never changes while the list is open, so a league
  * doesn't jump away from the highlight when you press OK.
  */
 @Composable
 private fun LeaguesPicker(settings: SportsSettings, followed: Set<String>, onToggle: (League) -> Unit, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
-    val (onNow, others) = remember { SportsCatalog.ordered(settings).partition { SportsCatalog.shown(it, settings) || it.id in followed } }
+    val field = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var query by remember { mutableStateOf("") }
+    var open by remember { mutableStateOf(emptySet<Sport>()) }
+    val groups = remember {
+        val all = SportsCatalog.ordered(settings)
+        Sport.entries.mapNotNull { s -> all.filter { it.sport == s }.takeIf { it.isNotEmpty() }?.let { s to it } }
+    }
+    val q = query.trim().lowercase()
+    val searching = q.isNotEmpty()
+    val shown = if (!searching) groups else groups.mapNotNull { (s, list) ->
+        val hits = if (s.label.lowercase().contains(q)) list else list.filter { it.name.lowercase().contains(q) || it.short.lowercase().contains(q) }
+        if (hits.isEmpty()) null else s to hits
+    }
     SportsDialog(onDismiss = onDismiss, width = 620.dp) {
         LiveText("Leagues on All Events", size = 18.sp, weight = FontWeight.Bold)
-        LiveText("OK turns a league on or off. Leagues you follow always show.", color = SportsLook.Dim, size = 12.sp)
+        LiveText("OK turns a league on or off, and opens or closes a sport. Leagues you follow always show.", color = SportsLook.Dim, size = 12.sp)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.heightIn(max = 400.dp).keepFocusWhileHeld(horizontal = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            fun rows(list: List<League>, firstRow: Boolean) {
-                itemsIndexed(list, key = { _, l -> l.id }) { i, l ->
-                    val mine = l.id in followed
-                    val on = mine || SportsCatalog.shown(l, settings)
+        LiveTextField(
+            value = query, onValueChange = { query = it }, hint = "Search leagues", focusRequester = field,
+            onDone = { keyboard?.hide(); runCatching { first.requestFocus() } }
+        )
+        Spacer(Modifier.height(8.dp))
+        if (searching && shown.isEmpty()) LiveText("No leagues match that search.", color = SportsLook.Dim, size = 12.sp)
+        LazyColumn(Modifier.heightIn(max = 360.dp).keepFocusWhileHeld(horizontal = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            shown.forEachIndexed { gi, (sport, list) ->
+                val isOpen = searching || sport in open
+                item(key = "g_${sport.name}") {
+                    val total = groups.first { it.first == sport }.second
+                    val on = total.count { it.id in followed || SportsCatalog.shown(it, settings) }
                     SportsMenuRow(
-                        label = (if (on) "✓   " else "      ") + "${l.sport.icon}  ${l.name}",
-                        detail = when {
-                            mine -> "Following"
-                            l.guideOnly -> "From your guide"
-                            else -> l.sport.label
-                        },
-                        modifier = if (firstRow && i == 0) Modifier.focusRequester(first) else Modifier,
-                        onClick = { if (!mine) onToggle(l) }
+                        label = (if (isOpen) "▾   " else "▸   ") + "${sport.icon}  ${sport.label}",
+                        detail = if (searching) "${list.size} found" else "$on of ${total.size} on",
+                        modifier = if (gi == 0) Modifier.focusRequester(first) else Modifier,
+                        onClick = { if (!searching) open = if (sport in open) open - sport else open + sport }
                     )
                 }
-            }
-            if (onNow.isNotEmpty()) {
-                item(key = "h_on") { SectionHeader("ON ALL EVENTS", count = null) }
-                rows(onNow, firstRow = true)
-            }
-            if (others.isNotEmpty()) {
-                item(key = "h_more") { SectionHeader("MORE LEAGUES", count = null) }
-                rows(others, firstRow = onNow.isEmpty())
+                if (isOpen) {
+                    items(list, key = { it.id }) { l ->
+                        val mine = l.id in followed
+                        val on = mine || SportsCatalog.shown(l, settings)
+                        SportsMenuRow(
+                            label = (if (on) "✓   " else "      ") + l.name,
+                            detail = when {
+                                mine -> "Following"
+                                l.guideOnly -> "From your guide"
+                                else -> null
+                            },
+                            modifier = Modifier.padding(start = 22.dp),
+                            onClick = { if (!mine) onToggle(l) }
+                        )
+                    }
+                }
             }
         }
     }
