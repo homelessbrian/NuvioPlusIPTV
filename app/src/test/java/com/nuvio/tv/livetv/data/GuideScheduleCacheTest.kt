@@ -13,6 +13,26 @@ class GuideScheduleCacheTest {
     private val old = listOf(EpgProgram(0, 1000, "Old schedule"))
     private val fresh = listOf(EpgProgram(0, 1000, "Committed schedule"))
 
+    @Test fun requestBeforeFirstGuideLoadSurvivesUntilDiskBecomesReady() = runTest {
+        val cache = GuideScheduleCache()
+        val mutex = Mutex()
+        var version: GuideReadVersion? = null
+        var reads = 0
+        val loader = GuideScheduleLoader(cache, mutex, { version }, { reads++; fresh }, {})
+        loader.request("opened-before-guide-ready")
+        assertEquals(0, reads)
+        assertEquals(listOf("opened-before-guide-ready"), cache.pending().map { it.channel })
+
+        // The initial stored-guide publication reissues retained demand, just like a reload.
+        val demand = cache.requests().map { it.channel }
+        cache.clear()
+        demand.forEach { cache.request(it) }
+        version = GuideReadVersion(1, 1, 100)
+        cache.pending().forEach { loader.load(it) }
+        assertEquals(1, reads)
+        assertEquals(fresh, cache.programs()["opened-before-guide-ready"])
+    }
+
     @Test fun requestAddedDuringCommitRefreshRemainsPendingAndIsRefilled() = runTest {
         val cache = GuideScheduleCache()
         val mutex = Mutex()

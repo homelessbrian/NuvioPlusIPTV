@@ -1476,7 +1476,6 @@ class LiveTvRepository @Inject constructor(
     }
 
     fun ensureChannelSchedule(channelKey: String) {
-        if (!guideInDb) return
         scope.launch(BackgroundWork.reads) {
             try {
                 scheduleLoader.request(channelKey)
