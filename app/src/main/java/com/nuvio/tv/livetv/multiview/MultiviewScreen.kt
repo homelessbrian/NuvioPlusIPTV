@@ -2,7 +2,6 @@ package com.nuvio.tv.livetv.multiview
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -10,22 +9,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -39,7 +37,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -54,7 +51,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -62,17 +58,18 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
-import androidx.tv.material3.Icon
-import com.nuvio.tv.livetv.ui.GuideGlassEdge
+import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.sports.SportsBadge
+import com.nuvio.tv.livetv.sports.SportsLook
+import com.nuvio.tv.livetv.sports.sportsFrame
+import com.nuvio.tv.livetv.ui.ChannelLogo
 import com.nuvio.tv.livetv.ui.KeepScreenAwake
 import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.livetv.ui.LiveTextField
-import com.nuvio.tv.livetv.ui.focusedTextColor
-import com.nuvio.tv.livetv.ui.liveCellColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
@@ -105,6 +102,16 @@ fun MultiviewScreen(
     var editedPane by remember { mutableIntStateOf(0) }
     val paneFocus = remember { List(4) { FocusRequester() } }
     val editFocus = remember { FocusRequester() }
+    val panelBackground by viewModel.panelBackground.collectAsStateWithLifecycle()
+    val use24h by viewModel.use24HourClock.collectAsStateWithLifecycle()
+    // A minute clock for the panes' "on now" and progress (read from the stored guide, four channels at most).
+    val clock by produceState(System.currentTimeMillis()) {
+        while (true) { delay(30_000L); value = System.currentTimeMillis() }
+    }
+    val paneKeys = state.panes.mapNotNull { it.channelKey }
+    val paneShows by produceState(emptyMap<String, EpgProgram>(), paneKeys, clock / 60_000L) {
+        value = viewModel.nowOn(paneKeys)
+    }
 
     fun leaveChangedProfile() {
         session.release()
@@ -170,7 +177,7 @@ fun MultiviewScreen(
     }
 
     Box(
-        Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
+        Modifier.fillMaxSize().background(NuvioTheme.colors.Background).onPreviewKeyEvent { event ->
             if (event.key == Key.Menu) {
                 if (event.type == KeyEventType.KeyDown) {
                     editedPane = state.focusedPane
@@ -187,9 +194,16 @@ fun MultiviewScreen(
             state.panes.forEach { pane ->
                 key(pane.id) {
                     val rect = bounds.first { it.id == pane.id }
+                    val logo = remember(allowedChannels, pane.channelKey) {
+                        pane.channelKey?.let { k -> allowedChannels.firstOrNull { it.key == k }?.logo }
+                    }
                     MultiviewPane(
                         pane = pane,
                         audible = pane.id == state.focusedPane && state.hasAudioFocus,
+                        logo = logo,
+                        show = pane.channelKey?.let { paneShows[it] },
+                        now = clock,
+                        use24h = use24h,
                         modifier = Modifier.offset(availableWidth * rect.left, availableHeight * rect.top)
                             .width(availableWidth * (rect.right - rect.left))
                             .height(availableHeight * (rect.bottom - rect.top)).padding(4.dp)
@@ -223,36 +237,36 @@ fun MultiviewScreen(
                 }
             }
         }
-        // Small control bar floating over the video, styled like the guide's buttons.
+        // The control bar floating over the video: the play bar's glass, Sports' buttons.
         Row(
             Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
-                .clip(RoundedCornerShape(18.dp)).background(NuvioTheme.colors.Background.copy(alpha = 0.82f))
-                .border(1.dp, GuideGlassEdge, RoundedCornerShape(18.dp))
-                .padding(start = 14.dp, end = 6.dp, top = 5.dp, bottom = 5.dp)
+                .multiviewPanel(panelBackground, RoundedCornerShape(14.dp))
+                .padding(start = 14.dp, end = 8.dp, top = 5.dp, bottom = 5.dp)
                 .onPreviewKeyEvent { event ->
                     if (event.key == Key.DirectionDown) {
                         if (event.type == KeyEventType.KeyDown) paneFocus[state.focusedPane].requestFocus()
                         true
                     } else false
                 },
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically
         ) {
-            LiveText("Multiview", size = 14.sp, weight = FontWeight.Bold)
-            LiveText(if (soundPaused) "Paused" else "${state.layout.paneCount} panes",
-                size = 12.sp, color = NuvioTheme.colors.TextSecondary)
-            MultiviewBarButton("Layout", Modifier) {
-                val next = when (state.layout) {
-                    MultiviewLayout.TWO -> MultiviewLayout.THREE
-                    MultiviewLayout.THREE -> MultiviewLayout.FOUR
-                    else -> MultiviewLayout.TWO
-                }
-                session.setLayout(next)
+            Column(Modifier.padding(end = 4.dp)) {
+                LiveText("LIVE TV", size = 9.sp, color = NuvioTheme.colors.TextSecondary)
+                LiveText("Multiview", size = 13.sp, weight = FontWeight.ExtraBold)
             }
-            MultiviewBarButton("Streams", Modifier.focusRequester(editFocus)) {
+            LiveText("Layout", size = 11.sp, color = NuvioTheme.colors.TextSecondary)
+            MULTIVIEW_LAYOUTS.forEach { (layout, label) ->
+                MultiviewChip(label, selected = state.layout == layout) { session.setLayout(layout) }
+            }
+            MultiviewBarDivider()
+            MultiviewChip("Streams", Modifier.focusRequester(editFocus)) {
                 editedPane = state.focusedPane
                 editorOpen = true
             }
-            MultiviewBarButton("Exit", Modifier, onClick = onBack)
+            MultiviewChip("Exit", onClick = onBack)
+            MultiviewBarDivider()
+            LiveText(if (soundPaused) "Paused" else "Sound: P${state.focusedPane + 1}",
+                size = 11.sp, color = NuvioTheme.colors.TextSecondary, modifier = Modifier.padding(end = 6.dp))
         }
         if (soundPaused) {
             LiveText("Playback paused. Select a pane to retry sound.", size = 12.sp,
@@ -267,6 +281,9 @@ fun MultiviewScreen(
             paneId = editedPane.coerceIn(0, state.layout.paneCount - 1),
             onPane = { editedPane = it },
             optionsSource = allowedChannels,
+            panelBackground = panelBackground,
+            use24h = use24h,
+            nowOn = viewModel::nowOn,
             onLayout = { layout -> session.setLayout(layout); editedPane = editedPane.coerceIn(0, layout.paneCount - 1) },
             onSelect = { option ->
                 // Recheck against current permissions when OK is pressed, even during a search.
@@ -282,61 +299,23 @@ fun MultiviewScreen(
     }
 }
 
+private val MULTIVIEW_LAYOUTS = listOf(MultiviewLayout.TWO to "2", MultiviewLayout.THREE to "3", MultiviewLayout.FOUR to "4")
+
 @Composable
-internal fun MultiviewPane(pane: MultiviewPaneState, audible: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(10.dp)
-    Box(modifier.clip(shape).background(NuvioTheme.colors.Background)
-        .border(if (focused || audible) 3.dp else 1.dp, if (focused || audible) NuvioTheme.colors.FocusRing else GuideGlassEdge, shape)
-        .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick)) {
-        if (pane.player != null) {
-            AndroidView(
-                factory = { context ->
-                    PlayerView(context).apply {
-                        useController = false
-                        isFocusable = false
-                        isFocusableInTouchMode = false
-                        descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-                update = { if (it.player !== pane.player) it.player = pane.player },
-                onRelease = { it.player = null }
-            )
-        }
-        if (pane.channelKey == null || pane.isBuffering || pane.error != null) {
-            Column(Modifier.align(Alignment.Center).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (pane.channelKey == null && pane.error == null) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = NuvioTheme.colors.TextSecondary, modifier = Modifier.size(28.dp))
-                }
-                LiveText(when {
-                    pane.error != null -> "Stream unavailable"
-                    pane.isBuffering -> "Loading…"
-                    else -> "Add a channel"
-                }, weight = FontWeight.Bold)
-                pane.error?.let { reason ->
-                    LiveText(reason, color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 3)
-                    LiveText("OK to replace or retry this pane", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
-                }
-            }
-        }
-        Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Color.Black.copy(alpha = 0.72f)).padding(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LiveText("${pane.id + 1}", color = NuvioTheme.colors.TextSecondary, weight = FontWeight.Bold)
-            LiveText(pane.channelName ?: "Empty pane", size = 14.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (audible) Icon(Icons.Default.VolumeUp, contentDescription = "Sound", tint = NuvioTheme.colors.TextPrimary, modifier = Modifier.size(16.dp))
-        }
-    }
+private fun MultiviewBarDivider() {
+    Box(Modifier.width(1.dp).height(18.dp).background(SportsLook.Divider))
 }
 
+/** The channel picker: a floating glass card like the play bar, with a small Search button. */
 @Composable
 private fun MultiviewEditor(
     state: MultiviewState,
     paneId: Int,
     onPane: (Int) -> Unit,
-    optionsSource: List<com.nuvio.tv.livetv.model.LiveChannel>,
+    optionsSource: List<LiveChannel>,
+    panelBackground: String,
+    use24h: Boolean,
+    nowOn: suspend (Collection<String>) -> Map<String, EpgProgram>,
     onLayout: (MultiviewLayout) -> Unit,
     onSelect: (MultiviewChannelOption) -> Unit,
     onClear: () -> Unit,
@@ -344,11 +323,13 @@ private fun MultiviewEditor(
     onClose: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    var searching by remember { mutableStateOf(false) }
+    var searchUsed by remember { mutableStateOf(false) }
     val closeFocus = remember { FocusRequester() }
+    val searchFocus = remember { FocusRequester() }
+    val fieldFocus = remember { FocusRequester() }
+    val firstCard = remember { FocusRequester() }
     val selectedPane = state.panes.firstOrNull { it.id == paneId }
-    val selectedPaneInfo = selectedPane?.let { pane ->
-        pane.error?.let { reason -> "${pane.channelName ?: "Pane ${paneId + 1}"}: $reason" } ?: pane.channelName
-    } ?: "Empty pane"
     // Preparing and searching large playlists never blocks TV focus or typing. All picker state is URL-free.
     val options by produceState(emptyList<MultiviewChannelOption>(), optionsSource) {
         value = withContext(Dispatchers.Default) {
@@ -358,101 +339,146 @@ private fun MultiviewEditor(
             }
         }
     }
+    val logos by produceState(emptyMap<String, String>(), optionsSource) {
+        value = withContext(Dispatchers.Default) {
+            buildMap { optionsSource.forEach { c -> c.logo?.takeIf { it.isNotBlank() }?.let { put(c.key, it) } } }
+        }
+    }
     val results by produceState(emptyList<MultiviewChannelOption>(), options, query) {
         value = searchMultiviewChannels(options, query)
     }
+    // What's on now for the cards shown, after typing pauses (one short read of the stored guide).
+    val shows by produceState(emptyMap<String, EpgProgram>(), results) {
+        delay(250L)
+        value = nowOn(results.map { it.key })
+    }
+    val now = remember(shows) { System.currentTimeMillis() }
+    val paneOf = remember(state.panes) {
+        buildMap { state.panes.forEach { pane -> pane.channelKey?.let { k -> if (k !in this) put(k, pane.id) } } }
+    }
+    fun closeSearch() {
+        query = ""
+        searching = false
+    }
     LaunchedEffect(Unit) { closeFocus.requestFocus() }
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f))) {
+    LaunchedEffect(searching) {
+        if (searching) runCatching { fieldFocus.requestFocus() }
+        else if (searchUsed) runCatching { searchFocus.requestFocus() }
+    }
+    Dialog(onDismissRequest = { if (searching) closeSearch() else onClose() },
+        properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.15f))) {
             Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(290.dp)
-                    .background(NuvioTheme.colors.Background).padding(horizontal = 20.dp, vertical = 12.dp).focusGroup(),
+                Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 16.dp)
+                    .fillMaxWidth().height(204.dp)
+                    .multiviewPanel(panelBackground)
+                    .padding(horizontal = 16.dp, vertical = 10.dp).focusGroup(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    LiveText("Streams", size = 18.sp, weight = FontWeight.Bold)
-                    LiveText("Pane", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
-                    state.panes.forEach { pane ->
-                        MultiviewButton("${pane.id + 1}", selected = pane.id == paneId) { onPane(pane.id) }
+                Row(Modifier.fillMaxWidth().heightIn(min = 32.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (searching) {
+                        Box(Modifier.width(300.dp)) {
+                            LiveTextField(value = query, onValueChange = { query = it }, hint = "Search channels",
+                                focusRequester = fieldFocus,
+                                onDone = { if (results.isNotEmpty()) runCatching { firstCard.requestFocus() } })
+                        }
+                        LiveText(if (query.isBlank()) "Type part of a channel's name" else "${results.size} matches",
+                            size = 11.sp, color = NuvioTheme.colors.TextSecondary)
+                        Spacer(Modifier.weight(1f))
+                        MultiviewChip("Close search", onClick = ::closeSearch)
+                    } else {
+                        Column(Modifier.width(118.dp)) {
+                            LiveText("Multiview · Pane ${paneId + 1}", size = 9.sp, color = NuvioTheme.colors.TextSecondary)
+                            LiveText("Streams", size = 14.sp, weight = FontWeight.ExtraBold)
+                        }
+                        LiveText("Pane", size = 11.sp, color = NuvioTheme.colors.TextSecondary)
+                        state.panes.forEach { pane ->
+                            MultiviewChip("P${pane.id + 1}", selected = pane.id == paneId) { onPane(pane.id) }
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        LiveText("Layout", size = 11.sp, color = NuvioTheme.colors.TextSecondary)
+                        MULTIVIEW_LAYOUTS.forEach { (layout, label) ->
+                            MultiviewChip(label, selected = state.layout == layout) { onLayout(layout) }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        MultiviewChip("Search", Modifier.focusRequester(searchFocus), icon = Icons.Default.Search) {
+                            searchUsed = true
+                            searching = true
+                        }
+                        MultiviewChip("Clear", onClick = onClear)
+                        if (selectedPane?.error != null) MultiviewChip("Retry", onClick = onRetry)
+                        MultiviewChip("Close", Modifier.focusRequester(closeFocus), onClick = onClose)
                     }
-                    Spacer(Modifier.width(8.dp))
-                    LiveText("Layout", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
-                    listOf(MultiviewLayout.TWO to "2", MultiviewLayout.THREE to "3", MultiviewLayout.FOUR to "4").forEach { (layout, label) ->
-                        MultiviewButton(label, selected = state.layout == layout) { onLayout(layout) }
-                    }
-                    Spacer(Modifier.weight(1f))
-                    MultiviewButton("Clear", onClick = onClear)
-                    if (state.panes.firstOrNull { it.id == paneId }?.error != null) MultiviewButton("Retry", onClick = onRetry)
-                    MultiviewButton("Close", Modifier.focusRequester(closeFocus), onClick = onClose)
                 }
-                LiveText(selectedPaneInfo, color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 1)
-                LiveTextField(value = query, onValueChange = { query = it }, hint = "Search channels")
-                LiveText(if (query.isBlank()) "${options.size} channels · showing up to 200" else "${results.size} matches · showing up to 200",
-                    color = NuvioTheme.colors.TextTertiary, size = 12.sp)
                 if (results.isEmpty()) {
-                    LiveText(if (options.isEmpty()) "No available channels. Add a playlist in Live TV settings." else "No matching channels.",
-                        color = NuvioTheme.colors.TextSecondary, maxLines = 2, modifier = Modifier.padding(vertical = 8.dp))
+                    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.CenterStart) {
+                        LiveText(if (options.isEmpty()) "No available channels. Add a playlist in Live TV settings." else "No matching channels.",
+                            color = NuvioTheme.colors.TextSecondary, maxLines = 2)
+                    }
                 } else {
-                    LazyRow(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 3.dp, vertical = 3.dp),
+                    LazyRow(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(results, key = { it.key }) { option ->
-                            MultiviewChannelCard(option,
-                                selected = state.panes.firstOrNull { it.id == paneId }?.channelKey == option.key) { onSelect(option) }
+                        itemsIndexed(results, key = { _, option -> option.key }) { index, option ->
+                            val inPane = paneOf[option.key]
+                            MultiviewChannelCard(
+                                option = option,
+                                logo = logos[option.key],
+                                show = shows[option.key],
+                                now = now,
+                                use24h = use24h,
+                                playingHere = selectedPane?.channelKey == option.key,
+                                otherPane = inPane?.takeIf { it != paneId },
+                                modifier = if (index == 0) Modifier.focusRequester(firstCard) else Modifier,
+                            ) { onSelect(option) }
                         }
                     }
                 }
-                LiveText("Sound: pane ${state.focusedPane + 1}  ·  OK to play in pane ${paneId + 1}  ·  Back closes", color = NuvioTheme.colors.TextSecondary, size = 12.sp)
+                val shown = if (query.isBlank()) "All channels · ${options.size}" else "${results.size} matches"
+                val capped = if ((if (query.isBlank()) options.size else results.size) > 200) " (first 200 shown)" else ""
+                LiveText(
+                    if (searching) "Down: matches · OK: play in P${paneId + 1} · Back: close search"
+                    else "$shown$capped · Sound: P${state.focusedPane + 1} · OK: play in P${paneId + 1} · Back: close",
+                    color = NuvioTheme.colors.TextSecondary, size = 10.sp)
             }
         }
     }
 }
 
-/** A channel card in the picker strip; focus looks like the guide's cells. */
+/** A channel card in the picker strip: Sports' card frame, the channel's logo and what's on now. */
 @Composable
-private fun MultiviewChannelCard(option: MultiviewChannelOption, selected: Boolean, onClick: () -> Unit) {
+private fun MultiviewChannelCard(
+    option: MultiviewChannelOption,
+    logo: String?,
+    show: EpgProgram?,
+    now: Long,
+    use24h: Boolean,
+    playingHere: Boolean,
+    otherPane: Int?,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
-    val cell = liveCellColors(focused, NuvioTheme.colors.Field)
-    val shape = RoundedCornerShape(10.dp)
     Column(
-        Modifier.width(190.dp).fillMaxHeight().clip(shape).background(cell.background)
-            .border(if (focused || selected) 2.dp else 1.dp,
-                if (focused) cell.border.takeIf { it != Color.Transparent } ?: NuvioTheme.colors.FocusRing
-                else if (selected) NuvioTheme.colors.FocusRing else GuideGlassEdge, shape)
-            .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick).padding(10.dp),
+        modifier.width(200.dp).fillMaxHeight()
+            .onFocusChanged { focused = it.isFocused }
+            .sportsFrame(focused, playing = playingHere, accent = NuvioTheme.colors.Secondary, radius = 10.dp)
+            .clickable(onClick = onClick)
+            .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        LiveText(option.title, size = 14.sp, weight = FontWeight.Bold, maxLines = 2, color = cell.text)
-        LiveText("${option.number} · ${option.group}", size = 12.sp,
-            color = if (focused) cell.text else NuvioTheme.colors.TextSecondary)
-        if (selected) LiveText("Playing here", size = 11.sp, color = if (focused) cell.text else NuvioTheme.colors.TextSecondary)
-    }
-}
-
-/** A small button in the floating Multiview bar, using the guide's cell colors. */
-@Composable
-private fun MultiviewBarButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    val cell = liveCellColors(focused, Color.White.copy(alpha = 0.10f))
-    val shape = RoundedCornerShape(14.dp)
-    Box(modifier.clip(shape).background(cell.background)
-        .border(if (focused) 2.dp else 1.dp, if (focused) cell.border else GuideGlassEdge, shape)
-        .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick)
-        .padding(horizontal = 12.dp, vertical = 6.dp)) {
-        LiveText(text, size = 12.sp, color = focusedTextColor(focused),
-            weight = if (focused) FontWeight.Bold else FontWeight.Normal)
-    }
-}
-
-/** A TV remote focus target using the same colors and ring as the guide. */
-@Composable
-internal fun MultiviewButton(text: String, modifier: Modifier = Modifier, selected: Boolean = false, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(8.dp)
-    Box(modifier.clip(shape).background(if (focused) NuvioTheme.colors.FocusRing else NuvioTheme.colors.Field)
-        .border(2.dp, if (focused || selected) NuvioTheme.colors.FocusRing else Color.Transparent, shape)
-        .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick)
-        .padding(horizontal = 14.dp, vertical = 10.dp)) {
-        LiveText(text, size = 14.sp, color = if (focused) NuvioTheme.colors.Background else NuvioTheme.colors.TextPrimary,
-            weight = if (focused || selected) FontWeight.Bold else FontWeight.Normal)
+        Row(Modifier.fillMaxWidth().height(20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            if (logo != null) ChannelLogo(logo, 18.dp)
+            LiveText("${option.number} · ${option.group}", Modifier.weight(1f), size = 10.sp, color = NuvioTheme.colors.TextSecondary)
+            when {
+                playingHere -> SportsBadge("PLAYING", NuvioTheme.colors.Secondary, NuvioTheme.colors.OnSecondary)
+                otherPane != null -> SportsBadge("P${otherPane + 1}", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
+            }
+        }
+        LiveText(option.title, size = 13.sp, weight = FontWeight.ExtraBold, maxLines = 2)
+        if (show != null) LiveText(show.title + " · " + multiviewShowTimes(show, use24h), size = 10.sp, color = NuvioTheme.colors.TextSecondary)
+        Spacer(Modifier.weight(1f))
+        if (show != null) MultiviewProgress(show.progress(now))
     }
 }

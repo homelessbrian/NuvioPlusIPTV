@@ -1283,6 +1283,7 @@ fun LiveTvPlayerScreen(
                 paneCount = 1,
                 hideScores = sportsSettings.hideScores,
                 onGame = { game -> sports.resolve(game.event.id) != null },
+                onPlayGame = { game -> playSportsGame(game.event.id) },
                 onStream = { game, channelKey -> playSportsGame(game.event.id, channelKey) },
                 onAdd = {
                     val channelKey = viewModel.playbackState.value.channelKey
@@ -1295,6 +1296,7 @@ fun LiveTvPlayerScreen(
                 onPane = {},
                 onClose = { sportsGamesOpen = false },
                 modifier = Modifier.align(Alignment.BottomCenter),
+                panelBackground = settings.panelBackground,
             )
         }
         if (playback.channelKey != null && recordings.any { it.channelKey == playback.channelKey && it.isRecording }) {
