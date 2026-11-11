@@ -37,8 +37,9 @@ internal class GuideTargetRegistry<T : Any> : AutoCloseable {
         while (iterator.hasNext()) {
             val entry = iterator.next()
             if (active.none { it === entry.key } && (!includeCommitted || !committed.containsKey(entry.key))) {
+                val ownership = entry.value
                 iterator.remove()
-                entry.value.close()
+                ownership.close()
             }
         }
     }
