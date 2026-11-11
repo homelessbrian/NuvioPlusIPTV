@@ -101,47 +101,5 @@ suspend fun searchMultiviewChannels(
     matches
 }
 
-/** Picker groups: the viewer's Favorites and Recently Watched first, then the playlist's own groups in order. */
+/** A group in the channel picker, in the guide's order (see MultiviewViewModel.pickerGroups). */
 data class MultiviewGroup(val id: String, val title: String, val count: Int)
-
-const val MULTIVIEW_GROUP_FAVORITES = "\u0000favorites"
-const val MULTIVIEW_GROUP_RECENT = "\u0000recent"
-
-fun multiviewGroupTitle(id: String): String = when (id) {
-    MULTIVIEW_GROUP_FAVORITES -> "Favorites"
-    MULTIVIEW_GROUP_RECENT -> "Recently Watched"
-    else -> id.ifBlank { "Other" }
-}
-
-fun multiviewGroups(
-    options: List<MultiviewChannelOption>,
-    favorites: Set<String>,
-    recent: List<String>
-): List<MultiviewGroup> {
-    val keys = options.mapTo(HashSet(options.size)) { it.key }
-    val groups = ArrayList<MultiviewGroup>()
-    favorites.count { it in keys }.takeIf { it > 0 }
-        ?.let { groups.add(MultiviewGroup(MULTIVIEW_GROUP_FAVORITES, "Favorites", it)) }
-    recent.count { it in keys }.takeIf { it > 0 }
-        ?.let { groups.add(MultiviewGroup(MULTIVIEW_GROUP_RECENT, "Recently Watched", it)) }
-    val counts = LinkedHashMap<String, Int>()
-    for (option in options) counts[option.group] = (counts[option.group] ?: 0) + 1
-    counts.forEach { (group, count) -> groups.add(MultiviewGroup(group, multiviewGroupTitle(group), count)) }
-    return groups
-}
-
-/** The channels of one group (null = all of them). Recently Watched keeps its most-recent-first order. */
-fun multiviewInGroup(
-    options: List<MultiviewChannelOption>,
-    groupId: String?,
-    favorites: Set<String>,
-    recent: List<String>
-): List<MultiviewChannelOption> = when (groupId) {
-    null -> options
-    MULTIVIEW_GROUP_FAVORITES -> options.filter { it.key in favorites }
-    MULTIVIEW_GROUP_RECENT -> {
-        val byKey = options.associateBy { it.key }
-        recent.mapNotNull { byKey[it] }
-    }
-    else -> options.filter { it.group == groupId }
-}

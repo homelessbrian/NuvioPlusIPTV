@@ -265,13 +265,7 @@ class LiveTvViewModel @Inject constructor(
         }
     }
 
-    /** The parts of the saved user state that [buildUi] reads; keep in step with it. */
-    private fun sameForLists(a: LiveUserState, b: LiveUserState): Boolean =
-        a.favorites == b.favorites && a.recent == b.recent &&
-            a.hiddenChannels == b.hiddenChannels && a.hiddenGroups == b.hiddenGroups &&
-            a.lockedGroups == b.lockedGroups && a.customGroups == b.customGroups &&
-            a.channelOrder == b.channelOrder && a.groupOrder == b.groupOrder &&
-            a.channelCopies == b.channelCopies
+    private fun sameForLists(a: LiveUserState, b: LiveUserState): Boolean = sameForLiveTvLists(a, b)
 
     // ------------------------------------------------------------ actions
 
@@ -1627,6 +1621,14 @@ private val STATION_NOTE = Regex("""[\[(]([^\])]*)[\])]""")
 internal fun stationNote(name: String): String? =
     STATION_NOTE.findAll(name.lowercase()).map { it.groupValues[1].trim() }
         .firstOrNull { it.isNotBlank() && backupName(it).isNotBlank() }
+
+/** The parts of the saved user state that [buildUi] reads; keep in step with it. */
+internal fun sameForLiveTvLists(a: LiveUserState, b: LiveUserState): Boolean =
+    a.favorites == b.favorites && a.recent == b.recent &&
+        a.hiddenChannels == b.hiddenChannels && a.hiddenGroups == b.hiddenGroups &&
+        a.lockedGroups == b.lockedGroups && a.customGroups == b.customGroups &&
+        a.channelOrder == b.channelOrder && a.groupOrder == b.groupOrder &&
+        a.channelCopies == b.channelCopies
 
 /** The guide's groups and the channels of [groupIdRaw], from your saved choices (also used by Home's row). */
 internal fun buildUi(

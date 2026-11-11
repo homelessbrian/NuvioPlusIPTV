@@ -7,10 +7,16 @@ import com.nuvio.tv.livetv.data.EpgDatabase
 import com.nuvio.tv.livetv.data.LiveTvChannelStore
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
+import com.nuvio.tv.livetv.model.ChannelGroup
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.model.LiveTvSettings
+import com.nuvio.tv.livetv.model.LiveUserState
+import com.nuvio.tv.livetv.parental.ParentalControls
 import com.nuvio.tv.livetv.player.LiveTvPlaybackController
 import com.nuvio.tv.livetv.ui.allowedLiveTvChannelsFlow
+import com.nuvio.tv.livetv.ui.buildUi
+import com.nuvio.tv.livetv.ui.sameForLiveTvLists
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -18,6 +24,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
@@ -52,12 +60,50 @@ class MultiviewViewModel @Inject constructor(
     val panelBackground: StateFlow<String> = preferences.settings.map { it.panelBackground }
         .stateIn(viewModelScope, SharingStarted.Eagerly, "darker")
 
-    /** The channels the viewer starred and watched lately, for the picker's Favorites / Recently Watched groups. */
-    val favoriteKeys: StateFlow<List<String>> = preferences.userState.map { it.favorites }.distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /** What the guide's lists are built from; the picker follows the guide's group and channel order. */
+    private class PickerInput(val channels: List<LiveChannel>, val user: LiveUserState, val settings: LiveTvSettings)
 
-    val recentKeys: StateFlow<List<String>> = preferences.userState.map { it.recent }.distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    private val pickerInput: StateFlow<PickerInput?> = combine(
+        channelStore.displayChannels,
+        preferences.userState.distinctUntilChanged(::sameForLiveTvLists),
+        preferences.settings,
+        ParentalControls.unlocked,
+    ) { channels, user, settings, _ ->
+        // Favorites, Recently Watched and All channels are always offered here, even if hidden in the guide.
+        PickerInput(channels, user, settings.copy(showFavoritesGroup = true, showRecentGroup = true, showAllChannelsGroup = true))
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * The picker's groups in the guide's order: Favorites and Recently Watched, then your own and the
+     * playlists' groups as "Reorder groups" set them (the provider's order for any you haven't placed).
+     * Locked and empty groups are left out.
+     */
+    val pickerGroups: StateFlow<List<MultiviewGroup>> = pickerInput.filterNotNull().map { input ->
+        val ui = buildUi(input.channels, input.user, input.settings, null, "", true)
+        val allowed = allowedKeys(ui.allVisibleChannels)
+        ui.groups.asSequence()
+            .filter { it.id != ChannelGroup.SEARCH && it.id != ChannelGroup.ALL && !it.locked }
+            .map { g ->
+                // Your own groups can hold channels from hidden playlist groups, which Multiview can't play.
+                val count = if (g.id.startsWith(ChannelGroup.CUSTOM_PREFIX)) {
+                    input.user.customGroups.firstOrNull { it.id == g.id }?.channelKeys?.distinct()?.count { it in allowed } ?: 0
+                } else g.count
+                MultiviewGroup(g.id, g.title, count)
+            }
+            .filter { it.count > 0 }
+            .toList()
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** One group's channels (null = All channels) in the guide's order, including "Reorder channels". */
+    suspend fun channelsIn(groupId: String?): List<MultiviewChannelOption> = withContext(Dispatchers.Default) {
+        val input = pickerInput.value ?: return@withContext emptyList()
+        val ui = buildUi(input.channels, input.user, input.settings, groupId ?: ChannelGroup.ALL, "", true, exactGroup = true)
+        val allowed = allowedKeys(ui.allVisibleChannels)
+        ui.channels.asSequence().filter { it.key in allowed }.distinctBy { it.key }
+            .map { MultiviewChannelOption(it.key, it.name, it.number, it.group) }.toList()
+    }
+
+    private fun allowedKeys(visible: List<LiveChannel>): Set<String> = visible.mapTo(HashSet(visible.size)) { it.key }
 
     val use24HourClock: StateFlow<Boolean> = preferences.settings.map { it.use24HourClock }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)

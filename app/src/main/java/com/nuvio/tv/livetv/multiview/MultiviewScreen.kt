@@ -136,9 +136,7 @@ fun MultiviewScreen(
         val live = viewModel.allowedChannels.value
         return if (extra.isEmpty()) live else (live + extra).distinctBy { it.key }
     }
-    val favoriteKeys by viewModel.favoriteKeys.collectAsStateWithLifecycle()
-    val recentKeys by viewModel.recentKeys.collectAsStateWithLifecycle()
-    val favoriteSet = remember(favoriteKeys) { favoriteKeys.toSet() }
+    val pickerGroups by viewModel.pickerGroups.collectAsStateWithLifecycle()
     var pickerGroup by remember { mutableStateOf<String?>(null) }
     var sportsMode by remember { mutableStateOf(startOnSports) }
     val paneEvents = remember { mutableStateMapOf<Int, String>().apply { request?.eventId?.let { put(0, it) } } }
@@ -451,8 +449,8 @@ fun MultiviewScreen(
             paneId = editedPane.coerceIn(0, state.layout.paneCount - 1),
             onPane = { editedPane = it },
             optionsSource = allowedChannels,
-            favorites = favoriteSet,
-            recent = recentKeys,
+            groups = pickerGroups,
+            channelsIn = viewModel::channelsIn,
             group = pickerGroup,
             onGroup = { pickerGroup = it },
             onSports = {
@@ -494,8 +492,8 @@ private fun MultiviewEditor(
     paneId: Int,
     onPane: (Int) -> Unit,
     optionsSource: List<LiveChannel>,
-    favorites: Set<String>,
-    recent: List<String>,
+    groups: List<MultiviewGroup>,
+    channelsIn: suspend (String?) -> List<MultiviewChannelOption>,
     group: String?,
     onGroup: (String?) -> Unit,
     onSports: () -> Unit,
@@ -534,9 +532,11 @@ private fun MultiviewEditor(
     var groupsOpen by remember { mutableStateOf(false) }
     var cardFocusPending by remember { mutableStateOf(false) }
     val groupTileFocus = remember { FocusRequester() }
-    val groups = remember(options, favorites, recent) { multiviewGroups(options, favorites, recent) }
-    val scoped = remember(options, group, favorites, recent) { multiviewInGroup(options, group, favorites, recent) }
-    val groupTitle = group?.let(::multiviewGroupTitle)
+    // The chosen group's channels in the guide's order (your "Reorder channels" first); rebuilt when the lists change.
+    val scoped by produceState(emptyList<MultiviewChannelOption>(), group, groups, optionsSource) {
+        value = channelsIn(group?.takeIf { id -> groups.any { it.id == id } })
+    }
+    val groupTitle = group?.let { id -> groups.firstOrNull { it.id == id }?.title }
     val results by produceState(emptyList<MultiviewChannelOption>(), scoped, query) {
         value = searchMultiviewChannels(scoped, query)
     }
