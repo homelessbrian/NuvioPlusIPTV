@@ -1,0 +1,290 @@
+{
+  "complete": true,
+  "method": "selected-source-host-JVM-Robolectric-native-SQLite-component",
+  "native_junit_executions_passed": 5,
+  "distinct_regression_methods": 4,
+  "benchmark_runs": 16,
+  "all_input_output_and_table_hashes_equal_within_each_case": true,
+  "stable_and_test_table_matcher_guide_outputs_equal": true,
+  "cases": [
+    {
+      "shape": "primary",
+      "mode": "stable-guide",
+      "trials_per_role": 3,
+      "parity_passed": true,
+      "roles": {
+        "before": {
+          "elapsed_ns": {
+            "values": [
+              1496843100,
+              1266802900,
+              1373010100
+            ],
+            "median": 1373010100,
+            "min": 1266802900,
+            "max": 1496843100
+          },
+          "caller_allocated_bytes": {
+            "values": [
+              757736520,
+              757925344,
+              757358520
+            ],
+            "median": 757736520,
+            "min": 757358520,
+            "max": 757925344
+          },
+          "gc_before": [
+            16,
+            16,
+            16
+          ],
+          "gc_after": [
+            28,
+            28,
+            28
+          ]
+        },
+        "after": {
+          "elapsed_ns": {
+            "values": [
+              1085218200,
+              1084281700,
+              1097953500
+            ],
+            "median": 1085218200,
+            "min": 1084281700,
+            "max": 1097953500
+          },
+          "caller_allocated_bytes": {
+            "values": [
+              611043656,
+              610971592,
+              610675168
+            ],
+            "median": 610971592,
+            "min": 610675168,
+            "max": 611043656
+          },
+          "gc_before": [
+            16,
+            16,
+            16
+          ],
+          "gc_after": [
+            26,
+            26,
+            26
+          ]
+        }
+      },
+      "reductions_percent": {
+        "elapsed_ns": 20.9606542588434,
+        "caller_allocated_bytes": 19.36886029988366
+      }
+    },
+    {
+      "shape": "primary",
+      "mode": "test-table",
+      "trials_per_role": 3,
+      "parity_passed": true,
+      "roles": {
+        "before": {
+          "elapsed_ns": {
+            "values": [
+              2434759000,
+              2393669700,
+              2427599100
+            ],
+            "median": 2427599100,
+            "min": 2393669700,
+            "max": 2434759000
+          },
+          "caller_allocated_bytes": {
+            "values": [
+              1459109408,
+              1458838504,
+              1461446400
+            ],
+            "median": 1459109408,
+            "min": 1458838504,
+            "max": 1461446400
+          },
+          "gc_before": [
+            18,
+            18,
+            18
+          ],
+          "gc_after": [
+            43,
+            43,
+            43
+          ]
+        },
+        "after": {
+          "elapsed_ns": {
+            "values": [
+              1748551200,
+              1825348000,
+              1757742900
+            ],
+            "median": 1757742900,
+            "min": 1748551200,
+            "max": 1825348000
+          },
+          "caller_allocated_bytes": {
+            "values": [
+              1170435280,
+              1170024176,
+              1170292504
+            ],
+            "median": 1170292504,
+            "min": 1170024176,
+            "max": 1170435280
+          },
+          "gc_before": [
+            18,
+            16,
+            16
+          ],
+          "gc_after": [
+            38,
+            32,
+            27
+          ]
+        }
+      },
+      "reductions_percent": {
+        "elapsed_ns": 27.593361688097506,
+        "caller_allocated_bytes": 19.794053990501038
+      }
+    },
+    {
+      "shape": "shared",
+      "mode": "stable-guide",
+      "trials_per_role": 1,
+      "parity_passed": true,
+      "roles": {
+        "before": {
+          "elapsed_ns": {
+            "values": [
+              5989425500
+            ],
+            "median": 5989425500,
+            "min": 5989425500,
+            "max": 5989425500
+          },
+          "caller_allocated_bytes": {
+            "values": [
+              4996988384
+            ],
+            "median": 4996988384,
+            "min": 4996988384,
+            "max": 4996988384
+          },
+          "gc_before": [
+            51
+          ],
+          "gc_after": [
+            137
+          ]
+        },
+        "after": {
+          "elapsed_ns": {
+            "values": [
+              3257756400
+            ],
+            "median": 3257756400,
+            "min": 3257756400,
+            "max": 3257756400
+          },
+          "caller_allocated_bytes": {
+            "values": [
+              2701822768
+            ],
+            "median": 2701822768,
+            "min": 2701822768,
+            "max": 2701822768
+          },
+          "gc_before": [
+            59
+          ],
+          "gc_after": [
+            112
+          ]
+        }
+      },
+      "reductions_percent": {
+        "elapsed_ns": 45.60819898335825,
+        "caller_allocated_bytes": 45.93097761341524
+      }
+    },
+    {
+      "shape": "shared",
+      "mode": "test-table",
+      "trials_per_role": 1,
+      "parity_passed": true,
+      "roles": {
+        "before": {
+          "elapsed_ns": {
+            "values": [
+              12753610600
+            ],
+            "median": 12753610600,
+            "min": 12753610600,
+            "max": 12753610600
+          },
+          "caller_allocated_bytes": {
+            "values": [
+              9534693000
+            ],
+            "median": 9534693000,
+            "min": 9534693000,
+            "max": 9534693000
+          },
+          "gc_before": [
+            53
+          ],
+          "gc_after": [
+            271
+          ]
+        },
+        "after": {
+          "elapsed_ns": {
+            "values": [
+              6240161400
+            ],
+            "median": 6240161400,
+            "min": 6240161400,
+            "max": 6240161400
+          },
+          "caller_allocated_bytes": {
+            "values": [
+              5069332440
+            ],
+            "median": 5069332440,
+            "min": 5069332440,
+            "max": 5069332440
+          },
+          "gc_before": [
+            58
+          ],
+          "gc_after": [
+            179
+          ]
+        }
+      },
+      "reductions_percent": {
+        "elapsed_ns": 51.07141345526105,
+        "caller_allocated_bytes": 46.83276703298156
+      }
+    }
+  ],
+  "limits": [
+    "Combined Unicode finishing and alias-fanout source changes; not attribution to one change.",
+    "Host Robolectric native SQLite component, not Android app RAM, SHIELD validation or full startup latency.",
+    "Caller-thread allocation excludes native SQLite and allocations on other threads.",
+    "Primary has three fresh-VM pairs; shared is one pair only. All trials retained; no p95 estimate.",
+    "No explicit GC. Fixture population and canonical logical input hashing are outside measured pipeline."
+  ]
+}

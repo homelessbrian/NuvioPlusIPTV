@@ -1,0 +1,135 @@
+{
+  "complete": true,
+  "component_only": true,
+  "fresh_vm_runs": 6,
+  "trials_per_role": 3,
+  "order": [
+    "before-1",
+    "after-1",
+    "after-2",
+    "before-2",
+    "before-3",
+    "after-3"
+  ],
+  "all_output_hashes_equal": true,
+  "output_sha256": "0562a978215de19bfbcfbfe9c0655008219f69de4cde50660c9cd061f3d5f7c9",
+  "statistics": {
+    "before": {
+      "elapsed_ns": {
+        "values": [
+          4710810100,
+          3731717400,
+          3748034400
+        ],
+        "median": 3748034400,
+        "min": 3731717400,
+        "max": 4710810100
+      },
+      "allocated_bytes_delta": {
+        "values": [
+          667025408,
+          661979136,
+          662437888
+        ],
+        "median": 662437888,
+        "min": 661979136,
+        "max": 667025408
+      },
+      "counter_delta_gc_count": [
+        201,
+        194,
+        200
+      ],
+      "counter_delta_blocking_gc_count": [
+        0,
+        0,
+        0
+      ],
+      "counter_delta_gc_time": [
+        3313,
+        2757,
+        2748
+      ],
+      "counter_delta_blocking_gc_time": [
+        0,
+        0,
+        0
+      ],
+      "counter_delta_bytes_allocated": [
+        667025408,
+        661979136,
+        662437888
+      ],
+      "counter_delta_bytes_freed": [
+        665866240,
+        663953408,
+        662061056
+      ]
+    },
+    "after": {
+      "elapsed_ns": {
+        "values": [
+          2030751300,
+          2625589100,
+          2161196900
+        ],
+        "median": 2161196900,
+        "min": 2030751300,
+        "max": 2625589100
+      },
+      "allocated_bytes_delta": {
+        "values": [
+          340656128,
+          340426752,
+          341213184
+        ],
+        "median": 340656128,
+        "min": 340426752,
+        "max": 341213184
+      },
+      "counter_delta_gc_count": [
+        105,
+        102,
+        111
+      ],
+      "counter_delta_blocking_gc_count": [
+        0,
+        0,
+        0
+      ],
+      "counter_delta_gc_time": [
+        1460,
+        1897,
+        1555
+      ],
+      "counter_delta_blocking_gc_time": [
+        0,
+        0,
+        0
+      ],
+      "counter_delta_bytes_allocated": [
+        340656128,
+        340426752,
+        341213184
+      ],
+      "counter_delta_bytes_freed": [
+        347865376,
+        345628960,
+        347795744
+      ]
+    }
+  },
+  "median_change_percent": {
+    "elapsed_ns": -42.337858478566794,
+    "allocated_bytes_delta": -48.57538583300356
+  },
+  "requested_max_heap_bytes": 536870912,
+  "observed_runtime_max_bytes_all_runs": 201326592,
+  "scope": "192000 actual SportsCatalog.norm calls plus exact String.equals validation; not app RAM/PSS or full Sports matching",
+  "ordinary_heap_snapshots_are_not_peaks_or_retained_heap": true,
+  "explicit_gc_requested": false,
+  "six_completed_timing_runs_retried": false,
+  "all_outliers_and_counter_snapshots_retained": true,
+  "scoped_cleanup_verified": true,
+  "dependency_apk_unchanged_and_application_stopped": true
+}

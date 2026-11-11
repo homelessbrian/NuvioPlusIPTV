@@ -1,0 +1,22 @@
+{
+  "provenance.json": {
+    "bytes": 3656,
+    "sha256": "dc1c727d5f4b98c121f444a067e706231a9fe1f61e3e93d9e0c63d96479702f0"
+  },
+  "README.txt": {
+    "bytes": 3990,
+    "sha256": "94d529b734e0c33f1a0b58dc2a8b3ce2615c3a990ac064d4afab575c6857d0e7"
+  },
+  "summary.json": {
+    "bytes": 7006,
+    "sha256": "e896805ed794c4504cbbe31ac82bb44756cada34574bde46802b3960b79f5d56"
+  },
+  "trials.csv": {
+    "bytes": 6062,
+    "sha256": "c0424ced038572afa8659d6ffafa0b55690ce320f692cdd51459085b5a10b40d"
+  },
+  "trials.json": {
+    "bytes": 15316,
+    "sha256": "2061f8973a8859d3e4047659cbc213e8f2a0d7fc746a3f7707a79071c408a32d"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "before_commit": "302d4e07108c95c4b9b3f28e0ba1776d4c74e05c",
+  "after_norm_commit": "e9b29464",
+  "source_sha256": {
+    "before": "74691e124a63e68c05b791b6a769c64b60a453a14c4355ca0555bc8c5cd1afd8",
+    "after": "82805f6e34e4048b9f4e03266abc1d43424fcafead479d8d8f1924fe0bf53388"
+  },
+  "measured_java_sha256": "a7e67db3cc3a9c14fd4446efd4f6cdbdb6fd05de8f86467958dff5a6b19a6c00",
+  "dependency_apk_sha256": "c8c98764dd51cf0f6b022c30cdb866d10f397e28c4310aca4215cea79174a165",
+  "output_sha256": "0562a978215de19bfbcfbfe9c0655008219f69de4cde50660c9cd061f3d5f7c9",
+  "override_dex_artifact_sha256": {
+    "before": "11cab66de97144ffda22b1044db3353472626cac980210f31790dd3637a712bd",
+    "after": "b4377f21919e1b8dea64dd570dffe72107a9ee6e6987419709e1e21800b815d6"
+  },
+  "sdk_int": 36,
+  "abi": "x86_64",
+  "runtime_version": "2.1.0",
+  "compiler": "Kotlin 2.3.0, D8 build-tools 36.0.0, min-api 24",
+  "compile_only_signature_class_count": 7,
+  "compile_only_class_sha256": {
+    "com/nuvio/tv/livetv/sports/League.class": "b1ad2b7e86f4dfb6f6ba1d39ed0371f8e51e9798ad7c3f38c8903b6b9ef24d25",
+    "com/nuvio/tv/livetv/sports/League$Companion.class": "4ae36cd29a838dafad79341c7b6558aee5b73c86de6179b9e34eb6d6ebd324de",
+    "com/nuvio/tv/livetv/sports/LeagueKind.class": "6a783ebad9822e344a5692c90b1e879a8860081f7c089bbc65891ac0dc223e6f",
+    "com/nuvio/tv/livetv/sports/Sport.class": "e55432e8a5619709a54616da79640030b208b885a5cfb9687078275c66bc53e9",
+    "com/nuvio/tv/livetv/sports/SportsSettings.class": "6369629b7664158ca24eefe0c7b73faff4573049ee5f56a6c0fda6d8a8702946",
+    "com/nuvio/tv/livetv/sports/SportsSettings$Companion.class": "3bf6f1b37f45efc8946f9a79888c43a7cf12fd781e1122786aef383549addca8",
+    "com/nuvio/tv/livetv/sports/TeamInfo.class": "eb5e3962259af102aef9a3af076385148ffea49076b493cc43d8b4ac3eb642e7"
+  },
+  "signature_container_sha256": "99fc27da22871d2107fb1b8b8f887272b003af45808de040ee058d03ddb2ec46",
+  "signature_jar_sha256": "fee081c646c647fe701979913576979dc0574582b77214fb04316a31e0154bb7",
+  "initial_compile_only_failure": {
+    "category": "missing real TeamInfo compile signature",
+    "preserved": true,
+    "runtime_measurements_taken": false,
+    "correction": "add only the real TeamInfo.class as seventh compile-only signature",
+    "catalog_sources_measured_java_and_runtime_apk_unchanged": true
+  },
+  "fake_model_classes_packaged_at_runtime": false,
+  "full_catalog_source_compiled_without_instrumentation": true,
+  "private_build_and_run_scripts_not_exported_or_claimed_portable": true
+}

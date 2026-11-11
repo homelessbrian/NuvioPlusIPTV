@@ -1,0 +1,43 @@
+Generic reproduction outline, not a portable private-script promise
+
+1. Obtain the complete before/after SportsCatalog.kt and verify the exact source
+   SHA-256 values in provenance.json (74691e... before, 82805f... after). Hashes
+   cover actual source BYTES including line endings. A checkout conversion can
+   change the hash even when Kotlin meaning is unchanged; do not label changed
+   bytes as the measured artifact. Keep the exact measured Java bytes too.
+2. Compile each entire Catalog using Kotlin 2.3.0 with Android API signatures,
+   the real Kotlin library, and seven real compile-only model class signatures:
+   League, League.Companion, LeagueKind, Sport, SportsSettings,
+   SportsSettings.Companion and TeamInfo. Use actual matching model signatures,
+   never fake implementations. The signature jar is classpath input ONLY.
+3. Compile the included Java and a role-specific SourcePin class in its package.
+   SourcePin provides ROLE (before/after), SOURCE_SHA256, APK_SHA256 and
+   REGEX_TAIL_FIELDS (2 before, 0 after). D8 the Catalog/generated classes plus
+   Java/SourcePin. Do not package model signatures or replacements into this DEX.
+4. On an explicitly owned compatible Android 16 x86_64 test emulator, keep the
+   real app stopped. Use a fresh task-owned directory matching the Java guard's
+   fixed namespace. Transfer and SHA-verify the two override DEX jars and the
+   unchanged dependency APK c8c98764dd51cf0f6b022c30cdb866d10f397e28c4310aca4215cea79174a165.
+   It is a classpath dependency only; no APK installation is needed.
+5. For each run start a NEW app_process VM with the role override jar FIRST and
+   dependency APK SECOND, -Xmx512m, the Java main class and role/source-SHA args.
+   Use before1/after1/after2/before2/before3/after3 order. Verify actual fresh VM
+   identity privately, no app process running, source-role guards, all output
+   hashes, actual Runtime.maxMemory and supported allocation counters.
+6. The included main bounds measured work at 90s and whole main at 120s with
+   periodic checks. An outer command timeout was 150s. A failure must preserve
+   its output and owned process marker for scoped inspection, stop the series,
+   and never silently retry or kill other processes. Success requires six
+   completed equal-output runs, exited owned VMs and exact owned-file cleanup.
+
+The initial compile preparation had six real signatures and failed for missing
+TeamInfo. The corrected compile used seven; Catalog sources, measured Java and
+runtime APK did not change. Original failure evidence is kept privately; raw
+commands, environment paths and private scripts are deliberately not exported.
+
+Record every numeric trial, GC and Runtime before/after snapshot. Do not request
+GC, debugger/JVMTI/profiling, Activity launch, app-data changes, cache trimming or
+heap compilation. There is no database, guide import, Sports matching or network
+in this component. Do not infer app RAM/PSS, retained heap, full startup or
+physical-device acceptance from it. Review actual Java guards when adapting the
+outline; these prose instructions are not an executable replacement harness.

@@ -1,0 +1,30 @@
+{
+  "NormBenchmark.java": {
+    "bytes": 9172,
+    "sha256": "a7e67db3cc3a9c14fd4446efd4f6cdbdb6fd05de8f86467958dff5a6b19a6c00"
+  },
+  "PROTOCOL.txt": {
+    "bytes": 3132,
+    "sha256": "d5186e2e492153441102dbe054dde31ea7cedc46a155e9fd91e619d082a029fc"
+  },
+  "provenance.json": {
+    "bytes": 2528,
+    "sha256": "03fdedb54e8c557c4a0248ceccc08cf81b520f54981291900784f22a840dc57a"
+  },
+  "README.txt": {
+    "bytes": 3211,
+    "sha256": "e26adebcabb351671672994402d406e1be39560f817d8657019827c34e49a5ba"
+  },
+  "summary.json": {
+    "bytes": 2960,
+    "sha256": "7b439406df55d622ba18dcc14bb8f00d674cc93be1df629e04e0112981b6d5a2"
+  },
+  "trials.csv": {
+    "bytes": 3395,
+    "sha256": "5479bec87caf13600b23fd810b7b0d623fdee1b0bd54fb970e479408872e0f92"
+  },
+  "trials.json": {
+    "bytes": 9786,
+    "sha256": "1460b50390d62972a6f119144a68ef3d86ea9a283e3eeda9d625190ac614c677"
+  }
+}

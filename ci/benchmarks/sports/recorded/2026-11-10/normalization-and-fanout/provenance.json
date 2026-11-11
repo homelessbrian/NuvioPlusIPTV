@@ -1,0 +1,138 @@
+{
+  "before_commit": "302d4e07108c95c4b9b3f28e0ba1776d4c74e05c",
+  "after_commit": "7edc641ab31df8d485b12f10a7ef37081f9f66d3",
+  "production_source_sha256": {
+    "before": {
+      "database": "f56adf94b3c7601a46b8445d714103647f5df2e6515c7062d529584773edf741",
+      "matcher": "8b063f217fbc6e4044762c318941d30f7f611d2ff4e84574dee45a1f8a61e792",
+      "normalizer": "74691e124a63e68c05b791b6a769c64b60a453a14c4355ca0555bc8c5cd1afd8"
+    },
+    "after": {
+      "database": "4e93f8a5afa3878acd8b5f5ea7f42a59c6ccfac47296e5f530b2375ac0379f2b",
+      "matcher": "3d7ea7fe2486e5d05a169292c8cc66ea7f39b03bbc6bd408caa7bfdb5651aece",
+      "normalizer": "82805f6e34e4048b9f4e03266abc1d43424fcafead479d8d8f1924fe0bf53388"
+    }
+  },
+  "benchmark_source_sha256": "8b89e56f2ec31cc1df17aff6d7a0ebd4a17d5d82139c65123d40e11046f1dd5b",
+  "backend": "Robolectric 4.17, SDK 34 instrumented Android API, native SQLite, host JVM",
+  "explicit_gc": false,
+  "production_instrumentation": false,
+  "device_or_application_ram_measurement": false,
+  "execution_order": [
+    {
+      "ordinal": 1,
+      "shape": "primary",
+      "mode": "stable-guide",
+      "role": "before",
+      "pair_trial": 1
+    },
+    {
+      "ordinal": 2,
+      "shape": "primary",
+      "mode": "stable-guide",
+      "role": "after",
+      "pair_trial": 1
+    },
+    {
+      "ordinal": 3,
+      "shape": "primary",
+      "mode": "stable-guide",
+      "role": "after",
+      "pair_trial": 2
+    },
+    {
+      "ordinal": 4,
+      "shape": "primary",
+      "mode": "stable-guide",
+      "role": "before",
+      "pair_trial": 2
+    },
+    {
+      "ordinal": 5,
+      "shape": "primary",
+      "mode": "stable-guide",
+      "role": "before",
+      "pair_trial": 3
+    },
+    {
+      "ordinal": 6,
+      "shape": "primary",
+      "mode": "stable-guide",
+      "role": "after",
+      "pair_trial": 3
+    },
+    {
+      "ordinal": 7,
+      "shape": "primary",
+      "mode": "test-table",
+      "role": "before",
+      "pair_trial": 1
+    },
+    {
+      "ordinal": 8,
+      "shape": "primary",
+      "mode": "test-table",
+      "role": "after",
+      "pair_trial": 1
+    },
+    {
+      "ordinal": 9,
+      "shape": "primary",
+      "mode": "test-table",
+      "role": "after",
+      "pair_trial": 2
+    },
+    {
+      "ordinal": 10,
+      "shape": "primary",
+      "mode": "test-table",
+      "role": "before",
+      "pair_trial": 2
+    },
+    {
+      "ordinal": 11,
+      "shape": "primary",
+      "mode": "test-table",
+      "role": "before",
+      "pair_trial": 3
+    },
+    {
+      "ordinal": 12,
+      "shape": "primary",
+      "mode": "test-table",
+      "role": "after",
+      "pair_trial": 3
+    },
+    {
+      "ordinal": 13,
+      "shape": "shared",
+      "mode": "stable-guide",
+      "role": "before",
+      "pair_trial": 1
+    },
+    {
+      "ordinal": 14,
+      "shape": "shared",
+      "mode": "stable-guide",
+      "role": "after",
+      "pair_trial": 1
+    },
+    {
+      "ordinal": 15,
+      "shape": "shared",
+      "mode": "test-table",
+      "role": "before",
+      "pair_trial": 1
+    },
+    {
+      "ordinal": 16,
+      "shape": "shared",
+      "mode": "test-table",
+      "role": "after",
+      "pair_trial": 1
+    }
+  ],
+  "executed_runner_source_sha256": "cbb2e4a9fcf3192400b5aa8577439115c64a390065a638bbde10ca6a925d3f70",
+  "portable_runner_source_sha256": "c19ad72900b6dc9a9bcd8f9785195b7b4f44d3aa8b47b99d749a5633f2ffadcf",
+  "portable_cli_packaging": "Only host path arguments are required explicitly and executable naming is platform-selected; compiler, workload, ordering and timing logic are unchanged. Portable CLI syntax/help/dry run checked without repeating measurements."
+}
