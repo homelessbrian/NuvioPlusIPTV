@@ -22,6 +22,10 @@ object ExternalPlayerLauncher {
         subtitles: List<SubtitleInput>? = null,
         skipSegmentsJson: String? = null
     ): Boolean {
+        if (isStalkerPlaybackAddress(url)) {
+            Toast.makeText(context, STALKER_EXTERNAL_PLAYBACK_UNAVAILABLE, Toast.LENGTH_LONG).show()
+            return false
+        }
         return try {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(Uri.parse(url), "video/*")

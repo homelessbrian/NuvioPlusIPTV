@@ -15,6 +15,11 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.stalker.StalkerStreamRef
+import com.nuvio.tv.livetv.stalker.StalkerGateway
+import com.nuvio.tv.livetv.stalker.StalkerMediaPolicy
+import com.nuvio.tv.livetv.stalker.StalkerPlayback
+import com.nuvio.tv.livetv.stalker.StalkerMimeProbe
 import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -68,7 +73,8 @@ data class LiveTrackOption(
 @OptIn(UnstableApi::class)
 @Singleton
 class LiveTvPlaybackController @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val stalker: StalkerGateway,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -79,6 +85,11 @@ class LiveTvPlaybackController @Inject constructor(
     val state: StateFlow<LivePlaybackState> = _state.asStateFlow()
 
     private var currentChannel: LiveChannel? = null
+    private var stalkerResolveJob: Job? = null
+    private var stalkerGeneration = 0L
+    private var activeStalkerRef: StalkerStreamRef? = null
+    private var stalkerMediaPolicy: StalkerMediaPolicy? = null
+    private var stalkerMimeType: String? = null
 
     // ---------------------------------------------------------------- pause and rewind
 
@@ -111,7 +122,7 @@ class LiveTvPlaybackController @Inject constructor(
         val p = _player ?: return false
         replayCache.baseDir = timeshift.baseDir
         if (!replayCache.hasRoomFor(120)) return false
-        val session = replayCache.start(url, channel.headers, keepMinutes = null, reconnect = false, label = "Catch-up save") ?: return false
+        val session = replayCache.start(url, channel.headers, keepMinutes = null, reconnect = false, label = "Catch-up save", refreshStream = bufferResolver(channel), policy = stalkerMediaPolicy, mimeType = stalkerMimeType) ?: return false
         com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Catch-up: saving the replay while it plays, for instant skipping")
         p.stop()
         replayJob?.cancel()
@@ -166,6 +177,7 @@ class LiveTvPlaybackController @Inject constructor(
 
     private fun shouldBuffer(channel: LiveChannel, catchupTitle: String?): Boolean =
         rewindAlways && timeshiftEnabled && catchupTitle == null && channel.drm == null &&
+            stalkerMimeType != StalkerMimeProbe.DASH &&
             com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.value &&
             channel.key != bufferFailedKey && timeshift.hasRoomFor(timeshiftMinutes)
 
@@ -176,7 +188,7 @@ class LiveTvPlaybackController @Inject constructor(
      */
     private fun startAlwaysBuffer(channel: LiveChannel, url: String): Boolean {
         val p = _player ?: return false
-        val session = timeshift.start(url, channel.headers, timeshiftMinutes) ?: return false
+        val session = timeshift.start(url, channel.headers, timeshiftMinutes, refreshStream = bufferResolver(channel), policy = stalkerMediaPolicy, mimeType = stalkerMimeType) ?: return false
         alwaysBuffer = true
         bufferStartedAt = System.currentTimeMillis()
         shiftPrepared = false
@@ -431,7 +443,7 @@ class LiveTvPlaybackController @Inject constructor(
         if (_recordingPlayback.value != null) { com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: paused a saved recording"); p.pause(); return }
         val ch = currentChannel
         if (_shiftStartedAt.value != null) { com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: paused again inside the buffer"); p.pause(); return }
-        if (ch == null || _state.value.catchupTitle != null || !timeshiftEnabled || !timeshift.hasRoomFor(timeshiftMinutes)) {
+        if (ch == null || _state.value.catchupTitle != null || stalkerMimeType == StalkerMimeProbe.DASH || !timeshiftEnabled || !timeshift.hasRoomFor(timeshiftMinutes)) {
             com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: plain pause, no recording (channel=${ch != null}, catchup=${_state.value.catchupTitle != null}, setting on=$timeshiftEnabled, room=${timeshift.hasRoomFor(timeshiftMinutes)})")
             p.pause(); return
         }
@@ -446,7 +458,7 @@ class LiveTvPlaybackController @Inject constructor(
                 ?.let { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it).language } }
         }.getOrNull()
         p.stop() // hand the provider connection over to the recording
-        val session = timeshift.start(url, ch.headers, timeshiftMinutes, leadMs = behindLive, audioLanguage = audioLanguage)
+        val session = timeshift.start(url, ch.headers, timeshiftMinutes, leadMs = behindLive, audioLanguage = audioLanguage, refreshStream = bufferResolver(ch), policy = stalkerMediaPolicy, mimeType = stalkerMimeType)
         if (session == null) {
             // Couldn't record: back to the live stream, paused.
             com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: couldn't start recording (no room, or provider refused); paused live instead")
@@ -614,9 +626,10 @@ class LiveTvPlaybackController @Inject constructor(
             val ch = currentChannel
             val url = currentUrl
             val title = _state.value.catchupTitle
+            val providerRef = activeStalkerRef
             val wasPlaying = p.playWhenReady
             release()
-            if (ch != null && wasPlaying) play(ch, overrideUrl = url.takeIf { it != ch.url }, catchupTitle = title)
+            if (ch != null && wasPlaying) play(ch, overrideUrl = url.takeIf { it != ch.url }, catchupTitle = title, stalkerStream = providerRef)
         }
 
     var audioPassthrough: Boolean = true
@@ -627,9 +640,10 @@ class LiveTvPlaybackController @Inject constructor(
             val ch = currentChannel
             val url = currentUrl
             val title = _state.value.catchupTitle
+            val providerRef = activeStalkerRef
             val wasPlaying = p.playWhenReady
             release()
-            if (ch != null && wasPlaying) play(ch, overrideUrl = url.takeIf { it != ch.url }, catchupTitle = title)
+            if (ch != null && wasPlaying) play(ch, overrideUrl = url.takeIf { it != ch.url }, catchupTitle = title, stalkerStream = providerRef)
         }
 
     @Volatile private var watchingFullscreen = false
@@ -664,6 +678,72 @@ class LiveTvPlaybackController @Inject constructor(
         catchupTitle: String? = null,
         fallback: String? = null,
         fallbacks: List<String> = emptyList(),
+        catchupStartMs: Long? = null,
+        catchupLeadMs: Long = 0L,
+        catchupPrimaryUrl: String? = null,
+        catchupExpectWallMs: Long? = null,
+        stalkerStream: StalkerStreamRef? = null,
+        reconnectAttempt: Int = 0,
+    ) {
+        if (stalkerStream == null && overrideUrl == null && catchupTitle == null && channel.stalkerRef != null &&
+            currentChannel?.key == channel.key && activeStalkerRef == channel.stalkerRef && _state.value.error == null &&
+            (stalkerResolveJob?.isActive == true || _player?.playbackState?.let { it != Player.STATE_IDLE } == true)
+        ) {
+            if (stalkerResolveJob?.isActive != true && _player?.isPlaying == false) _player?.play()
+            return
+        }
+        val previousChannelKey = currentChannel?.key
+        val ref = stalkerStream ?: when {
+            catchupTitle == null && overrideUrl?.startsWith("file:") != true && overrideUrl?.contains("127.0.0.1") != true -> channel.stalkerRef
+            catchupTitle != null && channel.key == currentChannel?.key && overrideUrl == currentUrl -> activeStalkerRef
+            else -> null
+        }
+        stalkerResolveJob?.cancel()
+        val generation = ++stalkerGeneration
+        activeStalkerRef = ref
+        stalkerMediaPolicy?.retire()
+        stalkerMediaPolicy = null
+        stalkerMimeType = null
+        if (ref == null) {
+            playResolved(channel, overrideUrl, catchupTitle, fallback, fallbacks, catchupStartMs,
+                catchupLeadMs, catchupPrimaryUrl, catchupExpectWallMs)
+            return
+        }
+        // Let go of the previous provider connection while the new temporary link is obtained.
+        reconnectJob?.cancel()
+        stopReplayCache()
+        stopShift()
+        _player?.stop()
+        currentChannel = channel
+        currentUrl = null
+        _state.value = LivePlaybackState(channelKey = channel.key, isBuffering = true, catchupTitle = catchupTitle)
+            .copy(reconnectAttempt = reconnectAttempt)
+        stalkerResolveJob = scope.launch {
+            try {
+                val resolved = stalker.prepare(channel.sourceId, ref)
+                if (generation != stalkerGeneration) { resolved.policy.retire(); return@launch }
+                stalkerMediaPolicy = resolved.policy
+                stalkerMimeType = resolved.mimeType
+                playResolved(channel.copy(headers = resolved.headers), resolved.url, catchupTitle,
+                    fallback = fallback, fallbacks = fallbacks,
+                    catchupStartMs = catchupStartMs, catchupLeadMs = catchupLeadMs,
+                    catchupPrimaryUrl = catchupPrimaryUrl, catchupExpectWallMs = catchupExpectWallMs,
+                    previousChannelKey = previousChannelKey, reconnectAttempt = reconnectAttempt)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (generation != stalkerGeneration) return@launch
+                scheduleReconnect(StalkerGateway.failureMessage(failure))
+            }
+        }
+    }
+
+    private fun playResolved(
+        channel: LiveChannel,
+        overrideUrl: String? = null,
+        catchupTitle: String? = null,
+        fallback: String? = null,
+        fallbacks: List<String> = emptyList(),
         /** Catch-up: the real time the replay should start at (the show's start). */
         catchupStartMs: Long? = null,
         /** Catch-up: how far the replay begins before [catchupStartMs] (whole-minute links); skipped once it's in. */
@@ -671,14 +751,16 @@ class LiveTvPlaybackController @Inject constructor(
         /** Catch-up: the link the app built first (the others are other kinds of the same request). */
         catchupPrimaryUrl: String? = null,
         /** Catch-up: the real time the link asks for, to check against the stream's own clock (null: don't check). */
-        catchupExpectWallMs: Long? = null
+        catchupExpectWallMs: Long? = null,
+        previousChannelKey: String? = currentChannel?.key,
+        reconnectAttempt: Int = 0,
     ) {
         // Something chosen to play (back from the background through a launcher row, say):
         // that wins over picking up what was on before.
         resumeAfterBackground = null
         // Picked by you (not a switch to the next channel for a game): start the game's list afresh.
         if (!switchingForGame) gameTried.clear()
-        if (currentChannel?.key != channel.key) recentStalls.clear()
+        if (previousChannelKey != channel.key) recentStalls.clear()
         shiftStartPending = false
         savedRecordingId = null
         _ownTimeline.value = false
@@ -689,7 +771,7 @@ class LiveTvPlaybackController @Inject constructor(
         archiveExpectWallMs = if (catchupTitle != null) catchupExpectWallMs else null
         wrongShowSkips = 0
         wallCheckedFor = null
-        if (currentChannel?.key != channel.key) {
+        if (previousChannelKey != channel.key) {
             neverStartedCount = 0
             audioHandled = false
             audioPrefPending = true
@@ -700,8 +782,8 @@ class LiveTvPlaybackController @Inject constructor(
         }
         // A channel whose HLS playlist couldn't be read earlier: its TS link instead.
         val url = overrideUrl ?: channel.url.let { u -> if (channel.key in tsInstead) tsLinkFor(u) ?: u else u }
-        if (currentChannel?.key != channel.key || currentUrl != url) {
-            forcedMime = null
+        if (previousChannelKey != channel.key || currentUrl != url) {
+            forcedMime = stalkerMimeType
             formatGuess = 0
             // A new stream (catch-up, another link): ask for the saved audio language again.
             audioPrefPending = true
@@ -754,6 +836,7 @@ class LiveTvPlaybackController @Inject constructor(
         LiveWatching.sourceId = channel.sourceId
         currentUrl = url
         _state.value = LivePlaybackState(channelKey = channel.key, isBuffering = true, catchupTitle = catchupTitle)
+            .copy(reconnectAttempt = reconnectAttempt)
         if (catchupTitle == null) markStarting(channel.key)
         if (bufferFailedKey != null && bufferFailedKey != channel.key) bufferFailedKey = null
         // Rewind anytime (full screen): play through the rolling buffer instead.
@@ -763,6 +846,7 @@ class LiveTvPlaybackController @Inject constructor(
         }
         // A TS catch-up replay: saved while it plays, for instant skipping.
         if (catchupTitle != null && catchupCache && channel.drm == null &&
+            stalkerMimeType != StalkerMimeProbe.HLS && stalkerMimeType != StalkerMimeProbe.DASH &&
             !url.substringBefore('?').endsWith(".m3u8", ignoreCase = true) && startReplayCache(channel, url)
         ) return
         archiveStartPending = catchupTitle != null
@@ -942,6 +1026,12 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     fun stop() {
+        stalkerMediaPolicy?.retire()
+        stalkerMediaPolicy = null
+        stalkerMimeType = null
+        stalkerResolveJob?.cancel()
+        stalkerGeneration++
+        activeStalkerRef = null
         savedRecordingId = null
         clearStarting()
         reconnectJob?.cancel()
@@ -1070,6 +1160,10 @@ class LiveTvPlaybackController @Inject constructor(
         )
         val url = currentUrl ?: ch.url
         val resumeAt = if (archive) pos else C_TIME_UNSET
+        if (activeStalkerRef != null) {
+            restartStalker(resumeAt)
+            return
+        }
         p.stop()
         archiveStartPending = false
         p.setMediaSource(buildMediaSource(url, ch.headers, isLive = !archive))
@@ -1083,8 +1177,20 @@ class LiveTvPlaybackController @Inject constructor(
         if (_state.value.catchupTitle != null) _state.value = _state.value.copy(catchupTitle = title)
     }
 
+    private fun restartStalker(positionMs: Long = 0L) {
+        val channel = currentChannel ?: return
+        val ref = activeStalkerRef ?: return
+        play(channel, catchupTitle = _state.value.catchupTitle, catchupStartMs = archiveStartWallMs,
+            catchupLeadMs = positionMs.coerceAtLeast(0L), stalkerStream = ref,
+            reconnectAttempt = _state.value.reconnectAttempt)
+    }
+
+    private fun bufferResolver(channel: LiveChannel): (suspend () -> StalkerPlayback)? =
+        (activeStalkerRef ?: channel.stalkerRef)?.let { ref -> { stalker.prepare(channel.sourceId, ref) } }
+
     fun retry() {
         val ch = currentChannel ?: return
+        if (activeStalkerRef != null) { restartStalker(); return }
         val url = currentUrl
         currentUrl = null
         play(ch, url, _state.value.catchupTitle)
@@ -1916,7 +2022,7 @@ class LiveTvPlaybackController @Inject constructor(
      * asks the provider for part of the file, which many providers don't handle (it froze).
      */
     fun catchupSeekInStream(): Boolean =
-        replayLocal || archiveWallMapped || currentUrl?.substringBefore('?')?.contains("m3u8", ignoreCase = true) == true
+        replayLocal || archiveWallMapped || stalkerMimeType == StalkerMimeProbe.HLS || stalkerMimeType == StalkerMimeProbe.DASH || currentUrl?.substringBefore('?')?.contains("m3u8", ignoreCase = true) == true
 
     /**
      * Faster Catch-Up Skipping: how much of the replay is saved on this box so far (ms into what
@@ -2025,7 +2131,7 @@ class LiveTvPlaybackController @Inject constructor(
 
     /** A link for the start-up report, with the username and password hidden. */
     private fun redact(url: String): String =
-        url.replace(Regex("""(/(?:timeshift|live|movie|series)/)[^/]+/[^/]+/"""), "$1***/***/")
+        if (currentChannel?.stalkerRef != null || url.startsWith("stalker:")) "[Stalker stream]" else url.replace(Regex("""(/(?:timeshift|live|movie|series)/)[^/]+/[^/]+/"""), "$1***/***/")
             .replace(Regex("""(username|password)=[^&]*"""), "$1=***")
             // Xtream links without "/live": http://host:port/user/pass/123.ts
             .replace(Regex("""^(https?://[^/]+)/(?!\*\*\*)[^/]+/[^/]+/(\d+(?:\.[A-Za-z0-9]+)?(?:\?.*)?)$"""), "$1/***/***/$2")
@@ -2066,7 +2172,7 @@ class LiveTvPlaybackController @Inject constructor(
         // Live channels that won't play: what failed and why, for the Start-Up Report (only
         // catch-up failures were written there, so "it won't play" reports had nothing to go on).
         if (_state.value.catchupTitle == null) {
-            val detail = error?.let { e ->
+            val detail = error?.takeIf { currentChannel?.stalkerRef == null }?.let { e ->
                 generateSequence(e.cause) { it.cause }.take(4)
                     .map { c -> c.javaClass.simpleName + (c.message?.take(80)?.let { m -> ": $m" } ?: "") }
                     .joinToString(" ← ")
@@ -2089,6 +2195,10 @@ class LiveTvPlaybackController @Inject constructor(
         reconnectJob = scope.launch {
             delay((attempt * 2_000L).coerceAtMost(10_000L))
             val ch = currentChannel ?: return@launch
+            if (activeStalkerRef != null) {
+                restartStalker(if (_state.value.catchupTitle != null) _player?.currentPosition ?: 0L else 0L)
+                return@launch
+            }
             val url = currentUrl ?: return@launch
             val p = _player ?: return@launch
             p.setMediaSource(buildMediaSource(url, ch.headers, isLive = _state.value.catchupTitle == null))
@@ -2102,6 +2212,7 @@ class LiveTvPlaybackController @Inject constructor(
             drm = currentChannel?.drm,
             forcedMime = forcedMime,
             bufferSize = bufferSize,
+            stalkerPolicy = stalkerMediaPolicy,
         ).build(url, headers, isLive)
 
     /**
@@ -2113,6 +2224,12 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private fun release() {
+        stalkerMediaPolicy?.retire()
+        stalkerMediaPolicy = null
+        stalkerMimeType = null
+        stalkerResolveJob?.cancel()
+        stalkerGeneration++
+        activeStalkerRef = null
         backgroundJob?.cancel()
         backgroundJob = null
         resumeAfterBackground = null
@@ -2145,6 +2262,7 @@ class LiveTvPlaybackController @Inject constructor(
                 stopReplayCache()
                 stopShift()
                 active.stop()
+                if (activeStalkerRef != null) { restartStalker(if (live) 0L else position); return@launch }
                 active.setMediaSource(buildMediaSource(url, channel.headers, live))
                 active.prepare()
                 if (!live && position > 0) active.seekTo(position)

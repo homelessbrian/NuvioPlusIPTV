@@ -1,5 +1,8 @@
 package com.nuvio.tv.livetv.model
 
+import com.nuvio.stalker.StalkerConfig
+import com.nuvio.stalker.StalkerStreamRef
+
 /**
  * A user-added M3U playlist. Xtream Codes logins are stored as a playlist too; the
  * URL is built from the server, username and password when the source is refreshed.
@@ -64,26 +67,32 @@ data class PlaylistSource(
      * Minutes to move the time asked for in this playlist's catch-up (and catch-up saves): for
      * providers whose archive runs on a different clock than their guide.
      */
-    val catchupShiftMinutes: Int = 0
+    val catchupShiftMinutes: Int = 0,
+    /** Explicit type survives a malformed portal configuration without treating it as M3U. */
+    val sourceType: String = "",
+    val stalkerConfig: StalkerConfig? = null
 ) {
     /** The user agent requests for this playlist go out with ("" = the app default). */
     val effectiveUserAgent: String get() = userAgent.ifBlank { fallbackUserAgent }
-    val isXtream: Boolean get() = xtreamServer.isNotBlank()
+    val isStalker: Boolean get() = sourceType == "stalker" || stalkerConfig != null
+    val isXtream: Boolean get() = !isStalker && xtreamServer.isNotBlank()
+    val hasCatalog: Boolean get() = isXtream || isStalker
 
     /** The time zone catch-up links are written in: the one picked in settings, else the server's. */
     val catchupZone: String get() = catchupTimezone.ifBlank { serverTimezone }
 
     /** Whether this source's live channels (and their guide) are loaded. */
-    val liveEnabled: Boolean get() = enabled && (!isXtream || importLive)
+    val liveEnabled: Boolean get() = enabled && (!hasCatalog || importLive)
 
     fun resolvedUrl(): String {
+        if (isStalker) return ""
         if (!isXtream) return tidyLink(url)
         return "${xtreamBase()}/get.php?username=${enc(xtreamUsername)}&password=${enc(xtreamPassword)}&type=m3u_plus&output=ts"
     }
 
     /** A channel link from this M3U playlist in the chosen stream format (unchanged on Auto). */
     fun m3uStreamLink(link: String): String {
-        if (isXtream) return link
+        if (hasCatalog) return link
         return when (streamFormat) {
             "ts", "m3u8" -> streamLinkAs(link, streamFormat)
             else -> link
@@ -219,7 +228,9 @@ data class LiveChannel(
     /** The playlist's "tvg-shift" for this channel, in minutes: moves its guide listings. */
     val tvgShiftMinutes: Int = 0,
     /** Numbered by the app (the playlist gave no number): changes with the playlists before it. */
-    val autoNumber: Boolean = false
+    val autoNumber: Boolean = false,
+    /** Resolve only when playback starts; never cache the temporary playback URL here. */
+    val stalkerRef: StalkerStreamRef? = null
 )
 
 /**
@@ -246,7 +257,11 @@ data class EpgProgram(
     /** Release year from the guide (XMLTV <date>, or "(1990)" in the title/description). */
     val year: Int? = null,
     /** Actors and directors from the guide's <credits>, when it has them. */
-    val people: List<String> = emptyList()
+    val people: List<String> = emptyList(),
+    /** Provider archive identifier, retained through guide storage and time shifts. */
+    val providerProgramId: String? = null,
+    /** Portal identity which issued the archive id; other guides can still provide the text. */
+    val providerSourceIdentity: String? = null
 ) {
     fun isLive(nowMs: Long): Boolean = nowMs in startMs until stopMs
     fun progress(nowMs: Long): Float {

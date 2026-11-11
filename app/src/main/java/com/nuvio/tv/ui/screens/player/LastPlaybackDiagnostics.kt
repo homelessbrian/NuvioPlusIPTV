@@ -75,9 +75,9 @@ data class LastPlaybackDiagnostics(
      */
     fun toJson(): String = JSONObject().apply {
         put("timestampMs", timestampMs)
-        put("host", host)
-        put("streamUrl", streamUrl ?: JSONObject.NULL)
-        put("headersJson", headersJson ?: JSONObject.NULL)
+        put("host", if (isStalkerPlayback) "stalker" else host)
+        put("streamUrl", if (isStalkerPlayback) JSONObject.NULL else streamUrl ?: JSONObject.NULL)
+        put("headersJson", if (isStalkerPlayback) JSONObject.NULL else headersJson ?: JSONObject.NULL)
         put("videoBitrate", videoBitrate)
         put("durationMs", durationMs)
         put("hdrCapsKnown", hdrCapsKnown)
@@ -107,8 +107,11 @@ data class LastPlaybackDiagnostics(
         put("videoHdrType", videoHdrType ?: JSONObject.NULL)
         put("rebufferCount", rebufferCount)
         put("rebufferTotalMs", rebufferTotalMs)
-        put("result", result)
+        put("result", if (isStalkerPlayback && result !in setOf("Pending", "Played")) "Stalker playback failed" else result)
     }.toString()
+
+    private val isStalkerPlayback: Boolean
+        get() = host.equals("stalker", ignoreCase = true) || isStalkerPlaybackAddress(streamUrl)
 
     companion object {
         val EMPTY = LastPlaybackDiagnostics()
@@ -154,7 +157,11 @@ data class LastPlaybackDiagnostics(
                 rebufferCount = o.optInt("rebufferCount", 0),
                 rebufferTotalMs = o.optLong("rebufferTotalMs", 0L),
                 result = o.optString("result", "Pending")
-            )
+            ).let { value ->
+                if (value.isStalkerPlayback) value.copy(host = "stalker", streamUrl = null, headersJson = null,
+                    result = if (value.result in setOf("Pending", "Played")) value.result else "Stalker playback failed")
+                else value
+            }
         } catch (e: Exception) {
             EMPTY
         }

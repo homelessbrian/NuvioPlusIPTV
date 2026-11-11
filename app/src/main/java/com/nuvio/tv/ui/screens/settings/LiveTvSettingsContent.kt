@@ -181,6 +181,7 @@ private val CLOCK_SIZES = listOf("small" to "Small", "medium" to "Medium", "larg
 private sealed interface LiveDialog {
     data object AddM3u : LiveDialog
     data object AddXtream : LiveDialog
+    data object AddStalker : LiveDialog
     data object AddEpg : LiveDialog
     data object AddFromPhone : LiveDialog
     data class PlaylistActions(val source: PlaylistSource) : LiveDialog
@@ -474,12 +475,12 @@ internal fun LiveTvSettingsContent(
                         val account = accounts[pl.id]
                         val expiring = pl.enabled && account?.expiringSoon() == true
                         SettingsActionRow(
-                            title = pl.name + if (pl.isXtream) " (Xtream)" else "",
+                            title = pl.name + when { pl.isStalker -> " (Stalker)"; pl.isXtream -> " (Xtream)"; else -> "" },
                             subtitle = when {
-                                pl.isXtream && pl.enabled && !pl.importLive && pl.importVod -> "Movies & series only (TV channels off)"
-                                pl.isXtream && pl.enabled && !pl.importLive && !pl.importVod -> "Nothing included: turn on TV channels or movies & series under Edit"
+                                pl.hasCatalog && pl.enabled && !pl.importLive && pl.importVod -> "Movies & series only (TV channels off)"
+                                pl.hasCatalog && pl.enabled && !pl.importLive && !pl.importVod -> "Nothing included: turn on TV channels or movies & series under Edit"
                                 else -> sourceStatus(pl.enabled, pl.lastUpdatedMs, pl.lastError, "${pl.channelCount} channels") +
-                                    (if (pl.isXtream && pl.importVod && pl.enabled) " · + movies & series" else "")
+                                    (if (pl.hasCatalog && pl.importVod && pl.enabled) " · + movies & series" else "")
                             } + (account?.expiryLabel()?.let { " · Expires $it" } ?: ""),
                             value = when {
                                 !pl.enabled -> "Off"
@@ -503,6 +504,12 @@ internal fun LiveTvSettingsContent(
                         subtitle = "Sign in with the server, username and password from your provider. Its TV guide comes with it.",
                         leadingIcon = Icons.Default.Add,
                         onClick = { dialog = LiveDialog.AddXtream }
+                    )
+                    SettingsActionRow(
+                        title = "Add Stalker / Ministra Portal",
+                        subtitle = "Use the portal URL and MAC address supplied by your provider",
+                        leadingIcon = Icons.Default.Add,
+                        onClick = { dialog = LiveDialog.AddStalker }
                     )
                     SubHeading("TV Guides (EPG)")
                     epgs.forEach { e ->
@@ -724,7 +731,7 @@ internal fun LiveTvSettingsContent(
                         onClick = { viewModel.onDemand.refreshNow() }
                     )
                     // One switch per Xtream login (logins added before On Demand start switched off).
-                    playlists.filter { it.isXtream }.forEach { pl ->
+                    playlists.filter { it.hasCatalog }.forEach { pl ->
                         SettingsToggleRow(
                             "Movies & Series from ${pl.name}",
                             if (pl.importVod) "Included" else "Not included. Switch on to import this provider's movies and series.",
@@ -1709,6 +1716,13 @@ internal fun LiveTvSettingsContent(
                 close()
             }
         )
+        LiveDialog.AddStalker -> StalkerSourceDialog(
+            onDismiss = close,
+            onSave = { name, config, guide, vod, live ->
+                viewModel.addStalker(name, config, vod, live, guide)
+                close()
+            }
+        )
         LiveDialog.AddFromPhone -> AddFromPhoneDialog(viewModel = viewModel, onDismiss = close)
         LiveDialog.AddEpg -> SourceFormDialog(
             title = "Add EPG source",
@@ -1741,21 +1755,21 @@ internal fun LiveTvSettingsContent(
                 // Which stream format to ask for. Xtream: Auto follows what the account allows.
                 // M3U links: Auto keeps the playlist's own links; TS / HLS switch links that can
                 // be switched (Xtream-style links, Dispatcharr).
-                "Stream format: " + when (d.source.streamFormat) {
+                if (!d.source.isStalker) ("Stream format: " + when (d.source.streamFormat) {
                     "ts" -> "TS"; "m3u8" -> "HLS (m3u8)"; else -> if (d.source.isXtream) "Auto" else "As in playlist"
-                } to {
+                }) to {
                     val next = when (d.source.streamFormat) { "auto" -> "ts"; "ts" -> "m3u8"; else -> "auto" }
                     viewModel.savePlaylist(d.source.copy(streamFormat = next))
                     close()
-                },
+                } else null,
                 // Which clock replay links are written in. Automatic: the one the provider's
                 // server reports (or that the app worked out); pick one when that's wrong.
-                "Catch-up time zone: " + catchupZoneLabel(d.source) to { dialog = LiveDialog.CatchupZone(d.source) },
+                if (!d.source.isStalker) ("Catch-up time zone: " + catchupZoneLabel(d.source)) to { dialog = LiveDialog.CatchupZone(d.source) } else null,
                 // Time shifts for this playlist: its built-in guide, and its catch-up.
                 ("Guide time shift: " + offsetLabel(d.source.guideShiftMinutes)).takeIf { d.source.liveEnabled }?.let {
                     it to { dialog = LiveDialog.PlaylistGuideShift(d.source) }
                 },
-                ("Catch-up time shift: " + offsetLabel(d.source.catchupShiftMinutes)).takeIf { d.source.liveEnabled }?.let {
+                ("Catch-up time shift: " + offsetLabel(d.source.catchupShiftMinutes)).takeIf { d.source.liveEnabled && !d.source.isStalker }?.let {
                     it to { dialog = LiveDialog.PlaylistCatchupShift(d.source) }
                 },
                 "Move up" to { viewModel.movePlaylist(d.source.id, -1); close() },
@@ -1780,7 +1794,13 @@ internal fun LiveTvSettingsContent(
         )
         is LiveDialog.EditPlaylist -> {
             val src = d.source
-            if (src.isXtream) {
+            if (src.isStalker) {
+                StalkerSourceDialog(src, onDismiss = close, onSave = { name, config, guide, vod, live ->
+                    viewModel.savePlaylist(src.copy(name = name, sourceType = "stalker", stalkerConfig = config,
+                        useEmbeddedEpg = guide, importVod = vod, importLive = live))
+                    close()
+                })
+            } else if (src.isXtream) {
                 SourceFormDialog(
                     title = "Edit Xtream login",
                     fields = listOf(
@@ -2478,6 +2498,51 @@ private fun AddFromPhoneDialog(viewModel: LiveTvSettingsViewModel, onDismiss: ()
     }
 }
 
+/** Provider identity is explicit; no MAC/device identifiers are generated or guessed. */
+@Composable
+private fun StalkerSourceDialog(
+    source: PlaylistSource? = null,
+    onDismiss: () -> Unit,
+    onSave: (String, com.nuvio.stalker.StalkerConfig, Boolean, Boolean, Boolean) -> Unit
+) {
+    val config = source?.stalkerConfig
+    SourceFormDialog(
+        title = if (source == null) "Add Stalker / Ministra portal" else "Edit Stalker / Ministra portal",
+        fields = listOf(
+            FormField("Name", "My provider", source?.name.orEmpty()),
+            FormField("Portal URL", "https://…/stalker_portal/c/", config?.portalUrl.orEmpty()),
+            FormField("Provider-issued MAC address", "00:00:00:00:00:00", config?.mac.orEmpty()),
+            FormField("Username (optional)", "", config?.username.orEmpty()),
+            FormField("Password (optional)", "", config?.password.orEmpty()),
+            FormField("Serial number (optional)", "", config?.serialNumber.orEmpty()),
+            FormField("Device ID (optional)", "", config?.deviceId.orEmpty()),
+            FormField("Device ID 2 (optional)", "", config?.deviceId2.orEmpty()),
+            FormField("Signature (optional)", "", config?.signature.orEmpty()),
+            FormField("Provider time zone", "UTC", config?.timezone ?: "UTC"),
+            FormField("Language", "en", config?.language ?: "en")
+        ),
+        advancedFrom = 3,
+        preserveWhitespaceAt = setOf(3, 4, 5, 6, 7, 8),
+        validate = { values ->
+            val address = runCatching { java.net.URI(values[1]) }.getOrNull()
+            when {
+                address?.scheme?.lowercase() !in listOf("http", "https") || address?.host.isNullOrBlank() || address?.rawUserInfo != null -> "Enter the full HTTP or HTTPS portal URL supplied by your provider."
+                !Regex("^[0-9a-fA-F]{2}([:-][0-9a-fA-F]{2}){5}$").matches(values[2]) -> "Enter the MAC address supplied by your provider."
+                else -> null
+            }
+        },
+        toggle = "Load built-in guide" to (source?.useEmbeddedEpg ?: true),
+        toggleLive = "Include TV channels" to (source?.importLive ?: true),
+        toggle2 = "Include movies & series (On Demand)" to (source?.importVod ?: true),
+        onDismiss = onDismiss,
+        onSave = { _, _ -> },
+        onSaveAll = { values, guide, vod, live ->
+            onSave(values[0], com.nuvio.stalker.StalkerConfig(values[1], values[2], values[3], values[4], values[5],
+                values[6], values[7], values[8], values[9].ifBlank { "UTC" }, values[10].ifBlank { "en" }), guide, vod, live)
+        }
+    )
+}
+
 private data class FormField(val label: String, val hint: String, val initial: String = "")
 
 @Composable
@@ -2492,9 +2557,14 @@ private fun SourceFormDialog(
     onSaveBoth: ((List<String>, Boolean, Boolean) -> Unit)? = null,
     /** Xtream: "Include TV channels", shown first. Its value goes to [onSaveAll]. */
     toggleLive: Pair<String, Boolean>? = null,
-    onSaveAll: ((values: List<String>, guide: Boolean, vod: Boolean, live: Boolean) -> Unit)? = null
+    onSaveAll: ((values: List<String>, guide: Boolean, vod: Boolean, live: Boolean) -> Unit)? = null,
+    advancedFrom: Int? = null,
+    validate: ((List<String>) -> String?)? = null,
+    preserveWhitespaceAt: Set<Int> = emptySet()
 ) {
     val values = remember { fields.map { mutableStateOf(it.initial) } }
+    var showAdvanced by remember { mutableStateOf(false) }
+    var formError by remember { mutableStateOf<String?>(null) }
     var toggleValue by remember { mutableStateOf(toggle?.second ?: true) }
     var toggle2Value by remember { mutableStateOf(toggle2?.second ?: true) }
     var toggleLiveValue by remember { mutableStateOf(toggleLive?.second ?: true) }
@@ -2514,7 +2584,10 @@ private fun SourceFormDialog(
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
         ) {
         fields.forEachIndexed { i, field ->
-            Column(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)) {
+            if (advancedFrom != null && i == advancedFrom) SettingsToggleRow(
+                title = "Advanced provider settings", subtitle = "Only enter values supplied by your provider",
+                checked = showAdvanced, onToggle = { showAdvanced = !showAdvanced })
+            if (advancedFrom == null || i < advancedFrom || showAdvanced) Column(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)) {
                 Text(
                     text = field.label,
                     style = MaterialTheme.typography.bodySmall,
@@ -2555,13 +2628,15 @@ private fun SourceFormDialog(
             )
         }
         }
+        formError?.let { Text(it, color = NuvioTheme.colors.Error, style = MaterialTheme.typography.bodySmall) }
         SettingsDialogActionRow {
             SettingsDialogActionButton(text = "Cancel", onClick = onDismiss)
             SettingsDialogActionButton(
                 text = "Save",
                 onClick = {
-                    val v = values.map { it.value.trim() }
-                    when {
+                    val v = values.mapIndexed { i, value -> if (i in preserveWhitespaceAt) value.value else value.value.trim() }
+                    formError = validate?.invoke(v)
+                    if (formError == null) when {
                         onSaveAll != null -> onSaveAll(v, toggleValue, toggle2Value, toggleLiveValue)
                         onSaveBoth != null -> onSaveBoth(v, toggleValue, toggle2Value)
                         else -> onSave(v, toggleValue)

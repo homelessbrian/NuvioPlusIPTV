@@ -63,6 +63,12 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
 internal class PlayerMediaSourceFactory(private val context: Context) {
+    // Ephemeral provider credentials stay in a per-hop policy, never in generic request headers.
+    var stalkerMediaPolicy: com.nuvio.tv.livetv.stalker.StalkerMediaPolicy? = null
+        set(value) {
+            if (field !== value) field?.retire()
+            field = value
+        }
     private var customExtractorsFactory: ExtractorsFactory? = null
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
@@ -182,7 +188,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         )
         val isHls = resolvedMimeType == MimeTypes.APPLICATION_M3U8
         val isDash = resolvedMimeType == MimeTypes.APPLICATION_MPD
-        val httpDataSourceFactory = if (isHls || isDash) {
+        val httpDataSourceFactory = if (stalkerMediaPolicy != null) {
+            DefaultDataSource.Factory(context, stalkerMediaPolicy!!.httpFactory())
+        } else if (isHls || isDash) {
             DefaultDataSource.Factory(
                 context,
                 PlayerPlaybackNetworking.createHttpDataSourceFactory(
@@ -220,7 +228,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 "safeNativeMb=${NuvioExoPlayerPerformanceHelper.getSafeNativeMemoryLimitMb(context)} " +
                 "parallel=${if (useParallelConnections) parallelConnectionCount else 0} chunkKb=$parallelChunkSizeKb"
         )
-        val useChunkSessionSource = useParallelConnections && !isHls && !isDash
+        val useChunkSessionSource = stalkerMediaPolicy == null && useParallelConnections && !isHls && !isDash
         parallelStartupPrefetchUnlocked.set(!useChunkSessionSource)
         val networkProgressiveFactory: DataSource.Factory = if (useChunkSessionSource) {
             val sessionConnections = parallelConnectionCount
@@ -247,7 +255,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
                 onResolvedUri = { resolved -> currentVodCacheResolvedUrl = resolved?.toString() }
             )
-        } else if (isLoopbackUrl(url)) {
+        } else if (stalkerMediaPolicy == null && isLoopbackUrl(url)) {
             PlayerPlaybackNetworking.createHttpDataSourceFactory(sanitizedHeaders, useLongReadTimeout = true)
         } else {
             httpDataSourceFactory
@@ -258,7 +266,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
 
         // 2. VOD disk cache (opt-in).
-        val useVodCache = ENABLE_VOD_CACHE && vodCacheEnabled && !isHls && !isDash && shouldUseVodCache(url)
+        // SimpleCache persists both request keys and redirected URIs. Temporary portal links may
+        // contain credentials, so keep them in the playback-owned memory transport only.
+        val useVodCache = stalkerMediaPolicy == null && ENABLE_VOD_CACHE && vodCacheEnabled && !isHls && !isDash && shouldUseVodCache(url)
         // A playback started inside the delay window would have its own data swept out from under it.
         pendingEvictionJob?.cancel()
         pendingEvictionJob = null
@@ -333,6 +343,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     }
 
     fun shutdown() {
+        stalkerMediaPolicy = null
         ParallelRangeDataSource.releaseRetainedSession()
     }
 

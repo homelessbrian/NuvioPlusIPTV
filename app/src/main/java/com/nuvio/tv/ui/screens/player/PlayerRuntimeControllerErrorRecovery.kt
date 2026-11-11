@@ -39,7 +39,7 @@ internal fun PlayerRuntimeController.attemptStartupRecovery(
         return false
     }
     if (hasRenderedFirstFrame) return false
-    if (!isRetryablePlaybackError(error)) return false
+    if (!isRetryablePlaybackError(error) && !canRenewStalkerTemporaryLink(error)) return false
     if (startupRetryCount >= MAX_STARTUP_AUTO_RETRIES) return false
 
     val paused = userPausedManually
@@ -121,6 +121,17 @@ internal fun isRetryablePlaybackError(error: PlaybackException): Boolean {
 /** HTTP statuses a retry of the same request gets again, so retrying only delays the error. */
 internal fun isPermanentHttpStatus(code: Int): Boolean =
     code == 400 || code == 401 || code == 403 || code == 404 || code == 410
+
+/** A temporary provider link may have expired; renew it once, keeping ordinary HTTP rules intact. */
+internal fun shouldRenewStalkerTemporaryLink(isStalker: Boolean, status: Int?, attempts: Int): Boolean =
+    isStalker && attempts == 0 && status in setOf(401, 403, 404, 410)
+
+private fun PlayerRuntimeController.canRenewStalkerTemporaryLink(error: PlaybackException): Boolean =
+    shouldRenewStalkerTemporaryLink(
+        com.nuvio.tv.core.player.isStalkerPlaybackAddress(currentStreamUrl),
+        error.findCause<HttpDataSource.InvalidResponseCodeException>()?.responseCode,
+        startupRetryCount + errorRetryCount
+    )
 
 /**
  * Audio-track failures that the safe-audio → audio-disabled fallback ladder can recover from.
@@ -251,7 +262,7 @@ internal fun PlayerRuntimeController.attemptAutoRetry(
     ) {
         return false
     }
-    if (!isRetryablePlaybackError(error)) return false
+    if (!isRetryablePlaybackError(error) && !canRenewStalkerTemporaryLink(error)) return false
     if (errorRetryCount >= MAX_AUTO_RETRIES) return false
 
     val paused = userPausedManually
@@ -279,7 +290,7 @@ internal fun PlayerRuntimeController.attemptAutoRetry(
 
         delay(RETRY_DELAY_MS)
 
-        if (isFirstAttempt) {
+        if (isFirstAttempt && !com.nuvio.tv.core.player.isStalkerPlaybackAddress(currentStreamUrl)) {
             // Lightweight recovery: re-prepare the same source without destroying the player.
             val player = _exoPlayer
             if (player != null) {
@@ -478,6 +489,8 @@ internal fun PlayerRuntimeController.tryParsingErrorProbeFallback(
     savedPosition: Long = 0L,
     paused: Boolean = userPausedManually
 ): Boolean {
+    // Generic probes cannot carry a portal's per-request credential policy.
+    if (com.nuvio.tv.core.player.isStalkerPlaybackAddress(currentStreamUrl) || mediaSourceFactory.stalkerMediaPolicy != null) return false
     if (currentVideoTrackIsLikelyVc1 ||
         Vc1VideoFormatHeuristics.isLikelyVc1(streamName = _uiState.value.currentStreamName ?: streamName)
     ) {

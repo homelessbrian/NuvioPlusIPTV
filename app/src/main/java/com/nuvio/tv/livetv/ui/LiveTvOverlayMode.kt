@@ -268,7 +268,7 @@ private fun OverlayModeContent(
         val p = focusedShow?.program ?: return
         when {
             now >= p.startMs && now < p.stopMs -> { viewModel.preview(ch); onClose() }
-            p.stopMs <= now && CatchupUrlBuilder.isAvailable(ch.catchup, p.startMs, now) -> {
+            p.stopMs <= now && CatchupUrlBuilder.isAvailable(ch, p, now) -> {
                 if (viewModel.playCatchup(ch, p)) onClose()
             }
             p.startMs > now -> futurePrompt = ch to p
@@ -543,7 +543,7 @@ private fun OverlayModeContent(
         val recordLabel = when {
             onNow && recordingNow -> "Stop recording"
             schedulesList.any { it.channel.key == ch.key && it.startMs == p.startMs } -> "Cancel recording"
-            p.stopMs <= now -> if (CatchupUrlBuilder.isAvailable(ch.catchup, p.startMs, now)) "Save to Recordings" else null
+            p.stopMs <= now -> if (CatchupUrlBuilder.isAvailable(ch, p, now)) "Save to Recordings" else null
             else -> "Record"
         }
         val seriesLabel = if (p.stopMs <= now) null else {

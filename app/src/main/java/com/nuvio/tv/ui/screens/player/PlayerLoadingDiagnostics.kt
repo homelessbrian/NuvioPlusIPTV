@@ -64,6 +64,9 @@ internal fun PlayerRuntimeController.recordLoadingDiagnosticEvent(
     progress: Float? = null,
     detail: String? = null
 ) {
+    val isStalker = com.nuvio.tv.core.player.isStalkerPlaybackAddress(currentStreamUrl) || mediaSourceFactory.stalkerMediaPolicy != null
+    val safeMessage = if (isStalker && message != null) "Stalker playback is preparing" else message
+    val safeDetail = if (isStalker) null else detail
     val now = SystemClock.elapsedRealtime()
     val timeMs = System.currentTimeMillis()
     if (loadingDiagnosticsStartedAtMs == 0L) {
@@ -74,10 +77,10 @@ internal fun PlayerRuntimeController.recordLoadingDiagnosticEvent(
         currentLoadingPhase = phase
         currentLoadingPhaseStartedAtMs = now
     }
-    currentLoadingMessageForReport = message
+    currentLoadingMessageForReport = safeMessage
     currentLoadingProgressForReport = progress
     val normalizedProgress = progress?.let { "%.3f".format(it.coerceIn(0f, 1f)) }.orEmpty()
-    val signature = "$phase|${message.orEmpty()}|$normalizedProgress|${detail.orEmpty()}"
+    val signature = "$phase|${safeMessage.orEmpty()}|$normalizedProgress|${safeDetail.orEmpty()}"
     if (signature == lastLoadingDiagnosticSignature) return
     lastLoadingDiagnosticSignature = signature
     startupPhaseSequence += 1
@@ -88,17 +91,17 @@ internal fun PlayerRuntimeController.recordLoadingDiagnosticEvent(
         "STARTUP_STAGE: seq=$startupPhaseSequence phase=$phase elapsedMs=$elapsedMs " +
             "phaseElapsedMs=$phaseElapsedMs clickElapsedMs=${clickElapsedMs ?: -1L} " +
             "engine=$currentInternalPlayerEngine host=${currentStreamUrl.safePlaybackRawHost()} " +
-            "message=${message?.compactTraceValue() ?: "n/a"} progress=${progress ?: -1f} " +
-            "detail=${detail?.compactTraceValue() ?: "n/a"}"
+            "message=${safeMessage?.compactTraceValue() ?: "n/a"} progress=${progress ?: -1f} " +
+            "detail=${safeDetail?.compactTraceValue() ?: "n/a"}"
     )
     loadingDiagnosticEvents.addLast(
         PlayerLoadingDiagnosticEvent(
             timeMs = timeMs,
             elapsedMs = elapsedMs,
             phase = phase,
-            message = message,
+            message = safeMessage,
             progress = progress,
-            detail = detail
+            detail = safeDetail
         )
     )
     while (loadingDiagnosticEvents.size > LOADING_EVENT_LIMIT) {
@@ -141,9 +144,10 @@ internal fun PlayerRuntimeController.buildPlaybackIssueLoadingInput(reportReason
     val player = _exoPlayer
     val elapsedMs = if (loadingDiagnosticsStartedAtMs > 0L) now - loadingDiagnosticsStartedAtMs else 0L
     val phaseElapsedMs = if (currentLoadingPhaseStartedAtMs > 0L) now - currentLoadingPhaseStartedAtMs else 0L
+    val isStalker = com.nuvio.tv.core.player.isStalkerPlaybackAddress(currentStreamUrl) || mediaSourceFactory.stalkerMediaPolicy != null
     return PlaybackIssueLoadingInput(
         phase = currentLoadingPhase.ifBlank { "unknown" },
-        message = state.loadingMessage ?: currentLoadingMessageForReport,
+        message = if (isStalker) "Stalker playback is preparing" else state.loadingMessage ?: currentLoadingMessageForReport,
         progress = state.loadingProgress ?: currentLoadingProgressForReport,
         elapsedMs = elapsedMs.coerceAtLeast(0L),
         phaseElapsedMs = phaseElapsedMs.coerceAtLeast(0L),
@@ -167,7 +171,7 @@ internal fun PlayerRuntimeController.buildPlaybackIssueLoadingInput(reportReason
         torrentDownloadSpeed = state.torrentDownloadSpeed,
         torrentPeers = state.torrentPeers,
         torrentSeeds = state.torrentSeeds,
-        rawEventLines = loadingDiagnosticRawEventLines.toList(),
+        rawEventLines = if (isStalker) emptyList() else loadingDiagnosticRawEventLines.toList(),
         events = loadingDiagnosticEvents.map {
             PlaybackIssueLoadingEventInput(
                 timeMs = it.timeMs,
@@ -198,6 +202,7 @@ private fun Int.playbackStateName(): String =
     }
 
 private fun String.safePlaybackRawHost(): String {
+    if (com.nuvio.tv.core.player.isStalkerPlaybackAddress(this)) return "stalker"
     return runCatching {
         Uri.parse(this).host ?: substringBefore("://").takeIf { it.isNotBlank() } ?: "unknown"
     }.getOrDefault("unknown")

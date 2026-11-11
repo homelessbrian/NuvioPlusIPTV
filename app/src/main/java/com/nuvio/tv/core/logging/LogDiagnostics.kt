@@ -1,14 +1,16 @@
 package com.nuvio.tv.core.logging
 
+import com.nuvio.tv.core.player.redactStalkerPlaybackDetails
+
 fun String?.rawForLog(): String =
-    this ?: "(null)"
+    this?.let(::redactStalkerPlaybackDetails) ?: "(null)"
 
 fun String?.urlForLog(): String {
-    return this ?: "(null)"
+    return this?.let(::redactStalkerPlaybackDetails) ?: "(null)"
 }
 
 fun String?.bodySnippetForLog(maxLength: Int = Int.MAX_VALUE): String {
-    val value = this ?: return "(null)"
+    val value = this?.let(::redactStalkerPlaybackDetails) ?: return "(null)"
     if (value.isBlank()) return value
     return if (value.length <= maxLength) value else "${value.take(maxLength)}..."
 }

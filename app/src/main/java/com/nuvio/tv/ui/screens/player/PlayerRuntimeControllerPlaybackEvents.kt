@@ -675,13 +675,16 @@ internal fun PlayerRuntimeController.submitPlaybackIssueReport() {
         state.playbackIssueReportStatus == PlaybackIssueReportStatus.Sent
     ) return
     val timeline = _playbackTimeline.value
-    val diagnostics = lastPlaybackDiagnosticsForReport.takeIf { it.timestampMs > 0L }
+    val isStalker = com.nuvio.tv.core.player.isStalkerPlaybackAddress(currentStreamUrl) || mediaSourceFactory.stalkerMediaPolicy != null
+    val diagnosticSnapshot = lastPlaybackDiagnosticsForReport.takeIf { it.timestampMs > 0L }
         ?: LastPlaybackDiagnostics(
             timestampMs = System.currentTimeMillis(),
             host = currentStreamUrl.reportSafeHost(),
             result = state.error?.let { "Error: $it" } ?: "Pending"
         )
-    val reportError = lastPlaybackIssueError
+    val diagnostics = if (isStalker) diagnosticSnapshot.copy(host = "stalker", streamUrl = null, headersJson = null,
+        result = diagnosticSnapshot.result.takeIf { it in setOf("Pending", "Played") } ?: "Stalker playback failed") else diagnosticSnapshot
+    val rawReportError = lastPlaybackIssueError
         ?: PlaybackIssueErrorInput(
             displayMessage = state.error,
             errorCode = null,
@@ -691,6 +694,10 @@ internal fun PlayerRuntimeController.submitPlaybackIssueReport() {
             causeMessage = null,
             httpStatus = null
         )
+    val reportError = if (isStalker) rawReportError.copy(
+        displayMessage = if (state.error == null) null else "Stalker playback failed",
+        causeMessage = null
+    ) else rawReportError
     val audioTrack = state.audioTracks.reportTrackLabel(state.selectedAudioTrackIndex)
     val subtitleTrack = state.subtitleTracks.reportTrackLabel(state.selectedSubtitleTrackIndex)
     val reportReason = PlayerStartupLoadingPolicy.loadingStallReportReason(
@@ -718,21 +725,21 @@ internal fun PlayerRuntimeController.submitPlaybackIssueReport() {
         episode = currentEpisode,
         episodeTitle = currentEpisodeTitle,
         releaseYear = year,
-        streamUrl = currentStreamUrl,
+        streamUrl = if (isStalker) "" else currentStreamUrl,
         streamMimeType = currentStreamMimeType,
         streamName = state.currentStreamName,
         addonName = currentAddonName,
         videoHash = currentVideoHash,
         videoSize = currentVideoSize,
-        requestHeaders = currentHeaders,
-        responseHeaders = currentStreamResponseHeaders,
+        requestHeaders = if (isStalker) emptyMap() else currentHeaders,
+        responseHeaders = if (isStalker) emptyMap() else currentStreamResponseHeaders,
         playerEngine = currentInternalPlayerEngine.name,
         loading = loadingInput,
         positionMs = timeline.currentPosition.takeIf { it > 0L },
         durationMs = timeline.duration.takeIf { it > 0L },
         bufferedPositionMs = timeline.bufferedPosition.takeIf { it > 0L },
-        selectedAudioTrack = audioTrack,
-        selectedSubtitleTrack = subtitleTrack,
+        selectedAudioTrack = if (isStalker) null else audioTrack,
+        selectedSubtitleTrack = if (isStalker) null else subtitleTrack,
         isTorrentStream = isTorrentStream,
         playbackSettings = buildPlaybackIssuePlaybackSettingsInput(),
         playbackAnalytics = playbackAnalyticsInput
@@ -878,6 +885,7 @@ private fun List<TrackInfo>.reportTrackLabel(selectedIndex: Int): String? {
 }
 
 private fun String.reportSafeHost(): String {
+    if (com.nuvio.tv.core.player.isStalkerPlaybackAddress(this)) return "stalker"
     return runCatching { Uri.parse(this).host ?: "unknown" }.getOrDefault("unknown")
 }
 

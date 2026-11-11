@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.DrmInfo
 import com.nuvio.tv.livetv.player.LiveCaptions
+import com.nuvio.tv.livetv.stalker.StalkerMediaPolicy
 
 /**
  * Immutable source configuration shared with single-channel Live TV. Each request explicitly
@@ -25,6 +26,7 @@ internal class LiveTvMediaSourceBuilder(
     private val observeCaptions: Boolean = true,
     private val strictDrm: Boolean = false,
     private val requireHttpSources: Boolean = false,
+    private val stalkerPolicy: StalkerMediaPolicy? = null,
 ) {
     private fun captionExtractor(factory: DefaultHlsExtractorFactory): HlsExtractorFactory =
         if (observeCaptions) LiveCaptions.Hls(factory) else factory
@@ -42,7 +44,7 @@ internal class LiveTvMediaSourceBuilder(
             buildDrmMediaSource(url, headers, isLive, protection)?.let { return it }
             check(!strictDrm) { "Protected stream could not be prepared" }
         }
-        val http = com.nuvio.tv.core.vpn.protectHttpFactory(DefaultHttpDataSource.Factory()
+        val http = stalkerPolicy?.httpFactory() ?: com.nuvio.tv.core.vpn.protectHttpFactory(DefaultHttpDataSource.Factory()
             .setUserAgent(headers["User-Agent"] ?: LiveTvRepository.DEFAULT_UA)
             .setDefaultRequestProperties(headers.filterKeys { it != "User-Agent" })
             .setAllowCrossProtocolRedirects(true)

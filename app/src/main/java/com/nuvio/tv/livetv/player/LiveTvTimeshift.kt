@@ -17,6 +17,9 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
+import com.nuvio.tv.livetv.stalker.StalkerPlayback
+import com.nuvio.tv.livetv.stalker.StalkerMediaPolicy
+import com.nuvio.tv.livetv.stalker.StalkerMimeProbe
 
 /**
  * Pause and rewind live TV, for channels without catch-up: when you pause, the channel is
@@ -91,12 +94,16 @@ class LiveTvTimeshift(private val context: Context) {
         /** HLS, live: how far behind live the player was (where you paused); null: the usual few pieces. */
         leadMs: Long? = null,
         /** HLS with separate sound: the language being listened to. */
-        audioLanguage: String? = null
+        audioLanguage: String? = null,
+        refreshStream: (suspend () -> StalkerPlayback)? = null,
+        policy: StalkerMediaPolicy? = null,
+        mimeType: String? = null,
     ): Session? {
+        if (mimeType == StalkerMimeProbe.DASH) return null
         stop()
         val dir = File(baseDir, System.currentTimeMillis().toString()).apply { mkdirs() }
             .takeIf { it.exists() } ?: File(context.cacheDir, "timeshift/" + System.currentTimeMillis()).apply { mkdirs() }
-        val isHls = url.lowercase().substringBefore('?').endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true)
+        val isHls = mimeType == StalkerMimeProbe.HLS || url.lowercase().substringBefore('?').endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true)
         val now = System.currentTimeMillis()
         trimmedMs = 0L
         savedMs = 0L
@@ -104,10 +111,10 @@ class LiveTvTimeshift(private val context: Context) {
         recording = true
         val s = if (isHls) {
             val local = File(dir, "index.m3u8")
-            Session(Kind.HLS, now, Uri.fromFile(local), dir).also { job = scope.launch { recordHls(url, headers, dir, local, keepMinutes ?: 24 * 60, live = reconnect, leadMs = leadMs, audioLanguage = audioLanguage, label = label) } }
+            Session(Kind.HLS, now, Uri.fromFile(local), dir).also { job = scope.launch { recordHls(url, headers, dir, local, keepMinutes ?: 24 * 60, live = reconnect, leadMs = leadMs, audioLanguage = audioLanguage, label = label, refreshStream = refreshStream, initialPolicy = policy) } }
         } else {
             val local = File(dir, "index.m3u8")
-            Session(Kind.TS, now, Uri.fromFile(local), dir).also { job = scope.launch { recordTs(url, headers, dir, keepMinutes, reconnect, label) } }
+            Session(Kind.TS, now, Uri.fromFile(local), dir).also { job = scope.launch { recordTs(url, headers, dir, keepMinutes, reconnect, label, refreshStream, policy) } }
         }
         session = s
         ACTIVE += s.dir
@@ -156,7 +163,9 @@ class LiveTvTimeshift(private val context: Context) {
         dir: File,
         keepMinutes: Int?,
         reconnect: Boolean = true,
-        label: String = "Pause buffer"
+        label: String = "Pause buffer",
+        refreshStream: (suspend () -> StalkerPlayback)? = null,
+        initialPolicy: StalkerMediaPolicy? = null,
     ) {
         // Pieces past the time limit are dropped as new ones come in (it records on, behind you).
         val segmenter = TsSegmenter(dir, keepSec = keepMinutes?.let { it * 60.0 }) { _ -> }
@@ -166,6 +175,7 @@ class LiveTvTimeshift(private val context: Context) {
         // accounts with one connection can refuse (or later cut) this one.
         delay(2_500)
         var attempt = 0
+        var policy = initialPolicy
         try {
             // Keeps going until you go live or change channel: a dropped connection is opened
             // again, with the gap marked, instead of ending the buffer (which sent you back to
@@ -179,7 +189,13 @@ class LiveTvTimeshift(private val context: Context) {
                 val t0 = System.currentTimeMillis()
                 var bytes = 0L
                 val why = try {
-                    val c = open(url, headers)
+                    val fresh = if (attempt > 1) refreshStream?.invoke() else null
+                    if (fresh?.mimeType == StalkerMimeProbe.DASH || fresh?.mimeType == StalkerMimeProbe.HLS) {
+                        recording = false
+                        throw java.io.IOException("The Stalker stream changed its buffer format. Retry playback.")
+                    }
+                    if (fresh != null) { if (policy !== fresh.policy) policy?.retire(); policy = fresh.policy }
+                    val c = LiveHttp.open(fresh?.url ?: url, fresh?.headers ?: headers, 20_000, policy)
                     val code = c.responseCode
                     if (code !in 200..299) { c.disconnect(); "HTTP $code" }
                     else c.inputStream.use { input ->
@@ -199,7 +215,7 @@ class LiveTvTimeshift(private val context: Context) {
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    e.message ?: e.javaClass.simpleName
+                    if (refreshStream != null) "Stalker stream unavailable" else e.message ?: e.javaClass.simpleName
                 }
                 if (!recording) break
                 // A replay that came in and ended: it's all saved (no reconnecting, which would
@@ -233,18 +249,22 @@ class LiveTvTimeshift(private val context: Context) {
         live: Boolean,
         leadMs: Long?,
         audioLanguage: String?,
-        label: String
+        label: String,
+        refreshStream: (suspend () -> StalkerPlayback)? = null,
+        initialPolicy: StalkerMediaPolicy? = null,
     ) {
         val report = com.nuvio.tv.livetv.model.LiveTvLoadReport
+        var policy = initialPolicy
+        val connect: (String, Map<String, String>) -> HttpURLConnection = { address, requestHeaders -> LiveHttp.open(address, requestHeaders, 20_000, policy) }
         try {
-            val (firstText, firstUrl) = LiveHttp.fetch(url, headers)
+            val (firstText, firstUrl) = LiveHttp.fetch(url, headers, policy)
             val choice = if (HlsPieces.isMaster(firstText)) {
                 HlsPieces.pick(firstUrl, firstText, audioLanguage) ?: return
             } else null
             val videoUrl = choice?.videoUrl ?: firstUrl
             val audioUrl = choice?.audioUrl
-            val video = HlsPieces.Track(videoUrl, dir, if (audioUrl != null) "v" else "", headers, ::open)
-            val audio = audioUrl?.let { HlsPieces.Track(it, dir, "a", headers, ::open) }
+            val video = HlsPieces.Track(videoUrl, dir, if (audioUrl != null) "v" else "", headers, connect)
+            val audio = audioUrl?.let { HlsPieces.Track(it, dir, "a", headers, connect) }
             val videoFile = if (audio != null) File(dir, "video.m3u8") else local
             val audioFile = File(dir, "audio.m3u8")
             var vm = if (choice == null) HlsPieces.parseMedia(firstText) else video.fetch()
@@ -258,12 +278,29 @@ class LiveTvTimeshift(private val context: Context) {
             }
             if (audio != null) report.add("$label: saving picture and sound separately (sound: ${choice?.audioLanguage ?: "default"})")
             var masterWritten = false
+            var lastProgressAt = System.currentTimeMillis()
+            var lastSavedName: String? = null
+            suspend fun refreshPortal() {
+                val fresh = refreshStream?.invoke() ?: return
+                if (fresh.mimeType == StalkerMimeProbe.DASH) throw java.io.IOException(StalkerMimeProbe.DASH_RECORDING_UNAVAILABLE)
+                if (policy !== fresh.policy) policy?.retire()
+                policy = fresh.policy
+                val (text, servedAt) = LiveHttp.fetch(fresh.url, fresh.headers, policy)
+                val refreshed = if (HlsPieces.isMaster(text)) HlsPieces.pick(servedAt, text, audioLanguage) else null
+                if ((refreshed?.audioUrl != null) != (audio != null)) throw IllegalStateException("The portal changed its audio format.")
+                video.url = refreshed?.videoUrl ?: servedAt
+                audio?.url = refreshed?.audioUrl ?: audio?.url.orEmpty()
+                vm = if (refreshed == null) HlsPieces.parseMedia(text) else video.fetch()
+                am = audio?.fetch()
+                if (vm.encrypted || am?.encrypted == true) throw IllegalStateException("Encrypted portal streams cannot be buffered.")
+                lastProgressAt = System.currentTimeMillis()
+            }
             while (scope.isActive && recording) {
                 // Live: from about where you are (players play a few pieces behind the newest).
                 val lead = if (live) (leadMs ?: (vm.target * 3_000L)) else null
                 video.saveNew(vm) { m -> if (lead == null) 0 else HlsPieces.startIndex(m.pieces, lead) }
                 if (audio != null && am != null) {
-                    audio.saveNew(am) { a -> if (lead == null) 0 else HlsPieces.matchingStart(a.pieces, video) }
+                    audio.saveNew(am!!) { a -> if (lead == null) 0 else HlsPieces.matchingStart(a.pieces, video) }
                 }
                 // Keep only the time limit's worth.
                 val keepSec = keepMinutes * 60.0
@@ -280,15 +317,26 @@ class LiveTvTimeshift(private val context: Context) {
                         masterWritten = true
                     }
                 }
+                if (video.saved.lastOrNull()?.name != lastSavedName) { lastSavedName = video.saved.lastOrNull()?.name; lastProgressAt = System.currentTimeMillis() }
+                else if (refreshStream != null && live && System.currentTimeMillis() - lastProgressAt > 20_000L) refreshPortal()
                 delay((vm.target * 1000L / 2).coerceIn(1_000L, 6_000L))
-                vm = runCatching { video.fetch() }.getOrElse { delay(2_000); continue }
+                try {
+                    vm = video.fetch()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    delay(2_000)
+                    if (refreshStream != null) refreshPortal()
+                    continue
+                }
                 if (audio != null) am = runCatching { audio.fetch() }.getOrNull()
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "HLS recording stopped: ${e.message}")
-            report.add("$label: HLS saving stopped (${e.message ?: e.javaClass.simpleName})")
+            val problem = if (refreshStream != null) "Stalker stream unavailable" else e.message ?: e.javaClass.simpleName
+            Log.w(TAG, "HLS recording stopped: $problem")
+            report.add("$label: HLS saving stopped ($problem)")
         } finally {
             recording = false
         }

@@ -22,11 +22,22 @@ import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.stalker.StalkerGateway
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import com.nuvio.vpn.android.VpnPlaybackProtection
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /** Pane presentation contains stable identity and display text, never stream URLs or DRM keys. */
 data class MultiviewPaneState(
@@ -138,6 +149,12 @@ private class AndroidMultiviewPanePlayer(
     bufferBytes: Int,
     private val onChanged: () -> Unit,
 ) : MultiviewPanePlayer {
+    private val appContext = context.applicationContext
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var resolveJob: Job? = null
+    private var generation = 0L
+    private var resolving = false
+    private var mediaPolicy: com.nuvio.tv.livetv.stalker.StalkerMediaPolicy? = null
     private var released = false
     private var error: String? = null
     private val listener = object : Player.Listener {
@@ -214,13 +231,46 @@ private class AndroidMultiviewPanePlayer(
 
     override val playback: MultiviewPanePlayback
         get() = MultiviewPanePlayback(
-            isBuffering = !released && error == null && player.playbackState == Player.STATE_BUFFERING,
+            isBuffering = !released && error == null && (resolving || player.playbackState == Player.STATE_BUFFERING),
             isPlaying = !released && error == null && player.isPlaying,
             error = error,
         )
 
     override fun prepare(channel: LiveChannel) {
+        resolveJob?.cancel()
+        mediaPolicy?.retire()
+        mediaPolicy = null
+        val expected = ++generation
         error = null
+        resolving = channel.stalkerRef != null
+        if (channel.stalkerRef != null) {
+            player.stop()
+            player.clearMediaItems()
+            onChanged()
+            resolveJob = scope.launch {
+                try {
+                    val gateway = EntryPointAccessors.fromApplication(appContext, StalkerPlayerEntryPoint::class.java).stalkerGateway()
+                    val stream = gateway.prepare(channel)
+                    if (released || expected != generation) { stream.policy.retire(); return@launch }
+                    resolving = false
+                    mediaPolicy = stream.policy
+                    prepareResolved(channel.copy(url = stream.url, headers = stream.headers), stream.policy, stream.mimeType)
+                    onChanged()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    if (released || expected != generation) return@launch
+                    resolving = false
+                    error = StalkerGateway.failureMessage(failure)
+                    player.volume = 0f
+                    player.playWhenReady = false
+                    onChanged()
+                }
+            }
+        } else prepareResolved(channel)
+    }
+
+    private fun prepareResolved(channel: LiveChannel, policy: com.nuvio.tv.livetv.stalker.StalkerMediaPolicy? = null, mimeType: String? = null) {
         player.setMediaSource(
             LiveTvMediaSourceBuilder(
                 drm = channel.drm,
@@ -228,6 +278,8 @@ private class AndroidMultiviewPanePlayer(
                 observeCaptions = false,
                 strictDrm = true,
                 requireHttpSources = true,
+                forcedMime = mimeType,
+                stalkerPolicy = policy,
             ).build(channel.url, channel.headers, isLive = true),
         )
         player.prepare()
@@ -251,6 +303,10 @@ private class AndroidMultiviewPanePlayer(
     override fun release() {
         if (released) return
         released = true
+        generation++
+        scope.cancel()
+        mediaPolicy?.retire()
+        mediaPolicy = null
         player.removeListener(listener)
         player.volume = 0f
         player.playWhenReady = false
@@ -258,6 +314,12 @@ private class AndroidMultiviewPanePlayer(
         player.clearMediaItems()
         player.release()
     }
+}
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface StalkerPlayerEntryPoint {
+    fun stalkerGateway(): StalkerGateway
 }
 
 /** The Android request belongs to the whole session; individual panes never request focus. */
