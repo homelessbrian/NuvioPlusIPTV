@@ -875,9 +875,13 @@ internal class SportsMatcher(
                 onRow(ch, start, stop, title, descr, cat, nt, if (wantDesc) nd else "")
             }
         } else {
-            db.scanListings(from, to, minStop) { ch, start, stop, title, descr, cat ->
-                if (gentle && ++rows % 1000 == 0) Thread.sleep(3)
-                onRow(ch, start, stop, title, descr, cat, norm(title), if (wantDesc && !descr.isNullOrEmpty()) norm(descr) else "")
+            db.scanListingGroups(from, to, minStop) { channels, start, stop, title, descr, cat ->
+                val nt = norm(title)
+                val nd = if (wantDesc && !descr.isNullOrEmpty()) norm(descr) else ""
+                for (ch in channels) {
+                    if (gentle && ++rows % 1000 == 0) Thread.sleep(3)
+                    onRow(ch, start, stop, title, descr, cat, nt, nd)
+                }
             }
         }
     }

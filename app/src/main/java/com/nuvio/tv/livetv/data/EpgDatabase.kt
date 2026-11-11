@@ -438,6 +438,22 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         minStopMs: Long,
         onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?) -> Unit
     ) {
+        scanListingGroups(fromMs, toMs, minStopMs) { channels, start, stop, title, descr, cat ->
+            for (ch in channels) onRow(ch, start, stop, title, descr, cat)
+        }
+    }
+
+    /**
+     * The same scan and order as [scanListings], before a stored listing is handed to each
+     * playlist alias with the same guide shift. Callers can share per-listing work, then fan
+     * out to every channel. The channel lists belong to the guide bindings and are read-only.
+     */
+    internal fun scanListingGroups(
+        fromMs: Long,
+        toMs: Long,
+        minStopMs: Long,
+        onRow: (channels: List<String>, start: Long, stop: Long, title: String, descr: String?, cat: String?) -> Unit
+    ) {
         for (group in allGroups()) {
             val sh = group.shiftMs
             val args = arrayOf((fromMs - sh).toString(), (toMs - sh).toString(), (minStopMs - sh).toString())
@@ -451,7 +467,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                         val title = c.getString(3)
                         val descr = if (c.isNull(4)) null else c.getString(4)
                         val cat = if (c.isNull(5)) null else c.getString(5)
-                        for (ch in chans) onRow(ch, start, stop, title, descr, cat)
+                        onRow(chans, start, stop, title, descr, cat)
                     }
                 }
             }
