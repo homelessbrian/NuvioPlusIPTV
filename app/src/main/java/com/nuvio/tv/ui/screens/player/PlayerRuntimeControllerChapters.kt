@@ -62,7 +62,8 @@ internal fun PlayerRuntimeController.dismissChaptersPanel() {
  */
 internal fun PlayerRuntimeController.loadExoChapters() {
     exoChapterLoadJob?.cancel()
-    if (isUsingMpvEngine() || _playbackTimeline.value.isLive) return
+    if (isUsingMpvEngine() || _playbackTimeline.value.isLive ||
+        com.nuvio.tv.core.player.isStalkerPlaybackAddress(currentStreamUrl)) return
     val url = currentStreamUrl
     val headers = currentHeaders
     exoChapterLoadJob = scope.launch {

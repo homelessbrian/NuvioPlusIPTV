@@ -276,7 +276,7 @@ private fun LiveTvGuideScreenBody(
         return when {
             onNow && recordingUntil.containsKey(ch.key) -> "Stop recording"
             p.startMs in scheduledStarts[ch.key].orEmpty() -> "Cancel recording"
-            p.stopMs <= nowMs -> if (CatchupUrlBuilder.isAvailable(ch.catchup, p.startMs, nowMs)) "Save to Recordings" else null
+            p.stopMs <= nowMs -> if (CatchupUrlBuilder.isAvailable(ch, p, nowMs)) "Save to Recordings" else null
             else -> "Record"
         }
     }
@@ -825,6 +825,20 @@ private fun LiveTvGuideScreenBody(
         if (column == GuideColumn.PROGRAM) blockAt(focusedPrograms, cursorMs) else blockAt(focusedPrograms, now)
     }
 
+    // A future portal listing may gain its archive id only after it airs. Refresh the
+    // selected past schedule when browsing it; opening the guide does not fan out requests.
+    LaunchedEffect(focusedChannel?.key, focusedBlock?.program?.startMs,
+        focusedBlock?.program?.providerSourceIdentity, focusedBlock?.program?.providerProgramId, column) {
+        val channel = focusedChannel ?: return@LaunchedEffect
+        val program = focusedBlock?.program ?: return@LaunchedEffect
+        if (column != GuideColumn.PROGRAM || channel.stalkerRef == null ||
+            program.stopMs > System.currentTimeMillis() || (!program.providerProgramId.isNullOrBlank() &&
+                program.providerSourceIdentity == channel.stalkerRef.sourceIdentity)
+        ) return@LaunchedEffect
+        delay(300)
+        viewModel.ensureChannelSchedule(channel.key)
+    }
+
     // Poster for the highlighted show in the info panel (what Nuvio's catalogs would show).
     // While browsing the group list, the info panel stays on what's playing in the preview;
     // it only follows the highlight when you're moving through the channels themselves.
@@ -903,7 +917,7 @@ private fun LiveTvGuideScreenBody(
         when {
             now >= block.startMs && now < block.stopMs -> playChannel(ch)
             block.stopMs <= now && block.program != null &&
-                CatchupUrlBuilder.isAvailable(ch.catchup, block.startMs, now) -> {
+                CatchupUrlBuilder.isAvailable(ch, block.program, now) -> {
                 if (viewModel.playCatchup(ch, block.program)) goFullscreen()
             }
             else -> infoTarget = MenuTarget(ch, block)
@@ -3683,7 +3697,7 @@ private fun ChannelContextMenu(
     val first = remember { FocusRequester() }
     val ch = target.channel
     val program = target.block?.program
-    val canCatchup = program != null && program.stopMs <= now && CatchupUrlBuilder.isAvailable(ch.catchup, program.startMs, now)
+    val canCatchup = program != null && program.stopMs <= now && CatchupUrlBuilder.isAvailable(ch, program, now)
     // The Calendar's bell: follow this show, or put this movie's airing on the Calendar.
     val bell = com.nuvio.tv.livetv.calendar.rememberLiveBell(program ?: streamProgram, ch)
     LiveDialog(onDismiss = onDismiss, width = 460.dp) {
@@ -4424,7 +4438,7 @@ private fun ProgramInfoDialog(
             modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())
         ) {
             val live = block != null && now >= block.startMs && now < block.stopMs
-            val archive = p != null && p.stopMs <= now && CatchupUrlBuilder.isAvailable(target.channel.catchup, p.startMs, now)
+            val archive = p != null && p.stopMs <= now && CatchupUrlBuilder.isAvailable(target.channel, p, now)
             val upcoming = p != null && block != null && block.startMs > now
             // For a show that hasn't started, streaming it through Nuvio is the main action.
             if (upcoming) {

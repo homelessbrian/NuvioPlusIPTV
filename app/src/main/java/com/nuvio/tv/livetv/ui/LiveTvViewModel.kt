@@ -645,6 +645,18 @@ class LiveTvViewModel @Inject constructor(
         val catchup = channel.catchup ?: return false
         val now = System.currentTimeMillis()
         if (!CatchupUrlBuilder.isAvailable(catchup, program.startMs, now)) return false
+        channel.stalkerRef?.let { live ->
+            // Portal archive identifiers refer to whole programmes, not Xtream timestamps.
+            val programmeId = program.providerProgramId?.takeIf { it.isNotBlank() } ?: return false
+            if (program.providerSourceIdentity != live.sourceIdentity) return false
+            val archive = live.copy(kind = com.nuvio.stalker.StalkerContentKind.ARCHIVE,
+                command = "", programId = programmeId)
+            playback.play(channel, catchupTitle = program.title, catchupStartMs = program.startMs,
+                catchupLeadMs = offsetMs.coerceAtLeast(0L), stalkerStream = archive)
+            _catchup.value = CatchupSession(channel, program, 0L)
+            repository.ensureChannelSchedule(channel.key)
+            return true
+        }
         // The time zone picked for this playlist, else the server's. Not known yet (M3U from an
         // Xtream server, or a login whose server didn't say): learn it first (a few seconds at
         // most), then play, so the replay starts at the right time. Once found it's saved with
@@ -815,7 +827,8 @@ class LiveTvViewModel @Inject constructor(
 
     private fun catchupStartPossible(channel: LiveChannel): Boolean {
         val p = currentProgram(channel.key) ?: return false
-        return CatchupUrlBuilder.isAvailable(channel.catchup, p.startMs, System.currentTimeMillis())
+        if (channel.stalkerRef != null && (p.providerProgramId.isNullOrBlank() || p.providerSourceIdentity != channel.stalkerRef.sourceIdentity)) return false
+        return CatchupUrlBuilder.isAvailable(channel, p, System.currentTimeMillis())
     }
 
     /** True if the show on now can be watched from its beginning: catch-up, or a recording running on the channel. */

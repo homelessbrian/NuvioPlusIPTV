@@ -76,7 +76,11 @@ data class VodItem(
     /** The provider's genres, as sent ("Action, Comedy"). Not every provider includes them. */
     val genre: String? = null,
     /** With duplicates merged: how many copies of this title there are (qualities, providers). */
-    val copies: Int = 1
+    val copies: Int = 1,
+    val stalkerRef: com.nuvio.stalker.StalkerStreamRef? = null,
+    val stalkerSeriesVariant: String? = null,
+    val providerPlot: String? = null,
+    val providerDurationSeconds: Long? = null
 ) {
     val uid: String get() = "${kind.key}:$playlistId:$id"
 }
@@ -99,7 +103,7 @@ data class VodCategory(
  */
 @Singleton
 class OnDemandDatabase @Inject constructor(@ApplicationContext private val appContext: Context) :
-    SQLiteOpenHelper(appContext, "livetv_on_demand.db", null, 9) {
+    SQLiteOpenHelper(appContext, "livetv_on_demand.db", null, 10) {
 
     init {
         // Browsing On Demand doesn't wait while an import or genre lookup is writing.
@@ -112,7 +116,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 pl TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL,
                 name TEXT NOT NULL, norm TEXT NOT NULL, icon TEXT, cat TEXT NOT NULL,
                 ext TEXT, tmdb TEXT, year INTEGER, rating TEXT, added INTEGER NOT NULL DEFAULT 0,
-                genre TEXT, h INTEGER,
+                genre TEXT, h INTEGER, stalker_ref TEXT, stalker_variant TEXT, provider_plot TEXT, provider_duration INTEGER,
                 PRIMARY KEY (pl, kind, id))"""
         )
         db.execSQL("CREATE INDEX items_cat ON items(kind, pl, cat)")
@@ -162,6 +166,12 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             runCatching { db.execSQL("ALTER TABLE items ADD COLUMN h INTEGER") }
             createPosterFixTable(db)
             db.execSQL("DELETE FROM posters")
+        }
+        if (oldVersion < 10) {
+            db.execSQL("ALTER TABLE items ADD COLUMN stalker_ref TEXT")
+            db.execSQL("ALTER TABLE items ADD COLUMN stalker_variant TEXT")
+            db.execSQL("ALTER TABLE items ADD COLUMN provider_plot TEXT")
+            db.execSQL("ALTER TABLE items ADD COLUMN provider_duration INTEGER")
         }
     }
 
@@ -360,6 +370,10 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         for (s in arrayOf(it.name, it.icon, it.categoryId, it.ext, it.tmdbId, it.year?.toString(), it.rating, it.addedSec.toString(), it.genre)) {
             h = 31 * h + (s?.hashCode() ?: 7)
         }
+        // Keep existing Xtream fingerprints stable: the new optional fields do not rewrite old catalogues.
+        if (it.stalkerRef != null) for (s in arrayOf(it.stalkerRef.encode(), it.stalkerSeriesVariant, it.providerPlot, it.providerDurationSeconds?.toString())) {
+            h = 31 * h + (s?.hashCode() ?: 7)
+        }
         return if (h == 0L) 1L else h
     }
 
@@ -395,7 +409,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 }, SQLiteDatabase.CONFLICT_REPLACE)
             }
             val stmt = db.compileStatement(
-                "INSERT OR REPLACE INTO items (pl, kind, id, name, norm, icon, cat, ext, tmdb, year, rating, added, genre, h) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                "INSERT OR REPLACE INTO items (pl, kind, id, name, norm, icon, cat, ext, tmdb, year, rating, added, genre, h, stalker_ref, stalker_variant, provider_plot, provider_duration) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             )
             val seen = HashSet<String>(maxOf(16, existing.size))
             items.forEach { it ->
@@ -418,6 +432,10 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 stmt.bindLong(12, it.addedSec)
                 it.genre?.let { v -> stmt.bindString(13, v) } ?: stmt.bindNull(13)
                 stmt.bindLong(14, h)
+                it.stalkerRef?.encode()?.let { v -> stmt.bindString(15, v) } ?: stmt.bindNull(15)
+                it.stalkerSeriesVariant?.let { v -> stmt.bindString(16, v) } ?: stmt.bindNull(16)
+                it.providerPlot?.let { v -> stmt.bindString(17, v) } ?: stmt.bindNull(17)
+                it.providerDurationSeconds?.let { v -> stmt.bindLong(18, v) } ?: stmt.bindNull(18)
                 stmt.executeInsert()
                 existing[it.id] = h // a title listed twice is written once
                 written++
@@ -663,7 +681,11 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         rating = getStringOrNull("rating"),
         addedSec = getLong(getColumnIndexOrThrow("added")),
         genre = getColumnIndex("genre").takeIf { it >= 0 }?.let { i -> if (isNull(i)) null else getString(i) },
-        copies = getColumnIndex("copies").takeIf { it >= 0 }?.let { i -> getInt(i) } ?: 1
+        copies = getColumnIndex("copies").takeIf { it >= 0 }?.let { i -> getInt(i) } ?: 1,
+        stalkerRef = getStringOrNull("stalker_ref")?.let(com.nuvio.stalker.StalkerStreamRef::decode),
+        stalkerSeriesVariant = getStringOrNull("stalker_variant"),
+        providerPlot = getStringOrNull("provider_plot"),
+        providerDurationSeconds = getColumnIndexOrThrow("provider_duration").let { i -> if (isNull(i)) null else getLong(i) }
     )
 
     private fun Cursor.getStringOrNull(col: String): String? =

@@ -213,9 +213,13 @@ internal object HlsPieces {
         var keepCut: () -> Boolean = { false }
 
         fun fetch(): Media {
-            val (t, u) = LiveHttp.fetch(url, headers)
-            url = u
-            return HlsPieces.parseMedia(t, target).also { target = it.target }
+            // Use the owned connector for manifests as well as pieces (VPN/session policy).
+            val connection = connect(url, headers)
+            try {
+                val text = connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                url = connection.url.toString()
+                return HlsPieces.parseMedia(text, target).also { target = it.target }
+            } finally { connection.disconnect() }
         }
 
         /** After a lost connection on a live channel: start again at the newest pieces, with a break mark. */

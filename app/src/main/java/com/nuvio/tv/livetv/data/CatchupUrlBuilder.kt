@@ -12,6 +12,11 @@ import java.util.TimeZone
  */
 object CatchupUrlBuilder {
 
+    fun isAvailable(channel: com.nuvio.tv.livetv.model.LiveChannel, program: com.nuvio.tv.livetv.model.EpgProgram, nowMs: Long): Boolean =
+        isAvailable(channel.catchup, program.startMs, nowMs) &&
+            (channel.stalkerRef == null || (!program.providerProgramId.isNullOrBlank() &&
+                program.providerSourceIdentity == channel.stalkerRef.sourceIdentity))
+
     fun isAvailable(catchup: CatchupInfo?, programStartMs: Long, nowMs: Long): Boolean {
         if (catchup == null) return false
         if (programStartMs >= nowMs) return false

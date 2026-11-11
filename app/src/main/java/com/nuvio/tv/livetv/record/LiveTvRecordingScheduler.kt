@@ -13,6 +13,8 @@ import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.CatchupInfo
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.stalker.StalkerContentKind
+import com.nuvio.stalker.StalkerStreamRef
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -44,16 +46,18 @@ data class ChannelSnapshot(
     val logo: String?,
     val url: String,
     val headers: Map<String, String>,
-    val catchup: CatchupInfo?
+    val catchup: CatchupInfo?,
+    val stalkerRef: StalkerStreamRef? = null,
 ) {
     fun toChannel(): LiveChannel = LiveChannel(
         key = key, sourceId = sourceId, sourceName = "", name = name, tvgId = null, tvgName = null,
-        logo = logo, groupId = "", group = "", number = 0, url = url, headers = headers, catchup = catchup
+        logo = logo, groupId = "", group = "", number = 0, url = url, headers = headers, catchup = catchup, stalkerRef = stalkerRef
     )
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("key", key); put("sourceId", sourceId); put("name", name); put("logo", logo ?: "")
         put("url", url); put("headers", JSONObject(headers as Map<*, *>))
+        stalkerRef?.let { put("stalkerRef", it.encode()) }
         catchup?.let { c ->
             put("catchup", JSONObject().apply {
                 put("type", c.type); put("source", c.source ?: ""); put("days", c.days); put("correction", c.correctionHours)
@@ -62,7 +66,8 @@ data class ChannelSnapshot(
     }
 
     companion object {
-        fun of(c: LiveChannel) = ChannelSnapshot(c.key, c.sourceId, c.name, c.logo, c.url, c.headers, c.catchup)
+        fun of(c: LiveChannel) = ChannelSnapshot(c.key, c.sourceId, c.name, c.logo,
+            if (c.stalkerRef != null) "" else c.url, if (c.stalkerRef != null) emptyMap() else c.headers, c.catchup, c.stalkerRef)
 
         fun fromJson(o: JSONObject): ChannelSnapshot {
             val h = o.optJSONObject("headers")
@@ -73,7 +78,7 @@ data class ChannelSnapshot(
             }
             return ChannelSnapshot(
                 o.optString("key"), o.optString("sourceId"), o.optString("name"), o.optString("logo").ifBlank { null },
-                o.optString("url"), headers, c
+                o.optString("url"), headers, c, StalkerStreamRef.decode(o.optString("stalkerRef"))
             )
         }
     }
@@ -97,7 +102,9 @@ data class RecordingSchedule(
     val nextTryMs: Long = 0L,
     /** Extra time before and after, from the settings when it was set (-1: the old 2 and 5 min). */
     val preMs: Long = -1L,
-    val postMs: Long = -1L
+    val postMs: Long = -1L,
+    val providerProgramId: String? = null,
+    val providerSourceIdentity: String? = null,
 ) {
     val pre: Long get() = if (preMs >= 0) preMs else LiveTvRecordingScheduler.PRE_MS
     val post: Long get() = if (postMs >= 0) postMs else LiveTvRecordingScheduler.POST_MS
@@ -108,6 +115,8 @@ data class RecordingSchedule(
         put("startMs", startMs); put("stopMs", stopMs); put("useCatchup", useCatchup)
         put("seriesId", seriesId ?: ""); put("attempts", attempts); put("nextTryMs", nextTryMs)
         put("preMs", preMs); put("postMs", postMs)
+        providerProgramId?.let { put("providerProgramId", it) }
+        providerSourceIdentity?.let { put("providerSourceIdentity", it) }
     }
 
     companion object {
@@ -124,7 +133,9 @@ data class RecordingSchedule(
             attempts = o.optInt("attempts"),
             nextTryMs = o.optLong("nextTryMs"),
             preMs = o.optLong("preMs", -1L),
-            postMs = o.optLong("postMs", -1L)
+            postMs = o.optLong("postMs", -1L),
+            providerProgramId = o.optString("providerProgramId").ifBlank { null },
+            providerSourceIdentity = o.optString("providerSourceIdentity").ifBlank { null },
         )
     }
 }
@@ -235,7 +246,9 @@ class LiveTvRecordingScheduler @Inject constructor(
      */
     fun add(channel: LiveChannel, program: EpgProgram, seriesId: String? = null): String {
         val now = System.currentTimeMillis()
-        val useCatchup = channel.catchup != null && (channel.catchup.days > 0)
+        val useCatchup = channel.catchup != null && (channel.catchup.days > 0) &&
+            (channel.stalkerRef == null || (!program.providerProgramId.isNullOrBlank() &&
+                program.providerSourceIdentity == channel.stalkerRef.sourceIdentity))
         val title = cleanTitle(program.title)
         if (!useCatchup && now >= program.startMs && now < program.stopMs) {
             // On now, no catch-up: record from now.
@@ -257,7 +270,9 @@ class LiveTvRecordingScheduler @Inject constructor(
             useCatchup = useCatchup,
             seriesId = seriesId,
             preMs = padPreMs,
-            postMs = padPostMs
+            postMs = padPostMs,
+            providerProgramId = program.providerProgramId,
+            providerSourceIdentity = program.providerSourceIdentity,
         )
         scope.launch {
             mutex.withLock {
@@ -467,17 +482,26 @@ class LiveTvRecordingScheduler @Inject constructor(
             // Catch-up: download the whole show.
             val channel = freshChannel(s.channel)
             val catchup = channel.catchup ?: s.channel.catchup
+            val stalkerArchive = channel.stalkerRef?.let { ref ->
+                if (s.providerSourceIdentity != ref.sourceIdentity) {
+                    drop(s, "\"${s.title}\" couldn't be saved: its portal identity changed")
+                    return@launch
+                }
+                val programId = s.providerProgramId?.takeIf { it.isNotBlank() }
+                    ?: run { drop(s, "\"${s.title}\" couldn't be saved: its portal archive identifier is unavailable"); return@launch }
+                ref.copy(kind = StalkerContentKind.ARCHIVE, command = "", programId = programId)
+            }
             val settings = prefs.currentSettings()
             val playlist = prefs.currentPlaylists().firstOrNull { it.id == channel.sourceId }
             // Not known yet: look it up first (as when watching), so the saved show is the right one.
             val zone = playlist?.catchupZone?.takeIf { it.isNotBlank() }
-                ?: kotlinx.coroutines.withTimeoutOrNull(10_000L) { repository.learnServerZone(channel) }
+                ?: if (stalkerArchive == null) kotlinx.coroutines.withTimeoutOrNull(10_000L) { repository.learnServerZone(channel) } else null
             // As when watching catch-up: the guide's shift off, the playlist's catch-up shift on.
             val overrides = runCatching { prefs.userState.first().epgOverrides }.getOrDefault(emptyMap())
             val shift = repository.guideShiftMs(channel, overrides) +
                 settings.epgOffsetMinutes * 60_000L - settings.catchupShiftMinutes * 60_000L -
                 (playlist?.catchupShiftMinutes ?: 0) * 60_000L
-            val url = catchup?.let {
+            val url = if (stalkerArchive != null) channel.url else catchup?.let {
                 // Same kind of link as watching (the catch-up setting): HLS comes as pieces, which
                 // providers send at full speed; one long TS stream is often sent at viewing speed
                 // or slower. The TS link stays as the fall-back if the HLS one sends nothing.
@@ -508,11 +532,11 @@ class LiveTvRecordingScheduler @Inject constructor(
                 channel, url, s.title, s.episode, s.description, s.startMs, s.stopMs,
                 stopAtMs = now + (s.stopMs - s.startMs) * 3 + 30 * 60_000L,
                 finite = true,
-                fallbacks = CatchupUrlBuilder.alternatives(url, zone),
+                fallbacks = if (stalkerArchive == null) CatchupUrlBuilder.alternatives(url, zone) else emptyList(),
                 seriesId = s.seriesId,
                 // Cut off part way: the rest of the show, from a little before where it got to
                 // (catch-up links often go by the minute, so a few seconds may repeat).
-                resumeFrom = { doneMs ->
+                resumeFrom = if (stalkerArchive != null) null else { doneMs ->
                     catchup?.let {
                         val from = s.startMs - s.pre - shift + doneMs - 30_000L
                         CatchupUrlBuilder.build(channel.url, it, from, s.stopMs + s.post - shift, System.currentTimeMillis(),
@@ -540,7 +564,8 @@ class LiveTvRecordingScheduler @Inject constructor(
                         }
                     }
                 },
-                expectedSec = (s.stopMs + s.post - (s.startMs - s.pre)) / 1000.0
+                expectedSec = if (stalkerArchive != null) (s.stopMs - s.startMs) / 1000.0 else (s.stopMs + s.post - (s.startMs - s.pre)) / 1000.0,
+                stalkerStream = stalkerArchive,
             )
             }
             if (started == null) {
@@ -616,7 +641,9 @@ class LiveTvRecordingScheduler @Inject constructor(
 
     /** The channel as it is now (its link may have changed), or as saved. */
     private fun freshChannel(saved: ChannelSnapshot): LiveChannel =
-        repository.channels.value.firstOrNull { it.key == saved.key } ?: saved.toChannel()
+        repository.channels.value.firstOrNull { it.key == saved.key &&
+            (saved.stalkerRef == null || it.stalkerRef?.sourceIdentity == saved.stalkerRef.sourceIdentity)
+        } ?: saved.toChannel()
 
     /**
      * A series episode you cancelled by hand: remember it, so the next guide refresh doesn't set

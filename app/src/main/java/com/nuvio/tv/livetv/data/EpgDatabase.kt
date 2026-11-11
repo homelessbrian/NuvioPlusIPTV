@@ -27,7 +27,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
-    SQLiteOpenHelper(context, "livetv_guide2.db", null, 1) {
+    SQLiteOpenHelper(context, "livetv_guide2.db", null, 2) {
 
     /**
      * Goes up whenever listings are written or removed: things worked out from the guide (Sports'
@@ -50,7 +50,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         db.execSQL(
             """CREATE TABLE listings (
                 gid INTEGER NOT NULL, start INTEGER NOT NULL, stop INTEGER NOT NULL, title TEXT NOT NULL,
-                descr TEXT, cat TEXT, ep TEXT, icon TEXT, year INTEGER, people TEXT)"""
+                descr TEXT, cat TEXT, ep TEXT, icon TEXT, year INTEGER, people TEXT, provider_id TEXT, provider_source TEXT)"""
         )
         // The only index: a guide channel's listings in time order. Listings arrive a guide
         // channel at a time, so it grows in step with the table (cheap to keep up to date).
@@ -73,10 +73,11 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Nothing here is the only copy of anything: start again and read the guide files.
-        listOf("listings", "guide_ch", "guide_src", "guide_src_channels", "chan", "auto", "meta", "sports_rows", "sports_words")
-            .forEach { db.execSQL("DROP TABLE IF EXISTS $it") }
-        onCreate(db)
+        // Add archive identifiers without discarding any cached guide or channel assignments.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE listings ADD COLUMN provider_id TEXT")
+            db.execSQL("ALTER TABLE listings ADD COLUMN provider_source TEXT")
+        }
     }
 
     /** A playlist channel's guide: a guide file ([sourceId]), a channel in it, and how far its times are moved. */
@@ -220,7 +221,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         channels: Collection<String>?
     ): Map<String, List<EpgProgram>> {
         val out = HashMap<String, List<EpgProgram>>()
-        val columns = if (light) "gid, start, stop, title, ep, icon" else "gid, start, stop, title, descr, cat, ep, icon, year, people"
+        val providerIdentities = ProgrammeIdentityPool()
+        val columns = if (light) "gid, start, stop, title, ep, icon, provider_id, provider_source" else "gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source"
         val wanted = when {
             onlyChannel != null -> groups(links(listOf(onlyChannel)))
             channels != null -> groups(links(channels))
@@ -241,7 +243,9 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                             stopMs = c.getLong(2) + sh,
                             title = c.getString(3),
                             episode = if (c.isNull(4)) null else XmltvParser.cleanEpisode(c.getString(4)),
-                            icon = if (c.isNull(5)) null else c.getString(5)
+                            icon = if (c.isNull(5)) null else c.getString(5),
+                            providerProgramId = if (c.isNull(6)) null else c.getString(6),
+                            providerSourceIdentity = if (c.isNull(7)) null else providerIdentities.share(c.getString(7))
                         ) else EpgProgram(
                             startMs = c.getLong(1) + sh,
                             stopMs = c.getLong(2) + sh,
@@ -251,7 +255,9 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                             episode = if (c.isNull(6)) null else XmltvParser.cleanEpisode(c.getString(6)),
                             icon = if (c.isNull(7)) null else c.getString(7),
                             year = if (c.isNull(8)) null else c.getInt(8),
-                            people = if (c.isNull(9)) emptyList() else c.getString(9).split('\u001F')
+                            people = if (c.isNull(9)) emptyList() else c.getString(9).split('\u001F'),
+                            providerProgramId = if (c.isNull(10)) null else c.getString(10),
+                            providerSourceIdentity = if (c.isNull(11)) null else providerIdentities.share(c.getString(11))
                         )
                         lists.getOrPut(c.getLong(0)) { ArrayList() } += p
                     }
@@ -434,7 +440,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             purgeDead()
             db.beginTransaction()
             stmt = db.compileStatement(
-                "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
+                "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
             )
         }
 
@@ -757,7 +763,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         // Emptied before: whatever a cleanup hadn't got to yet goes, so nothing is stored twice.
         db.delete("listings", "gid = ?", arrayOf(id.toString()))
         val stmt = db.compileStatement(
-            "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
+            "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
         )
         var lastStop = 0L
         var placeholders = 0L
@@ -846,13 +852,10 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                 }
                 db.delete("listings", "gid = ? AND start >= ? AND start < ?", arrayOf(id.toString(), (fromMs - sh).toString(), (toMs - sh).toString()))
                 val stmt = db.compileStatement(
-                    "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people) VALUES (?,?,?,?,?,?,?,?,?,?)"
+                    "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
                 )
                 programs.forEach { p ->
-                    stmt.clearBindings()
-                    stmt.bindLong(1, id); stmt.bindLong(2, p.startMs - sh); stmt.bindLong(3, p.stopMs - sh); stmt.bindString(4, p.title)
-                    p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
-                    stmt.bindNull(6); stmt.bindNull(7); stmt.bindNull(8); stmt.bindNull(9); stmt.bindNull(10)
+                    bindListing(stmt, id, p, sh)
                     stmt.executeInsert()
                 }
                 stmt.close()
@@ -948,6 +951,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         p.icon?.let { stmt.bindString(8, it) } ?: stmt.bindNull(8)
         p.year?.let { stmt.bindLong(9, it.toLong()) } ?: stmt.bindNull(9)
         if (p.people.isEmpty()) stmt.bindNull(10) else stmt.bindString(10, p.people.joinToString("\u001F"))
+        p.providerProgramId?.let { stmt.bindString(11, it) } ?: stmt.bindNull(11)
+        p.providerSourceIdentity?.let { stmt.bindString(12, it) } ?: stmt.bindNull(12)
     }
 
     // ------------------------------------------------------------ sports shows

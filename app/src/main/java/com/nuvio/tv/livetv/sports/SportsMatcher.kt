@@ -478,7 +478,8 @@ internal class SportsMatcher(
                         how = f.how,
                         program = f.program,
                         quality = input.quality[ch.key] ?: nameQuality(ch.name),
-                        catchup = ch.catchup != null && CatchupUrlBuilder.isAvailable(ch.catchup, f.program?.startMs ?: ev.startMs, input.now)
+                        catchup = if (ch.stalkerRef != null) f.program?.let { CatchupUrlBuilder.isAvailable(ch, it, input.now) } == true
+                        else ch.catchup != null && CatchupUrlBuilder.isAvailable(ch.catchup, f.program?.startMs ?: ev.startMs, input.now)
                     )
                 }
             if (list.isEmpty()) continue

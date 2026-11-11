@@ -342,6 +342,13 @@ class PlayerViewModel @Inject constructor(
         onResult: (Boolean) -> Unit
     ) {
         val url = controller.getCurrentStreamUrl()
+        if (com.nuvio.tv.core.player.isStalkerPlaybackAddress(url)) {
+            android.widget.Toast.makeText(activityContext,
+                com.nuvio.tv.core.player.STALKER_EXTERNAL_PLAYBACK_UNAVAILABLE,
+                android.widget.Toast.LENGTH_LONG).show()
+            onResult(false)
+            return
+        }
         if (url.isBlank()) {
             onResult(false)
             return

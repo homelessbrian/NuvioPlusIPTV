@@ -60,6 +60,7 @@ object XmltvParser {
 
         val channels = LinkedHashMap<String, XmltvChannel>()
         val programs = HashMap<String, MutableList<EpgProgram>>()
+        val providerIdentities = ProgrammeIdentityPool()
         var wanted: Set<String>? = null
         var wantedResolved = false
         val seenIds = HashSet<String>()
@@ -93,7 +94,7 @@ object XmltvParser {
                             else -> true
                         }
                         if (keep) {
-                            val program = readProgramme(parser, windowStartMs, windowEndMs)
+                            val program = readProgramme(parser, windowStartMs, windowEndMs, providerIdentities)
                             if (program != null) {
                                 if (onPrograms != null) {
                                     if (bufId != channelId) { flush(); bufId = channelId }
@@ -164,7 +165,9 @@ object XmltvParser {
         return XmltvChannel(id, names, icon)
     }
 
-    private fun readProgramme(parser: XmlPullParser, windowStart: Long, windowEnd: Long): EpgProgram? {
+    private fun readProgramme(parser: XmlPullParser, windowStart: Long, windowEnd: Long, providerIdentities: ProgrammeIdentityPool): EpgProgram? {
+        val providerProgramId = parser.getAttributeValue(null, "stalker-id")
+        val providerSourceIdentity = providerIdentities.share(parser.getAttributeValue(null, "stalker-source"))
         val start = parseTime(parser.getAttributeValue(null, "start"))
         val stop = parseTime(parser.getAttributeValue(null, "stop"))
         if (start == null || stop == null || stop <= windowStart || start >= windowEnd) {
@@ -227,7 +230,9 @@ object XmltvParser {
             episode = episode?.intern(),
             icon = icon?.intern(),
             year = year,
-            people = people?.take(12) ?: emptyList()
+            people = people?.take(12) ?: emptyList(),
+            providerProgramId = providerProgramId,
+            providerSourceIdentity = providerSourceIdentity
         )
     }
 

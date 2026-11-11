@@ -395,6 +395,8 @@ class ExternalPlaybackTracker @Inject constructor(
         ownsTorrentStream: Boolean = false,
         context: Context
     ): Boolean {
+        // Refuse before persisting a pending handoff or starting external-player tracking.
+        if (isStalkerPlaybackAddress(url)) return false
         this.ownsTorrentStream = false
         this.pendingOwnsTorrentStream = ownsTorrentStream
         if (shouldCancelPendingAutoLaunch(autoLaunch)) {
