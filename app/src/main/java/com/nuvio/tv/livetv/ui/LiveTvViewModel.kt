@@ -56,6 +56,8 @@ class LiveTvSession @Inject constructor() {
     /** Overlay mode off: Left in full screen returns to the guide with the groups open. */
     var openGroupsOnReturn = false
     val collapsedPlaylists = MutableStateFlow<Set<String>>(emptySet())
+    /** The saved folded playlists have been loaded into [collapsedPlaylists]. */
+    var collapsedLoaded = false
     /** Sleep timer: when playback stops (null = off). Kept while the app is open. */
     val sleepAtMs = MutableStateFlow<Long?>(null)
     /** The "closed while starting" note has been shown (once per app launch). */
@@ -243,6 +245,14 @@ class LiveTvViewModel @Inject constructor(
                 // Keep the hours around now loaded from the guide database as time passes.
                 repository.ensureRange(_now.value - 3 * 3_600_000L, _now.value + 12 * 3_600_000L)
                 delay(30_000)
+            }
+        }
+        viewModelScope.launch {
+            // Folded playlists in the group list stay folded between visits.
+            if (!session.collapsedLoaded) {
+                session.collapsedLoaded = true
+                val saved = prefs.collapsedPlaylists()
+                if (saved.isNotEmpty()) session.collapsedPlaylists.value = session.collapsedPlaylists.value + saved
             }
         }
         viewModelScope.launch {
@@ -1312,12 +1322,14 @@ class LiveTvViewModel @Inject constructor(
         .map { list -> list.associate { it.id to it.name } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    /** Playlists folded away in the group list (kept while the app is open). */
+    /** Playlists folded away in the group list (saved, so they stay folded next time). */
     val collapsedPlaylists = session.collapsedPlaylists
 
     fun togglePlaylistCollapsed(id: String) {
         val cur = session.collapsedPlaylists.value
-        session.collapsedPlaylists.value = if (id in cur) cur - id else cur + id
+        val next = if (id in cur) cur - id else cur + id
+        session.collapsedPlaylists.value = next
+        viewModelScope.launch { prefs.setCollapsedPlaylists(next) }
     }
 
     /** Saves the whole group order at once (Reorder groups). */

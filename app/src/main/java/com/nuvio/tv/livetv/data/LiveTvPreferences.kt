@@ -204,6 +204,7 @@ class LiveTvPreferences @Inject constructor(
         val guideInfoHidden = stringPreferencesKey("guide_info_hidden")
         val launcherRows = stringPreferencesKey("launcher_rows")
         val lockedGroups = stringSetPreferencesKey("locked_groups")
+        val collapsedPlaylists = stringSetPreferencesKey("collapsed_playlists")
         val reminders = stringPreferencesKey("reminders")
         val channelQuality = stringPreferencesKey("channel_quality")
         val channelAudio = stringPreferencesKey("channel_audio")
@@ -1393,6 +1394,14 @@ class LiveTvPreferences @Inject constructor(
 
     suspend fun setLastGroup(groupId: String) {
         store.edit { it[my(Keys.lastGroup)] = groupId }
+    }
+
+    /** Playlists folded away in the guide's group list; kept between visits. */
+    suspend fun collapsedPlaylists(): Set<String> =
+        store.data.first()[my(Keys.collapsedPlaylists)] ?: emptySet()
+
+    suspend fun setCollapsedPlaylists(ids: Set<String>) {
+        store.edit { it[my(Keys.collapsedPlaylists)] = ids }
     }
 
     // ---------- Google Drive sync ----------
