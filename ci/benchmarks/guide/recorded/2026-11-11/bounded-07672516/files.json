@@ -1,0 +1,95 @@
+{
+  "self_included": false,
+  "files": [
+    {
+      "file": ".gitattributes",
+      "bytes": 92,
+      "sha256": "4811240b2e0af4860d2f4444613cd36eb3cbb90f7ceccb430a6b42762b24383e"
+    },
+    {
+      "file": "counter-observations.json",
+      "bytes": 15341,
+      "sha256": "1e1db4c69cfd6ad30188398dbb2b22c47c6981b68293d34a04b9fdc30fd20ca3"
+    },
+    {
+      "file": "manifest.json",
+      "bytes": 5143,
+      "sha256": "50e53d0476076fba9f8299ad66fbf796b3a1e2ebf82a2b4d6fd6fe7976b6603d"
+    },
+    {
+      "file": "numeric-replay-validation.json",
+      "bytes": 685,
+      "sha256": "447573b66208ea032e80008bdd9bf41d3350d753f0cd4bba375a138080bb0000"
+    },
+    {
+      "file": "numeric-replay.json",
+      "bytes": 152141,
+      "sha256": "413a6e9e89246705b43fdc4eec8cc45fbefd9800f1f90ea0ca83ce40f12c2088"
+    },
+    {
+      "file": "primary-baseline-1.csv",
+      "bytes": 64888,
+      "sha256": "91f0d75c8f31cdb9eaaeffae311daf20f61a8a7d7114ba3684318ffe8255b029"
+    },
+    {
+      "file": "primary-baseline-2.csv",
+      "bytes": 64909,
+      "sha256": "6d74c81a24a81f7d0d18ee305734be6d6897df1351d38736399f919861dae68c"
+    },
+    {
+      "file": "primary-baseline-3.csv",
+      "bytes": 65913,
+      "sha256": "a6bfa4a48056f237557262d8c209bc265ec06240c18f7a7c564b3cbc09eab7fc"
+    },
+    {
+      "file": "primary-candidate-1.csv",
+      "bytes": 65531,
+      "sha256": "abbb1f4bdf19de2386ae18f7bef069b1deab590dc797db49ce589f049eb2900d"
+    },
+    {
+      "file": "primary-candidate-2.csv",
+      "bytes": 65940,
+      "sha256": "9e38c14ea39d4f708505810f266fce00e005bb102211e7eeb85ef617478bab69"
+    },
+    {
+      "file": "primary-candidate-3.csv",
+      "bytes": 66545,
+      "sha256": "1fd7b0b9e86da1a6699c97de23f1c516b482e04d883184a83b0d091ba2526085"
+    },
+    {
+      "file": "protocol-failures/manifest.json",
+      "bytes": 2152,
+      "sha256": "7d567afc4aee8b7a53313b8705e0fbdfb39fdcf28ab93e21046037834f0e75d3"
+    },
+    {
+      "file": "provenance.json",
+      "bytes": 15552,
+      "sha256": "2e0ababc5482b2ffe598c6be56d80fbeeafc5d586610d58f11cab9f99e358529"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5070,
+      "sha256": "281a5eddd487746a05a48f7fa29ff1c6c9e953dbc42ba418d7b3f7a60412652e"
+    },
+    {
+      "file": "shared-baseline-1.csv",
+      "bytes": 28556,
+      "sha256": "cdcacd305566e60511c73dc6103dd8cac98a72474ea2f6b8dc7aa2442b8ad023"
+    },
+    {
+      "file": "shared-candidate-1.csv",
+      "bytes": 28162,
+      "sha256": "b9ad75dc257297a4210eba781ca0f438620fd0d3ed5eacf006f7b54f317d1ddb"
+    },
+    {
+      "file": "summarize-observer-csv.py",
+      "bytes": 19117,
+      "sha256": "158d7d9fffab2d1f1e7bd419f5d1421e31700f609504307f9b45ce8b7cea2627"
+    },
+    {
+      "file": "summary.json",
+      "bytes": 141220,
+      "sha256": "5de8259f8807629fe39b89c9c099dba1be97e12a1da36b89fae6a8da418dbfab"
+    }
+  ]
+}

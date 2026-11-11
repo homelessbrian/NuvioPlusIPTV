@@ -1,0 +1,14 @@
+{
+  "complete": true,
+  "trials": 8,
+  "primary_browse_pairs": 3,
+  "numeric_rows": 1934,
+  "all_rows_retained": true,
+  "windows_peaks_gc_cadence_caps_chronology_and_all_repeated_aggregates_match": true,
+  "fresh_cold_full_guide_proofs_checked_separately": true,
+  "failure_attempts_preserved_separately": 3,
+  "manifest_sha256": "50e53d0476076fba9f8299ad66fbf796b3a1e2ebf82a2b4d6fd6fe7976b6603d",
+  "summary_sha256": "5de8259f8807629fe39b89c9c099dba1be97e12a1da36b89fae6a8da418dbfab",
+  "provenance_sha256": "2e0ababc5482b2ffe598c6be56d80fbeeafc5d586610d58f11cab9f99e358529",
+  "independent_replay_source_sha256": "158d7d9fffab2d1f1e7bd419f5d1421e31700f609504307f9b45ce8b7cea2627"
+}

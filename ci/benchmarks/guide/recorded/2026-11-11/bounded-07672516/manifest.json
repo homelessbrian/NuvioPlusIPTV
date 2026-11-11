@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "study": "bounded-guide-candidate",
+  "cases": [
+    "primary",
+    "shared"
+  ],
+  "planned_cases": [
+    "primary",
+    "shared"
+  ],
+  "browse_policy": "all-primary",
+  "expected_runtime_max_bytes": 536870912,
+  "source_pins": {
+    "baseline": {
+      "source_commit": "4636df605eb111897bfbb91913300188719399e0",
+      "apk_sha256": "631bf8e80f43ad7c21c64652f4ac68eb0dd55d6d50938382e5848cd98096d19a"
+    },
+    "candidate": {
+      "source_commit": "07672516557ffd14e2f6456ecf7441d560a64fe0",
+      "apk_sha256": "356e0fc06409397847dc9f275f3fcadcd9e822b1a43f22ee3750bca6ed087dfb"
+    }
+  },
+  "input_pins": {
+    "primary": {
+      "case_plan_sha256": "a61ac47047a57b656e699d55106456fcdf658cd566fe15e8fe1be379a1d988e8",
+      "common_record_sha256": "ca5995e99d6a61f95b16f3d4054ea5dcf617ae339861ffc89aa58d42950b54d1",
+      "common_snapshot_sha256": "3cee0906b2a7bcf71fb45b65a215aba5a1f1d726d23b189f444501595eb0a880",
+      "fixture_manifest_sha256": "9be793b3511fef89ea1a2bac53f47bc4d6fbc5df9ad2946666fd4e87d26caedd",
+      "logical_proof_sha256": "ba9f9a6ec5431770c1b3e2ded27dd9fca011b148ea37f57741ce9859ddbad04e"
+    },
+    "shared": {
+      "case_plan_sha256": "b13d0bece7fb3eb86c4c6effd03b2055c01a69289c77a1e2159b89b24af6441b",
+      "common_record_sha256": "4764fe3f88b5ac449337541c5bad8de973ca15a4988b26d917eb61f596703e1e",
+      "common_snapshot_sha256": "086a7893764a0a026984c3f0819ac5cf6d1ef12c1ec7f049315b9a90d6ab2faa",
+      "fixture_manifest_sha256": "93860c93668253e42e5933e2798ab3893492a6c5e0b96c90d3ad46a131182a46",
+      "logical_proof_sha256": "0ff9dbf4d352278ba8fdd1a626c6d23ebcc83cd0ece30b9266efcfb3ed85ab4f"
+    }
+  },
+  "trials": [
+    {
+      "case": "primary",
+      "role": "baseline",
+      "label": "baseline-1",
+      "file": "primary-baseline-1.csv",
+      "sha256": "91f0d75c8f31cdb9eaaeffae311daf20f61a8a7d7114ba3684318ffe8255b029",
+      "bytes": 64888,
+      "rows": 278,
+      "main_launch_requested_elapsed_ns": 84087483322900,
+      "browse_begin_elapsed_ns": 84208800000000,
+      "browse_end_elapsed_ns": 84298760000000
+    },
+    {
+      "case": "primary",
+      "role": "candidate",
+      "label": "candidate-1",
+      "file": "primary-candidate-1.csv",
+      "sha256": "abbb1f4bdf19de2386ae18f7bef069b1deab590dc797db49ce589f049eb2900d",
+      "bytes": 65531,
+      "rows": 282,
+      "main_launch_requested_elapsed_ns": 84436775378100,
+      "browse_begin_elapsed_ns": 84558090000000,
+      "browse_end_elapsed_ns": 84652140000000
+    },
+    {
+      "case": "primary",
+      "role": "baseline",
+      "label": "baseline-2",
+      "file": "primary-baseline-2.csv",
+      "sha256": "6d74c81a24a81f7d0d18ee305734be6d6897df1351d38736399f919861dae68c",
+      "bytes": 64909,
+      "rows": 279,
+      "main_launch_requested_elapsed_ns": 84783190461700,
+      "browse_begin_elapsed_ns": 84904500000000,
+      "browse_end_elapsed_ns": 84996100000000
+    },
+    {
+      "case": "primary",
+      "role": "candidate",
+      "label": "candidate-2",
+      "file": "primary-candidate-2.csv",
+      "sha256": "9e38c14ea39d4f708505810f266fce00e005bb102211e7eeb85ef617478bab69",
+      "bytes": 65940,
+      "rows": 283,
+      "main_launch_requested_elapsed_ns": 85099573272200,
+      "browse_begin_elapsed_ns": 85220880000000,
+      "browse_end_elapsed_ns": 85315090000000
+    },
+    {
+      "case": "primary",
+      "role": "baseline",
+      "label": "baseline-3",
+      "file": "primary-baseline-3.csv",
+      "sha256": "a6bfa4a48056f237557262d8c209bc265ec06240c18f7a7c564b3cbc09eab7fc",
+      "bytes": 65913,
+      "rows": 283,
+      "main_launch_requested_elapsed_ns": 85421658960700,
+      "browse_begin_elapsed_ns": 85542950000000,
+      "browse_end_elapsed_ns": 85637660000000
+    },
+    {
+      "case": "primary",
+      "role": "candidate",
+      "label": "candidate-3",
+      "file": "primary-candidate-3.csv",
+      "sha256": "1fd7b0b9e86da1a6699c97de23f1c516b482e04d883184a83b0d091ba2526085",
+      "bytes": 66545,
+      "rows": 285,
+      "main_launch_requested_elapsed_ns": 85739586529200,
+      "browse_begin_elapsed_ns": 85860910000000,
+      "browse_end_elapsed_ns": 85957310000000
+    },
+    {
+      "case": "shared",
+      "role": "baseline",
+      "label": "baseline-1",
+      "file": "shared-baseline-1.csv",
+      "sha256": "cdcacd305566e60511c73dc6103dd8cac98a72474ea2f6b8dc7aa2442b8ad023",
+      "bytes": 28556,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 86418735206900,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "case": "shared",
+      "role": "candidate",
+      "label": "candidate-1",
+      "file": "shared-candidate-1.csv",
+      "sha256": "b9ad75dc257297a4210eba781ca0f438620fd0d3ed5eacf006f7b54f317d1ddb",
+      "bytes": 28162,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 86588895249500,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    }
+  ],
+  "protocol_failures": {
+    "manifest": "protocol-failures/manifest.json",
+    "attempts": 3,
+    "partial_rows_in_accepted_statistics": false
+  },
+  "counter_observations": "counter-observations.json"
+}
