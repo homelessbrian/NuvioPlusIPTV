@@ -14,6 +14,7 @@ import com.nuvio.tv.livetv.ui.allowedLiveTvChannelsFlow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
@@ -50,6 +51,13 @@ class MultiviewViewModel @Inject constructor(
     /** The play bar's darkness ("Bar darkness"), which every panel over the video follows. */
     val panelBackground: StateFlow<String> = preferences.settings.map { it.panelBackground }
         .stateIn(viewModelScope, SharingStarted.Eagerly, "darker")
+
+    /** The channels the viewer starred and watched lately, for the picker's Favorites / Recently Watched groups. */
+    val favoriteKeys: StateFlow<List<String>> = preferences.userState.map { it.favorites }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val recentKeys: StateFlow<List<String>> = preferences.userState.map { it.recent }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val use24HourClock: StateFlow<Boolean> = preferences.settings.map { it.use24HourClock }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)

@@ -99,7 +99,9 @@ fun LiveTvPlayerScreen(
     /** The gear panel's "Settings" link (All Live TV settings). */
     onOpenSettings: () -> Unit = {},
     viewModel: LiveTvViewModel = hiltViewModel(),
-    onOpenSportsMultiview: (Int) -> Unit = {}
+    onOpenSportsMultiview: (Int) -> Unit = {},
+    /** The play bar's Multiview button: the normal Multiview, starting with this channel. */
+    onOpenMultiview: () -> Unit = {}
 ) {
     val sports: com.nuvio.tv.livetv.sports.SportsWatchViewModel = hiltViewModel()
     val sportsSettings by sports.settings.collectAsStateWithLifecycle()
@@ -426,6 +428,19 @@ fun LiveTvPlayerScreen(
         dialog = PlayerDialog.NONE
         sportsGamesOpen = true
     }
+    // The play bar's Multiview button works for any live channel (not only ones with a game).
+    val multiviewEligible = current != null && playback.catchupTitle == null && !playingRecording
+    fun openMultiview() {
+        okHoldJob?.cancel()
+        longPressFired = false
+        closeFull()
+        bannerVisible = false
+        browseKey = null
+        listVisible = false
+        dialog = PlayerDialog.NONE
+        current?.key?.let { com.nuvio.tv.livetv.multiview.MultiviewQueue.add(it) }
+        onOpenMultiview()
+    }
     fun playSportsGame(eventId: String, channelKey: String? = null): Boolean {
         val match = sports.resolve(eventId, channelKey) ?: return false
         com.nuvio.tv.livetv.sports.SportsLaunch.openedFromSports(eventId)
@@ -608,7 +623,7 @@ fun LiveTvPlayerScreen(
                         else if (shiftStartedAt != null || (ownTimeline && viewModel.playback.shiftIsBehind())) PanelMode.SHIFT
                         else PanelMode.LIVE
                     val paused = playback.userPaused
-                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty(), sports = sportsEligible)
+                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty(), sports = multiviewEligible)
                     if (e.type == KeyEventType.KeyUp) return@onPreviewKeyEvent isOk || e.key == Key.Back
                     showBanner()
                     val buttons = list.filter { it != PanelControl.TIMELINE }
@@ -685,7 +700,7 @@ fun LiveTvPlayerScreen(
                                     com.nuvio.tv.livetv.record.LiveTvNotice.show(if (pinned) "Score pinned to the corner" else "Score unpinned")
                                 }
                                 PanelControl.BACKUPS -> dialog = PlayerDialog.BACKUPS
-                                PanelControl.SPORTS -> openSportsGames()
+                                PanelControl.SPORTS -> openMultiview()
                                 PanelControl.MORE -> openGear()
                                 PanelControl.TIMELINE, null -> Unit
                             }
@@ -1125,7 +1140,7 @@ fun LiveTvPlayerScreen(
                 }
                 LiveTvPlayerPanel(
                     onBackupsBounds = { backupsAnchor = it },
-                    onMultiview = { openSportsGames() },
+                    onMultiview = { openMultiview() },
                     background = settings.panelBackground,
                     channel = ch,
                     mode = mode,
@@ -1145,7 +1160,7 @@ fun LiveTvPlayerScreen(
                     showPosters = settings.showPosters,
                     timeline = timeline,
                     paused = paused,
-                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty(), sports = sportsEligible),
+                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty(), sports = multiviewEligible),
                     focused = controlFocus,
                     captionsOn = captionsOn,
                     audioLabel = remember(playback.channelKey, bannerVisible) { viewModel.playback.audioLabel() },

@@ -2423,6 +2423,7 @@ private fun LiveTvGuideScreenBody(
                 embedded = true,
                 onOpenSettings = onOpenSettings,
                 onOpenSportsMultiview = { panes -> onOpenSportsMultiview(panes, playback.channelKey) },
+                onOpenMultiview = onOpenMultiview,
                 viewModel = viewModel
             )
         }

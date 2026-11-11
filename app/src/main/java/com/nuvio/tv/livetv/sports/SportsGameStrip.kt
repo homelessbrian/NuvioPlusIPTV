@@ -78,6 +78,8 @@ internal fun SportsGameStrip(
     onRemove: () -> Unit,
     onPane: (Int) -> Unit,
     onClose: () -> Unit,
+    /** Multiview's channel picker: shows a small "Channels" button next to Close. */
+    onChannels: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     /** The play bar's darkness ("Bar darkness"): this panel floats over the video like the bar. */
     panelBackground: String = "darker",
@@ -207,6 +209,7 @@ internal fun SportsGameStrip(
                 showGames()
             })
         }
+        if (onChannels != null) add(StripControl("channels", "Channels", false, onClick = onChannels))
         add(StripControl("close", "Close", false, onClick = onClose))
     }
     controls.forEach { controlFocus.getOrPut(it.id) { FocusRequester() } }
@@ -347,7 +350,7 @@ internal fun SportsGameStrip(
                         Spacer(Modifier.width(5.dp))
                         LiveText("Pane", size = 11.sp, color = NuvioTheme.colors.TextSecondary)
                     }
-                    if (control.id == "close") Spacer(Modifier.weight(1f))
+                    if (control.id == "channels" || (control.id == "close" && onChannels == null)) Spacer(Modifier.weight(1f))
                     StripButton(
                         control = control,
                         onClick = {
