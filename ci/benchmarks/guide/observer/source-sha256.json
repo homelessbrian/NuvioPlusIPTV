@@ -1,0 +1,19 @@
+{
+  "provenance": "Exact Java and manifest from reviewed companion build-0004; no app data or APK binary included",
+  "package": "com.nuvio.bench.ram20261110",
+  "target_package": "com.nuvio.livetv.groupvpnpreview",
+  "recorded_companion_apk": {
+    "bytes": 12432,
+    "sha256": "09977bbfac81adf91991da98ef895f5d67a2ab693785696a400ed106d4d99f0f"
+  },
+  "files": {
+    "AndroidManifest.xml": {
+      "bytes": 721,
+      "sha256": "5bc1a816f486eeea30b952182d05128db3b97762f0d72cd5139c2bc3342954c7"
+    },
+    "src/com/nuvio/bench/ram20261110/RamInstrumentation.java": {
+      "bytes": 9042,
+      "sha256": "e07ee94bbcb9f09cb882d6b6174689c6a96036f6f18e663f4c9f340e770a110d"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.nuvio.bench.ram20261110"
+    android:versionCode="1" android:versionName="1">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
+    <application android:hasCode="true" android:debuggable="false"
+        android:allowBackup="false" android:label="Private RAM observer" />
+    <instrumentation android:name="com.nuvio.bench.ram20261110.RamInstrumentation"
+        android:targetPackage="com.nuvio.livetv.groupvpnpreview"
+        android:targetProcesses="com.nuvio.livetv.groupvpnpreview"
+        android:functionalTest="false" android:handleProfiling="false" />
+</manifest>

@@ -1,0 +1,5 @@
+.run/
+*.apk
+*.idsig
+*.class
+*.dex

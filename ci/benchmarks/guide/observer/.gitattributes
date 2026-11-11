@@ -1,0 +1,6 @@
+AndroidManifest.xml text eol=lf
+src/**/*.java text eol=lf
+build.ps1 text eol=lf
+README.md text eol=lf
+source-sha256.json text eol=lf
+build-validation.json text eol=lf

@@ -1,0 +1,42 @@
+{
+  "baseline-1.csv": {
+    "bytes": 28420,
+    "sha256": "44e0f7096560551a600e4ef55d86cfb209d6ffb8fe881565cd63a129055c0dcd",
+    "rows": 122,
+    "numeric_columns": 32
+  },
+  "candidate-1.csv": {
+    "bytes": 28254,
+    "sha256": "0f6bc892caaf182b23ab755c531fb5b11f2abb804bcc178b8fe9e6defe8665d3",
+    "rows": 122,
+    "numeric_columns": 32
+  },
+  "baseline-2.csv": {
+    "bytes": 27885,
+    "sha256": "8ebb71ad229cb80ce77832e5c0bf4c5b7574f72ec536298fa7cd170c6bb81b01",
+    "rows": 122,
+    "numeric_columns": 32
+  },
+  "candidate-2.csv": {
+    "bytes": 27854,
+    "sha256": "cf8df383cd9a75e0ed240b9159c9f94e4a4b6cedd64487bc70bc98c2e85a0f25",
+    "rows": 121,
+    "numeric_columns": 32
+  },
+  "baseline-3.csv": {
+    "bytes": 67808,
+    "sha256": "9a6ba7557cdff20be93f1107b0e679dcd62ba1165dcce6aa3f97493856e94f20",
+    "rows": 290,
+    "numeric_columns": 32
+  },
+  "candidate-3.csv": {
+    "bytes": 68576,
+    "sha256": "f2e355dcc9a9b58891dcf4c48a8c3fec5702ec2f9e476ca746fbe7fd82b6ef13",
+    "rows": 294,
+    "numeric_columns": 32
+  },
+  "primary-summary.json": {
+    "bytes": 110048,
+    "sha256": "8ed0dd954de691b87358886b71cc8b2a9953162e7561e8a994a7e08ca458343c"
+  }
+}

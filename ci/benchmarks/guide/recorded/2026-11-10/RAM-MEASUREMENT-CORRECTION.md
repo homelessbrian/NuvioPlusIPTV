@@ -4,4 +4,4 @@ Full dumpsys meminfo invokes app-side garbage collection before reading managed-
 
 The APK-process values in actual-app-ram-* are GC-perturbed diagnostics. This overrides earlier natural/no-forced-GC labels. All numbers, regressions and outliers remain unchanged.
 
-The normalized full-dump series was also stopped and reclassified. Replacement collection is being validated. Isolated query/materialization and JDK allocation experiments remain separate; no app-RAM saving is established.
+The normalized full-dump series was also stopped and reclassified. A new [matched instrumented comparison](matched-observer-0004/README.md) now uses in-process Runtime/Debug.MemoryInfo without an explicit GC request. It reports all six trials, overlapping ranges and an unfavorable candidate browsing peak; it is not pooled with these diagnostics or presented as passive execution. Isolated query/materialization and JDK allocation experiments remain separate. No uniform app-RAM saving or reported-device resolution is established.

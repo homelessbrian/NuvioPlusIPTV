@@ -1,0 +1,18 @@
+{
+  "logical_payload_identical_to_measured_observer_0004": true,
+  "host_build_apk_sha256": "c834e27098e4902442c803a999c00d69f1ff94f1e4da6d8ffaff17388ca9fa5b",
+  "recorded_observer_apk_sha256": "09977bbfac81adf91991da98ef895f5d67a2ab693785696a400ed106d4d99f0f",
+  "checks": {
+    "AndroidManifest.xml": {
+      "equal": true,
+      "sha256": "617f2d172e263e3cfdf03a7c27f73dfa5f2a94caf79f5500df1d9931ca1701a9",
+      "bytes": 1916
+    },
+    "classes.dex": {
+      "equal": true,
+      "sha256": "969021ee634925c9f7e43a57e7a3f2f3bf28e6245bd2f1a5067e617bd7bd063c",
+      "bytes": 8156
+    }
+  },
+  "no_device_actions": true
+}
