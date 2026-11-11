@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -48,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -74,6 +76,7 @@ import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.livetv.model.effectiveGuideSize
 import com.nuvio.tv.ui.screens.collection.NuvioTextField
 import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.brandWordmarkResource
 import kotlinx.coroutines.delay
 import java.text.DateFormat
 import java.util.Date
@@ -179,6 +182,7 @@ private sealed interface LiveDialog {
     data object AddM3u : LiveDialog
     data object AddXtream : LiveDialog
     data object AddEpg : LiveDialog
+    data object AddFromPhone : LiveDialog
     data class PlaylistActions(val source: PlaylistSource) : LiveDialog
     data class CatchupZone(val source: PlaylistSource) : LiveDialog
     data class EditPlaylist(val source: PlaylistSource) : LiveDialog
@@ -459,6 +463,12 @@ internal fun LiveTvSettingsContent(
                     onToggle = { toggle("sources") }
                 ) {
                     SubHeading("Playlists")
+                    SettingsActionRow(
+                        title = "Add From Your Phone",
+                        subtitle = "Scan a QR code, then paste your playlist link, Xtream login or EPG link on your phone instead of typing it with the remote",
+                        leadingIcon = Icons.Default.PhoneAndroid,
+                        onClick = { dialog = LiveDialog.AddFromPhone }
+                    )
                     if (status.loading) LoadingLine(status.message ?: "Updating…")
                     playlists.forEach { pl ->
                         val account = accounts[pl.id]
@@ -1699,6 +1709,7 @@ internal fun LiveTvSettingsContent(
                 close()
             }
         )
+        LiveDialog.AddFromPhone -> AddFromPhoneDialog(viewModel = viewModel, onDismiss = close)
         LiveDialog.AddEpg -> SourceFormDialog(
             title = "Add EPG source",
             fields = listOf(FormField("Name", "Guide"), FormField("XMLTV URL", "http://…/epg.xml.gz")),
@@ -2356,6 +2367,116 @@ private fun DriveSignInDialog(prompt: com.nuvio.tv.livetv.sync.SignInPrompt, onC
 }
 
 // ==================================================================== dialogs
+
+/**
+ * "Add from your phone": a QR code opens a page on the home network where a playlist link, an
+ * Xtream login or an EPG link can be pasted on the phone. Whatever is sent is added right away
+ * (the code in the address means only someone who can see this screen can use it).
+ */
+@Composable
+private fun AddFromPhoneDialog(viewModel: LiveTvSettingsViewModel, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val closeFocus = remember { FocusRequester() }
+    var handle by remember { mutableStateOf<com.nuvio.tv.livetv.crash.AddFromPhoneServer.Handle?>(null) }
+    var noNetwork by remember { mutableStateOf(false) }
+    var added by remember { mutableStateOf(listOf<String>()) }
+    val logoRes = com.nuvio.tv.livetv.branding.LiveTvBranding.iptvWordmark(NuvioTheme.currentTheme.brandWordmarkResource)
+    val accentArgb = NuvioTheme.colors.Secondary.toArgb()
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val tvName = runCatching {
+            android.provider.Settings.Global.getString(context.contentResolver, "device_name")
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: android.os.Build.MODEL ?: "your TV"
+        val h = com.nuvio.tv.livetv.crash.AddFromPhoneServer.start(
+            tvName = tvName,
+            accent = String.format("#%06X", accentArgb and 0xFFFFFF),
+            logo = { runCatching { context.resources.openRawResource(logoRes).use { it.readBytes() } }.getOrNull() }
+        ) { e ->
+            val line = when (e.kind) {
+                "xtream" -> {
+                    val name = e.name.ifBlank { "Xtream" }
+                    viewModel.addXtream(name, e.server, e.username, e.password, importVod = e.includeVod, importLive = e.includeLive)
+                    "Xtream login \"$name\""
+                }
+                "epg" -> {
+                    val name = e.name.ifBlank { "EPG" }
+                    viewModel.addEpg(name, e.url)
+                    "TV guide \"$name\""
+                }
+                else -> {
+                    val name = e.name.ifBlank { "Playlist" }
+                    viewModel.addPlaylist(name, e.url, e.userAgent)
+                    if (e.epgUrl.isNotBlank()) viewModel.addEpg("$name guide", e.epgUrl)
+                    "Playlist \"$name\"" + if (e.epgUrl.isNotBlank()) " and its guide" else ""
+                }
+            }
+            added = added + line
+            "Added $line. It's loading on your TV now. You can add another."
+        }
+        handle = h
+        noNetwork = h == null
+        onDispose { h?.stop() }
+    }
+    LaunchedEffect(Unit) {
+        delay(80)
+        runCatching { closeFocus.requestFocus() }
+    }
+    val qrBitmap = remember(handle?.url) {
+        handle?.url?.let { runCatching { com.nuvio.tv.core.qr.QrCodeGenerator.generate(it, 420, margin = 1) }.getOrNull() }
+    }
+    NuvioDialog(onDismiss = onDismiss, title = "Add From Your Phone", width = 620.dp) {
+        if (noNetwork) {
+            Text(
+                text = "Connect this TV to your home Wi-Fi or network to add playlists from your phone.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            androidx.compose.foundation.layout.Row(
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                qrBitmap?.let {
+                    androidx.compose.foundation.Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = "QR code",
+                        modifier = Modifier.size(196.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+                ) {
+                    Text(
+                        text = "1. Put your phone on the same Wi-Fi as this TV.\n2. Scan the code with your phone's camera.\n3. Paste your playlist link, Xtream login or EPG link and tap Send to TV.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = NuvioTheme.colors.TextSecondary
+                    )
+                    handle?.url?.let {
+                        Text(
+                            text = "No camera? Type this on your phone: " + it.removePrefix("http://"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioTheme.colors.TextPrimary
+                        )
+                    }
+                }
+            }
+            Text(
+                text = if (added.isEmpty()) "Waiting for your phone… you can add more than one."
+                else "Added: " + added.joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (added.isEmpty()) NuvioTheme.colors.TextSecondary else NuvioTheme.colors.Secondary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        SettingsDialogActionRow(horizontalAlignment = Alignment.CenterHorizontally) {
+            androidx.compose.foundation.layout.Box(Modifier.focusRequester(closeFocus)) {
+                SettingsDialogActionButton(text = if (added.isEmpty()) "Close" else "Done", onClick = onDismiss)
+            }
+        }
+    }
+}
 
 private data class FormField(val label: String, val hint: String, val initial: String = "")
 
