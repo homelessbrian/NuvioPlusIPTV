@@ -50,14 +50,14 @@ class SportsMatchWorkTest {
         init {
             every { db.revision() } answers { revision }
             every { db.changes } answers { changes }
-            every { db.scanListings(any(), any(), any(), any()) } answers {
+            every { db.scanListingGroups(any(), any(), any(), any()) } answers {
                 scans++
                 val from = arg<Long>(0)
                 val to = arg<Long>(1)
                 val stop = arg<Long>(2)
-                val callback = arg<(String, Long, Long, String, String?, String?) -> Unit>(3)
+                val callback = arg<(List<String>, Long, Long, String, String?, String?) -> Unit>(3)
                 rows.filter { (_, p) -> p.startMs >= from && p.startMs < to && p.stopMs > stop }
-                    .forEach { (key, p) -> callback(key, p.startMs, p.stopMs, p.title, p.description, p.category) }
+                    .forEach { (key, p) -> callback(listOf(key), p.startMs, p.stopMs, p.title, p.description, p.category) }
             }
         }
     }
