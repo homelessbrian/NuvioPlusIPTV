@@ -1034,7 +1034,20 @@ class LiveTvRepository @Inject constructor(
     private var publishedOverviewSource: Map<String, List<EpgProgram>>? = null
     private var publishedOverviewBase: GuideMapSnapshot.Base<String, List<EpgProgram>>? = null
     private val mergedWindows = HashMap<String, Triple<List<EpgProgram>, List<EpgProgram>, List<EpgProgram>>>()
-    private val schedules = LinkedHashMap<String, List<EpgProgram>>()
+    private val schedules = GuideScheduleCache()
+    private val scheduleLoader by lazy {
+        GuideScheduleLoader(schedules, rangeMutex,
+            currentVersion = {
+                _committedGuideRevision.value?.let { GuideReadVersion(cacheEpoch.get(), guideDb.changes, it) }
+            },
+            read = { key ->
+                val settings = prefs.currentSettings()
+                val at = System.currentTimeMillis() - settings.epgOffsetMinutes * 60_000L
+                guideDb.channelRange(key, at - settings.epgPastHours.coerceAtLeast(1) * HOUR,
+                    at + settings.epgFutureDays.coerceAtLeast(1) * 24 * HOUR)
+            },
+            onPublished = ::publishWindows)
+    }
     private var viewportJob: kotlinx.coroutines.Job? = null
     private var overviewJob: kotlinx.coroutines.Job? = null
     @Volatile private var overviewAt = 0L
@@ -1083,14 +1096,17 @@ class LiveTvRepository @Inject constructor(
         val changes = guideDb.changes
         val revision = guideDb.revision()
         try {
+        val savedSchedules = rangeMutex.withLock {
+            schedules.invalidate(changedChannels)
+            schedules.requests()
+        }
         val shift = prefs.currentSettings().epgOffsetMinutes * 60_000L
         val at = System.currentTimeMillis() - shift
         val next = guideDb.nowNext(at, changedChannels)
         val available = guideDb.channelsWithListings(channels = changedChannels)
-        val savedSchedules = rangeMutex.withLock { schedules.keys.toList() }
         val settings = prefs.currentSettings()
-        val fullSchedules = savedSchedules.associateWith { key ->
-            guideDb.channelRange(key, at - settings.epgPastHours.coerceAtLeast(1) * HOUR,
+        val fullSchedules = savedSchedules.associateWith { request ->
+            guideDb.channelRange(request.channel, at - settings.epgPastHours.coerceAtLeast(1) * HOUR,
                 at + settings.epgFutureDays.coerceAtLeast(1) * 24 * HOUR)
         }
         rangeMutex.withLock {
@@ -1107,8 +1123,7 @@ class LiveTvRepository @Inject constructor(
                 overview = (overview - changedChannels) + next
                 _guideChannelsWithListings.value = (_guideChannelsWithListings.value - changedChannels) + available
             }
-            schedules.clear()
-            schedules.putAll(fullSchedules)
+            fullSchedules.forEach { (request, programs) -> schedules.put(request, programs) }
             overviewAt = System.currentTimeMillis()
             overviewShift = shift
             publishWindows()
@@ -1117,6 +1132,7 @@ class LiveTvRepository @Inject constructor(
             _guideGeneration.value++
             _committedGuideRevision.value = revision
         }
+        loadPendingSchedules()
         // Reload only the visible screen after replacement, even if its group has 100,000 channels.
         val keys = viewportKeys.ifEmpty { priorityKeys() }
         val (from, to) = if (viewportTo > viewportFrom) viewportFrom to viewportTo else defaultWindow(at)
@@ -1140,9 +1156,7 @@ class LiveTvRepository @Inject constructor(
                         overview = overview - changedChannels
                         _guideChannelsWithListings.value = _guideChannelsWithListings.value - changedChannels
                     }
-                    schedules.keys.toList().forEach { key ->
-                        if (changedChannels == null || key in changedChannels) schedules[key] = emptyList()
-                    }
+                    schedules.invalidate(changedChannels)
                     publishWindows()
                     overviewAt = 0L
                     guideInDb = true
@@ -1180,7 +1194,7 @@ class LiveTvRepository @Inject constructor(
             mergedWindows[key] = Triple(list, current, merged)
             shown[key] = merged
         }
-        schedules.forEach { (key, list) ->
+        schedules.programs().forEach { (key, list) ->
             val current = if (shown.containsKey(key)) shown[key].orEmpty() else base.snapshot[key].orEmpty()
             shown[key] = mergeGuideSchedules(list, current)
         }
@@ -1240,11 +1254,12 @@ class LiveTvRepository @Inject constructor(
         // Publish a small priority read immediately; fill the global now/next view in background.
         val epoch = cacheEpoch.incrementAndGet()
         val revision = guideDb.revision()
-        val requestedSchedules = rangeMutex.withLock {
-            val requested = schedules.keys.toList()
+        rangeMutex.withLock {
+            val requested = schedules.requests().map { it.channel }
             windowCache.clear()
             mergedWindows.clear()
             schedules.clear()
+            requested.forEach { schedules.request(it) }
             overview = pre?.window.orEmpty()
             publishWindows()
             overviewAt = 0L
@@ -1253,11 +1268,10 @@ class LiveTvRepository @Inject constructor(
             lightPrograms = true
             _guideGeneration.value++
             _committedGuideRevision.value = revision
-            requested
         }
         ensureRange(0L, 0L)
         loadChannelsNow(viewportKeys.ifEmpty { priorityKeys() })
-        requestedSchedules.forEach(::ensureChannelSchedule)
+        loadPendingSchedules()
         if (_epgSources.value.isEmpty()) scope.launch(Dispatchers.IO) { loadSourceLists(targets) }
         // Availability uses key-only database reads, not whether a channel's RAM tile was visited.
         scope.launch(BackgroundWork.reads) {
@@ -1464,20 +1478,25 @@ class LiveTvRepository @Inject constructor(
     fun ensureChannelSchedule(channelKey: String) {
         if (!guideInDb) return
         scope.launch(BackgroundWork.reads) {
-            val epoch = cacheEpoch.get()
-            val changes = guideDb.changes
-            val now = System.currentTimeMillis()
-            val settings = prefs.currentSettings()
-            val list = runCatching {
-                guideDb.channelRange(channelKey, now - settings.epgPastHours.coerceAtLeast(1) * HOUR,
-                    now + settings.epgFutureDays.coerceAtLeast(1) * 24 * HOUR)
-            }.getOrNull() ?: return@launch
-            rangeMutex.withLock {
-                if (cacheEpoch.get() != epoch || guideDb.changes != changes) return@withLock
-                schedules.remove(channelKey)
-                schedules[channelKey] = list
-                while (schedules.size > 2) schedules.remove(schedules.keys.first())
-                publishWindows()
+            try {
+                scheduleLoader.request(channelKey)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Log.w(TAG, "Couldn't read channel schedule", failure)
+            }
+        }
+    }
+
+    private suspend fun loadPendingSchedules() {
+        val pending = rangeMutex.withLock { schedules.pending() }
+        for (request in pending) scope.launch(BackgroundWork.reads) {
+            try {
+                scheduleLoader.load(request)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Log.w(TAG, "Couldn't refill channel schedule", failure)
             }
         }
     }
