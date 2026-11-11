@@ -138,8 +138,12 @@ private fun rememberLiveTvSearchResultsEnabled(
         value = q
     }
     val publication by produceState(initialValue = LiveTvSearchPublication(), settled, stamp, now, profileReady) {
-        value = LiveTvSearchPublication()
-        if (!profileReady) return@produceState
+        if (!profileReady) {
+            value = LiveTvSearchPublication()
+            return@produceState
+        }
+        // Keep valid cards mounted during the periodic refresh so TV focus survives the query.
+        // A changed access/catalogue stamp is hidden immediately by the publication gate below.
         val expected = stamp
         val hits = withContext(Dispatchers.Default) {
             val plan = LiveTvSearchPlan(settled, expected.channels, now, expected.access)
@@ -153,7 +157,7 @@ private fun rememberLiveTvSearchResultsEnabled(
     val displayed = publication
     return LiveTvSearchResults(
         // A profile/policy change hides old cards immediately, before the replacement query runs.
-        hits = displayed.hits.takeIf { displayed.stamp == stamp }.orEmpty(),
+        hits = displayed.hits.takeIf { profileReady && displayed.stamp == stamp }.orEmpty(),
         use24h = settings.use24HourClock,
         open = { hit ->
             scope.launch {
