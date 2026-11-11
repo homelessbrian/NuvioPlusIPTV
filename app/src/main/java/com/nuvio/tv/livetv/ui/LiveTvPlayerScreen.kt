@@ -110,6 +110,7 @@ fun LiveTvPlayerScreen(
     val pictureShape = com.nuvio.tv.livetv.player.PictureShape.of(playback.channelKey?.let { pictureShapes[it] })
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val programs by viewModel.programs.collectAsStateWithLifecycle()
+    RetainGuideBrowsePrograms(programs)
     val recordings by viewModel.recordings.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()

@@ -72,4 +72,57 @@ class GuideWindowLoaderTest {
         assertEquals(1, published)
         assertEquals(listOf(game), cache.programs()["channel650"])
     }
+
+    @Test fun pagedReadReservesBeforeSqlAndDoesNotAutomaticallyDrainContinuation() = runTest {
+        val budget = GuideBrowseBudget()
+        val cache = GuideWindowCache(budget = budget)
+        var reads = 0
+        val cursor = GuideBrowseCursor(1, 0, 1, 10, 10)
+        val loader = GuideWindowLoader(cache, Mutex(), { GuideReadVersion(1, 1, 100) },
+            onPublished = {}, readPage = { request, cancellation ->
+                assertEquals(512, budget.stats().reservedRows)
+                assertFalse(cancellation.isCancelled)
+                assertEquals(listOf("one"), request.channels)
+                reads++
+                GuideBrowsePage(mapOf("one" to listOf(EpgProgram(0, 10, "first"))), cursor, 1, 1024)
+            })
+        loader.load(listOf("one"), 0, 1000)
+        assertEquals(1, reads)
+        assertEquals(0, budget.stats().reservedRows)
+        assertEquals(cursor, cache.pageInfo(GuideWindowCache.Tile("one", 0))!!.continuation)
+    }
+
+    @Test fun pagedOldGenerationCannotPublishAndReleasesTheInFlightReservation() = runTest {
+        val budget = GuideBrowseBudget()
+        val cache = GuideWindowCache(budget = budget)
+        var version = GuideReadVersion(1, 1, 100)
+        val loader = GuideWindowLoader(cache, Mutex(), { version }, onPublished = { fail("stale page published") },
+            readPage = { _, _ ->
+                version = GuideReadVersion(2, 2, 200)
+                GuideBrowsePage(mapOf("one" to listOf(EpgProgram(0, 10, "old"))), null, 1, 1024)
+            })
+        loader.load(listOf("one"), 0, 1000)
+        assertEquals(0, cache.size)
+        assertEquals(0, budget.stats().rows)
+        assertEquals(0, budget.stats().reservedRows)
+    }
+
+    @Test fun explicitNextPageUsesItsCursorInsteadOfStartingAgainAtTheBeginning() = runTest {
+        val cache = GuideWindowCache()
+        val cursor = GuideBrowseCursor(1, 0, 1, 10, 10)
+        var reads = 0
+        val loader = GuideWindowLoader(cache, Mutex(), { GuideReadVersion(1, 1, 100) },
+            onPublished = {}, readPage = { request, _ ->
+                reads++
+                if (reads == 1) GuideBrowsePage(mapOf("one" to listOf(EpgProgram(0, 10, "first"))), cursor, 1, 1024)
+                else {
+                    assertEquals(cursor, request.after)
+                    GuideBrowsePage(mapOf("one" to listOf(EpgProgram(10, 20, "second"))), null, 1, 1024)
+                }
+            })
+        loader.load(listOf("one"), 0, 1000)
+        assertTrue(loader.focus("one", 0, GuideReadCancellation(), direction = 1))
+        assertEquals(2, reads)
+        assertEquals("second", cache.programs()["one"]!!.single().title)
+    }
 }

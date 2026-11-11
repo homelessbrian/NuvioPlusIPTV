@@ -6,6 +6,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteCursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.os.CancellationSignal
 import androidx.core.database.sqlite.SQLiteCursorCompat
 import com.nuvio.tv.livetv.model.EpgAssignment
 import com.nuvio.tv.livetv.model.EpgProgram
@@ -241,7 +242,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
      * Both indexed lookups stop at one row; later schedules never enter a cursor or RAM.
      * Bindings sharing a guide channel and shift receive the very same small list.
      */
-    fun nowNext(atMs: Long, channels: Set<String>? = null): Map<String, List<EpgProgram>> {
+    fun nowNext(atMs: Long, channels: Set<String>? = null, display: Boolean = false): Map<String, List<EpgProgram>> {
         fun read(): Map<String, List<EpgProgram>> {
             val out = HashMap<String, List<EpgProgram>>()
             for (group in selectedGroups(channels)) {
@@ -250,7 +251,12 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                 val args = arrayOf((rawAt - MAX_SHOW_MS).toString(), (rawAt + 12 * 3_600_000L).toString(),
                     rawAt.toString(), (rawAt + 12 * 3_600_000L).toString(), rawAt.toString())
                 for (part in group.byGid.keys.chunked(GID_CHUNK)) {
-                    val sql = "SELECT g.gid, p.start, p.stop, p.title, p.ep, p.icon, n.start, n.stop, n.title, n.ep, n.icon " +
+                    fun columns(alias: String): String = if (display)
+                        "substr($alias.title,1,${GuideBrowseLimits.TITLE_CHARS}), " +
+                            "substr($alias.ep,1,${GuideBrowseLimits.EPISODE_CHARS}), " +
+                            "CASE WHEN length($alias.icon) <= ${GuideBrowseLimits.ICON_CHARS} THEN $alias.icon ELSE NULL END"
+                    else "$alias.title, $alias.ep, $alias.icon"
+                    val sql = "SELECT g.gid, p.start, p.stop, ${columns("p")}, n.start, n.stop, ${columns("n")} " +
                         "FROM guide_ch AS g JOIN listings AS p ON p.rowid = " +
                         "(SELECT rowid FROM listings WHERE gid = g.gid AND start >= ? AND start < ? AND stop > ? ORDER BY start LIMIT 1) " +
                         "LEFT JOIN listings AS n ON n.rowid = " +
@@ -258,10 +264,16 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                         "WHERE g.gid IN (${part.joinToString(",")})"
                     readableDatabase.rawQuery(sql, args).forwardOnly().use { c ->
                         while (c.moveToNext()) {
-                            fun program(offset: Int) = EpgProgram(c.getLong(offset) + sh, c.getLong(offset + 1) + sh,
-                                c.getString(offset + 2),
-                                episode = if (c.isNull(offset + 3)) null else XmltvParser.cleanEpisode(c.getString(offset + 3)),
-                                icon = if (c.isNull(offset + 4)) null else c.getString(offset + 4))
+                            fun program(offset: Int): EpgProgram {
+                                val rawTitle = c.getString(offset + 2)
+                                val rawEpisode = if (c.isNull(offset + 3)) null else XmltvParser.cleanEpisode(c.getString(offset + 3))
+                                val rawIcon = if (c.isNull(offset + 4)) null else c.getString(offset + 4)
+                                return EpgProgram(c.getLong(offset) + sh, c.getLong(offset + 1) + sh,
+                                    if (display) guideBrowseText(rawTitle, GuideBrowseLimits.TITLE_CHARS) else rawTitle,
+                                    episode = if (display) rawEpisode?.let { guideBrowseText(it, GuideBrowseLimits.EPISODE_CHARS) } else rawEpisode,
+                                    icon = if (display) rawIcon?.takeIf { it.length <= GuideBrowseLimits.ICON_CHARS } else rawIcon,
+                                    isDisplayProjection = display)
+                            }
                             val list = ArrayList<EpgProgram>(2)
                             list += program(1)
                             if (!c.isNull(6)) list += program(6)
@@ -428,6 +440,288 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     }
 
     /**
+     * A bounded display page. Canonical [range], Search and Sports are independent of this
+     * projection. A continuation is a keyset, not an OFFSET: dense schedules and equal start
+     * times remain reachable without decoding preceding pages again.
+     *
+     * Read one gid/shift at a time through listings_gid_start. A global joined ORDER BY can
+     * otherwise make SQLite sort an entire multi-channel schedule before returning its page.
+     */
+    internal fun browsePage(
+        fromMs: Long,
+        toMs: Long,
+        channels: List<String>,
+        after: GuideBrowseCursor? = null,
+        cancellation: CancellationSignal? = null,
+        maxRows: Int = GuideBrowseLimits.MAX_PAGE_ROWS,
+        maxBytes: Long = GuideBrowseLimits.MAX_PAGE_BYTES,
+        backwards: Boolean = false,
+        minimumStartMs: Long? = null
+    ): GuideBrowsePage {
+        require(maxRows in 1..GuideBrowseLimits.MAX_PAGE_ROWS)
+        require(maxBytes in GuideBrowseLimits.MIN_PAGE_BYTES..GuideBrowseLimits.MAX_PAGE_BYTES)
+        require(channels.size <= GuideBrowseLimits.MAX_CHANNELS)
+        val keys = channels.distinct()
+        val selectedKeys = keys.associateBy { it }
+        val demand = GuideBrowseDemand(fromMs, toMs, keys.sorted(), backwards, minimumStartMs)
+        require(after == null || after.demand == demand) { "Guide continuation belongs to a different demand" }
+        cancellation?.throwIfCanceled()
+        val at = changes
+        if (after != null && after.sourceChanges != at) throw GuideBrowseInvalidatedException()
+        if (keys.isEmpty() || fromMs >= toMs) return GuideBrowsePage(emptyMap(), null, 0, 0)
+
+        val bindings = ArrayList<Link>(keys.size)
+        val bindingSql = "SELECT ch, gid, sh FROM chan WHERE ch IN (${keys.joinToString(",") { "?" }})"
+        readableDatabase.rawQuery(bindingSql, keys.toTypedArray(), cancellation).forwardOnly().use { c ->
+            while (c.moveToNext()) {
+                cancellation?.throwIfCanceled()
+                // Reuse catalogue keys instead of retaining another decoded copy per page.
+                val key = selectedKeys[c.getString(0)] ?: continue
+                bindings += Link(key, c.getLong(1), c.getLong(2))
+            }
+        }
+        val sources = groups(bindings).let { groups ->
+            if (backwards) groups.sortedByDescending { it.shiftMs } else groups.sortedBy { it.shiftMs }
+        }
+        val out = HashMap<String, List<EpgProgram>>()
+        var rowCount = 0
+        // Input channel strings already belong to the catalogue; charge this page's map slots.
+        var bytes = 384L + keys.size * 48L
+        var firstShift = 0L
+        var firstGid = 0L
+        var firstStart = 0L
+        var firstRowId = 0L
+        var lastShift = 0L
+        var lastGid = 0L
+        var lastStart = 0L
+        var lastRowId = 0L
+        var more = false
+        sourceLoop@ for (group in sources) {
+            if (after != null && if (backwards) group.shiftMs > after.shiftMs else group.shiftMs < after.shiftMs) continue
+            val gids = if (backwards) group.byGid.keys.sortedDescending() else group.byGid.keys.sorted()
+            for (gid in gids) {
+                if (after != null && group.shiftMs == after.shiftMs &&
+                    if (backwards) gid > after.gid else gid < after.gid) continue
+                cancellation?.throwIfCanceled()
+                val sameSource = after != null && group.shiftMs == after.shiftMs && gid == after.gid
+                val aliases = group.byGid.getValue(gid)
+                val rows = ArrayList<EpgProgram>()
+                val lower = maxOf(fromMs - group.shiftMs - MAX_SHOW_MS,
+                    minimumStartMs?.minus(group.shiftMs) ?: Long.MIN_VALUE)
+                val baseArgs = listOf(gid.toString(), lower.toString(),
+                    (toMs - group.shiftMs).toString(), (fromMs - group.shiftMs).toString())
+                // SQLite substr counts code points. Kotlin below additionally bounds UTF-16
+                // units, so even supplementary characters cannot exceed the display limits.
+                val select = "SELECT rowid, start, stop, substr(title,1,${GuideBrowseLimits.TITLE_CHARS}), " +
+                    "substr(ep,1,${GuideBrowseLimits.EPISODE_CHARS}), " +
+                    "CASE WHEN length(icon) <= ${GuideBrowseLimits.ICON_CHARS} THEN icon ELSE NULL END " +
+                    "FROM listings WHERE gid = ? AND start >= ? AND start < ? AND stop > ?"
+                val ordered = if (backwards) "ORDER BY start DESC, rowid DESC" else "ORDER BY start, rowid"
+                fun readSegment(keyset: String, extraArgs: List<String>, order: String = ordered) {
+                    cancellation?.throwIfCanceled()
+                    val sql = "$select$keyset $order LIMIT ${(maxRows - rowCount + 1).coerceAtLeast(1)}"
+                    readableDatabase.rawQuery(sql, (baseArgs + extraArgs).toTypedArray(), cancellation).forwardOnly().use { c ->
+                        while (c.moveToNext()) {
+                            cancellation?.throwIfCanceled()
+                            if (rowCount == maxRows) {
+                                more = true
+                                break
+                            }
+                            val title = guideBrowseText(c.getString(3), GuideBrowseLimits.TITLE_CHARS)
+                            val episode = if (c.isNull(4)) null else XmltvParser.cleanEpisode(c.getString(4))?.let {
+                                guideBrowseText(it, GuideBrowseLimits.EPISODE_CHARS)
+                            }
+                            val icon = if (c.isNull(5)) null else c.getString(5).takeIf {
+                                it.length <= GuideBrowseLimits.ICON_CHARS
+                            }
+                            val program = EpgProgram(c.getLong(1) + group.shiftMs, c.getLong(2) + group.shiftMs,
+                                title, episode = episode, icon = icon, isDisplayProjection = true,
+                                guideRowId = c.getLong(0))
+                            val weight = guideBrowseProgramWeight(program) + 8L +
+                                if (rows.isEmpty()) 64L + aliases.size * 16L else 0L
+                            check(weight <= GuideBrowseLimits.MAX_PROJECTED_ROW_BYTES)
+                            if (bytes + weight > maxBytes) {
+                                more = true
+                                break
+                            }
+                            rows += program
+                            bytes += weight
+                            if (rowCount == 0) {
+                                firstShift = group.shiftMs
+                                firstGid = gid
+                                firstStart = c.getLong(1)
+                                firstRowId = c.getLong(0)
+                            }
+                            rowCount++
+                            lastShift = group.shiftMs
+                            lastGid = gid
+                            lastStart = c.getLong(1)
+                            lastRowId = c.getLong(0)
+                        }
+                    }
+                }
+                if (sameSource) {
+                    // Separate seeks make progress even if thousands of rows share a start.
+                    // An OR keyset can otherwise rescan every earlier row on every page.
+                    val comparison = if (backwards) "<" else ">"
+                    readSegment(" AND start = ? AND rowid $comparison ?",
+                        listOf(after!!.startMs.toString(), after.rowId.toString()),
+                        if (backwards) "ORDER BY rowid DESC" else "ORDER BY rowid")
+                    if (!more) readSegment(" AND start $comparison ?", listOf(after.startMs.toString()))
+                } else readSegment("", emptyList())
+                if (rows.isNotEmpty()) {
+                    if (backwards) rows.reverse()
+                    rows.trimToSize()
+                    aliases.forEach { out[it] = rows }
+                }
+                if (more) break@sourceLoop
+            }
+        }
+        cancellation?.throwIfCanceled()
+        if (changes != at) throw GuideBrowseInvalidatedException()
+        // The minimum page allowance fits one maximally sized projected row and all96 aliases.
+        check(!more || rowCount > 0) { "Guide display page cannot make progress" }
+        val firstAdmitted = if (rowCount > 0) GuideBrowseCursor(at, firstShift, firstGid, firstStart, firstRowId, demand) else null
+        val lastAdmitted = if (rowCount > 0) GuideBrowseCursor(at, lastShift, lastGid, lastStart, lastRowId, demand) else null
+        return GuideBrowsePage(out, if (more) lastAdmitted else null, rowCount, if (rowCount == 0) 0 else bytes,
+            firstCursor = if (backwards) lastAdmitted else firstAdmitted,
+            lastCursor = if (backwards) firstAdmitted else lastAdmitted)
+    }
+
+    /** First start/last stop within a schedule range, without decoding any programme text. */
+    internal fun listingBounds(
+        channel: String,
+        fromMs: Long,
+        toMs: Long,
+        cancellation: CancellationSignal? = null
+    ): Pair<Long, Long>? {
+        cancellation?.throwIfCanceled()
+        if (fromMs >= toMs) return null
+        val at = changes
+        val binding = readableDatabase.rawQuery("SELECT gid, sh FROM chan WHERE ch = ?",
+            arrayOf(channel), cancellation).use { c ->
+            cancellation?.throwIfCanceled()
+            if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else null
+        } ?: return null
+        val (gid, shift) = binding
+        val args = arrayOf(gid.toString(), (fromMs - shift - MAX_SHOW_MS).toString(),
+            (toMs - shift).toString(), (fromMs - shift).toString())
+        val bounds = readableDatabase.rawQuery("SELECT min(start), max(stop) FROM listings " +
+            "WHERE gid = ? AND start >= ? AND start < ? AND stop > ?", args, cancellation).use { c ->
+            cancellation?.throwIfCanceled()
+            if (!c.moveToFirst() || c.isNull(0)) null else (c.getLong(0) + shift) to (c.getLong(1) + shift)
+        }
+        cancellation?.throwIfCanceled()
+        if (changes != at) throw GuideBrowseInvalidatedException()
+        return bounds
+    }
+
+    /** Actual local start-days for schedule navigation; no title or programme payload is read. */
+    internal fun listingDays(
+        channel: String,
+        fromMs: Long,
+        toMs: Long,
+        displayOffsetMs: Long,
+        cancellation: CancellationSignal? = null
+    ): List<Long> {
+        cancellation?.throwIfCanceled()
+        if (fromMs >= toMs) return emptyList()
+        val at = changes
+        val binding = readableDatabase.rawQuery("SELECT gid, sh FROM chan WHERE ch = ?",
+            arrayOf(channel), cancellation).use { c ->
+            cancellation?.throwIfCanceled()
+            if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else null
+        } ?: return emptyList()
+        val (gid, shift) = binding
+        val args = arrayOf(gid.toString(), (fromMs - shift - MAX_SHOW_MS).toString(),
+            (toMs - shift).toString(), (fromMs - shift).toString())
+        val calendar = java.util.Calendar.getInstance()
+        val days = LinkedHashSet<Long>()
+        var haveLastDay = false
+        var lastDay = 0L
+        readableDatabase.rawQuery("SELECT start FROM listings WHERE gid = ? AND start >= ? AND start < ? " +
+            "AND stop > ? ORDER BY start", args, cancellation).forwardOnly().use { c ->
+            while (c.moveToNext()) {
+                cancellation?.throwIfCanceled()
+                calendar.timeInMillis = c.getLong(0) + shift + displayOffsetMs
+                calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                calendar.set(java.util.Calendar.MINUTE, 0)
+                calendar.set(java.util.Calendar.SECOND, 0)
+                calendar.set(java.util.Calendar.MILLISECOND, 0)
+                val day = calendar.timeInMillis
+                // Sorted starts only need to allocate a set entry when the local day changes.
+                if (!haveLastDay || lastDay != day) {
+                    days += day
+                    lastDay = day
+                    haveLastDay = true
+                }
+            }
+        }
+        cancellation?.throwIfCanceled()
+        if (changes != at) throw GuideBrowseInvalidatedException()
+        return days.sorted()
+    }
+
+    /** Exact schedule continuation metadata, independent of programme stop times or resident pages. */
+    internal fun hasAdjacentListing(
+        channel: String,
+        fromMs: Long,
+        toMs: Long,
+        startMs: Long,
+        rowId: Long?,
+        backwards: Boolean,
+        cancellation: CancellationSignal? = null
+    ): Boolean {
+        cancellation?.throwIfCanceled()
+        if (fromMs >= toMs) return false
+        val at = changes
+        val binding = readableDatabase.rawQuery("SELECT gid, sh FROM chan WHERE ch = ?",
+            arrayOf(channel), cancellation).use { c ->
+            cancellation?.throwIfCanceled()
+            if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else null
+        }
+        if (binding == null) {
+            if (changes != at) throw GuideBrowseInvalidatedException()
+            return false
+        }
+        val (gid, shift) = binding
+        val lower = fromMs - shift - MAX_SHOW_MS
+        val upper = toMs - shift
+        val minStop = fromMs - shift
+        val anchor = startMs - shift
+        // Legacy callers without a row identity refer to the same first row as program().
+        val anchorId = rowId ?: readableDatabase.rawQuery(
+            "SELECT rowid FROM listings WHERE gid = ? AND start = ? AND stop > ? ORDER BY rowid LIMIT 1",
+            arrayOf(gid.toString(), anchor.toString(), anchor.toString()), cancellation).use { c ->
+            cancellation?.throwIfCanceled()
+            if (c.moveToFirst()) c.getLong(0) else null
+        }
+        fun exists(where: String, args: Array<String>): Boolean {
+            cancellation?.throwIfCanceled()
+            return readableDatabase.rawQuery("SELECT 1 FROM listings WHERE $where LIMIT 1", args,
+                cancellation).use { c ->
+                cancellation?.throwIfCanceled()
+                c.moveToFirst()
+            }
+        }
+        val comparison = if (backwards) "<" else ">"
+        val equalStart = anchorId != null && anchor >= lower && anchor < upper && exists(
+            "gid = ? AND start = ? AND rowid $comparison ? AND stop > ?",
+            arrayOf(gid.toString(), anchor.toString(), anchorId.toString(), minStop.toString()))
+        val otherStart = if (equalStart) false else if (backwards) exists(
+            "gid = ? AND start >= ? AND start < ? AND stop > ?",
+            arrayOf(gid.toString(), lower.toString(), minOf(upper, anchor).toString(), minStop.toString()))
+        else {
+            val strict = anchor >= lower
+            exists("gid = ? AND start ${if (strict) ">" else ">="} ? AND start < ? AND stop > ?",
+                arrayOf(gid.toString(), maxOf(lower, anchor).toString(), upper.toString(), minStop.toString()))
+        }
+        cancellation?.throwIfCanceled()
+        if (changes != at) throw GuideBrowseInvalidatedException()
+        return equalStart || otherStart
+    }
+
+    /**
      * Sports: every listing starting in [fromMs, toMs) and still on after [minStopMs], one at a
      * time, read in a single pass (the caller picks out what it wants as the rows go by). A show
      * on a guide channel several playlist channels use is handed over once for each of them.
@@ -553,9 +847,42 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         return out
     }
 
-    /** One show's full details (description, cast…), for the show you're looking at. */
-    fun program(ch: String, startMs: Long): EpgProgram? =
-        range(startMs, startMs + 1, onlyChannel = ch)[ch]?.firstOrNull { it.startMs == startMs }
+    /** One show's full details, without decoding every other show overlapping its start. */
+    fun program(ch: String, startMs: Long, rowId: Long? = null): EpgProgram? {
+        fun read(): EpgProgram? {
+            val binding = readableDatabase.rawQuery("SELECT gid, sh FROM chan WHERE ch = ?", arrayOf(ch)).use { c ->
+                if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else null
+            } ?: return null
+            val (gid, shift) = binding
+            val args = arrayListOf(gid.toString(), (startMs - shift).toString(), (startMs - shift).toString())
+            val exactRow = if (rowId == null) "" else {
+                args += rowId.toString()
+                " AND rowid = ?"
+            }
+            val sql = "SELECT start, stop, title, descr, cat, ep, icon, year, people FROM listings " +
+                "WHERE gid = ? AND start = ? AND stop > ?$exactRow ORDER BY rowid LIMIT 1"
+            return readableDatabase.rawQuery(sql, args.toTypedArray()).use { c ->
+                if (!c.moveToFirst()) null else EpgProgram(
+                    startMs = c.getLong(0) + shift,
+                    stopMs = c.getLong(1) + shift,
+                    title = c.getString(2),
+                    description = if (c.isNull(3)) null else c.getString(3),
+                    category = if (c.isNull(4)) null else c.getString(4),
+                    episode = if (c.isNull(5)) null else XmltvParser.cleanEpisode(c.getString(5)),
+                    icon = if (c.isNull(6)) null else c.getString(6),
+                    year = if (c.isNull(7)) null else c.getInt(7),
+                    people = if (c.isNull(8)) emptyList() else c.getString(8).split('\u001F'),
+                    guideRowId = rowId
+                )
+            }
+        }
+        repeat(2) {
+            val at = changes
+            val result = read()
+            if (changes == at) return result
+        }
+        return read()
+    }
 
     /** One channel's listings across [fromMs, toMs) (overlay mode's full schedule, catch-up). */
     fun channelRange(ch: String, fromMs: Long, toMs: Long): List<EpgProgram> =

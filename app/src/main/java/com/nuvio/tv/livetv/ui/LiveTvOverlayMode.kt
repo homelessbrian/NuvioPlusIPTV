@@ -72,6 +72,31 @@ private sealed interface ScheduleRow {
     data class Show(val program: EpgProgram, val dayStart: Long) : ScheduleRow
 }
 
+/** A page may replace the preceding rows; an index alone cannot identify the highlighted show. */
+internal data class OverlayScheduleSelection(val startMs: Long, val stopMs: Long, val title: String, val guideRowId: Long? = null) {
+    constructor(program: EpgProgram) : this(program.startMs, program.stopMs, program.title, program.guideRowId)
+    fun matches(program: EpgProgram) = if (guideRowId != null && program.guideRowId != null) guideRowId == program.guideRowId
+        else startMs == program.startMs && stopMs == program.stopMs && title == program.title
+}
+
+internal fun overlayScheduleSelectionIndex(
+    programs: List<EpgProgram>, selection: OverlayScheduleSelection?, anchorMs: Long, steps: Int = 0
+): Int {
+    if (programs.isEmpty()) return -1
+    val retained = programs.indexOfFirst { selection?.matches(it) == true }
+    if (steps != 0) {
+        if (retained >= 0) return (retained + steps).coerceIn(0, programs.lastIndex)
+        return if (steps > 0) programs.indexOfFirst { it.startMs >= anchorMs }
+            else programs.indexOfLast { it.startMs <= anchorMs }
+    }
+    if (retained >= 0) return retained
+    return programs.indexOfFirst { anchorMs >= it.startMs && anchorMs < it.stopMs }.takeIf { it >= 0 }
+        ?: programs.indexOfFirst { it.startMs >= anchorMs }.takeIf { it >= 0 } ?: programs.lastIndex
+}
+
+private data class SchedulePageMove(val boundary: OverlayScheduleSelection, val steps: Int)
+private data class SchedulePageRequest(val anchorMs: Long, val backwards: Boolean, val continuation: Boolean, val dayStart: Boolean)
+
 /**
  * Overlay mode: a see-through guide over the playing video.
  *  - Channels (Left from full screen): the group's channels, with the highlighted channel's
@@ -127,6 +152,8 @@ private fun OverlayModeContent(
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val programs by viewModel.programs.collectAsStateWithLifecycle()
+    RetainGuideBrowsePrograms(programs)
+    val schedulePages by viewModel.schedulePages.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val playback by viewModel.playbackState.collectAsStateWithLifecycle()
     val user by viewModel.userState.collectAsStateWithLifecycle()
@@ -151,6 +178,12 @@ private fun OverlayModeContent(
     var headingAt by remember { mutableStateOf<String?>(null) }
     var scheduleChannel by remember { mutableStateOf<LiveChannel?>(null) }
     var rowIndex by remember { mutableIntStateOf(0) }
+    var scheduleSelection by remember { mutableStateOf<OverlayScheduleSelection?>(null) }
+    var scheduleAnchor by remember { mutableStateOf(now) }
+    var pendingScheduleMove by remember { mutableStateOf<SchedulePageMove?>(null) }
+    var pendingScheduleDate by remember { mutableStateOf<Long?>(null) }
+    var schedulePageRequest by remember { mutableStateOf<SchedulePageRequest?>(null) }
+    var emptyScheduleDay by remember { mutableStateOf<Long?>(null) }
     var dateIndex by remember { mutableIntStateOf(0) }
     var activity by remember { mutableIntStateOf(0) }
     var futurePrompt by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
@@ -207,11 +240,13 @@ private fun OverlayModeContent(
     }
 
     // ---- schedule of one channel, grouped by day
-    val schedule: List<ScheduleRow> = remember(scheduleChannel, programs) {
-        val ch = scheduleChannel ?: return@remember emptyList()
+    val channelPrograms = scheduleChannel?.key?.let { programs[it] }.orEmpty()
+    val schedulePage = scheduleChannel?.key?.let { schedulePages[it] }
+    val schedule: List<ScheduleRow> = remember(scheduleChannel?.key, channelPrograms) {
+        if (scheduleChannel == null) return@remember emptyList()
         val out = ArrayList<ScheduleRow>()
         var lastDay = Long.MIN_VALUE
-        programs[ch.key].orEmpty().forEach { p ->
+        channelPrograms.forEach { p ->
             val day = startOfDay(p.startMs)
             if (day != lastDay) {
                 out += ScheduleRow.Day(dayLabel(day, now), day)
@@ -221,49 +256,127 @@ private fun OverlayModeContent(
         }
         out
     }
-    val days: List<Long> = remember(schedule) { schedule.filterIsInstance<ScheduleRow.Day>().map { it.dayStart } }
+    // These dates come from the stored schedule, including days whose display page is not resident.
+    val days = schedulePage?.days ?: remember(schedule) { schedule.filterIsInstance<ScheduleRow.Day>().map { it.dayStart } }
+
+    fun requestSchedulePage(anchorMs: Long, backwards: Boolean, continuation: Boolean = false, dayStart: Boolean = false) {
+        val ch = scheduleChannel ?: return
+        val request = SchedulePageRequest(anchorMs, backwards, continuation, dayStart)
+        if (schedulePageRequest == request) return
+        schedulePageRequest = request
+        scheduleAnchor = anchorMs
+        viewModel.ensureChannelSchedule(ch.key, anchorMs, backwards, continuation, dayStart)
+    }
 
     fun openSchedule(ch: LiveChannel) {
+        val sameChannel = scheduleChannel?.key == ch.key
         scheduleChannel = ch
+        scheduleSelection = null
+        scheduleAnchor = now
+        pendingScheduleMove = null
+        pendingScheduleDate = null
+        schedulePageRequest = null
+        emptyScheduleDay = null
+        rowIndex = 0
         level = OverlayLevel.SCHEDULE
+        if (sameChannel) requestSchedulePage(now, backwards = false)
     }
-    // Land on what's on now when a schedule opens.
-    // The full schedule (all days) for the channel being browsed, from the guide database.
-    LaunchedEffect(scheduleChannel?.key) { scheduleChannel?.let { viewModel.ensureChannelSchedule(it.key) } }
-    LaunchedEffect(scheduleChannel, schedule.size) {
-        if (schedule.isEmpty()) return@LaunchedEffect
-        val live = schedule.indexOfFirst { it is ScheduleRow.Show && now >= it.program.startMs && now < it.program.stopMs }
-        val next = schedule.indexOfFirst { it is ScheduleRow.Show && it.program.startMs >= now }
-        rowIndex = when {
-            live >= 0 -> live
-            next >= 0 -> next
-            else -> schedule.indexOfLast { it is ScheduleRow.Show }.coerceAtLeast(0)
+    LaunchedEffect(scheduleChannel?.key) {
+        scheduleChannel?.let { requestSchedulePage(scheduleAnchor, backwards = false) }
+    }
+    // Keep the highlighted programme when pages arrive or earlier pages leave the cache.
+    // Only explicit navigation requests another page; a dense schedule is never drained here.
+    LaunchedEffect(scheduleChannel?.key, channelPrograms, schedulePage) {
+        if (scheduleChannel == null) return@LaunchedEffect
+        val request = schedulePageRequest
+        val currentRequest = schedulePage != null && (request == null || schedulePage.anchorMs == request.anchorMs)
+        if (currentRequest && schedulePage?.loading == false && schedulePage?.errorMessage != null) {
+            // A failed page must not become an empty day or leave navigation spinning.
+            pendingScheduleMove = null
+            pendingScheduleDate = null
+            schedulePageRequest = null
+            return@LaunchedEffect
         }
+        val acknowledged = currentRequest && schedulePage?.loading == false && schedulePage?.errorMessage == null
+        val requestedDay = pendingScheduleDate
+        val move = pendingScheduleMove
+        val shows = schedule.mapIndexedNotNull { index, row -> (row as? ScheduleRow.Show)?.let { index to it.program } }
+        when {
+            requestedDay != null -> {
+                if (!acknowledged) return@LaunchedEffect
+                val first = shows.firstOrNull { startOfDay(it.second.startMs) == requestedDay }
+                rowIndex = first?.first ?: 0
+                scheduleSelection = first?.second?.let(::OverlayScheduleSelection)
+                emptyScheduleDay = requestedDay.takeIf { first == null }
+                pendingScheduleDate = null
+            }
+            move != null -> {
+                if (!acknowledged) return@LaunchedEffect
+                val target = overlayScheduleSelectionIndex(shows.map { it.second }, move.boundary, move.boundary.startMs, move.steps)
+                shows.getOrNull(target)?.let { (index, program) ->
+                    rowIndex = index
+                    scheduleSelection = OverlayScheduleSelection(program)
+                }
+                pendingScheduleMove = null
+            }
+            emptyScheduleDay == null -> {
+                val anchor = scheduleSelection?.startMs ?: scheduleAnchor
+                val chosen = shows.getOrNull(overlayScheduleSelectionIndex(shows.map { it.second }, scheduleSelection, anchor))
+                chosen?.let { (index, program) ->
+                    rowIndex = index
+                    scheduleSelection = OverlayScheduleSelection(program)
+                }
+            }
+        }
+        if (acknowledged) schedulePageRequest = null
     }
-    val focusedShow = (schedule.getOrNull(rowIndex) as? ScheduleRow.Show)
-    LaunchedEffect(level, focusedShow?.dayStart) {
+    val highlightedScheduleIndex = if (scheduleSelection == null) rowIndex else schedule.indexOfFirst {
+        it is ScheduleRow.Show && scheduleSelection?.matches(it.program) == true
+    }
+    val focusedShow = (schedule.getOrNull(highlightedScheduleIndex) as? ScheduleRow.Show)
+        ?.takeIf { scheduleSelection?.matches(it.program) == true && emptyScheduleDay == null }
+    LaunchedEffect(level, focusedShow?.dayStart, days) {
         if (level != OverlayLevel.DATES) focusedShow?.let { s -> dateIndex = days.indexOf(s.dayStart).coerceAtLeast(0) }
     }
 
     fun moveShow(delta: Int) {
-        if (schedule.isEmpty()) return
-        var i = rowIndex
-        repeat(kotlin.math.abs(delta)) {
+        if (schedule.isEmpty() || pendingScheduleMove != null || pendingScheduleDate != null || emptyScheduleDay != null) return
+        if (scheduleSelection != null && highlightedScheduleIndex < 0) return
+        var i = highlightedScheduleIndex
+        val direction = if (delta > 0) 1 else -1
+        for (step in 0 until kotlin.math.abs(delta)) {
             var j = i + if (delta > 0) 1 else -1
             while (j in schedule.indices && schedule[j] !is ScheduleRow.Show) j += if (delta > 0) 1 else -1
-            if (j in schedule.indices) i = j
+            if (j in schedule.indices) i = j else {
+                val boundary = (schedule.getOrNull(i) as? ScheduleRow.Show)?.program ?: break
+                val more = schedulePage?.errorMessage != null ||
+                    if (direction > 0) schedulePage?.hasLater != false else schedulePage?.hasEarlier != false
+                if (more && schedulePage?.loading != true && schedulePageRequest == null) {
+                    scheduleSelection = OverlayScheduleSelection(boundary)
+                    pendingScheduleMove = SchedulePageMove(OverlayScheduleSelection(boundary), direction * (kotlin.math.abs(delta) - step))
+                    requestSchedulePage(boundary.startMs, backwards = direction < 0, continuation = true)
+                }
+                break
+            }
         }
         rowIndex = i
+        (schedule.getOrNull(i) as? ScheduleRow.Show)?.program?.let { scheduleSelection = OverlayScheduleSelection(it) }
     }
 
     fun jumpToDate(index: Int) {
         val day = days.getOrNull(index) ?: return
+        if (index == dateIndex && schedulePage?.errorMessage == null) return
         dateIndex = index
-        val first = schedule.indexOfFirst { it is ScheduleRow.Show && it.dayStart == day }
-        if (first >= 0) rowIndex = first
+        emptyScheduleDay = null
+        pendingScheduleMove = null
+        pendingScheduleDate = day
+        schedulePageRequest = null
+        // A resident fragment of a day does not prove its first show has been loaded.
+        requestSchedulePage(day, backwards = false, dayStart = true)
     }
 
     fun activateShow() {
+        if (pendingScheduleDate != null || pendingScheduleMove != null || schedulePage?.errorMessage != null) return
         val ch = scheduleChannel ?: return
         val p = focusedShow?.program ?: return
         when {
@@ -320,6 +433,8 @@ private fun OverlayModeContent(
     }
     /** The show the record menu is for: the highlighted show, or what's on now on the highlighted channel. */
     fun openRecordMenu() {
+        if (level == OverlayLevel.SCHEDULE &&
+            (pendingScheduleDate != null || pendingScheduleMove != null || schedulePage?.errorMessage != null)) return
         val target: Pair<LiveChannel, EpgProgram> = when (level) {
             OverlayLevel.SCHEDULE -> scheduleChannel?.let { c -> focusedShow?.program?.let { c to it } }
             OverlayLevel.CHANNELS -> focusedChannel?.let { c ->
@@ -423,7 +538,11 @@ private fun OverlayModeContent(
                     if (settings.overlayShowDetails) settledChannel?.let { SchedulePreview(it, programs[it.key].orEmpty(), now, use24h) }
                 }
                 OverlayLevel.SCHEDULE, OverlayLevel.DATES -> scheduleChannel?.let { ch ->
-                    SchedulePanel(ch, schedule, rowIndex, focused = level == OverlayLevel.SCHEDULE, playback.channelKey, now, use24h)
+                    SchedulePanel(ch, if (emptyScheduleDay == null) schedule else emptyList(), highlightedScheduleIndex,
+                        focused = level == OverlayLevel.SCHEDULE && pendingScheduleDate == null && pendingScheduleMove == null,
+                        playback.channelKey, now, use24h,
+                        loading = schedulePage?.loading == true || pendingScheduleDate != null || pendingScheduleMove != null,
+                        emptyDay = emptyScheduleDay != null, errorMessage = schedulePage?.errorMessage)
                     DatesPanel(days, dateIndex, focused = level == OverlayLevel.DATES, today = startOfDay(now))
                 }
             }
@@ -868,7 +987,10 @@ private fun SchedulePanel(
     focused: Boolean,
     playingKey: String?,
     now: Long,
-    use24h: Boolean
+    use24h: Boolean,
+    loading: Boolean = false,
+    emptyDay: Boolean = false,
+    errorMessage: String? = null
 ) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (index - 3).coerceAtLeast(0))
     keepVisible(state, index)
@@ -883,8 +1005,12 @@ private fun SchedulePanel(
                 }
             }
         }
-        if (rows.isEmpty()) {
-            LiveText("No program information for this channel", color = NuvioTheme.colors.TextSecondary, modifier = Modifier.padding(18.dp))
+        if (errorMessage != null || loading || rows.isEmpty()) {
+            LiveText(errorMessage ?: when {
+                loading -> "Loading program information…"
+                emptyDay -> "No program information for this day"
+                else -> "No program information for this channel"
+            }, color = NuvioTheme.colors.TextSecondary, modifier = Modifier.padding(18.dp))
         }
         LazyColumn(state = state, modifier = Modifier.fillMaxSize()) {
             itemsIndexed(rows) { i, row ->
@@ -1047,6 +1173,7 @@ private fun BackupFlyoutContent(
     menuOpen: Boolean
 ) {
     val programs by viewModel.programs.collectAsStateWithLifecycle()
+    RetainGuideBrowsePrograms(programs)
     val now by viewModel.now.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()

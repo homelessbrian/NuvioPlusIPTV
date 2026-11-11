@@ -12,6 +12,7 @@ import com.nuvio.tv.livetv.player.LivePlaybackState
 import com.nuvio.tv.livetv.player.LiveTvPlaybackController
 import com.nuvio.tv.livetv.ui.LiveTvSession
 import com.nuvio.tv.livetv.ui.LiveTvViewModel
+import com.nuvio.tv.livetv.data.guideBrowsePublicationId
 import com.nuvio.tv.livetv.ui.channelInGroup
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -61,12 +63,16 @@ class LiveTvHomeRowViewModel @Inject constructor(
     private val rowChannels = homeRowChannelSelections(
         channelStore.displayChannels, userState, settings, viewModelScope
     )
+    private val guideOwnership = com.nuvio.tv.livetv.ui.GuideProgramOwnership {
+        repository.acknowledgeGuidePublication(it.guideBrowsePublicationId())
+    }
 
     val homeRow: StateFlow<List<LiveTvViewModel.HomeRowEntry>> = combine(
         rowChannels,
         repository.programs,
         now
     ) { (list, s), progs, nowMs ->
+        guideOwnership.update(progs)
         if (list.isEmpty()) return@combine emptyList()
         // Guide Time Offset: the row's own shows moved, not the whole guide.
         val shift = s.epgOffsetMinutes * 60_000L
@@ -87,7 +93,8 @@ class LiveTvHomeRowViewModel @Inject constructor(
             else -> entries
         }
         if (s.homeRowLimit > 0) entries.take(s.homeRowLimit) else entries
-    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }.flowOn(Dispatchers.Default).onCompletion { guideOwnership.close() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
         // Google Drive sync (if connected): pick up a newer setup from another TV.

@@ -246,7 +246,11 @@ data class EpgProgram(
     /** Release year from the guide (XMLTV <date>, or "(1990)" in the title/description). */
     val year: Int? = null,
     /** Actors and directors from the guide's <credits>, when it has them. */
-    val people: List<String> = emptyList()
+    val people: List<String> = emptyList(),
+    /** A bounded UI copy; actions must resolve canonical details before saving metadata. */
+    @Transient val isDisplayProjection: Boolean = false,
+    /** In-memory key for exact hydration when several stored listings share one start time. */
+    @Transient val guideRowId: Long? = null
 ) {
     fun isLive(nowMs: Long): Boolean = nowMs in startMs until stopMs
     fun progress(nowMs: Long): Float {

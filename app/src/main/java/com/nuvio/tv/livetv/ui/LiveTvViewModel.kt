@@ -6,6 +6,7 @@ import com.nuvio.tv.livetv.data.CatchupUrlBuilder
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.LiveTvStatus
+import com.nuvio.tv.livetv.data.guideBrowsePublicationId
 import com.nuvio.tv.livetv.model.ChannelGroup
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
@@ -156,34 +157,17 @@ class LiveTvViewModel @Inject constructor(
 
     private val searchQuery = MutableStateFlow("")
 
-    /**
-     * Guide Time Offset: each channel's listings as last moved, by the original list. Declared
-     * before [programs], whose first run can start while the rest is still being set up.
-     */
-    private val shiftedLists = java.util.IdentityHashMap<List<EpgProgram>, List<EpgProgram>>()
-    private var shiftedBy = 0L
+    private val shiftedPrograms = GuideTimeOffsetMemo()
+    private val guideProgramOwnership = GuideProgramOwnership { repository.acknowledgeGuidePublication(it.guideBrowsePublicationId()) }
 
     /** Programs with the user's EPG time offset applied. */
     val programs: StateFlow<Map<String, List<EpgProgram>>> = combine(
         repository.programs,
         settings.map { it.epgOffsetMinutes }.distinctUntilChanged()
     ) { map, offset ->
-        if (offset == 0) { shiftedLists.clear(); map } else {
-            val shift = offset * 60_000L
-            if (shift != shiftedBy) { shiftedLists.clear(); shiftedBy = shift }
-            // Only channels whose listings changed are moved again: each update of the guide
-            // (as the hours pass, scrolling ahead) used to copy every show of every channel, and
-            // made every guide row redraw. Keyed by the list itself (same list = same listings).
-            val next = java.util.IdentityHashMap<List<EpgProgram>, List<EpgProgram>>(map.size)
-            val out = map.mapValues { (_, list) ->
-                val moved = next[list] ?: shiftedLists[list] ?: list.map { it.copy(startMs = it.startMs + shift, stopMs = it.stopMs + shift) }
-                next[list] = moved
-                moved
-            }
-            shiftedLists.clear()
-            shiftedLists.putAll(next)
-            out
-        }
+        val view = shiftedPrograms.view(map, offset * 60_000L)
+        guideProgramOwnership.update(map)
+        view
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     private val hasSources: StateFlow<Boolean> = prefs.playlists.map { it.isNotEmpty() }
@@ -295,7 +279,10 @@ class LiveTvViewModel @Inject constructor(
     fun toggleReminder(channel: LiveChannel, program: EpgProgram) = viewModelScope.launch {
         val exists = userState.value.reminders.any { it.channelKey == channel.key && it.startMs == program.startMs }
         if (exists) prefs.removeReminder(channel.key, program.startMs)
-        else prefs.addReminder(com.nuvio.tv.livetv.model.Reminder(channel.key, channel.name, program.title, program.startMs))
+        else {
+            val full = canonicalActionProgram(channel.key, program) ?: return@launch
+            prefs.addReminder(com.nuvio.tv.livetv.model.Reminder(channel.key, channel.name, full.title, full.startMs))
+        }
     }
 
     // ------------------------------------------------------------ parental controls
@@ -382,6 +369,7 @@ class LiveTvViewModel @Inject constructor(
 
     /** [watchedIn]: the group it was picked from outside the guide (Quick Channels), saved as the group you watched in. */
     fun preview(channel: LiveChannel, watchedIn: String? = null) {
+        cancelPendingCatchup()
         if (!switchingToBackup) backupTried.clear()
         _catchup.value = null
         // Another channel from a provider that's recording: the recording holds a connection.
@@ -544,7 +532,9 @@ class LiveTvViewModel @Inject constructor(
         val program: EpgProgram,
         val baseOffsetMs: Long,
         /** A recording from Recordings playing as its own show (the "program" is the recording). */
-        val recordingId: String? = null
+        val recordingId: String? = null,
+        /** Global display shift at creation; archive lookups keep the same session time axis. */
+        val displayOffsetMs: Long = 0L
     )
 
     /**
@@ -553,6 +543,7 @@ class LiveTvViewModel @Inject constructor(
      * (gone, or nothing saved).
      */
     fun playRecording(recordingId: String, fromStart: Boolean): Boolean {
+        cancelPendingCatchup()
         val rec = recorder.recordings.value.firstOrNull { it.id == recordingId } ?: return false
         val file = recorder.playlistFile(rec)
         if (!file.isFile) return false
@@ -582,6 +573,7 @@ class LiveTvViewModel @Inject constructor(
 
     /** Leaving a recording played here: keep where you got to (Recordings shows it, Resume uses it), then stop. */
     fun stopRecordingPlayback() {
+        cancelPendingCatchup()
         val s = _catchup.value
         if (s?.recordingId != null && _recordingEnded.value == null) saveRecordingSpot(s)
         _recordingEnded.value = null
@@ -629,12 +621,45 @@ class LiveTvViewModel @Inject constructor(
 
     private val _catchup = MutableStateFlow<CatchupSession?>(null)
     val catchup: StateFlow<CatchupSession?> = _catchup
+    private var catchupStartJob: kotlinx.coroutines.Job? = null
+    private var catchupFollowJob: kotlinx.coroutines.Job? = null
+    private var catchupRequest = 0L
+
+    private fun cancelPendingCatchup() {
+        catchupRequest++
+        catchupStartJob?.cancel()
+        catchupStartJob = null
+        catchupFollowJob?.cancel()
+        catchupFollowJob = null
+    }
 
     /** Plays [program] from the archive, starting [offsetMs] into it. */
     fun playCatchup(channel: LiveChannel, program: EpgProgram, offsetMs: Long = 0L): Boolean {
         val catchup = channel.catchup ?: return false
         val now = System.currentTimeMillis()
         if (!CatchupUrlBuilder.isAvailable(catchup, program.startMs, now)) return false
+        val request = ++catchupRequest
+        catchupStartJob?.cancel()
+        if (program.isDisplayProjection) {
+            catchupStartJob = viewModelScope.launch {
+                val full = canonicalActionProgram(channel.key, program) ?: return@launch
+                if (request != catchupRequest) return@launch
+                playCatchupResolved(channel, catchup, full, offsetMs, request)
+            }
+            return true
+        }
+        return playCatchupResolved(channel, catchup, program, offsetMs, request)
+    }
+
+    private fun playCatchupResolved(
+        channel: LiveChannel,
+        catchup: com.nuvio.tv.livetv.model.CatchupInfo,
+        program: EpgProgram,
+        offsetMs: Long,
+        request: Long
+    ): Boolean {
+        if (program.isDisplayProjection || request != catchupRequest ||
+            !CatchupUrlBuilder.isAvailable(catchup, program.startMs, System.currentTimeMillis())) return false
         // The time zone picked for this playlist, else the server's. Not known yet (M3U from an
         // Xtream server, or a login whose server didn't say): learn it first (a few seconds at
         // most), then play, so the replay starts at the right time. Once found it's saved with
@@ -647,8 +672,9 @@ class LiveTvViewModel @Inject constructor(
             return startCatchup(channel, catchup, program, offsetMs, knownZone)
         }
         if (Regex("""/(?:live/)?[^/]+/[^/]+/\d+(\.[a-z0-9]+)?(\?.*)?$""", RegexOption.IGNORE_CASE).containsMatchIn(channel.url)) {
-            viewModelScope.launch {
+            catchupStartJob = viewModelScope.launch {
                 val tz = kotlinx.coroutines.withTimeoutOrNull(ZONE_WAIT_MS) { repository.learnServerZone(channel) }
+                if (request != catchupRequest) return@launch
                 startCatchup(channel, catchup, program, offsetMs, tz ?: playlistZones.value[channel.sourceId]?.takeIf { it.isNotBlank() })
             }
             return true
@@ -663,6 +689,7 @@ class LiveTvViewModel @Inject constructor(
         offsetMs: Long,
         zone: String?
     ): Boolean {
+        if (program.isDisplayProjection) return false
         val now = System.currentTimeMillis()
         // The guide's time shift is taken back off (the archive goes by the guide's own times),
         // then the playlist's catch-up time shift added, for providers whose archive is on
@@ -709,9 +736,9 @@ class LiveTvViewModel @Inject constructor(
             // makes the stream's clock differ from the guide on purpose).
             catchupExpectWallMs = if (shift == 0L && correctionMs == 0L) from else null
         )
-        _catchup.value = CatchupSession(channel, program, offsetMs.coerceAtLeast(0) - lead)
-        // Load this channel's full schedule, so catch-up can follow on into later shows.
-        repository.ensureChannelSchedule(channel.key)
+        _catchup.value = CatchupSession(channel, program, offsetMs.coerceAtLeast(0) - lead,
+            displayOffsetMs = settings.value.epgOffsetMinutes * 60_000L)
+        // Follow-on reads the adjacent canonical listing; it does not retain a full UI schedule.
         return true
     }
 
@@ -786,21 +813,39 @@ class LiveTvViewModel @Inject constructor(
         }
         val pos = catchupPositionMs() ?: return
         val absolute = s.program.startMs + pos
-        val list = programs.value[s.channel.key].orEmpty()
         val p = playback.player
-        if (p?.playbackState == androidx.media3.common.Player.STATE_ENDED) {
-            // The window we asked for ran out: start a new one right where we are.
-            val at = list.firstOrNull { absolute >= it.startMs && absolute < it.stopMs } ?: return
-            if (absolute < System.currentTimeMillis() - 60_000) playCatchup(s.channel, at, absolute - at.startMs)
-            return
+        val ended = p?.playbackState == androidx.media3.common.Player.STATE_ENDED
+        if (!ended && absolute < s.program.stopMs) return
+        if (catchupFollowJob?.isActive == true) return
+        val displayOffset = s.displayOffsetMs
+        catchupFollowJob = viewModelScope.launch {
+            val full = try {
+                repository.programAtOrAfter(s.channel.key, absolute - displayOffset)
+                    ?.takeUnless { it.isDisplayProjection }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // A guide replacement can invalidate this read; the next playback tick retries.
+                null
+            } ?: return@launch
+            if (_catchup.value !== s || playback.playingChannel?.key != s.channel.key) return@launch
+            val next = com.nuvio.tv.livetv.data.canonicalGuideDetails(full, displayOffset)
+            if (ended) {
+                // The window ran out: restart only at the programme containing this point.
+                if (playback.player?.playbackState == androidx.media3.common.Player.STATE_ENDED &&
+                    absolute >= next.startMs && absolute < next.stopMs &&
+                    absolute < System.currentTimeMillis() - 60_000) {
+                    val currentDisplay = com.nuvio.tv.livetv.data.canonicalGuideDetails(full,
+                        settings.value.epgOffsetMinutes * 60_000L)
+                    playCatchup(s.channel, currentDisplay, absolute - next.startMs)
+                }
+                return@launch
+            }
+            if (next.startMs == s.program.startMs) return@launch
+            _catchup.value = CatchupSession(s.channel, next, s.program.startMs + s.baseOffsetMs - next.startMs,
+                displayOffsetMs = displayOffset)
+            playback.setCatchupTitle(next.title)
         }
-        if (absolute < s.program.stopMs) return
-        val next = list.firstOrNull { absolute >= it.startMs && absolute < it.stopMs }
-            ?: list.firstOrNull { it.startMs >= s.program.stopMs }
-            ?: return
-        if (next.startMs == s.program.startMs) return
-        _catchup.value = CatchupSession(s.channel, next, s.program.startMs + s.baseOffsetMs - next.startMs)
-        playback.setCatchupTitle(next.title)
     }
 
     private fun catchupStartPossible(channel: LiveChannel): Boolean {
@@ -888,6 +933,7 @@ class LiveTvViewModel @Inject constructor(
     }
 
     fun backToLive(channel: LiveChannel) {
+        cancelPendingCatchup()
         _catchup.value = null
         playback.play(channel)
     }
@@ -1007,10 +1053,33 @@ class LiveTvViewModel @Inject constructor(
     val guideGeneration: StateFlow<Int> = repository.guideGeneration
 
     /** A channel's full schedule (overlay mode's days, catch-up). */
-    fun ensureChannelSchedule(channelKey: String) {
-        repository.ensureChannelSchedule(channelKey)
+    val schedulePages: StateFlow<Map<String, com.nuvio.tv.livetv.data.GuideSchedulePageState>> = combine(
+        repository.schedulePages, programs
+    ) { pages, displayed ->
+        val id = displayed.guideBrowsePublicationId()
+        pages.mapValues { (_, page) -> if (!page.loading && page.publicationId > id) page.copy(loading = true) else page }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    val guideFocusPage: StateFlow<com.nuvio.tv.livetv.data.GuideFocusPageState> = repository.guideFocusPage
+
+    fun ensureChannelSchedule(channelKey: String, anchorMs: Long = System.currentTimeMillis(), backwards: Boolean = false,
+                               continuation: Boolean = false, dayStart: Boolean = false) {
+        val shift = settings.value.epgOffsetMinutes * 60_000L
+        repository.ensureChannelSchedule(channelKey, anchorMs - shift, backwards, continuation, dayStart)
         displayChannels.value.firstOrNull { it.key == channelKey }?.let { repository.loadXtreamArchive(listOf(it)) }
     }
+
+    fun ensureGuideFocus(channelKey: String, atMs: Long) =
+        repository.ensureGuideFocus(channelKey, atMs - settings.value.epgOffsetMinutes * 60_000L)
+
+    fun isGuideFocusPending(channelKey: String, anchorMs: Long, displayedPrograms: Map<String, List<EpgProgram>> = programs.value): Boolean {
+        if (repository.status.value.loadedOnce && !repository.lightPrograms && repository.committedGuideRevision.value == null) return false
+        val page = repository.guideFocusPage.value
+        return page.channelKey != channelKey || page.anchorMs != anchorMs || page.loading || page.errorMessage != null ||
+            displayedPrograms.guideBrowsePublicationId() < page.publicationId
+    }
+
+    fun releaseGuideWindow() = repository.releaseGuideWindow()
 
     /** Past listings from the Xtream catch-up archive for these channels (browsing back). */
     fun loadCatchupArchive(channels: List<LiveChannel>) = repository.loadXtreamArchive(channels)
@@ -1068,6 +1137,10 @@ class LiveTvViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        cancelPendingCatchup()
+        detailCache.clear()
+        shiftedPrograms.clear()
+        guideProgramOwnership.close()
         hooks.unregister(this)
         commitEpgChanges()
         super.onCleared()
@@ -1111,7 +1184,7 @@ class LiveTvViewModel @Inject constructor(
         // Details (year, cast, description) sharpen the match; fetch them if not loaded yet.
         val full = if (program != null && channel != null) details(channel.key, program) else program
         posterResolver.posterFor(
-            programTitle,
+            if (program?.isDisplayProjection == true) full?.title ?: programTitle else programTitle,
             com.nuvio.tv.livetv.data.LiveTvPosterResolver.typeHint(full, channel),
             com.nuvio.tv.livetv.data.LiveTvPosterResolver.Clues(
                 year = full?.year,
@@ -1124,7 +1197,10 @@ class LiveTvViewModel @Inject constructor(
 
     // ------------------------------------------------------------ show details on demand
 
-    private val detailCache = com.nuvio.tv.livetv.data.boundedCache<String, EpgProgram>(800)
+    private val detailCache = com.nuvio.tv.livetv.data.GuideProgramDetailsCache()
+
+    private fun detailKey(channelKey: String, program: EpgProgram): String =
+        "${repository.committedGuideRevision.value}|${settings.value.epgOffsetMinutes}|$channelKey|${program.startMs}|${program.guideRowId}"
 
     /**
      * A show with its full details (description, cast, category, year). The guide keeps only
@@ -1132,21 +1208,43 @@ class LiveTvViewModel @Inject constructor(
      * you're looking at are fetched here, once, and remembered.
      */
     suspend fun details(channelKey: String, program: EpgProgram): EpgProgram {
-        if (!repository.lightPrograms || program.description != null || program.people.isNotEmpty()) return program
-        val key = "$channelKey|${program.startMs}"
+        if (!program.isDisplayProjection &&
+            (!repository.lightPrograms || program.description != null || program.people.isNotEmpty())) return program
+        val key = detailKey(channelKey, program)
         detailCache[key]?.let { return it }
         val shift = settings.value.epgOffsetMinutes * 60_000L
-        val full = repository.programDetails(channelKey, program.startMs - shift) ?: return program
-        val merged = program.copy(
-            description = full.description,
-            category = full.category,
-            year = full.year,
-            people = full.people,
-            episode = program.episode ?: full.episode,
-            icon = program.icon ?: full.icon
-        )
+        val full = repository.programDetails(channelKey, program.startMs - shift, program.guideRowId)
+            ?.takeUnless { it.isDisplayProjection } ?: return program
+        val merged = com.nuvio.tv.livetv.data.canonicalGuideDetails(full, shift)
         detailCache[key] = merged
         return merged
+    }
+
+    /** Canonical fields are required before an action persists a title or starts an archive. */
+    private suspend fun canonicalActionProgram(channelKey: String, program: EpgProgram): EpgProgram? {
+        val full = try {
+            if (program.isDisplayProjection) details(channelKey, program) else program
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        if (full != null && !full.isDisplayProjection) return full
+        com.nuvio.tv.livetv.record.LiveTvNotice.show("Programme details are unavailable. Please try again.")
+        return null
+    }
+
+    private fun canonicalAction(
+        channel: LiveChannel,
+        program: EpgProgram,
+        preparingMessage: String,
+        action: (EpgProgram) -> String
+    ): String {
+        viewModelScope.launch {
+            val full = canonicalActionProgram(channel.key, program) ?: return@launch
+            com.nuvio.tv.livetv.record.LiveTvNotice.show(action(full))
+        }
+        return preparingMessage
     }
 
     // ------------------------------------------------------------ 24/7 channels
@@ -1366,6 +1464,9 @@ class LiveTvViewModel @Inject constructor(
             scheduler.cancel(channel.key, program.startMs)
             return "Recording cancelled"
         }
+        if (program.isDisplayProjection) return canonicalAction(channel, program, "Preparing recording…") {
+            toggleScheduled(channel, it)
+        }
         // On now, on a channel without catch-up: record it now (sharing the connection if you're
         // watching it). With catch-up, the whole show is saved from catch-up after it ends.
         val now = System.currentTimeMillis()
@@ -1377,6 +1478,9 @@ class LiveTvViewModel @Inject constructor(
 
     /** Record every airing of this show on this channel (or stop that). Returns a message. */
     fun toggleSeries(channel: LiveChannel, program: EpgProgram): String {
+        if (program.isDisplayProjection) return canonicalAction(channel, program, "Preparing series recording…") {
+            toggleSeries(channel, it)
+        }
         scheduler.seriesFor(channel.key, titleMarks(program.title).title)?.let {
             scheduler.removeSeries(it.id)
             return "Stopped recording \"${it.title}\""
@@ -1384,8 +1488,10 @@ class LiveTvViewModel @Inject constructor(
         return scheduler.addSeries(channel, program)
     }
 
-    fun isSeries(channel: LiveChannel, program: EpgProgram): Boolean =
-        scheduler.seriesFor(channel.key, titleMarks(program.title).title) != null
+    fun isSeries(channel: LiveChannel, program: EpgProgram): Boolean {
+        val full = if (program.isDisplayProjection) detailCache[detailKey(channel.key, program)] ?: return false else program
+        return scheduler.seriesFor(channel.key, titleMarks(full.title).title) != null
+    }
 
     /** Every recording (for the REC marks in the guide and the player). */
     val recordings = recorder.recordings
@@ -1403,6 +1509,15 @@ class LiveTvViewModel @Inject constructor(
         }
         val now = System.currentTimeMillis()
         val show = currentProgram(channel.key, now)?.takeIf { !LiveTvRepository.isPlaceholderTitle(it.title) }
+        if (show?.isDisplayProjection == true) return canonicalAction(channel, show, "Preparing recording…") {
+            if (recorder.activeFor(channel.key) != null) "Recording is already running"
+            else startRecording(channel, it)
+        }
+        return startRecording(channel, show)
+    }
+
+    private fun startRecording(channel: LiveChannel, show: EpgProgram?): String {
+        val now = System.currentTimeMillis()
         val stopAt = if (show != null && show.stopMs > now) show.stopMs + 5 * 60_000L else now + 60 * 60_000L
         val title = show?.title?.let { titleMarks(it).title } ?: channel.name
         // Roughly 2 GB an hour in HD: say so if it may not fit.

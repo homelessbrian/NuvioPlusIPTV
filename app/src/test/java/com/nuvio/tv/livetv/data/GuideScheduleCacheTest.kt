@@ -176,4 +176,119 @@ class GuideScheduleCacheTest {
         assertEquals(fresh, cache.programs()["one"])
         assertEquals(listOf("two"), cache.pending().map { it.channel })
     }
+
+    @Test fun scheduleKeepsOnlyThreePagesAndPreservesTheirContinuationMetadata() {
+        val budget = GuideBrowseBudget()
+        val cache = GuideScheduleCache(budget = budget)
+        val request = cache.request("one")
+        val cursor = GuideBrowseCursor(1, 0, 1, 30, 30)
+        for (index in 0..3) {
+            val programs = listOf(EpgProgram(index * 1000L, index * 1000L + 1000, "Page $index"))
+            val page = GuideBrowsePage(mapOf("one" to programs), cursor, 1, 1024)
+            assertTrue(cache.putPage(request, page, cache.reservePage()!!,
+                GuideScheduleCache.PageKey(index * 1000L), 0, 10_000))
+        }
+        assertEquals(listOf(1000L, 2000L, 3000L), cache.programs()["one"]!!.map { it.startMs })
+        assertEquals(3, cache.pageInfo("one").size)
+        assertTrue(cache.pageInfo("one").all { !it.complete && it.continuation == cursor })
+        assertSame(request, cache.getRequest("one"))
+        cache.clear()
+        assertEquals(0, budget.stats().rows)
+    }
+
+    @Test fun stalePageCannotRestoreAnEvictedScheduleAndReleasesItsReservation() {
+        val budget = GuideBrowseBudget()
+        val cache = GuideScheduleCache(budget = budget)
+        val stale = cache.request("one")
+        val reservation = cache.reservePage()!!
+        cache.request("two"); cache.request("three")
+        assertFalse(cache.putPage(stale, GuideBrowsePage(mapOf("one" to fresh), null, 1, 1024),
+            reservation, GuideScheduleCache.PageKey(0)))
+        assertEquals(0, budget.stats().reservedRows)
+        assertEquals(0, budget.stats().rows)
+    }
+
+    @Test fun scheduleInvalidationKeepsDemandButPublicationOwnsOldPageUntilReleased() {
+        val budget = GuideBrowseBudget()
+        val cache = GuideScheduleCache(budget = budget)
+        val request = cache.request("one")
+        assertTrue(cache.putPage(request, GuideBrowsePage(mapOf("one" to fresh), null, 1, 1024),
+            cache.reservePage()!!, GuideScheduleCache.PageKey(0)))
+        val publication = budget.retain(cache.programs())!!
+        cache.invalidate()
+        assertEquals(listOf(request), cache.pending())
+        assertEquals(1, budget.stats().rows)
+        publication.close()
+        assertEquals(0, budget.stats().rows)
+    }
+
+    @Test fun legacyFullListCannotSilentlyBypassSchedulePageLimit() {
+        val budget = GuideBrowseBudget()
+        val cache = GuideScheduleCache(budget = budget)
+        val request = cache.request("one")
+        val unbounded = (0..256).map { EpgProgram(it * 1000L, it * 1000L + 1000, "Show $it") }
+        assertFalse(cache.put(request, unbounded))
+        assertTrue(cache.programs().isEmpty())
+        assertEquals(listOf(request), cache.pending())
+        assertEquals(0, budget.stats().rows)
+    }
+
+    @Test fun distinctShowsSharingAStartRemainVisibleAcrossPages() {
+        val cache = GuideScheduleCache()
+        val request = cache.request("one")
+        val first = listOf(EpgProgram(0, 1000, "First"), EpgProgram(0, 1000, "Second"))
+        assertTrue(cache.putPage(request, GuideBrowsePage(mapOf("one" to first), null, 2, 2048),
+            cache.reservePage()!!, GuideScheduleCache.PageKey(0)))
+        assertEquals(listOf("First", "Second"), cache.programs()["one"]!!.map { it.title })
+    }
+
+    @Test fun pressureCanReleaseAdjacentCacheOwnershipBeforeReservingTheNextPage() {
+        val budget = GuideBrowseBudget(maxRows = 257)
+        val cache = GuideScheduleCache(budget = budget)
+        val request = cache.request("one")
+        // Use exact smaller decode reservations to prepare the already-resident pages.
+        for (index in 0..1) {
+            val page = GuideBrowsePage(mapOf("one" to listOf(EpgProgram(index.toLong(), index + 1L, "Page $index"))), null, 1, 1024)
+            assertTrue(cache.putPage(request, page, budget.reserve(1, 4096)!!,
+                GuideScheduleCache.PageKey(index.toLong())))
+        }
+        assertEquals(2, budget.stats().rows)
+        val next = cache.reservePage()!! // Needs256 reserved rows; one old adjacent page must go.
+        assertEquals(1, budget.stats().rows)
+        assertEquals(256, budget.stats().reservedRows)
+        next.close(); cache.clear()
+        assertEquals(0, budget.stats().rows)
+    }
+
+    @Test fun clippedDisplayTitlesCannotMergeDistinctCanonicalRows() {
+        val cache = GuideScheduleCache()
+        val request = cache.request("one")
+        val clipped = "same prefix".repeat(60).take(512)
+        val shows = listOf(EpgProgram(0, 1000, clipped, guideRowId = 101),
+            EpgProgram(0, 1000, clipped, guideRowId = 102))
+        assertTrue(cache.putPage(request, GuideBrowsePage(mapOf("one" to shows), null, 2, 4096),
+            cache.reservePage()!!, GuideScheduleCache.PageKey(0)))
+        assertEquals(listOf(101L, 102L), cache.programs()["one"]!!.map { it.guideRowId })
+    }
+
+    @Test fun movingBackFromThreeForwardPagesKeepsTheContiguousNeighbourhoodIncludingEqualStarts() {
+        for (sameStart in listOf(false, true)) {
+            val cache = GuideScheduleCache()
+            val request = cache.request("one")
+            fun add(id: Long, backwards: Boolean) {
+                val start = if (sameStart) 1000L else id * 1000
+                val cursor = GuideBrowseCursor(1, 0, 1, start, id)
+                val show = EpgProgram(start, start + 1000, "Show $id", guideRowId = id)
+                val page = GuideBrowsePage(mapOf("one" to listOf(show)), null, 1, 4096,
+                    firstCursor = cursor, lastCursor = cursor)
+                val key = GuideScheduleCache.PageKey(start, backwards, cursor)
+                assertTrue(cache.putPage(request, page, cache.reservePage("one", backwards)!!, key))
+            }
+            add(10, false); add(20, false); add(30, false)
+            add(1, true)
+            assertEquals(listOf(1L, 10L, 20L), cache.programs()["one"]!!.map { it.guideRowId })
+            assertEquals(setOf(1L, 10L, 20L), cache.pageInfo("one").map { it.firstCursor!!.rowId }.toSet())
+            cache.clear()
+        }
+    }
 }

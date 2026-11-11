@@ -299,6 +299,7 @@ private fun LiveTvGuideScreenBody(
         com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.toggleSeries(ch, p))
     }
     val programs by viewModel.programs.collectAsStateWithLifecycle()
+    RetainGuideBrowsePrograms(programs)
     val status by viewModel.status.collectAsStateWithLifecycle()
     val playback by viewModel.playbackState.collectAsStateWithLifecycle()
     // A channel playing in the preview window: keep the TV awake (no screen saver), like full
@@ -521,11 +522,16 @@ private fun LiveTvGuideScreenBody(
                     val end = (start + count).coerceAtMost(channels.size)
                     return channels.subList(start, end).map { it.key }
                 }
-                val keys = (segment(firstPage, 48) + segment(focusedPage, 32)).distinct()
+                val keys = (listOfNotNull(channels.getOrNull(row)?.key) + segment(firstPage, 48) + segment(focusedPage, 32)).distinct()
                 viewModel.ensureGuideWindow(keys, windowStart - 3_600_000L,
                     windowStart + guideWindowMs(settings) + 2 * 3_600_000L)
             }
     }
+
+    LaunchedEffect(channels.getOrNull(row)?.key, cursorMs, column, now, settings.epgOffsetMinutes) {
+        channels.getOrNull(row)?.let { viewModel.ensureGuideFocus(it.key, if (column == GuideColumn.CHANNEL) now else cursorMs) }
+    }
+    DisposableEffect(viewModel) { onDispose { viewModel.releaseGuideWindow() } }
 
     // A different group opens at its top. (It used to jump to the playing channel when that
     // channel was in the group too, e.g. after playing it from Favorites.) Opening Live TV and
@@ -815,6 +821,13 @@ private fun LiveTvGuideScreenBody(
 
     val focusedChannel = channels.getOrNull(row)
     val focusedPrograms = rememberGuidePrograms(focusedChannel, programs[focusedChannel?.key].orEmpty(), now, settings.epgPastHours)
+    val guideFocusPage by viewModel.guideFocusPage.collectAsStateWithLifecycle()
+    val horizontalMoves = remember { GuideHorizontalMoveQueue() }
+    val focusedGuideAnchor = if (column == GuideColumn.CHANNEL) now else cursorMs
+    val focusedGuideError = guideFocusPage.takeIf {
+        it.channelKey == focusedChannel?.key && it.anchorMs == focusedGuideAnchor
+    }?.errorMessage
+    val focusedProgrammePending = focusedChannel?.let { viewModel.isGuideFocusPending(it.key, focusedGuideAnchor, programs) } == true
 
     fun blockAt(list: List<EpgProgram>, at: Long): GuideBlock {
         list.firstOrNull { at >= it.startMs && at < it.stopMs }?.let { return GuideBlock(it.startMs, it.stopMs, it) }
@@ -910,6 +923,10 @@ private fun LiveTvGuideScreenBody(
         if (!ui.hasSources) { onOpenSettings(); return }
         val ch = focusedChannel ?: return
         if (column == GuideColumn.CHANNEL) { playChannel(ch); return }
+        if (viewModel.isGuideFocusPending(ch.key, cursorMs, programs)) {
+            if (focusedGuideError == null) viewModel.ensureGuideFocus(ch.key, cursorMs)
+            return
+        }
         val block = focusedBlock ?: return
         when {
             now >= block.startMs && now < block.stopMs -> playChannel(ch)
@@ -935,7 +952,16 @@ private fun LiveTvGuideScreenBody(
     // The cursor is always on a program. "CHANNEL" now just means "resting on what's on now"
     // (the guide keeps following the clock); "PROGRAM" means browsing ahead or back in time.
     fun moveRight() {
-        if (focusedChannel == null) return
+        val ch = focusedChannel ?: return
+        val at = if (column == GuideColumn.CHANNEL) now else cursorMs
+        if (focusedGuideError != null || viewModel.isGuideFocusPending(ch.key, at, programs)) {
+            horizontalMoves.offer(ch.key, at, direction = 1)
+            // Only a user's horizontal input retries a failed focused page.
+            val latest = viewModel.guideFocusPage.value
+            if (latest.errorMessage != null || latest.channelKey != ch.key || latest.anchorMs != at)
+                viewModel.ensureGuideFocus(ch.key, at)
+            return
+        }
         if (column == GuideColumn.CHANNEL) {
             column = GuideColumn.PROGRAM
             cursorMs = now
@@ -945,9 +971,12 @@ private fun LiveTvGuideScreenBody(
         if (block.stopMs >= limit) return
         cursorMs = block.stopMs
         while (cursorMs >= windowStart + guideWindowMs(settings) - SLOT_MS / 2) windowStart += SLOT_MS
+        // Set the pending anchor before another remote event can interpret an unloaded gap.
+        viewModel.ensureGuideFocus(ch.key, cursorMs)
     }
 
     fun resetToNow() {
+        horizontalMoves.clear()
         column = GuideColumn.CHANNEL
         windowStart = floorSlot(now)
         cursorMs = now
@@ -987,12 +1016,32 @@ private fun LiveTvGuideScreenBody(
             }
             return
         }
+        if (focusedGuideError != null || viewModel.isGuideFocusPending(ch.key, from, programs)) {
+            horizontalMoves.offer(ch.key, from, direction = -1, held = held)
+            val latest = viewModel.guideFocusPage.value
+            if (latest.errorMessage != null || latest.channelKey != ch.key || latest.anchorMs != from)
+                viewModel.ensureGuideFocus(ch.key, from)
+            return
+        }
         column = GuideColumn.PROGRAM
         cursorMs = block.startMs - 1
         while (cursorMs < windowStart) windowStart -= SLOT_MS
+        viewModel.ensureGuideFocus(ch.key, cursorMs)
         // Stepping back onto what's on now: rest there, so the next Left opens the groups.
         val landed = blockAt(focusedPrograms, cursorMs)
         if (now >= landed.startMs && now < landed.stopMs && ch.catchup == null) resetToNow()
+    }
+
+    LaunchedEffect(guideFocusPage, programs, focusedChannel?.key, focusedGuideAnchor, groupsOpen, nameFocus,
+        fullscreen, menuTarget, infoTarget) {
+        if (groupsOpen || nameFocus || fullscreen || menuTarget != null || infoTarget != null || focusedGuideError != null) {
+            horizontalMoves.clear()
+            return@LaunchedEffect
+        }
+        val ch = focusedChannel ?: run { horizontalMoves.clear(); return@LaunchedEffect }
+        val move = horizontalMoves.takeReady(ch.key, focusedGuideAnchor,
+            focusedGuideError != null || viewModel.isGuideFocusPending(ch.key, focusedGuideAnchor, programs)) ?: return@LaunchedEffect
+        if (move.direction > 0) moveRight() else moveLeft(move.held)
     }
 
     CompositionLocalProvider(LocalLiveSolidHighlight provides settings.solidHighlight, LocalGuideDarkness provides settings.guideInfoBackground) {
@@ -1499,7 +1548,11 @@ private fun LiveTvGuideScreenBody(
                                 if (isOk) {
                                     fun openMenu() {
                                         longPressFired = true
-                                        focusedChannel?.let { menuTarget = MenuTarget(it, focusedBlock) }
+                                        focusedChannel?.let { ch ->
+                                            if (column == GuideColumn.PROGRAM && viewModel.isGuideFocusPending(ch.key, cursorMs, programs)) {
+                                                if (focusedGuideError == null) viewModel.ensureGuideFocus(ch.key, cursorMs)
+                                            } else menuTarget = MenuTarget(ch, focusedBlock)
+                                        }
                                     }
                                     if (event.type == KeyEventType.KeyDown) {
                                         if (event.nativeKeyEvent.repeatCount == 0) {
@@ -1678,6 +1731,8 @@ private fun LiveTvGuideScreenBody(
                                             isPlaying = ch.key == playback.channelKey,
                                             focusColumn = if (index == row && (gridFocused || epgPickerFor != null || logoPickerFor != null) && !nameFocus && !reorderActive) column else null,
                                             focusedBlock = if (index == row) focusedBlock else null,
+                                            loadingFocusedProgramme = index == row && focusedProgrammePending,
+                                            focusedProgrammeError = if (index == row) focusedGuideError else null,
                                             visible = if (visibilityMode) ch.key !in pendingHidden else null,
                                             onToggleVisibility = if (visibilityMode) ({
                                                 row = index
@@ -2731,6 +2786,9 @@ private fun GuideRow(
     isPlaying: Boolean,
     focusColumn: GuideColumn?,
     focusedBlock: GuideBlock?,
+    /** A missing focused cell is a loading slice until its bounded query has been published. */
+    loadingFocusedProgramme: Boolean = false,
+    focusedProgrammeError: String? = null,
     /** In Manage visibility: true = shown, false = hidden. Null otherwise. */
     visible: Boolean? = null,
     onToggleVisibility: (() -> Unit)? = null,
@@ -2908,7 +2966,7 @@ private fun GuideRow(
                     androidx.compose.material3.Text(
                         // The channel's name, so you can see what the row is (24/7 channels'
                         // names also say what's on). Dim and italic: nothing's actually listed.
-                        text = channel.name,
+                        text = focusedProgrammeError ?: if (loadingFocusedProgramme) "Loading program information…" else channel.name,
                         color = if (emptyRowFocused) emptyColors.text else NuvioTheme.colors.TextTertiary,
                         fontSize = gsp(14f),
                         fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
@@ -2930,7 +2988,7 @@ private fun GuideRow(
                     if (gw > 4.dp) strip += StripItem(
                         x = gx, width = gw,
                         // Something is on; the guide just doesn't say what.
-                        title = if (gw > 90.dp) "No information" else "",
+                        title = if (gw > 90.dp) { focusedProgrammeError ?: if (loadingFocusedProgramme) "Loading…" else "No information" } else "",
                         subtitle = null,
                         fill = gapFill, edge = Color.White.copy(alpha = 0.09f),
                         text = NuvioTheme.colors.TextTertiary, italic = true
@@ -2959,7 +3017,7 @@ private fun GuideRow(
                     )
                     focusedShow = {
                         ProgramBlock(
-                            title = marks.title,
+                            title = focusedProgrammeError ?: marks.title,
                             // "Show times in the guide": start and end under the title.
                             subtitle = subtitle,
                             x = x, width = w,
@@ -3000,7 +3058,7 @@ private fun GuideRow(
                 val x = xOf(focusedBlock.startMs)
                 val w = (xOf(focusedBlock.stopMs) - x).coerceAtLeast(2.dp)
                 ProgramBlock(
-                    title = "No information", subtitle = null, x = x, width = w,
+                    title = focusedProgrammeError ?: if (loadingFocusedProgramme) "Loading…" else "No information", subtitle = null, x = x, width = w,
                     colors = liveCellColors(focused = true, idle = guideSurface()),
                     focused = true, progress = null, continuesLeft = false
                 )

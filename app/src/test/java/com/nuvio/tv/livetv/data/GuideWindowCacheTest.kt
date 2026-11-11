@@ -65,6 +65,69 @@ class GuideWindowCacheTest {
         val cache = GuideWindowCache()
         val missing = cache.missing((1..16_000).map { "channel$it" }, 0, 30 * 24 * hour)
         assertEquals(96, missing.map { it.channel }.toSet().size)
-        assertEquals(96 * 6, missing.size)
+        assertEquals(96 * 2, missing.size) // The active display/prefetch request is at most six hours.
+    }
+
+    @Test fun programmePayloadCannotBypassTheTileCountLimit() {
+        val budget = GuideBrowseBudget()
+        val cache = GuideWindowCache(budget = budget)
+        val huge = program(0).copy(description = "x".repeat(2_000_000))
+        assertFalse(cache.put(GuideWindowCache.Tile("one", 0), listOf(huge)))
+        assertEquals(0, cache.size)
+        assertEquals(0, budget.stats().rows)
+    }
+
+    @Test fun evictionReleasesCacheOwnershipButRetiredPublicationKeepsItsPayloadCharged() {
+        val budget = GuideBrowseBudget()
+        val cache = GuideWindowCache(capacity = 2, budget = budget)
+        cache.put(GuideWindowCache.Tile("one", 0), listOf(program(0)))
+        cache.put(GuideWindowCache.Tile("two", 0), listOf(program(0)))
+        val publication = cache.snapshotLease(cache.programs(setOf("one")))!!
+        cache.put(GuideWindowCache.Tile("three", 0), listOf(program(0)))
+        assertEquals(2, cache.size)
+        assertEquals(3, budget.stats().rows)
+        publication.close()
+        assertEquals(2, budget.stats().rows)
+        cache.clear()
+        assertEquals(0, budget.stats().rows)
+    }
+
+    @Test fun densePageRetainsContinuationAndNextPageReplacesInsteadOfAccumulating() {
+        val budget = GuideBrowseBudget()
+        val cache = GuideWindowCache(budget = budget)
+        val tile = GuideWindowCache.Tile("one", 0)
+        val cursor = GuideBrowseCursor(1, 0, 1, 10, 10)
+        val first = listOf(program(0))
+        val reserve = cache.reservePage(tile)!!
+        assertTrue(cache.putPage(tile, GuideBrowsePage(mapOf("one" to first), cursor, 1, 1024), reserve))
+        assertFalse(cache.pageInfo(tile)!!.complete)
+        assertEquals(cursor, cache.pageInfo(tile)!!.continuation)
+        val second = listOf(program(10))
+        assertTrue(cache.putPage(tile, GuideBrowsePage(mapOf("one" to second), null, 1, 1024), cache.reservePage(tile)!!))
+        assertTrue(cache.pageInfo(tile)!!.complete)
+        assertEquals(second, cache.programs()["one"])
+        assertEquals(1, budget.stats().rows)
+    }
+
+    @Test fun optionalLowerPriorityRowsCannotEvictTheFocusedDemand() {
+        val budget = GuideBrowseBudget()
+        val cache = GuideWindowCache(budget = budget, maxRows = 2)
+        cache.setDemand(listOf("focused", "visible", "prefetch"))
+        assertTrue(cache.put(GuideWindowCache.Tile("focused", 0), listOf(program(0))))
+        assertTrue(cache.put(GuideWindowCache.Tile("visible", 0), listOf(program(0))))
+        assertFalse(cache.put(GuideWindowCache.Tile("prefetch", 0), listOf(program(0))))
+        assertEquals(setOf("focused", "visible"), cache.programs().keys)
+        assertEquals(2, cache.stats().rows)
+    }
+
+    @Test fun publicationIncludesOnlyDemandedChannelsAndHoursNotWarmHistory() {
+        val cache = GuideWindowCache()
+        cache.put(GuideWindowCache.Tile("one", 0), listOf(program(0)))
+        cache.put(GuideWindowCache.Tile("one", 4 * hour), listOf(program(4 * hour)))
+        cache.put(GuideWindowCache.Tile("warm", 0), listOf(program(0)))
+        val shown = cache.programs(setOf("one"), 4 * hour, 5 * hour)
+        assertEquals(setOf("one"), shown.keys)
+        assertEquals(listOf(program(4 * hour)), shown["one"])
+        assertEquals(3, cache.size) // Warm data can stay cached without entering the publication.
     }
 }
