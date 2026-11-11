@@ -1,0 +1,25 @@
+{
+  "purpose": "Synthetic fixture Search focus regression screenshots",
+  "images": {
+    "before": {
+      "file": "search-focus-before.png",
+      "source_commit": "ac39dab9",
+      "query": "Team 9 vs Team 14",
+      "bytes": 150496,
+      "sha256": "8978c91f08228d74861e6c4d56198ff446bafec099bbc6e243390c54cf7cb02a",
+      "pixels_unmodified": true
+    },
+    "after": {
+      "file": "search-focus-after.png",
+      "source_commit": "84a3b3b6",
+      "query": "Team 9 vs Team 15",
+      "bytes": 133597,
+      "sha256": "49c47f8f5bc9a4283f54163ce60ed896b0226f7bed391e56efa34e76778aa328",
+      "pixels_unmodified": true
+    }
+  },
+  "query_difference": "The upcoming six-hour target changed with the clock; both probes target the same channel650/result rank.",
+  "after_observed_focus_hold_seconds": 68.7859245,
+  "right_keys_after_hold": 20,
+  "earlier_failed_case_preserved": true
+}
