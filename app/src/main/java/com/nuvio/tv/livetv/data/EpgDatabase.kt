@@ -437,11 +437,17 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         toMs: Long,
         minStopMs: Long,
         onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?) -> Unit
-    ) {
-        scanListingGroups(fromMs, toMs, minStopMs) { channels, start, stop, title, descr, cat ->
-            for (ch in channels) onRow(ch, start, stop, title, descr, cat)
-        }
+    ) = scanListingsGrouped(fromMs, toMs, minStopMs) { channels, start, stop, title, descr, cat ->
+        for (ch in channels) onRow(ch, start, stop, title, descr, cat)
     }
+
+    /** A guide show is read once even when many playlist channels share it. */
+    fun scanListingsGrouped(
+        fromMs: Long,
+        toMs: Long,
+        minStopMs: Long,
+        onRow: (channels: List<String>, start: Long, stop: Long, title: String, descr: String?, cat: String?) -> Unit
+    ) = scanListingGroups(fromMs, toMs, minStopMs, onRow)
 
     /**
      * The same scan and order as [scanListings], before a stored listing is handed to each

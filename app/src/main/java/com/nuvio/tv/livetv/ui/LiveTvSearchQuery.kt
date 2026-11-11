@@ -44,21 +44,69 @@ internal data class LiveTvSearchStamp(
     val channels: List<LiveChannel>
 )
 
-/** Ranking remains channel order, with name/number matches ahead of programme matches. */
+private const val MAX_HITS = 200
+
+/** Words after a channel's name that only say which copy it is (its quality). */
+private val QUALITY_WORDS = setOf("hd", "fhd", "uhd", "sd", "4k", "hevc", "h265", "backup", "1080p", "720p")
+
+/** The channel's name without its region prefix and quality tags: "US: TNT HD" -> "tnt". */
+private fun cleanChannelName(name: String): String =
+    name.substringAfterLast(':').substringAfterLast('|').trim().lowercase()
+        .split(' ', '-', '_').filter { it.isNotEmpty() && it !in QUALITY_WORDS }.joinToString(" ")
+
+/** How good this copy is, best first: 4K, then FHD, HD, no tag, SD, and backups last. */
+private fun qualityRank(name: String): Int {
+    val words = name.lowercase().split(' ', '-', '_', '|', ':', '(', ')', '[', ']').filter { it.isNotEmpty() }.toSet()
+    return when {
+        "backup" in words -> 5
+        words.any { it == "4k" || it == "uhd" || it == "2160p" } -> 0
+        words.any { it == "fhd" || it == "1080p" } -> 1
+        words.any { it == "hd" || it == "720p" || it == "hevc" || it == "h265" } -> 2
+        "sd" in words -> 4
+        else -> 3
+    }
+}
+
+/** 0 = exact name, 1 = prefix, 2 = word prefix, 3 = substring. */
+private fun nameMatchTier(name: String, q: String): Int {
+    val words = name.substringAfterLast(':').substringAfterLast('|').trim().lowercase()
+        .split(' ', '-', '_').filter { it.isNotEmpty() && it !in QUALITY_WORDS }
+    val clean = words.joinToString(" ")
+    // Upstream strips quality words when ranking, while candidate admission remains literal.
+    val query = q.lowercase().split(' ').filter { it.isNotEmpty() && it !in QUALITY_WORDS }.joinToString(" ")
+        .ifEmpty { q.lowercase() }
+    return when {
+        clean == query -> 0
+        clean.startsWith(query) -> 1
+        words.any { it.startsWith(query) } -> 2
+        else -> 3
+    }
+}
+
+private class RankedName(val channel: LiveChannel, val tier: Int, val name: String, val quality: Int)
+
+/** Upstream name ranking, followed by programme-only matches in catalogue order. */
 internal class LiveTvSearchPlan(query: String, channels: List<LiveChannel>, nowMs: Long, access: LiveTvSearchAccess) {
     private val q = query.trim()
     private val eligible = if (q.length < 2) emptyList() else channels.filter(access::permits)
-    private val names = eligible.filter { it.name.contains(q, ignoreCase = true) || it.number.toString() == q }.take(40)
+    // Compute comparison keys once per candidate; stable ties retain catalogue order. Region
+    // preference is deliberately absent, matching upstream's current Search behavior.
+    private val names = eligible.asSequence()
+        .filter { it.name.contains(q, ignoreCase = true) || it.number.toString() == q }
+        .map { RankedName(it, if (it.number.toString() == q) 0 else nameMatchTier(it.name, q),
+            cleanChannelName(it.name), qualityRank(it.name)) }
+        .sortedWith(compareBy<RankedName>({ it.tier }, { it.name }, { it.quality }))
+        .take(MAX_HITS).map { it.channel }.toList()
     private val nameKeys = names.mapTo(HashSet()) { it.key }
-    val request = EpgSearchRequest(q, if (names.size == 40) emptyList() else eligible.map { it.key }.filter { it !in nameKeys },
-        nameKeys, nowMs, access.offsetMinutes, maxMatches = 40 - names.size)
+    val request = EpgSearchRequest(q, if (names.size == MAX_HITS) emptyList() else eligible.map { it.key }.filter { it !in nameKeys },
+        nameKeys, nowMs, access.offsetMinutes, maxMatches = MAX_HITS - names.size)
     val needsPrograms: Boolean get() = eligible.isNotEmpty()
 
     fun results(programs: EpgSearchPrograms): List<LiveSearchHit> {
-        val out = ArrayList<LiveSearchHit>(40)
+        val out = ArrayList<LiveSearchHit>(MAX_HITS)
         names.forEach { out += LiveSearchHit(it, programs.current[it.key], matchedProgram = false) }
         for (channel in eligible) {
-            if (out.size == 40) break
+            if (out.size == MAX_HITS) break
             if (channel.key in nameKeys) continue
             val program = programs.matching[channel.key] ?: continue
             out += LiveSearchHit(channel, program, matchedProgram = true)

@@ -8,9 +8,12 @@ The directory must contain manifest.json with version 1 (or no version), and:
     "label": "baseline-1", "sha256": "<64 hexadecimal digits>",
     "main_launch_requested_elapsed_ns": 123,
     "browse_begin_elapsed_ns": null, "browse_end_elapsed_ns": null}, ...]}
-The complete order is primary baseline/candidate repeated three times, then shared
-baseline/candidate once. Only the third primary pair has browse markers. Origins
-must be positive and strictly increase in that order. Optional top-level
+Optional top-level cases is ["primary"] for exactly six primary trials, or
+["primary", "shared"] for all eight. Omitting cases requires all eight, preserving
+the original strict default. Order is primary baseline/candidate repeated three
+times, then shared baseline/candidate once when declared. Declaring both cases
+never permits missing shared trials. Only the third primary pair has browse
+markers. Origins must be positive and strictly increase in that order. Optional top-level
 expected_runtime_max_bytes checks the observed cap; optional source_pins is copied
 verbatim to the report, never inferred. File paths must remain within record-dir.
 
@@ -27,7 +30,11 @@ is separately reported and is never added to resident PSS. Aliases in the output
 debug_memory_total_pss_kib -> raw_total_pss_kib, swap_pss_derived_kib ->
 derived_swap_pss_kib. Sampled maxima are not continuous or retained-heap peaks.
 
-Successful replay establishes numeric consistency only. It does not authenticate
+Successful replay establishes numeric consistency for the DECLARED cases only;
+it does not establish completion of the whole originally planned study. A primary-
+only record can stand alone when a planned shared setup failed before measurement,
+provided the companion failure/unmeasured-case provenance is preserved separately.
+The tool does not authenticate
 the manifest, prove lifecycle/fixture/input parity, recover missing samples, prove
 absence of GC requests, or establish physical-device behavior. Those require the
 separate provenance and capture evidence. Invalid evidence fails without dropping
@@ -197,9 +204,9 @@ def read_trial(directory, entry, expected_cap):
             "summary": summary}
 
 
-def aggregate(trials):
+def aggregate(trials, cases=("primary", "shared")):
     groups = {}
-    for case in ("primary", "shared"):
+    for case in cases:
         groups[case] = {}
         for role in ("baseline", "candidate"):
             selected = [t for t in trials if t["case"] == case and t["role"] == role]
@@ -226,10 +233,13 @@ def replay(directory):
     manifest = json.loads(data.decode("utf-8"), parse_constant=reject_constant)
     require(isinstance(manifest, dict) and type(manifest.get("version", 1)) is int
             and manifest.get("version", 1) == 1, "Manifest version1 object required")
+    cases = manifest.get("cases", ["primary", "shared"])
+    require(cases in (["primary"], ["primary", "shared"]), "Cases must be ['primary'] or ['primary','shared']")
+    expected_order = EXPECTED_ORDER[:6] if cases == ["primary"] else EXPECTED_ORDER
     entries = manifest.get("trials")
-    require(isinstance(entries, list) and len(entries) == 8, "Exactly eight trials required")
+    require(isinstance(entries, list) and len(entries) == len(expected_order), "Exactly six primary trials, plus two shared when declared, required")
     require(all(isinstance(t, dict) for t in entries), "Trial entries must be objects")
-    require([(t.get("case"), t.get("role")) for t in entries] == EXPECTED_ORDER, "Full primary B/A×3 then shared B/A order required")
+    require([(t.get("case"), t.get("role")) for t in entries] == expected_order, "Full declared primary B/A×3 then shared B/A order required")
     labels, files = set(), set()
     for index, entry in enumerate(entries):
         label = entry.get("label")
@@ -248,14 +258,17 @@ def replay(directory):
     origins = [t["main_launch_requested_elapsed_ns"] for t in trials]
     require(all(a < b for a, b in zip(origins, origins[1:])), "Main launch clocks do not follow full alternating order")
     require(len({t["observed_runtime_max_bytes"] for t in trials}) == 1, "Runtime cap differs across matched trials")
-    return {"complete": True, "manifest_sha256": hashlib.sha256(data).hexdigest(),
-            "source_pins": manifest.get("source_pins"), "trials": trials, "groups": aggregate(trials),
+    return {"complete": True, "completion_scope": "numeric-replay-of-declared-cases-only", "cases": cases,
+            "whole_original_study_completion_established": False,
+            "manifest_sha256": hashlib.sha256(data).hexdigest(),
+            "source_pins": manifest.get("source_pins"), "trials": trials, "groups": aggregate(trials, cases),
             "units": {"runtime_and_native_heap": "bytes", "pss_and_swap": "KiB", "origin": "device elapsed realtime ns"},
             "all_samples_retained": True, "explicit_gc_requested_by_replay": False,
             "limits": ["Matched instrumentation has observer overhead; replay does not establish uninstrumented behavior.",
                        "Manifest, capture/input parity and lifecycle evidence require independent review.",
+                       "Declared-case numeric completion does not establish completion of the original planned study; preserve companion failure/unmeasured-case provenance.",
                        "All prelaunch, gap, ordinary-GC and outlier samples retained; no filtering or retries.",
-                       "Sampled maxima are not continuous peaks or retained heap; shared and browse each have one pair.",
+                       "Sampled maxima are not continuous peaks or retained heap; browse and any declared shared case each have one pair.",
                        "No physical SHIELD or long-session acceptance inferred."]}
 
 

@@ -4,6 +4,40 @@ import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.LiveUserState
 import com.nuvio.tv.livetv.parental.ParentalControls
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** Carries the exact guide-data owner through dedupe, TV listings and score-delay preparation. */
+internal class SportsPreparedEvents(
+    val guideSource: Map<Long, List<SportsEvent>>,
+    val events: List<SportsEvent>
+) {
+    fun withEvents(next: List<SportsEvent>) = SportsPreparedEvents(guideSource, next)
+}
+
+/** Equal event values from another source do not acknowledge this scan's asynchronous output. */
+internal suspend fun awaitSportsGuideEvents(
+    prepared: StateFlow<SportsPreparedEvents>,
+    source: Map<Long, List<SportsEvent>>,
+    timeoutMs: Long = 30_000L
+): List<SportsEvent>? = withTimeoutOrNull(timeoutMs) {
+    prepared.first { it.guideSource === source }.events
+}
+
+/** Ordinary quick work shares playback waits with the full pass; first-guide cards can precede them. */
+internal suspend fun prepareSportsMatchStages(
+    quickEarly: Boolean,
+    guideReady: () -> Boolean,
+    awaitPlayback: suspend () -> Unit,
+    quick: suspend () -> Unit
+): Boolean {
+    if (quickEarly) quick()
+    if (!guideReady()) return false
+    awaitPlayback()
+    if (!quickEarly) quick()
+    return true
+}
 
 /** Only settings that affect which channels Sports may search, their order, or their guide times. */
 internal data class SportsMatchPolicy(
@@ -89,6 +123,59 @@ internal data class SportsMatchSnapshot(
     val events: Pair<Int, Long>
 )
 
+/** Provisional name/network/pick matches need current access, even before a guide is committed. */
+internal data class SportsQuickMatchSnapshot(
+    val profileId: Int,
+    val catalog: List<LiveChannel>,
+    val policy: SportsMatchPolicy,
+    val rules: List<Any>,
+    val events: Pair<Int, Long>,
+    val databaseChanges: Long,
+    val committedGuideRevision: Long?
+)
+
+/** Include GUIDE hits and quick eligibility, without invalidating for scores or cosmetic clocks. */
+internal fun sportsQuickMatchEventStamp(events: List<SportsEvent>): Pair<Int, Long> {
+    var hash = 17L
+    for (event in events) {
+        hash = hash * 31 + event.id.hashCode()
+        hash = hash * 31 + event.leagueId.hashCode()
+        hash = hash * 31 + event.startMs
+        hash = hash * 31 + if (event.hasTime) 1 else 0
+        hash = hash * 31 + event.state.hashCode()
+        hash = hash * 31 + event.title.hashCode()
+        hash = hash * 31 + (event.subtitle?.hashCode() ?: 0)
+        hash = hash * 31 + event.broadcasts.hashCode()
+        hash = hash * 31 + event.source.hashCode()
+        hash = hash * 31 + (event.endMs ?: 0L)
+        hash = hash * 31 + (event.word?.hashCode() ?: 0)
+        hash = hash * 31 + event.guideHits.hashCode()
+        val away = event.away?.team
+        val home = event.home?.team
+        hash = hash * 31 + if (away != null) 1 else 0
+        hash = hash * 31 + (away?.id?.hashCode() ?: 0)
+        hash = hash * 31 + (away?.name?.hashCode() ?: 0)
+        hash = hash * 31 + (away?.fullName?.hashCode() ?: 0)
+        hash = hash * 31 + if (home != null) 1 else 0
+        hash = hash * 31 + (home?.id?.hashCode() ?: 0)
+        hash = hash * 31 + (home?.name?.hashCode() ?: 0)
+        hash = hash * 31 + (home?.fullName?.hashCode() ?: 0)
+    }
+    return events.size to hash
+}
+
+internal fun sportsQuickMatchEvents(events: List<SportsEvent>, now: Long): List<SportsEvent> = events.filter {
+    it.state == GameState.LIVE || (it.state == GameState.PRE && it.startMs in now..(now + 3 * 3_600_000L))
+}
+
+/** Provisional results fill gaps without replacing channels from an accepted full pass. */
+internal fun mergeSportsQuickMatches(
+    current: Map<String, List<ChannelMatch>>, quick: Map<String, List<ChannelMatch>>
+): Map<String, List<ChannelMatch>> {
+    val fresh = quick.filterKeys { it !in current }
+    return if (fresh.isEmpty()) current else current + fresh
+}
+
 /** Persistent guide revision survives restart; the in-process write counter does not. */
 internal data class SportsSavedMatchStamp(val revision: Long, val profile: Int, val context: Int)
 
@@ -103,6 +190,20 @@ internal fun SportsMatchSnapshot.savedStamp() = SportsSavedMatchStamp(
 internal suspend fun <T> runSportsMatchWork(
     snapshot: SportsMatchSnapshot,
     current: suspend () -> SportsMatchSnapshot?,
+    work: suspend () -> T,
+    publish: (T) -> Unit
+): Boolean = runSportsMatchWorkFenced(snapshot, current, work, publish)
+
+internal suspend fun <T> runSportsMatchWork(
+    snapshot: SportsQuickMatchSnapshot,
+    current: suspend () -> SportsQuickMatchSnapshot?,
+    work: suspend () -> T,
+    publish: (T) -> Unit
+): Boolean = runSportsMatchWorkFenced(snapshot, current, work, publish)
+
+private suspend fun <S : Any, T> runSportsMatchWorkFenced(
+    snapshot: S,
+    current: suspend () -> S?,
     work: suspend () -> T,
     publish: (T) -> Unit
 ): Boolean {

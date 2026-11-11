@@ -1,0 +1,19 @@
+{
+  "case": "shared",
+  "status": "SETUP_FAILED_NOT_MEASURED",
+  "numeric_rows": 0,
+  "activity_started": false,
+  "utc": "2026-11-11T04:41:45.120719+00:00",
+  "source_commit": "67570ddd",
+  "apk_sha256": "1fde1a86c757c4998c34f4bf02663203ece814554fd7e9effaf51d23da87967f",
+  "fixture_manifest_sha256": "93860c93668253e42e5933e2798ab3893492a6c5e0b96c90d3ad46a131182a46",
+  "common_snapshot_sha256": "960fd0e2d52c8d04bb99ef0deeded8076f1e0b0fe1a69922f06ae045f712510a",
+  "case_plan_sha256": "d263749bf89302ac5951883fe70ad90620f96a03c330febe87763ae8228a7a93",
+  "private_failure_record_sha256": "506ea2cc00c9afb9f64ca96810b1fe110677bda2c65b353ba5cca7940204e60d",
+  "failed_stage": "Shared app-data restore before instrumentation or activity launch",
+  "exact_errno_unavailable": true,
+  "frozen_helper_discarded_stderr": true,
+  "rollback_and_partial_state_preserved": true,
+  "whole_trial_retries": 0,
+  "resolution": "Keep the six completed primary trials; do not retry the old shared pair. Restore original data with verified recovery, then prepare a separate current-upstream study."
+}

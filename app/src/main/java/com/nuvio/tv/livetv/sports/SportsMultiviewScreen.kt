@@ -17,6 +17,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -26,7 +27,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -36,6 +36,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlinx.coroutines.delay
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -47,6 +49,8 @@ import com.nuvio.tv.livetv.multiview.MultiviewPlaybackSession
 import com.nuvio.tv.livetv.multiview.MultiviewViewModel
 import com.nuvio.tv.livetv.multiview.multiviewNextPane
 import com.nuvio.tv.livetv.multiview.multiviewPaneBounds
+import com.nuvio.tv.livetv.multiview.multiviewPanel
+import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.ui.KeepScreenAwake
 import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -88,6 +92,15 @@ internal fun SportsMultiviewScreen(
         request.eventId?.let { put(0, it) }
     } }
     val paneFocus = remember { List(4) { FocusRequester() } }
+    val panelBackground by playback.panelBackground.collectAsStateWithLifecycle()
+    val use24h by playback.use24HourClock.collectAsStateWithLifecycle()
+    val clock by produceState(System.currentTimeMillis()) {
+        while (true) { delay(30_000L); value = System.currentTimeMillis() }
+    }
+    val paneKeys = state.panes.mapNotNull { it.channelKey }
+    val paneShows by produceState(emptyMap<String, EpgProgram>(), paneKeys, clock / 60_000L) {
+        value = playback.nowOn(paneKeys)
+    }
 
     fun profileChanged() {
         session.release()
@@ -105,6 +118,25 @@ internal fun SportsMultiviewScreen(
         session.assignChannel(targetPane, match.channel)
         session.focusPane(targetPane)
         return true
+    }
+
+    /** The game playing in this pane and its streams after the current one (the next to try first). */
+    fun nextStreams(paneId: Int): Pair<String, List<ChannelMatch>>? {
+        val channelKey = state.panes.getOrNull(paneId)?.channelKey
+        val eventId = paneEvents[paneId]
+            ?: games.firstOrNull { game -> game.channels.any { it.channel.key == channelKey } }?.event?.id
+            ?: return null
+        val game = games.firstOrNull { it.event.id == eventId } ?: return null
+        val streams = game.channels.distinctBy { it.channel.key }
+        val at = streams.indexOfFirst { it.channel.key == channelKey }
+        return eventId to streams.drop(at + 1)
+    }
+
+    /** OK on a pane whose stream failed: play the game's next stream there. */
+    fun tryAnotherStream(paneId: Int): Boolean {
+        val (eventId, candidates) = nextStreams(paneId) ?: return false
+        targetPane = paneId
+        return candidates.any { playGame(eventId, it.channel.key) }
     }
 
     fun single() {
@@ -178,7 +210,7 @@ internal fun SportsMultiviewScreen(
     }
     BackHandler { if (stripOpen) stripOpen = false else single() }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(NuvioTheme.colors.Background)) {
         BoxWithConstraints(Modifier.fillMaxSize().padding(4.dp)) {
             val width = maxWidth
             val height = maxHeight
@@ -186,6 +218,10 @@ internal fun SportsMultiviewScreen(
             state.panes.forEach { pane ->
                 key(pane.id) {
                     val rect = bounds.first { it.id == pane.id }
+                    val logo = remember(allowed, pane.channelKey) {
+                        pane.channelKey?.let { k -> allowed.firstOrNull { it.key == k }?.logo }
+                    }
+                    val nextUp = if (pane.error != null) nextStreams(pane.id)?.second.orEmpty() else emptyList()
                     MultiviewPane(
                         pane, pane.id == state.focusedPane && state.hasAudioFocus,
                         Modifier.offset(width * rect.left, height * rect.top)
@@ -218,7 +254,22 @@ internal fun SportsMultiviewScreen(
                                     else -> false
                                 }
                             },
-                        onClick = { session.focusPane(pane.id); stripOpen = true },
+                        onClick = {
+                            if (pane.error == null || !tryAnotherStream(pane.id)) {
+                                session.focusPane(pane.id)
+                                stripOpen = true
+                            }
+                        },
+                        logo = logo,
+                        show = pane.channelKey?.let { paneShows[it] },
+                        now = clock,
+                        use24h = use24h,
+                        errorHint = when (nextUp.size) {
+                            0 -> "OK: pick another game"
+                            1 -> "OK: try another stream · Next: ${nextUp.first().channel.name}"
+                            else -> "OK: try another stream · Next: ${nextUp.first().channel.name} · ${nextUp.size - 1} more"
+                        },
+                        emptyHint = "OK to pick a game",
                     )
                 }
             }
@@ -234,6 +285,7 @@ internal fun SportsMultiviewScreen(
                 paneCount = state.layout.paneCount,
                 hideScores = settings.hideScores,
                 onGame = { game -> sports.resolve(game.event.id) != null },
+                onPlayGame = { game -> playGame(game.event.id) },
                 onStream = { game, channelKey -> playGame(game.event.id, channelKey) },
                 onAdd = {
                     val count = session.state.value.layout.paneCount
@@ -258,13 +310,15 @@ internal fun SportsMultiviewScreen(
                 onPane = { targetPane = it },
                 onClose = { stripOpen = false },
                 modifier = Modifier.align(Alignment.BottomCenter),
+                panelBackground = panelBackground,
             )
         } else {
             LiveText(
-                "Sound: pane ${state.focusedPane + 1}  ·  OK: Sports games  ·  Back: single screen",
-                size = 12.sp, color = NuvioTheme.colors.TextSecondary,
-                modifier = Modifier.align(Alignment.BottomCenter).background(Color.Black.copy(alpha = 0.72f))
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                "Sound: P${state.focusedPane + 1}  ·  OK: Sports games  ·  Back: single screen",
+                size = 11.sp, color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)
+                    .multiviewPanel(panelBackground, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 14.dp, vertical = 5.dp),
             )
         }
     }

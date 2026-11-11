@@ -453,6 +453,9 @@ private fun LiveTvGuideScreenBody(
     var logoPickerFor by remember { mutableStateOf<LiveChannel?>(null) }
     var logoPanelFocusTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(epgPickerFor) { if (epgPickerFor != null) viewModel.ensureEpgDetails() }
+    // The guides' channel lists are only kept while Assign EPG or the logo picker is open.
+    val epgListsOpen = epgPickerFor != null || logoPickerFor != null
+    DisposableEffect(epgListsOpen) { onDispose { if (epgListsOpen) viewModel.releaseEpgLists() } }
     var epgPanelFocusTick by remember { mutableIntStateOf(0) }
     val epgSources by viewModel.epgSources.collectAsStateWithLifecycle()
     val epgListsLoading by viewModel.epgListsLoading.collectAsStateWithLifecycle()
@@ -1136,7 +1139,7 @@ private fun LiveTvGuideScreenBody(
                 playbackBuffering = playback.isBuffering,
                 playbackError = playback.error,
                 catchupTitle = playback.catchupTitle,
-                status = status.message.takeIf { settings.showImportProgress && status.loading }
+                status = status.message.takeIf { settings.showImportProgress && status.loading && !status.silent }
             )
 
             // ---------------------------------------------------------------- groups + guide
@@ -1840,7 +1843,7 @@ private fun LiveTvGuideScreenBody(
                 }
             }
         }
-        if (settings.showImportProgress && !fullscreen && (settings.showProgramDetails || settings.showPreview) && status.loading) {
+        if (settings.showImportProgress && !fullscreen && (settings.showProgramDetails || settings.showPreview) && status.loading && !status.silent) {
             status.message?.let {
                 LiveText(
                     it,
@@ -2025,7 +2028,7 @@ private fun LiveTvGuideScreenBody(
                 current = user.epgOverrides[ch.key],
                 automatic = epgAutoMatches[ch.key],
                 loading = status.loading || epgListsLoading,
-                statusMessage = status.message.takeIf { status.loading }
+                statusMessage = status.message.takeIf { status.loading && !status.silent }
                     ?: "Reading the guides' channel lists…".takeIf { epgListsLoading },
                 unassignedOnly = epgUnassignedOnly,
                 onToggleUnassigned = { epgUnassignedOnly = !epgUnassignedOnly },
@@ -3700,6 +3703,7 @@ private fun ChannelContextMenu(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             item { MenuHeader("Watch", first = true) }
             item { MenuItem("Watch full screen", Modifier.focusRequester(first), onWatch) }
+            item { MenuItem("Add to Multiview", onClick = { com.nuvio.tv.livetv.multiview.MultiviewQueue.addAndAnnounce(ch.key); onDismiss() }) }
             // On now, with catch-up or a recording running: start it over (right under Watch).
             if (canRestart && (program == null || (now >= program.startMs && now < program.stopMs))) item {
                 MenuItem(restartLabel, onClick = onRestart)
@@ -4642,7 +4646,9 @@ private fun LogoSidePanel(
     var choices by remember { mutableStateOf<List<com.nuvio.tv.livetv.data.LogoChoice>?>(null) }
     var libraryLoading by remember { mutableStateOf(false) }
     val picked = viewModel.hasPickedLogo(channel)
-    LaunchedEffect(channel.key, query, logoSourcesOff) {
+    // Your guides' logos come with their channel lists, read when the panel opens.
+    val guideLists by viewModel.epgSources.collectAsStateWithLifecycle()
+    LaunchedEffect(channel.key, query, logoSourcesOff, guideLists.isEmpty()) {
         // Your playlists and guides straight away; the libraries' lists may need fetching first.
         choices = null
         choices = viewModel.logoChoices(context, channel, query, withLibrary = false)

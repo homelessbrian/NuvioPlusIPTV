@@ -73,6 +73,11 @@ class SportsListingGroupsTest {
         db.scanListingGroups(from, to, now) { channels, start, stop, title, descr, cat ->
             grouped += channels.toList() to Row("", start, stop, title, descr, cat)
         }
+        val publicGrouped = ArrayList<Pair<List<String>, Row>>()
+        db.scanListingsGrouped(from, to, now) { channels, start, stop, title, descr, cat ->
+            publicGrouped += channels.toList() to Row("", start, stop, title, descr, cat)
+        }
+        assertEquals(grouped, publicGrouped)
         assertEquals(flat, grouped.flatMap { (channels, row) -> channels.map { row.copy(ch = it) } })
         assertEquals(6, grouped.size)
         assertEquals(10, flat.size)
@@ -157,6 +162,16 @@ class SportsListingGroupsTest {
         val guide = run(false)
         val table = run(true)
         assertEquals(guide, table)
+        // Full-guide collectors share the stored programme within one guide/shift group.
+        val aliases = setOf("alias-0", "alias-1", "channel-26716")
+        val sharedMatches = guide.second.filter { it.channel.key in aliases }
+        assertEquals(aliases, sharedMatches.map { it.channel.key }.toSet())
+        sharedMatches.forEach { assertSame(sharedMatches.first().program, it.program) }
+        val sharedHits = guide.first.values.flatten().flatMap { it.guideHits }.filter {
+            it.first in aliases && it.second.title == title && it.second.startMs == now
+        }
+        assertEquals(aliases, sharedHits.map { it.first }.toSet())
+        sharedHits.forEach { assertSame(sharedHits.first().second, it.second) }
         val expected = bindings.filter { it.gid == "shared" }.map { it.key }.toSet()
         assertEquals(expected, table.second.map { it.channel.key }.toSet())
         assertTrue(table.second.all { it.sure && it.program?.title == title && it.program?.description == description })

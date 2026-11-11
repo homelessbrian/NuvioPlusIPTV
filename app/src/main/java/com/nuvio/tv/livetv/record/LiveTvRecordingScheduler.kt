@@ -283,6 +283,7 @@ class LiveTvRecordingScheduler @Inject constructor(
         scope.launch {
             mutex.withLock {
                 val gone = _schedules.value.filter { it.channel.key == channelKey && it.startMs == startMs }
+                gone.forEach { markSeenLocked(it) }
                 gone.forEach { disarm(it) }
                 _schedules.value = _schedules.value - gone.toSet()
                 save()
@@ -293,7 +294,7 @@ class LiveTvRecordingScheduler @Inject constructor(
     fun cancel(id: String) {
         scope.launch {
             mutex.withLock {
-                _schedules.value.firstOrNull { it.id == id }?.let { disarm(it) }
+                _schedules.value.firstOrNull { it.id == id }?.let { markSeenLocked(it); disarm(it) }
                 _schedules.value = _schedules.value.filterNot { it.id == id }
                 save()
             }
@@ -366,6 +367,9 @@ class LiveTvRecordingScheduler @Inject constructor(
         if (rules.isEmpty()) return
         val now = System.currentTimeMillis()
         for (rule in rules) {
+            // Episodes set in this pass: add() puts a recording in the list a moment later, so a
+            // repeat later in the same listing wouldn't see the first and was set as well.
+            val setNow = mutableSetOf<String>()
             val listings = runCatching { repository.upcomingListings(rule.channel.key, days = 7) }.getOrDefault(emptyList())
             val channel = repository.channels.value.firstOrNull { it.key == rule.channel.key } ?: rule.channel.toChannel()
             listings.filter { LiveTvRepository.normalize(cleanTitle(it.title)) == rule.norm && it.stopMs > now }.forEach { p ->
@@ -383,7 +387,7 @@ class LiveTvRecordingScheduler @Inject constructor(
                             (it.seriesId == rule.id || it.channelKey == rule.channel.key) && episodeKey(it.episode) == ep &&
                                 LiveTvRepository.normalize(cleanTitle(it.title)) == rule.norm
                         }))
-                if (!already && p.startMs > now) add(channel, p, seriesId = rule.id)
+                if (!already && p.startMs > now && (ep == null || setNow.add(ep))) add(channel, p, seriesId = rule.id)
             }
         }
     }
@@ -613,6 +617,18 @@ class LiveTvRecordingScheduler @Inject constructor(
     /** The channel as it is now (its link may have changed), or as saved. */
     private fun freshChannel(saved: ChannelSnapshot): LiveChannel =
         repository.channels.value.firstOrNull { it.key == saved.key } ?: saved.toChannel()
+
+    /**
+     * A series episode you cancelled by hand: remember it, so the next guide refresh doesn't set
+     * it again. Call with the lock held.
+     */
+    private fun markSeenLocked(s: RecordingSchedule) {
+        val id = s.seriesId ?: return
+        val ep = episodeKey(s.episode) ?: return
+        _series.value = _series.value.map { r ->
+            if (r.id == id && ep !in r.seen) r.copy(seen = (r.seen + ep).takeLast(500)) else r
+        }
+    }
 
     /** A series episode is being recorded: remember it, so its repeats are skipped from now on. */
     private suspend fun markSeen(s: RecordingSchedule) {

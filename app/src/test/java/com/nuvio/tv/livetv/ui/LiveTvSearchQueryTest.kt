@@ -50,7 +50,7 @@ class LiveTvSearchQueryTest {
         assertEquals(2, reads)
     }
 
-    @Test fun `name and exact number matches lead programme matches in channel order once each`() = runTest {
+    @Test fun `ranked name and exact number matches lead programme matches once each`() = runTest {
         val channels = listOf(channel(1), channel(42), channel(3, "42 News"), channel(4))
         val rows = channels.map { it.key to program("The 42 Show") }
         val hits = search("42", channels, rows)
@@ -63,15 +63,62 @@ class LiveTvSearchQueryTest {
         val channels = (1..1000).map { channel(it) }
         val plan = LiveTvSearchPlan("tennis", channels, now, access)
         val programs = stored(plan.request, channels.reversed().map { it.key to program() })
-        assertEquals(40, programs.matching.size)
-        assertEquals((1..40).toList(), plan.results(programs).map { it.channel.number })
+        assertEquals(200, programs.matching.size)
+        assertEquals((1..200).toList(), plan.results(programs).map { it.channel.number })
     }
 
-    @Test fun `forty name matches occupy the whole result limit`() = runTest {
-        val channels = (1..45).map { channel(it, "Tennis $it") } + channel(99)
+    @Test fun `two hundred ranked name matches occupy the whole result limit`() = runTest {
+        // Ranking must consider every name before applying the cap, including names at the
+        // end of the catalogue. Padding gives the names an explicit numeric A-to-Z order.
+        val channels = (1..205).reversed().map { channel(it, "Tennis ${it.toString().padStart(3, '0')}") } + channel(999)
+        val plan = LiveTvSearchPlan("tennis", channels, now, access)
+        assertTrue(plan.request.channelKeys.isEmpty())
+        assertEquals(200, plan.request.currentKeys.size)
+        assertEquals(0, plan.request.maxMatches)
         val hits = search("tennis", channels, channels.map { it.key to program() })
-        assertEquals((1..40).toList(), hits.map { it.channel.number })
+        assertEquals((1..200).toList(), hits.map { it.channel.number })
         assertTrue(hits.none { it.matchedProgram })
+    }
+
+    @Test fun `exact name prefix word prefix and substring rank in that order`() = runTest {
+        val channels = listOf(channel(1, "Stnt"), channel(2, "Alpha TNT Sports"),
+            channel(3, "TNT Sports"), channel(4, "UK: TNT_HD"))
+        val hits = search("tnt", channels, emptyList())
+        assertEquals(listOf(4, 3, 2, 1), hits.map { it.channel.number })
+        assertTrue(hits.none { it.matchedProgram })
+    }
+
+    @Test fun `same tier sorts names alphabetically and each name best quality first`() = runTest {
+        val channels = listOf(channel(1, "US: TNT Sports Zulu UHD"), channel(2, "UK: TNT Sports Alpha SD"),
+            channel(3, "TNT backup"), channel(4, "UK: TNT SD"), channel(5, "US: TNT"),
+            channel(6, "US: TNT HD"), channel(7, "TNT FHD"), channel(8, "TNT UHD"))
+        assertEquals(listOf(8, 7, 6, 5, 4, 3, 2, 1), search("tnt", channels, emptyList()).map { it.channel.number })
+    }
+
+    @Test fun `same name and quality keep catalogue order without a region preference`() = runTest {
+        val channels = listOf(channel(1, "UK: TNT HD"), channel(2, "US: TNT HD"), channel(3, "CA | TNT HD"))
+        assertEquals(channels, search("tnt", channels, emptyList()).map { it.channel })
+    }
+
+    @Test fun `quality words in query affect ranking while name admission remains literal`() = runTest {
+        val channels = listOf(channel(1, "TNT HD Sports"), channel(2, "US: TNT HD"),
+            channel(3, "US: TNT Sports HD"), channel(4, "US: TNT UHD"), channel(5, "TNT-HD"))
+        assertEquals(listOf(2, 1), search("tnt hd", channels, emptyList()).map { it.channel.number })
+    }
+
+    @Test fun `programme matches use only remaining global budget after ranked names`() = runTest {
+        val names = (1..199).map { channel(it, "Tennis ${it.toString().padStart(3, '0')}") }
+        val first = channel(650)
+        val later = channel(651)
+        val channels = listOf(first, later) + names.reversed()
+        val plan = LiveTvSearchPlan("tennis", channels, now, access)
+        assertEquals(listOf(first.key, later.key), plan.request.channelKeys)
+        assertEquals(1, plan.request.maxMatches)
+        val hits = search("tennis", channels, channels.reversed().map { it.key to program() })
+        assertEquals((1..199).toList() + 650, hits.map { it.channel.number })
+        assertEquals(199, hits.count { !it.matchedProgram })
+        assertEquals(first, hits.single { it.matchedProgram }.channel)
+        assertEquals(200, hits.map { it.channel.key }.toSet().size)
     }
 
     @Test fun `two character Unicode and literal wildcard substrings match titles only`() = runTest {

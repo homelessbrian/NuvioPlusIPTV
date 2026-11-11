@@ -2,7 +2,9 @@ package com.nuvio.tv.livetv.sports
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,7 +39,6 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.InputMode
@@ -51,6 +52,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nuvio.tv.livetv.multiview.MultiviewNeutralTag
+import com.nuvio.tv.livetv.multiview.multiviewPanel
 import com.nuvio.tv.livetv.ui.ChannelLogo
 import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -68,12 +71,16 @@ internal fun SportsGameStrip(
     paneCount: Int,
     hideScores: Boolean,
     onGame: (SportsWatchGame) -> Boolean,
+    /** OK on a game: play its best-matched stream in the pane right away. */
+    onPlayGame: (SportsWatchGame) -> Boolean,
     onStream: (SportsWatchGame, String) -> Unit,
     onAdd: () -> Unit,
     onRemove: () -> Unit,
     onPane: (Int) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The play bar's darkness ("Bar darkness"): this panel floats over the video like the bar. */
+    panelBackground: String = "darker",
 ) {
     val rowListStates = remember { mutableMapOf<String, LazyListState>() }
     val rowGamePositions = remember { mutableMapOf<String, Int>() }
@@ -88,7 +95,7 @@ internal fun SportsGameStrip(
     val chosenGames = remember { mutableStateMapOf<Int, String>() }
     var lastGameId by remember { mutableStateOf<String?>(null) }
     var lastGameIndex by remember { mutableIntStateOf(0) }
-    var lastControlId by remember { mutableStateOf("games") }
+    var lastControlId by remember { mutableStateOf("close") }
     var controlsHadFocus by remember { mutableStateOf(false) }
     var initialGameFocused by remember { mutableStateOf(false) }
     var activeRowKey by remember { mutableStateOf<String?>(null) }
@@ -194,17 +201,8 @@ internal fun SportsGameStrip(
     val controls = buildList {
         add(StripControl("add", "Add pane", false, enabled = paneCount < 4, onClick = onAdd))
         add(StripControl("remove", "Remove pane", false, enabled = paneCount > 1, onClick = ::removeSelectedPane))
-        add(StripControl("games", "Games", !streamsOpen) { showGames() })
-        add(StripControl("streams", "Streams", streamsOpen, enabled = streamGame != null) {
-            if (streamsOpen) {
-                focusStreamAt(streams.indexOfFirst { it.channel.key == currentChannelKey }.takeIf { it >= 0 } ?: 0)
-            } else {
-                initializedStreamTarget = null
-                streamsOpen = true
-            }
-        })
         for (pane in 0 until visiblePanes) {
-            add(StripControl("pane$pane", "${pane + 1}", pane == focusedPane) {
+            add(StripControl("pane$pane", "P${pane + 1}", pane == focusedPane) {
                 onPane(pane)
                 showGames()
             })
@@ -300,7 +298,7 @@ internal fun SportsGameStrip(
         }
         if (streams.isEmpty()) {
             initializedStreamTarget = null
-            requestKeyboardFocus(controlFocus["streams"])
+            requestKeyboardFocus(controlFocus["close"])
         } else if (initializedStreamTarget != streamTarget || (!controlsHadFocus && lastStreamKey !in streamKeys)) {
             val index = if (initializedStreamTarget == streamTarget) {
                 lastStreamIndex.coerceIn(0, streams.lastIndex)
@@ -320,12 +318,9 @@ internal fun SportsGameStrip(
 
     BackHandler { if (streamsOpen) showGames() else onClose() }
     Column(
-        modifier.fillMaxWidth().height(198.dp)
-            .background(Brush.verticalGradient(listOf(
-                NuvioTheme.colors.Background.copy(alpha = 0.90f),
-                NuvioTheme.colors.Background.copy(alpha = 0.98f),
-            )))
-            .padding(horizontal = 20.dp, vertical = 8.dp)
+        modifier.padding(horizontal = 20.dp, vertical = 14.dp).fillMaxWidth().height(198.dp)
+            .multiviewPanel(panelBackground)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
             .focusGroup(),
     ) {
         Row(
@@ -334,7 +329,10 @@ internal fun SportsGameStrip(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (streamsOpen) {
-                LiveText("Streams", size = 16.sp, weight = FontWeight.Bold)
+                Column(Modifier.widthIn(max = 180.dp)) {
+                    LiveText(streamGame?.event?.title ?: "Streams", size = 9.sp, color = NuvioTheme.colors.TextSecondary)
+                    LiveText("Other streams", size = 13.sp, weight = FontWeight.Bold)
+                }
             } else {
                 Column(Modifier.widthIn(max = 180.dp)) {
                     LiveText(if (activeRow != null) "Sports · ${rowIndex + 1}/${rows.size}" else "Sports",
@@ -409,6 +407,7 @@ internal fun SportsGameStrip(
                             game = streamGame,
                             match = match,
                             playing = match.channel.key == currentChannelKey,
+                            best = index == 0,
                             onClick = { focusStreamAt(index); onStream(streamGame, match.channel.key) },
                             modifier = Modifier.focusRequester(streamFocus.getValue(match.channel.key))
                                 .onFocusChanged {
@@ -422,7 +421,7 @@ internal fun SportsGameStrip(
                                     when (event.key) {
                                         Key.DirectionUp -> {
                                             if (event.type == KeyEventType.KeyDown) {
-                                                val target = lastControlId.takeIf { it in controlIds } ?: "streams"
+                                                val target = lastControlId.takeIf { it in controlIds } ?: "pane$focusedPane"
                                                 focusControl(target)
                                             }
                                             true
@@ -466,11 +465,8 @@ internal fun SportsGameStrip(
                         onClick = {
                             if (game.channels.isNotEmpty()) {
                                 val targetPane = focusedPane
-                                if (onGame(game)) {
+                                if (onPlayGame(game)) {
                                     chosenGames[targetPane] = game.event.id
-                                    lastControlId = "streams"
-                                    initializedStreamTarget = null
-                                    streamsOpen = true
                                 } else {
                                     focusGameAt(index)
                                     com.nuvio.tv.livetv.record.LiveTvNotice.show(
@@ -480,6 +476,18 @@ internal fun SportsGameStrip(
                                 focusGameAt(index)
                                 com.nuvio.tv.livetv.record.LiveTvNotice.show(
                                     "No matched channel for this game. Choose a broadcast on the Sports page first.")
+                            }
+                        },
+                        // Hold OK: this game's other streams, to pick a different one for the pane.
+                        onLongClick = {
+                            if (game.channels.isNotEmpty() && onGame(game)) {
+                                chosenGames[focusedPane] = game.event.id
+                                initializedStreamTarget = null
+                                streamsOpen = true
+                            } else {
+                                focusGameAt(index)
+                                com.nuvio.tv.livetv.record.LiveTvNotice.show(
+                                    "No other streams for this game right now.")
                             }
                         },
                         modifier = Modifier.focusRequester(gameFocus.getValue(game.event.id))
@@ -501,7 +509,7 @@ internal fun SportsGameStrip(
                                         if (event.type == KeyEventType.KeyDown) {
                                             if (rowIndex > 0) moveRow(-1)
                                             else {
-                                                val target = lastControlId.takeIf { it in controlIds } ?: "games"
+                                                val target = lastControlId.takeIf { it in controlIds } ?: "pane$focusedPane"
                                                 focusControl(target)
                                             }
                                         }
@@ -524,9 +532,16 @@ internal fun SportsGameStrip(
             }
         }
         Spacer(Modifier.height(3.dp))
-        val destination = if (visiblePanes == 1) "this view" else "pane ${focusedPane.coerceIn(0, visiblePanes - 1) + 1}"
-        LiveText(if (streamsOpen) "Browse streams · OK to use this stream in $destination · Back to games"
-            else "Left / Right: games · Up / Down: Sports rows · OK: choose game for $destination · Back: close",
+        val destination = if (visiblePanes == 1) "this view" else "P${focusedPane.coerceIn(0, visiblePanes - 1) + 1}"
+        val focusedGame = rowGames.firstOrNull { it.event.id == lastGameId }
+        val others = (focusedGame?.channels?.distinctBy { it.channel.key }?.size ?: 0) - 1
+        val hold = when {
+            others == 1 -> " · Hold OK: 1 other stream"
+            others > 1 -> " · Hold OK: $others other streams"
+            else -> ""
+        }
+        LiveText(if (streamsOpen) "OK: play this stream in $destination · Back: back to games"
+            else "OK: play in $destination$hold · Up / Down: Sports rows · Back: close",
             size = 10.sp, color = NuvioTheme.colors.TextSecondary)
     }
 }
@@ -561,6 +576,7 @@ private fun StripStreamCard(
     game: SportsWatchGame,
     match: ChannelMatch,
     playing: Boolean,
+    best: Boolean,
     onClick: () -> Unit,
     modifier: Modifier,
 ) {
@@ -584,6 +600,7 @@ private fun StripStreamCard(
             LiveText(game.event.title, Modifier.weight(1f), size = 10.sp,
                 color = NuvioTheme.colors.TextSecondary)
             if (playing) SportsBadge("PLAYING", accent, NuvioTheme.colors.OnSecondary)
+            else if (best) SportsBadge("BEST MATCH", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
         }
         LiveText(match.channel.name, size = 13.sp, maxLines = 2, weight = FontWeight.ExtraBold)
         Row(
@@ -603,6 +620,7 @@ private fun StripStreamCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StripGameCard(
     game: SportsWatchGame,
@@ -611,10 +629,12 @@ private fun StripGameCard(
     focusedPane: Int,
     hideScores: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
     val event = game.event
+    val otherStreams = game.channels.distinctBy { it.channel.key }.size - 1
     val league = SportsCatalog.league(event.leagueId)
     val sport = league?.sport ?: Sport.OTHER
     val sides = event.ordered(sport)
@@ -638,7 +658,7 @@ private fun StripGameCard(
             // Unmatched games remain focusable so their status can be read; OK cannot tune them.
             .semantics(mergeDescendants = true) { if (!available) disabled() }
             .focusProperties { canFocus = true }
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Row(
             Modifier.fillMaxWidth().height(24.dp).padding(horizontal = 9.dp),
@@ -666,9 +686,13 @@ private fun StripGameCard(
         Column(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 9.dp, vertical = 3.dp),
             verticalArrangement = Arrangement.Center) {
             LiveText(status, size = 10.sp, color = Color.White.copy(alpha = 0.78f))
-            LiveText(channel?.channel?.name ?: "No matched channel", size = 11.sp,
-                color = if (available) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextSecondary,
-                weight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                LiveText(channel?.channel?.name ?: "No matched channel", Modifier.weight(1f, fill = false), size = 11.sp,
+                    color = if (available) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextSecondary,
+                    weight = FontWeight.SemiBold)
+                if (otherStreams > 0) SportsBadge(if (otherStreams == 1) "+1 stream" else "+$otherStreams streams",
+                    MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
+            }
         }
     }
 }

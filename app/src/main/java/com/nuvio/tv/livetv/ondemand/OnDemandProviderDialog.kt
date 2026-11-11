@@ -84,7 +84,7 @@ internal fun ProviderDetailDialog(
     item: VodItem,
     viewModel: OnDemandViewModel,
     onDismiss: () -> Unit,
-    onPlay: (url: String, title: String, poster: String?) -> Unit
+    onPlay: (url: String, title: String, poster: String?, season: Int?, episode: Int?, episodeName: String?) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val info by produceState<VodInfo?>(initialValue = null, item.uid) { value = viewModel.info(item) }
@@ -126,12 +126,12 @@ internal fun ProviderDetailDialog(
                                     "Play · ${v.label}" + if (v.detail.isNotBlank()) "  —  ${v.detail}" else "",
                                     if (v == versions.first()) Modifier.focusRequester(first) else Modifier
                                 ) {
-                                    scope.launch { viewModel.movieUrl(v.item)?.let { onPlay(it, item.name, poster) } }
+                                    scope.launch { viewModel.movieUrl(v.item)?.let { onPlay(it, item.name, poster, null, null, null) } }
                                 }
                             }
                         }
                     } else MenuItem("Play", Modifier.focusRequester(first)) {
-                        scope.launch { viewModel.movieUrl(item)?.let { onPlay(it, item.name, poster) } }
+                        scope.launch { viewModel.movieUrl(item)?.let { onPlay(it, item.name, poster, null, null, null) } }
                     }
                 } else {
                     val episodes = info?.episodes.orEmpty()
@@ -150,7 +150,7 @@ internal fun ProviderDetailDialog(
                                     "${ep.episode}.  ${ep.title}",
                                     if (ep == episodes.firstOrNull { it.season == current }) Modifier.focusRequester(first) else Modifier
                                 ) {
-                                    onPlay(ep.url, "${item.name} · S${ep.season}E${ep.episode}", poster)
+                                    onPlay(ep.url, "${item.name} · S${ep.season}E${ep.episode}", poster, ep.season, ep.episode, ep.title)
                                 }
                             }
                         }

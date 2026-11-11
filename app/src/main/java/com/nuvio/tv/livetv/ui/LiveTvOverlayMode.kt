@@ -55,6 +55,7 @@ import com.nuvio.tv.livetv.model.ChannelGroup
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.ui.theme.NuvioTheme
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -153,6 +154,14 @@ private fun OverlayModeContent(
     var dateIndex by remember { mutableIntStateOf(0) }
     var activity by remember { mutableIntStateOf(0) }
     var futurePrompt by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
+    // Holding OK on a channel or a show: Record / Record series, as in the guide.
+    var recordMenu by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
+    val recordingsList by viewModel.recordings.collectAsStateWithLifecycle()
+    val schedulesList by viewModel.schedules.collectAsStateWithLifecycle()
+    val seriesList by viewModel.seriesRules.collectAsStateWithLifecycle()
+    val okScope = rememberCoroutineScope()
+    var okPending by remember { mutableStateOf(false) }
+    var okHoldJob by remember { mutableStateOf<Job?>(null) }
     val focus = remember { FocusRequester() }
 
     // Opening: the cursor on the playing channel. Picking another group: its first channel
@@ -185,7 +194,7 @@ private fun OverlayModeContent(
     // Closes itself after a while without a key press.
     LaunchedEffect(activity) {
         delay(15_000)
-        if (futurePrompt == null) onClose()
+        if (futurePrompt == null && recordMenu == null) onClose()
     }
 
     val focusedChannel = channels.getOrNull(chIndex)
@@ -301,6 +310,35 @@ private fun OverlayModeContent(
         else { headingAt = null; selectGroupAt(next.group) }
     }
 
+    fun pickChannel(ch: LiveChannel) {
+        // "Keep list open": switch and stay on the list; OK on the playing one closes it.
+        if (settings.overlayKeepOpen && ch.key != playback.channelKey) viewModel.preview(ch)
+        else {
+            if (ch.key != playback.channelKey) viewModel.preview(ch)
+            onClose()
+        }
+    }
+    /** The show the record menu is for: the highlighted show, or what's on now on the highlighted channel. */
+    fun openRecordMenu() {
+        val target: Pair<LiveChannel, EpgProgram> = when (level) {
+            OverlayLevel.SCHEDULE -> scheduleChannel?.let { c -> focusedShow?.program?.let { c to it } }
+            OverlayLevel.CHANNELS -> focusedChannel?.let { c ->
+                programs[c.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }?.let { c to it }
+            }
+            else -> null
+        } ?: return
+        recordMenu = target
+    }
+    /** OK is acted on when released, so holding it can open the record menu instead. */
+    fun armOk() {
+        okPending = true
+        okHoldJob?.cancel()
+        okHoldJob = okScope.launch {
+            delay(LONG_PRESS_MS)
+            if (okPending) { okPending = false; openRecordMenu() }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -308,6 +346,18 @@ private fun OverlayModeContent(
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) {
                     val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                    if (isOk && e.type == KeyEventType.KeyUp) {
+                        okHoldJob?.cancel()
+                        if (okPending) {
+                            okPending = false
+                            activity++
+                            when (level) {
+                                OverlayLevel.CHANNELS -> focusedChannel?.let { pickChannel(it) }
+                                OverlayLevel.SCHEDULE -> activateShow()
+                                else -> Unit
+                            }
+                        }
+                    }
                     return@onPreviewKeyEvent isOk || e.key == Key.Back
                 }
                 activity++
@@ -328,14 +378,7 @@ private fun OverlayModeContent(
                             level = OverlayLevel.GROUPS
                         }
                         e.key == Key.DirectionRight -> focusedChannel?.let { openSchedule(it) }
-                        isOk -> focusedChannel?.let { ch ->
-                            // "Keep list open": switch and stay on the list; OK on the playing one closes it.
-                            if (settings.overlayKeepOpen && ch.key != playback.channelKey) viewModel.preview(ch)
-                            else {
-                                if (ch.key != playback.channelKey) viewModel.preview(ch)
-                                onClose()
-                            }
-                        }
+                        isOk -> if (e.nativeKeyEvent.repeatCount == 0) armOk()
                         e.key == Key.Back -> onClose()
                     }
                     OverlayLevel.GROUPS -> when {
@@ -353,7 +396,7 @@ private fun OverlayModeContent(
                         e.key == Key.PageDown || e.key == Key.ChannelDown -> moveShow(8)
                         e.key == Key.DirectionRight -> if (days.isNotEmpty()) level = OverlayLevel.DATES
                         e.key == Key.DirectionLeft || e.key == Key.Back -> level = OverlayLevel.CHANNELS
-                        isOk -> activateShow()
+                        isOk -> if (e.nativeKeyEvent.repeatCount == 0) armOk()
                     }
                     OverlayLevel.DATES -> when {
                         e.key == Key.DirectionUp -> jumpToDate((dateIndex - 1).coerceAtLeast(0))
@@ -492,6 +535,50 @@ private fun OverlayModeContent(
     }
     LaunchedEffect(futurePrompt) {
         if (futurePrompt == null) { delay(60); runCatching { focus.requestFocus() } }
+    }
+    recordMenu?.let { (ch, p) ->
+        val first = remember { FocusRequester() }
+        val onNow = now >= p.startMs && now < p.stopMs
+        val recordingNow = recordingsList.any { it.channelKey == ch.key && it.isRecording }
+        val recordLabel = when {
+            onNow && recordingNow -> "Stop recording"
+            schedulesList.any { it.channel.key == ch.key && it.startMs == p.startMs } -> "Cancel recording"
+            p.stopMs <= now -> if (CatchupUrlBuilder.isAvailable(ch.catchup, p.startMs, now)) "Save to Recordings" else null
+            else -> "Record"
+        }
+        val seriesLabel = if (p.stopMs <= now) null else {
+            val n = com.nuvio.tv.livetv.data.LiveTvRepository.normalize(titleMarks(p.title).title)
+            if (seriesList.any { it.channel.key == ch.key && it.norm == n }) "Stop recording series" else "Record series"
+        }
+        LiveDialog(onDismiss = { recordMenu = null; activity++ }, width = 460.dp) {
+            LiveText(p.title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
+            LiveText(
+                "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)} · ${ch.name}",
+                color = NuvioTheme.colors.TextSecondary, size = osp(13f)
+            )
+            Spacer(Modifier.height(14.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (recordLabel != null) MenuItem(recordLabel, Modifier.focusRequester(first)) {
+                    val msg = if (onNow && recordingNow) viewModel.toggleRecording(ch) else viewModel.toggleScheduled(ch, p)
+                    com.nuvio.tv.livetv.record.LiveTvNotice.show(msg)
+                    recordMenu = null
+                    activity++
+                }
+                if (seriesLabel != null) MenuItem(seriesLabel, if (recordLabel == null) Modifier.focusRequester(first) else Modifier) {
+                    com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.toggleSeries(ch, p))
+                    recordMenu = null
+                    activity++
+                }
+                MenuItem("Close", if (recordLabel == null && seriesLabel == null) Modifier.focusRequester(first) else Modifier) {
+                    recordMenu = null
+                    activity++
+                }
+            }
+        }
+        LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
+    }
+    LaunchedEffect(recordMenu) {
+        if (recordMenu == null) { delay(60); runCatching { focus.requestFocus() } }
     }
 }
 

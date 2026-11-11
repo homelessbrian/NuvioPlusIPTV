@@ -1,0 +1,43 @@
+{
+  "method": "matched-instrumented-direct-runtime-debug-memoryinfo",
+  "builds": {
+    "baseline": {
+      "source_commit": "67570ddd",
+      "apk_sha256": "1fde1a86c757c4998c34f4bf02663203ece814554fd7e9effaf51d23da87967f"
+    },
+    "candidate": {
+      "source_commit": "4afe8a39902d029dc3f6d7ee2bfb75a1b2f97982",
+      "apk_sha256": "89708796a94708637e4c9420e45f0139b763164547ed4b76b4b61284d366c483"
+    }
+  },
+  "cases": {
+    "primary": {
+      "series": "current-pr-4afe-primary-20261111",
+      "common_snapshot_sha256": "7135f0355037905e8a5365002066029913fffbf6d33abcf7c60e24f3b204eb08",
+      "fixture_manifest_sha256": "9be793b3511fef89ea1a2bac53f47bc4d6fbc5df9ad2946666fd4e87d26caedd",
+      "logical_proof_sha256": "b04daed89b539da3b2b6ba9f719f9d478ad192c92fccfb9ab1f1f6f7213644ac",
+      "core_runner_sha256": "0ab150f9901e5dcf3e85833439deffdf2e7ce712c70d59ab2e95aa7f24844781",
+      "summary_core_sha256": "ef36425b494556f800b5ce19801c090a6306b79f0786583fe92bb18126d11a5d",
+      "adapter_sha256": "39d9a1a4044637b358b85b7a381f4547b9b6a3323fab5a3a3e61a5ae3425fd42",
+      "capture_helper_sha256": "aaa831f271e6a1a2b7f8aad1989956f181b349c5bb1167f0eea2c1399220f81d",
+      "observer_sha256": "09977bbfac81adf91991da98ef895f5d67a2ab693785696a400ed106d4d99f0f",
+      "pilot_result_sha256": "cd1dcbad57e525464cffa926e94c967bbe6b60e1f0bdbbced7ac258d79841472",
+      "case_plan_sha256": "5c06a106565cd9f6c86550f0e76af709e24d69e6cf0d1288d99594c005a11e8b",
+      "cold_after_proof": {
+        "capture_host_before_ns": 1152517283360500,
+        "capture_host_after_ns": 1152523668067800,
+        "capture_utc_before": "2026-11-11T04:38:16.334177+00:00",
+        "capture_utc_after": "2026-11-11T04:38:22.718884+00:00",
+        "final_trial_csv_sha256": "06f90c0567386f137bf08b274f653a9910e53d1a36fd1c2158501e8e60509001",
+        "final_trial_plan_sha256": "8cb6ab89298aa01a251ebe4442eb4bebadd5b83d952bf7cb88a7dade23a55b42",
+        "final_trial_finished_host_after_ns": 1152405964098400,
+        "final_trial_finished_utc": "2026-11-11T04:36:25.014949+00:00",
+        "candidate_apk_sha256": "89708796a94708637e4c9420e45f0139b763164547ed4b76b4b61284d366c483",
+        "logical_proof_sha256": "ba9f9a6ec5431770c1b3e2ded27dd9fca011b148ea37f57741ce9859ddbad04e",
+        "logical_helper_sha256": "8b4b0a2ea957015ff8e8f1f98dab33588f728dc339214d83bf246febc44b442b",
+        "computed_from_archive_this_call": true,
+        "bound_record_sha256": "0b181e88a420eb50bd6d4af4891df0ed213895c624fe965d3730e4b7c3e43250"
+      }
+    }
+  }
+}

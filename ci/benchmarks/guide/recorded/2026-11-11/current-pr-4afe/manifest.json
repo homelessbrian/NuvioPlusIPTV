@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "study": "current-whole-pr-4afe",
+  "cases": [
+    "primary"
+  ],
+  "planned_cases": [
+    "primary",
+    "shared"
+  ],
+  "expected_runtime_max_bytes": 536870912,
+  "source_pins": {
+    "baseline": {
+      "source_commit": "67570ddd",
+      "apk_sha256": "1fde1a86c757c4998c34f4bf02663203ece814554fd7e9effaf51d23da87967f"
+    },
+    "candidate": {
+      "source_commit": "4afe8a39902d029dc3f6d7ee2bfb75a1b2f97982",
+      "apk_sha256": "89708796a94708637e4c9420e45f0139b763164547ed4b76b4b61284d366c483"
+    }
+  },
+  "trials": [
+    {
+      "file": "primary-baseline-1.csv",
+      "case": "primary",
+      "role": "baseline",
+      "label": "baseline-1",
+      "sha256": "19ed9d6b14dea470198257773d928c97e25baa3895f96d8cb6f198733461b80d",
+      "bytes": 28314,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 57844846818200,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "file": "primary-candidate-1.csv",
+      "case": "primary",
+      "role": "candidate",
+      "label": "candidate-1",
+      "sha256": "fca8b1dbf1aec5de6dd419799defd631e84d921e8736fa9999d07c2674054d10",
+      "bytes": 27721,
+      "rows": 120,
+      "main_launch_requested_elapsed_ns": 58025315300600,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "file": "primary-baseline-2.csv",
+      "case": "primary",
+      "role": "baseline",
+      "label": "baseline-2",
+      "sha256": "c38fc96fb4bf2b588dc1aeb50d80cd3e7187359ecf37252d82a3d673763a30e9",
+      "bytes": 28525,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 58274468896800,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "file": "primary-candidate-2.csv",
+      "case": "primary",
+      "role": "candidate",
+      "label": "candidate-2",
+      "sha256": "df931e3489c43235b3a6cfce2ea6f71075e07a661e0d26ba069664fa715dd361",
+      "bytes": 28392,
+      "rows": 122,
+      "main_launch_requested_elapsed_ns": 58453374600300,
+      "browse_begin_elapsed_ns": null,
+      "browse_end_elapsed_ns": null
+    },
+    {
+      "file": "primary-baseline-3.csv",
+      "case": "primary",
+      "role": "baseline",
+      "label": "baseline-3",
+      "sha256": "3d0a10ef665f48e96a54200978fb70c2d66d14facd0b0065b2defec471c12d08",
+      "bytes": 62723,
+      "rows": 267,
+      "main_launch_requested_elapsed_ns": 58691960837600,
+      "browse_begin_elapsed_ns": 58813260000000,
+      "browse_end_elapsed_ns": 58892630000000
+    },
+    {
+      "file": "primary-candidate-3.csv",
+      "case": "primary",
+      "role": "candidate",
+      "label": "candidate-3",
+      "sha256": "06f90c0567386f137bf08b274f653a9910e53d1a36fd1c2158501e8e60509001",
+      "bytes": 74034,
+      "rows": 316,
+      "main_launch_requested_elapsed_ns": 59053402134700,
+      "browse_begin_elapsed_ns": 59174970000000,
+      "browse_end_elapsed_ns": 59302450000000
+    }
+  ]
+}

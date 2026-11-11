@@ -1,0 +1,10 @@
+{
+  "complete": true,
+  "scope": "all-six-primary-CSV-windows-peaks-and-metrics",
+  "all_rows": 1069,
+  "public_replay_source_sha256": "04ecfa412f3cbfbbbb815cd2d7c1100b510174b3a9e1feec97504ded4510a745",
+  "primary_summary_sha256": "0839f5a19fdc0495b3f325f7cbb297a87ca9dd5bcbce0faa5c4abafeee7bdff7",
+  "manifest_sha256": "705c00d4877c2dd9a3477bdea3511505456c71c703128020d7118ccc85e8e639",
+  "whole_original_study_completion_established": false,
+  "shared_case_measured": false
+}
