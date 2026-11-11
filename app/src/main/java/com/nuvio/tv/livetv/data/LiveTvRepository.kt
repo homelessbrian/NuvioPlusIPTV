@@ -725,9 +725,11 @@ class LiveTvRepository @Inject constructor(
     private val savedChannelsFile get() = File(baseDir, "channels_cache3.bin")
 
     /** Everything the channel list is built from; a different value means it must be re-read. */
-    private suspend fun channelsFingerprint(): String {
+    private suspend fun channelsFingerprint(
+        playlists: List<PlaylistSource>? = null
+    ): String {
         val sb = StringBuilder().append(CHANNELS_CACHE_VERSION).append('|')
-        prefs.currentPlaylists().filter { it.liveEnabled }.forEach { pl ->
+        (playlists ?: prefs.currentPlaylists().filter { it.liveEnabled }).forEach { pl ->
             val f = playlistFile(pl.id)
             sb.append(pl.id).append(':').append(pl.name.hashCode()).append(':').append(pl.userAgent.hashCode())
                 .append(':').append(f.length()).append(':').append(contentStamp(f))
@@ -770,6 +772,10 @@ class LiveTvRepository @Inject constructor(
                 fun opt(): String? = if (input.readBoolean()) input.readUTF() else null
                 val count = input.readInt()
                 val list = ArrayList<LiveChannel>(if (outdated) 0 else count)
+                // Channels from a playlist that's turned off (a list saved while one was being
+                // switched off): read the playlists again so the saved copy is put right.
+                val liveIds = prefs.currentPlaylists().filter { it.liveEnabled }.mapTo(HashSet()) { it.id }
+                var strayFound = false
                 repeat(count) {
                     val key = input.readUTF()
                     val sourceId = shared()
@@ -794,10 +800,15 @@ class LiveTvRepository @Inject constructor(
                     } else null
                     val tvgShift = input.readInt()
                     if (outdated) links[key] = url
+                    else if (sourceId !in liveIds) strayFound = true
                     else list += LiveChannel(key, sourceId, sourceName, name, tvgId, tvgName, logo, groupId, group, number, url, headers, catchup, drm, tvgShift)
                 }
                 if (outdated) {
                     previousLinks = links
+                    return@withContext false
+                }
+                if (strayFound) {
+                    LIVE_REPORT.add("Saved channel list had channels from a turned-off playlist: reading the playlists again")
                     return@withContext false
                 }
                 embeddedEpgUrls.clear()
@@ -813,7 +824,9 @@ class LiveTvRepository @Inject constructor(
     }
 
     private suspend fun saveChannels() = withContext(BackgroundWork.cpu()) {
-        val fingerprint = channelsFingerprint()
+        // Labelled with the playlists the list was actually read from, not the ones on now: a
+        // playlist switched on or off while it was being read makes the next start read again.
+        val fingerprint = channelsFingerprint(builtFrom)
         runCatching {
             val list = _channels.value
             // Text shared by many channels, stored once.
@@ -1703,6 +1716,9 @@ class LiveTvRepository @Inject constructor(
     /** Channel key → stream link from an out-of-date saved channel list (see [loadSavedChannels]). */
     private var previousLinks: Map<String, String> = emptyMap()
 
+    /** The playlists the current channel list was read from (see [saveChannels]). */
+    @Volatile private var builtFrom: List<PlaylistSource>? = null
+
     /**
      * A channel renamed in the playlist (by the provider or a playlist editor) gets a new key.
      * This moves favorites, hidden channels, groups you made, renames, guide choices and so on
@@ -1793,8 +1809,13 @@ class LiveTvRepository @Inject constructor(
             prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(channelCount = parsed.entries.size) else it } }
         }
         loadGroupOrder()
-        _channels.value = out
-        carryOverRenamedChannels(before, out)
+        builtFrom = playlists
+        // A playlist switched off while the channels were being read: leave its channels out
+        // (it was already taken out of the guide, and this would have put it back).
+        val stillOn = prefs.currentPlaylists().filter { it.liveEnabled }.mapTo(HashSet()) { it.id }
+        val kept = if (out.all { it.sourceId in stillOn }) out else out.filter { it.sourceId in stillOn }
+        _channels.value = kept
+        carryOverRenamedChannels(before, kept)
     }
 
     private suspend fun buildPrograms(settings: LiveTvSettings, targets: List<EpgTarget>, forceRead: Boolean = false) {
