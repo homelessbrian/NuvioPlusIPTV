@@ -111,4 +111,48 @@ class GuideBrowseBudgetTest {
         assertEquals(1, releases)
         assertEquals(0, budget.stats().rows)
     }
+
+    @Test fun livePublicationConsumersStillAcquireWhenAllPoolBytesAreReserved() {
+        val budget = GuideBrowseBudget()
+        val firstMap = mapOf("one" to listOf(program("First")))
+        val secondMap = mapOf("one" to listOf(program("Second")))
+        val first = GuideBrowsePublication(firstMap, budget.retain(firstMap)!!, 1)
+        val oldConsumer = first.retain()!!
+        first.close()
+        val second = GuideBrowsePublication(secondMap, budget.retain(secondMap)!!, 2)
+        val remaining = budget.maxBytes - budget.stats().estimatedBytes
+        val flight = budget.reserve(rows = 0,
+            estimatedBytes = remaining - GuideBrowseBudget.HANDLE_POOL_BYTES)!!
+        assertEquals(budget.maxBytes, budget.stats().estimatedBytes + budget.stats().reservedBytes)
+        val before = budget.stats().estimatedBytes
+        val lateOldConsumer = first.retain()!!
+        val newConsumer = second.retain()!!
+        assertEquals(before, budget.stats().estimatedBytes) // Handles were charged up front.
+        oldConsumer.close(); second.close()
+        assertEquals(2, budget.stats().rows)
+        lateOldConsumer.close()
+        assertEquals(1, budget.stats().rows)
+        newConsumer.close(); flight.close()
+        assertEquals(0, budget.stats().rows)
+        assertEquals(0L, budget.stats().estimatedBytes + budget.stats().reservedBytes)
+        assertTrue(budget.stats().highWaterBytes <= budget.maxBytes)
+    }
+
+    @Test fun prepaidHandleCardinalityFailsBeforeAllocatingAnUnchargedConsumer() {
+        val budget = GuideBrowseBudget()
+        val map = mapOf("one" to listOf(program()))
+        val publication = GuideBrowsePublication(map, budget.retain(map)!!)
+        val consumers = ArrayList<GuideBrowseBudget.Lease>()
+        repeat(GuideBrowseBudget.MAX_HANDLES_PER_OWNERSHIP - 1) { consumers += publication.retain()!! }
+        val charged = budget.stats().estimatedBytes
+        assertTrue(runCatching { publication.retain() }.exceptionOrNull() is IllegalStateException)
+        assertEquals(GuideBrowseBudget.MAX_HANDLES_PER_OWNERSHIP, budget.stats().leases)
+        assertEquals(charged, budget.stats().estimatedBytes)
+        publication.close()
+        assertEquals(1, budget.stats().rows)
+        consumers.forEach { it.close() }
+        assertEquals(0, budget.stats().rows)
+        assertEquals(0, budget.stats().leases)
+        assertEquals(0L, budget.stats().estimatedBytes)
+    }
 }

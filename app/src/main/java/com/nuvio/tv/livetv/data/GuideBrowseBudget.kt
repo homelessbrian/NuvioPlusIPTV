@@ -73,11 +73,11 @@ internal class GuideBrowseBudget(
     }
 
     inner class Lease internal constructor(
-        private val ownership: Ownership,
-        private val extraHandle: Boolean = false
+        private val ownership: Ownership
     ) : AutoCloseable {
         val estimatedBytes: Long get() = ownership.estimatedBytes
-        val indexBytes: Long get() = ownership.overhead
+        /** Local list/index data; the fixed handle pool remains charged in the shared budget. */
+        val indexBytes: Long get() = ownership.overhead - HANDLE_POOL_BYTES
         val rows: Int get() = ownership.programs.size
         private var open = true
 
@@ -99,18 +99,19 @@ internal class GuideBrowseBudget(
         }
 
         private fun retainOwnership(): Lease? {
-            if (ownership.references == 0 || !fits(0, LEASE_HANDLE_BYTES)) return null
+            if (ownership.references == 0) return null
+            check(ownership.references < MAX_HANDLES_PER_OWNERSHIP) {
+                "Guide publication exceeded its prepaid consumer-handle capacity"
+            }
             ownership.references++
-            bytes += LEASE_HANDLE_BYTES
             leases++
             updateHighWater()
-            return Lease(ownership, extraHandle = true)
+            return Lease(ownership)
         }
 
         override fun close() = synchronized(lock) {
             if (open) {
                 open = false
-                if (extraHandle) bytes -= LEASE_HANDLE_BYTES
                 if (--ownership.references == 0) {
                     for (program in ownership.programs) {
                         val record = payload[program] ?: error("Missing charged guide payload")
@@ -129,12 +130,14 @@ internal class GuideBrowseBudget(
     }
 
     fun reserve(rows: Int = PAGE_ROWS, estimatedBytes: Long = PAGE_RESERVATION_BYTES): Reservation? = synchronized(lock) {
-        require(rows >= 0 && estimatedBytes >= 0)
-        if (!fits(rows, estimatedBytes)) { refused++; return@synchronized null }
+        require(rows >= 0 && estimatedBytes >= 0 && estimatedBytes <= Long.MAX_VALUE - HANDLE_POOL_BYTES)
+        // Fixed ownership metadata is reserved before decoding, including custom small pages.
+        val chargedBytes = estimatedBytes + HANDLE_POOL_BYTES
+        if (!fits(rows, chargedBytes)) { refused++; return@synchronized null }
         reservedRows += rows
-        reservedBytes += estimatedBytes
+        reservedBytes += chargedBytes
         updateHighWater()
-        Reservation(rows, estimatedBytes)
+        Reservation(rows, chargedBytes)
     }
 
     /** The map must contain browsing overrides only, never the catalogue-wide overview. */
@@ -190,7 +193,9 @@ internal class GuideBrowseBudget(
         // A capped display row can be inspected before deciding that it starts the next page.
         const val DECODE_HEADROOM_BYTES = 64L * 1024
         const val PAGE_RESERVATION_BYTES = PAGE_BYTES + DECODE_HEADROOM_BYTES
-        private const val LEASE_HANDLE_BYTES = 64L
+        /** Includes the original owner: at most 63 additional live consumer handles. */
+        const val MAX_HANDLES_PER_OWNERSHIP = 64
+        const val HANDLE_POOL_BYTES = MAX_HANDLES_PER_OWNERSHIP * 64L
 
         internal fun programWeight(program: EpgProgram): Long = guideBrowseProgramWeight(program) + 64L
 
@@ -215,7 +220,7 @@ internal class GuideBrowseBudget(
                 listBytes += 64L + 8L * list.size
             }
             // Map entries, identity-accounting records and the lease's bounded identity list.
-            return 512L + 128L * programs.size + listBytes + 8L * uniqueRows
+            return HANDLE_POOL_BYTES + 512L + 128L * programs.size + listBytes + 8L * uniqueRows
         }
     }
 }

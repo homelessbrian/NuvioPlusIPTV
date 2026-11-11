@@ -6,7 +6,8 @@ import org.junit.Test
 
 class GuideWindowCacheTest {
     @Test fun decodePressureCanReleaseOptionalMemoWhileMountedPayloadStaysCharged() {
-        val budget = GuideBrowseBudget(maxRows = 2, maxBytes = 4096)
+        val budget = GuideBrowseBudget(maxRows = 2,
+            maxBytes = 3 * GuideBrowseBudget.HANDLE_POOL_BYTES + 4096)
         val first = EpgProgram(0, 1000, "Mounted")
         val optional = EpgProgram(1000, 2000, "Optional")
         val memo = GuideMergedWindowMemo(budget)
