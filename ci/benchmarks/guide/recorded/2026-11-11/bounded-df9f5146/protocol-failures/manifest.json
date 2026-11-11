@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "root_failure_index_sha256": "7fe25d9c8da5b362ea4c6e1e94cfe563f582dd41f0989a5bf2eeebdde926b467",
+  "attempts": [
+    {
+      "id": "setup-combined-policy-0001",
+      "case": "primary",
+      "trial_label": "baseline-1",
+      "classification": "SETUP_FAILURE",
+      "app_or_ram_cause_established": false,
+      "exclusion_independent_of_ram_values": true,
+      "whole_private_file_tree_sha256": "dd5f7a6c67d657bd65594fafb0e325beaaf26f5723942e3fb52ce1ad9bb60944",
+      "private_files_preserved": 2,
+      "associated_record_sha256s": [],
+      "accepted_comparison": false,
+      "csv_files": []
+    }
+  ],
+  "partial_rows_enter_accepted_statistics": false,
+  "prefix_and_other_partial_snapshots_may_overlap_and_are_not_independent": true,
+  "raw_ui_logs_archives_and_provider_material_excluded": true
+}
