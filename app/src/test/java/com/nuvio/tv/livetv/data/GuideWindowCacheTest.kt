@@ -5,6 +5,27 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class GuideWindowCacheTest {
+    @Test fun decodePressureCanReleaseOptionalMemoWhileMountedPayloadStaysCharged() {
+        val budget = GuideBrowseBudget(maxRows = 2, maxBytes = 4096)
+        val first = EpgProgram(0, 1000, "Mounted")
+        val optional = EpgProgram(1000, 2000, "Optional")
+        val memo = GuideMergedWindowMemo(budget)
+        memo.merge("one", listOf(first, optional), emptyList())!!
+        val mountedMap = mapOf("one" to listOf(first))
+        val publication = GuideBrowsePublication(mountedMap, budget.retain(mountedMap)!!)
+        val mounted = publication.retain()!!
+        publication.close()
+        val cache = GuideWindowCache(budget = budget, onPressure = { memo.clear() })
+        val next = cache.reservePage(rows = 1, estimatedBytes = 1024)
+        assertNotNull(next)
+        assertEquals(1, budget.stats().rows)
+        assertEquals(1, budget.stats().reservedRows)
+        assertEquals(0, memo.size)
+        next!!.close()
+        mounted.close()
+        assertEquals(0, budget.stats().rows)
+        assertEquals(0L, budget.stats().estimatedBytes)
+    }
     private val hour = 3_600_000L
     private fun program(start: Long, stop: Long = start + hour) = EpgProgram(startMs = start, stopMs = stop, title = "Game $start")
 

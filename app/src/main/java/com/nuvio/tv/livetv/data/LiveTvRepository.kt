@@ -261,8 +261,36 @@ class LiveTvRepository @Inject constructor(
         val remaining = _channels.value.filterNot { it.sourceId == id }
         if (remaining.size == _channels.value.size) return
         val keys = remaining.mapTo(HashSet()) { it.key }
+        val removed = _channels.value.asSequence().map { it.key }.filter { it !in keys }.toSet()
         _channels.value = remaining
-        _programs.value = _programs.value.filterKeys { it in keys }
+        if (guideInDb) scope.launch(BackgroundWork.reads) {
+            rangeMutex.withLock {
+                // A re-enabled playlist may already have rebuilt before this cleanup runs.
+                val eligible = _channels.value.mapTo(HashSet()) { it.key }
+                val dropped = removed - eligible
+                if (dropped.isEmpty()) return@withLock
+                cacheEpoch.incrementAndGet()
+                browseCoordinator.cancel()
+                windowCache.removeChannels(dropped)
+                mergedWindows.removeChannels(dropped)
+                schedules.removeChannels(dropped)
+                loadedScheduleSerials.keys.removeAll(dropped)
+                preparedSchedules.keys.removeAll(dropped)
+                synchronized(browseDemandLock) {
+                    dropped.forEach { desiredSchedules.remove(it) }
+                    viewportKeys = viewportKeys.filterNot { it in dropped }
+                    if (viewportFocus?.first in dropped) viewportFocus = null
+                }
+                _schedulePages.value = _schedulePages.value - dropped
+                overview = overview - dropped
+                scheduleWindowPublication()
+                _guideGeneration.value++
+                if (viewportKeys.isNotEmpty()) requestWindow(viewportKeys, viewportFrom, viewportTo, replace = true)
+            }
+        } else {
+            _programs.value = _programs.value.filterKeys { it in keys }
+            _guideGeneration.value++
+        }
     }
 
     suspend fun setPlaylistEnabled(id: String, enabled: Boolean) {
@@ -1037,7 +1065,7 @@ class LiveTvRepository @Inject constructor(
     // change cannot require unbudgeted copies. Strings remain shared with leased payload.
     @Suppress("unused")
     private val offsetDisplayCapacity = checkNotNull(browseBudget.reserve(2048, 512L * 1024))
-    private val windowCache = GuideWindowCache(budget = browseBudget)
+    private val windowCache = GuideWindowCache(budget = browseBudget, onPressure = { mergedWindows.clear() })
     private val cacheEpoch = java.util.concurrent.atomic.AtomicLong()
     private val windowLoader by lazy {
         GuideWindowLoader(windowCache, rangeMutex,
@@ -1050,7 +1078,7 @@ class LiveTvRepository @Inject constructor(
     private var overview: Map<String, List<EpgProgram>> = emptyMap()
     private var publishedOverviewSource: Map<String, List<EpgProgram>>? = null
     private var publishedOverviewBase: GuideMapSnapshot.Base<String, List<EpgProgram>>? = null
-    private val mergedWindows = HashMap<String, Triple<List<EpgProgram>, List<EpgProgram>, List<EpgProgram>>>()
+    private val mergedWindows = GuideMergedWindowMemo(browseBudget)
     private val schedules = GuideScheduleCache(budget = browseBudget)
     private data class ScheduleDemand(val channel: String, val anchor: Long, val backwards: Boolean,
                                       val serial: Long, val continuation: Boolean = false, val dayStart: Boolean = false)
@@ -1169,7 +1197,7 @@ class LiveTvRepository @Inject constructor(
                 overviewFullAt = System.currentTimeMillis()
             } else {
                 windowCache.removeChannels(changedChannels)
-                changedChannels.forEach { mergedWindows.remove(it) }
+                mergedWindows.removeChannels(changedChannels)
                 overview = (overview - changedChannels) + next
                 _guideChannelsWithListings.value = (_guideChannelsWithListings.value - changedChannels) + available
             }
@@ -1240,13 +1268,15 @@ class LiveTvRepository @Inject constructor(
         val windows = windowCache.programs(demand, viewportFrom.takeIf { viewportTo > it } ?: Long.MIN_VALUE,
             viewportTo.takeIf { it > viewportFrom } ?: Long.MAX_VALUE)
         if (windowCache.publicationBlocked) return false
-        mergedWindows.keys.retainAll(windows.keys)
+        mergedWindows.retainChannels(windows.keys)
         windows.forEach { (key, list) ->
             val current = overview[key].orEmpty()
-            val prior = mergedWindows[key]
-            val merged = if (prior != null && prior.first === list && prior.second === current) prior.third
-                else (list + current).distinctBy { it.startMs }.sortedBy { it.startMs }
-            mergedWindows[key] = Triple(list, current, merged)
+            val merged = mergedWindows.merge(key, list, current) ?: run {
+                // Release optional memo owners before deferring for a mounted consumer.
+                // Current publications and cache pages retain their own independent leases.
+                mergedWindows.clear()
+                mergedWindows.merge(key, list, current) ?: return false
+            }
             shown[key] = merged
         }
         val schedulePrograms = schedules.programs()
@@ -1489,7 +1519,17 @@ class LiveTvRepository @Inject constructor(
             .put("tiles", cache.tiles).put("incomplete_tiles", cache.incompleteTiles)
             .put("refused_reservations", budget.refusedReservations)
         // Numeric-only debug evidence. One bounded writer; no titles, profiles or credentials.
-        runCatching { File(context.cacheDir, "guide_browse_stats.json").writeText(report.toString()) }
+        runCatching {
+            val file = android.util.AtomicFile(File(context.cacheDir, "guide_browse_stats.json"))
+            val stream = file.startWrite()
+            try {
+                stream.write(report.toString().toByteArray(Charsets.UTF_8))
+                file.finishWrite(stream)
+            } catch (failure: Exception) {
+                file.failWrite(stream)
+                throw failure
+            }
+        }
     }
 
     /** Only requested channel/time tiles are decoded; an old WAL read cannot enter a new guide. */
@@ -1736,6 +1776,7 @@ class LiveTvRepository @Inject constructor(
                             archiveEpoch = cacheEpoch.get()
                         } else {
                             _programs.value = _programs.value + (ch.key to merged)
+                            _guideGeneration.value++
                         }
                         if (missingOnly && !apiFillReported) {
                             apiFillReported = true
@@ -1954,6 +1995,7 @@ class LiveTvRepository @Inject constructor(
                 // Drop shows that have ended since the cache was saved (outside the window).
                 val windowStart = System.currentTimeMillis() - settings.epgPastHours.coerceAtLeast(1) * HOUR
                 _programs.value = programs.mapValues { (_, l) -> l.filter { it.stopMs > windowStart } }
+                _guideGeneration.value++
                 _autoMatches.value = auto
                 epgDetailsPending = true
                 true
@@ -2864,6 +2906,7 @@ class LiveTvRepository @Inject constructor(
             }
         } else {
             _programs.value = (_programs.value - changed) + newPrograms
+            _guideGeneration.value++
         }
         _autoMatches.value = (_autoMatches.value - changed) + newAuto
         val logos = HashMap(_epgLogos.value).apply { changed.forEach { remove(it) }; putAll(newIcons) }

@@ -16,7 +16,8 @@ internal class GuideWindowCache(
     private val capacity: Int = 384,
     val budget: GuideBrowseBudget = GuideBrowseBudget(),
     private val maxRows: Int = 2048,
-    private val maxBytes: Long = 2L * 1024 * 1024
+    private val maxBytes: Long = 2L * 1024 * 1024,
+    private val onPressure: () -> Unit = {}
 ) {
     data class Tile(val channel: String, val startMs: Long) {
         val endMs: Long get() = startMs + TILE_MS
@@ -67,8 +68,10 @@ internal class GuideWindowCache(
 
     fun reservePage(tile: Tile? = null, rows: Int = GuideBrowseBudget.PAGE_ROWS,
                     estimatedBytes: Long = GuideBrowseBudget.PAGE_RESERVATION_BYTES): GuideBrowseBudget.Reservation? {
+        var releasedMemo = false
         while (true) {
             budget.reserve(rows, estimatedBytes)?.let { return it }
+            if (!releasedMemo) { releasedMemo = true; onPressure(); continue }
             val victim = evictionCandidate(tile?.channel) ?: return null
             remove(victim)
         }

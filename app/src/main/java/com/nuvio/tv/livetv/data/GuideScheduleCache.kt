@@ -131,6 +131,7 @@ internal class GuideScheduleCache(
     }
 
     fun clear() { entries.keys.toList().forEach(::remove) } // Request identities are never reused after a reset.
+    fun removeChannels(keys: Set<String>) { keys.forEach(::remove) }
 
     fun programs(): Map<String, List<EpgProgram>> {
         publicationBlocked = false

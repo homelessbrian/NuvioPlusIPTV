@@ -94,7 +94,7 @@ class LiveTvHomeRowViewModel @Inject constructor(
         }
         if (s.homeRowLimit > 0) entries.take(s.homeRowLimit) else entries
     }.flowOn(Dispatchers.Default).onCompletion { guideOwnership.close() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000, replayExpirationMillis = 0), emptyList())
 
     init {
         // Google Drive sync (if connected): pick up a newer setup from another TV.
