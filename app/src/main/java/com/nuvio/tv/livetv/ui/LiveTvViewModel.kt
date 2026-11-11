@@ -1054,19 +1054,23 @@ class LiveTvViewModel @Inject constructor(
 
     /** A channel's full schedule (overlay mode's days, catch-up). */
     val schedulePages: StateFlow<Map<String, com.nuvio.tv.livetv.data.GuideSchedulePageState>> = combine(
-        repository.schedulePages, programs
-    ) { pages, displayed ->
+        repository.schedulePages, programs, repository.status.map { it.loadedOnce }.distinctUntilChanged()
+    ) { pages, displayed, loaded ->
         val id = displayed.guideBrowsePublicationId()
-        pages.mapValues { (_, page) -> if (!page.loading && page.publicationId > id) page.copy(loading = true) else page }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+        pages.mapValues { (channel, page) ->
+            if (loaded && !repository.lightPrograms) com.nuvio.tv.livetv.data.legacySchedulePage(page, displayed[channel].orEmpty(), id)
+            else if (!page.loading && page.publicationId > id) page.copy(loading = true) else page
+        }
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     val guideFocusPage: StateFlow<com.nuvio.tv.livetv.data.GuideFocusPageState> = repository.guideFocusPage
 
     fun ensureChannelSchedule(channelKey: String, anchorMs: Long = System.currentTimeMillis(), backwards: Boolean = false,
-                               continuation: Boolean = false, dayStart: Boolean = false) {
+                               continuation: Boolean = false, dayStart: Boolean = false): Long {
         val shift = settings.value.epgOffsetMinutes * 60_000L
-        repository.ensureChannelSchedule(channelKey, anchorMs - shift, backwards, continuation, dayStart, shift)
+        val serial = repository.ensureChannelSchedule(channelKey, anchorMs - shift, backwards, continuation, dayStart, shift)
         displayChannels.value.firstOrNull { it.key == channelKey }?.let { repository.loadXtreamArchive(listOf(it)) }
+        return serial
     }
 
     fun ensureGuideFocus(channelKey: String, atMs: Long) {

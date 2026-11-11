@@ -1478,7 +1478,7 @@ class LiveTvRepository @Inject constructor(
                 val activeKeys = synchronized(browseDemandLock) { desiredSchedules.keys.toSet() }
                 if (!publishWindows()) { browseDeferred.set(true); return@withLock }
                 _schedulePages.value = (_schedulePages.value + (demand.channel to GuideSchedulePageState(
-                    days, false, earlier, later, demand.anchor + shift, _programs.value.guideBrowsePublicationId())))
+                    days, false, earlier, later, demand.anchor + shift, _programs.value.guideBrowsePublicationId(), requestSerial = demand.serial)))
                     .filterKeys { key -> key in activeKeys }
                 loadedScheduleSerials[demand.channel] = version to demand.serial
                 loadedScheduleSerials.keys.retainAll(schedules.requests().map { it.channel }.toSet())
@@ -1806,18 +1806,20 @@ class LiveTvRepository @Inject constructor(
     }
 
     fun ensureChannelSchedule(channelKey: String, anchorMs: Long = System.currentTimeMillis(), backwards: Boolean = false,
-                               continuation: Boolean = false, dayStart: Boolean = false, displayOffsetMs: Long = 0L) {
+                               continuation: Boolean = false, dayStart: Boolean = false, displayOffsetMs: Long = 0L): Long {
         val request = synchronized(browseDemandLock) {
             val demand = ScheduleDemand(channelKey, anchorMs, backwards, ++scheduleDemandSerial, continuation, dayStart)
             desiredSchedules.remove(channelKey)
             desiredSchedules[channelKey] = demand
             while (desiredSchedules.size > 2) desiredSchedules.remove(desiredSchedules.keys.first())
             _schedulePages.value = (_schedulePages.value + (channelKey to
-                (_schedulePages.value[channelKey] ?: GuideSchedulePageState()).copy(loading = true, anchorMs = anchorMs + displayOffsetMs, errorMessage = null)))
+                (_schedulePages.value[channelKey] ?: GuideSchedulePageState()).copy(loading = true, anchorMs = anchorMs + displayOffsetMs,
+                    errorMessage = null, requestSerial = demand.serial)))
                 .filterKeys { it in desiredSchedules }
             BrowseDemand(viewportKeys, viewportFrom, viewportTo, viewportFocus, desiredSchedules.values.toList())
         }
         browseCoordinator.submit(request)
+        return request.schedules.first { it.channel == channelKey }.serial
     }
 
     private suspend fun loadPendingSchedules() {
