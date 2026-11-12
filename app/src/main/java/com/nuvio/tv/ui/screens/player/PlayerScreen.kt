@@ -38,6 +38,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
@@ -178,6 +179,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.nuvio.tv.libass.media.widget.AssSubtitleSurfaceView
 import kotlin.math.abs
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 private const val PLAYER_CONTROLS_FADE_DURATION_MS = 200
@@ -214,6 +217,8 @@ fun PlayerScreen(
     onOpenPartyMedia: (PartyMedia) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // Live TV fork: seek thumbnails (off unless turned on in Settings > Playback).
+    PlayerSeekThumbsHook(viewModel)
     val playerBadges = rememberPlayerBadges(viewModel, uiState)
     val partyState by viewModel.party.state.collectAsState()
     val partyPlayback by viewModel.party.playback.collectAsState()
@@ -3217,23 +3222,42 @@ private fun PlayerControlsProgressBarHost(
     val playbackTimeline by viewModel.playbackTimeline.collectAsState()
 
     ChapterTitle(chapters = chapters, positionMs = playbackTimeline.currentPosition)
-    ProgressBar(
-        chapters = chapters,
-        currentPosition = playbackTimeline.currentPosition,
-        duration = playbackTimeline.duration,
-        onSeekPreview = { delta ->
-            viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(delta))
-        },
-        onSeekCommit = {
-            viewModel.onEvent(PlayerEvent.OnCommitPreviewSeek)
-        },
-        focusRequester = focusRequester,
-        upFocusRequester = upFocusRequester,
-        downFocusRequester = downFocusRequester,
-        onUpKey = onUpKey,
-        onFocused = onFocused,
-        onClick = onClick,
-        bufferedPosition = playbackTimeline.bufferedPosition
+    Box {
+        ProgressBar(
+            chapters = chapters,
+            currentPosition = playbackTimeline.currentPosition,
+            duration = playbackTimeline.duration,
+            onSeekPreview = { delta ->
+                viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(delta))
+            },
+            onSeekCommit = {
+                viewModel.onEvent(PlayerEvent.OnCommitPreviewSeek)
+            },
+            focusRequester = focusRequester,
+            upFocusRequester = upFocusRequester,
+            downFocusRequester = downFocusRequester,
+            onUpKey = onUpKey,
+            onFocused = onFocused,
+            onClick = onClick,
+            bufferedPosition = playbackTimeline.bufferedPosition
+        )
+        SeekThumbOverBar(viewModel, playbackTimeline.currentPosition, playbackTimeline.duration)
+    }
+}
+
+/** Live TV fork: the seek thumbnail above the bar while a seek is under way. */
+@Composable
+private fun BoxScope.SeekThumbOverBar(viewModel: PlayerViewModel, positionMs: Long, durationMs: Long) {
+    val pending by remember(viewModel) {
+        viewModel.uiState.map { it.pendingPreviewSeekPosition != null }.distinctUntilChanged()
+    }.collectAsState(initial = false)
+    com.nuvio.tv.livetv.thumbs.SeekThumbAbove(
+        owner = com.nuvio.tv.livetv.thumbs.SeekThumbs.Owner.MAIN,
+        positionMs = positionMs,
+        fraction = if (durationMs > 0) positionMs.toFloat() / durationMs else 0f,
+        timeLabel = com.nuvio.tv.livetv.thumbs.seekThumbTime(positionMs),
+        visible = pending && durationMs > 0,
+        modifier = Modifier.align(Alignment.TopStart)
     )
 }
 
@@ -3576,7 +3600,8 @@ private fun SeekOverlay(
     currentPosition: Long,
     duration: Long,
     bufferedPosition: Long = 0L,
-    chapters: List<PlayerChapter> = emptyList()
+    chapters: List<PlayerChapter> = emptyList(),
+    thumbVisible: Boolean = false
 ) {
     Column(
         modifier = Modifier
@@ -3585,14 +3610,25 @@ private fun SeekOverlay(
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             ChapterTitle(chapters = chapters, positionMs = currentPosition)
-            ProgressBar(
-                currentPosition = currentPosition,
-                duration = duration,
-                onSeekPreview = {},
-                onSeekCommit = {},
-                bufferedPosition = bufferedPosition,
-                chapters = chapters
-            )
+            Box {
+                ProgressBar(
+                    currentPosition = currentPosition,
+                    duration = duration,
+                    onSeekPreview = {},
+                    onSeekCommit = {},
+                    bufferedPosition = bufferedPosition,
+                    chapters = chapters
+                )
+                // Live TV fork: this overlay only shows while seeking.
+                com.nuvio.tv.livetv.thumbs.SeekThumbAbove(
+                    owner = com.nuvio.tv.livetv.thumbs.SeekThumbs.Owner.MAIN,
+                    positionMs = currentPosition,
+                    fraction = if (duration > 0) currentPosition.toFloat() / duration else 0f,
+                    timeLabel = com.nuvio.tv.livetv.thumbs.seekThumbTime(currentPosition),
+                    visible = thumbVisible && duration > 0,
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
+            }
 
             Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
 
@@ -3615,11 +3651,15 @@ private fun SeekOverlay(
 private fun SeekOverlayHost(viewModel: PlayerViewModel, chapters: List<PlayerChapter>) {
     val playbackTimeline by viewModel.playbackTimeline.collectAsState()
 
+    val pending by remember(viewModel) {
+        viewModel.uiState.map { it.pendingPreviewSeekPosition != null }.distinctUntilChanged()
+    }.collectAsState(initial = false)
     SeekOverlay(
         currentPosition = playbackTimeline.currentPosition,
         duration = playbackTimeline.duration,
         bufferedPosition = playbackTimeline.bufferedPosition,
-        chapters = chapters
+        chapters = chapters,
+        thumbVisible = pending
     )
 }
 

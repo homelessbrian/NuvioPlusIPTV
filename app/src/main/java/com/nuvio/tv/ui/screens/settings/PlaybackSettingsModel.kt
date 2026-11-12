@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
@@ -29,6 +30,7 @@ internal enum class PlaybackSection(
     UP_NEXT(R.string.playback_section_up_next, R.string.playback_section_up_next_desc, Icons.Default.QueuePlayNext),
     SKIP_SEGMENTS(R.string.playback_section_skip, R.string.playback_section_skip_desc, Icons.Default.FastForward),
     PLAYER_INTERFACE(R.string.playback_section_interface, R.string.playback_section_interface_desc, Icons.Default.Layers),
+    SEEK_THUMBNAILS(R.string.playback_section_seek_thumbnails, R.string.playback_section_seek_thumbnails_desc, Icons.Default.Image),
     AUDIO(R.string.audio_section, R.string.playback_section_audio_only_desc, Icons.AutoMirrored.Filled.VolumeUp),
     SUBTITLES(R.string.playback_section_subtitles, R.string.playback_section_subtitles_desc, Icons.Default.Subtitles),
     VIDEO(R.string.video_section, R.string.playback_section_video_desc, Icons.Default.VideoSettings),

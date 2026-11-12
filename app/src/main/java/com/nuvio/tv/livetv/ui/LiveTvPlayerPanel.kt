@@ -539,6 +539,11 @@ private fun GlassTimeline(t: PanelTimeline, grabbed: Boolean, hint: Boolean = fa
                         .border(if (grabbed) 4.dp else 0.dp, Color.White.copy(alpha = 0.3f), CircleShape)
                 )
             }
+            // Seek thumbnails (recordings, sports replays), or why there are none, while seeking.
+            com.nuvio.tv.livetv.thumbs.LiveTvTimelineThumb(
+                startMs = t.startMs, endMs = t.endMs, positionMs = t.positionMs, grabbed = grabbed,
+                modifier = Modifier.align(Alignment.TopStart)
+            )
         }
         Spacer(Modifier.width(10.dp))
         LiveText(right, size = 11.sp, color = if (t.liveMs != null) LIVE_RED else colors.TextSecondary)

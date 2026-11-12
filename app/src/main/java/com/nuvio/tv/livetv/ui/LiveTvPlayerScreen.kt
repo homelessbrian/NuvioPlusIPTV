@@ -118,6 +118,8 @@ fun LiveTvPlayerScreen(
     val view = LocalView.current
 
     if (!embedded) PauseLiveTvInBackground(viewModel.playback)
+    // Seek thumbnails for recordings and sports addon replays (off unless turned on in Settings).
+    com.nuvio.tv.livetv.thumbs.LiveTvSeekThumbsHook(viewModel.playback)
 
     DisposableEffect(Unit) {
         viewModel.playback.attach()

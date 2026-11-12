@@ -362,6 +362,9 @@ class LiveTvPlaybackController @Inject constructor(
     /** The recording playing as a show of its own ([playSavedRecording]), or null. */
     @Volatile var savedRecordingId: String? = null
         private set
+    /** That recording's playlist of pieces on this box (for its seek thumbnails), or null. */
+    @Volatile var savedRecordingPlaylist: java.io.File? = null
+        private set
 
     /**
      * Plays a recording from Recordings like a replay that's all on this box: the catch-up seek
@@ -371,6 +374,7 @@ class LiveTvPlaybackController @Inject constructor(
         play(channel, overrideUrl = android.net.Uri.fromFile(playlist).toString(), catchupTitle = title)
         val p = _player ?: return
         savedRecordingId = recordingId
+        savedRecordingPlaylist = playlist
         replayLocal = true
         archiveStartPending = false
         leadSeekMs = 0L
@@ -590,6 +594,8 @@ class LiveTvPlaybackController @Inject constructor(
     /** The channel the player is on (as it was when playback started). */
     val playingChannel: LiveChannel? get() = currentChannel
     private var currentUrl: String? = null
+    /** The link playing now (a backup or catch-up link when one is in use), or null. */
+    val playingUrl: String? get() = currentUrl
     private var attachCount = 0
     private var releaseJob: Job? = null
     private var reconnectJob: Job? = null
@@ -763,6 +769,7 @@ class LiveTvPlaybackController @Inject constructor(
         if (previousChannelKey != channel.key) recentStalls.clear()
         shiftStartPending = false
         savedRecordingId = null
+        savedRecordingPlaylist = null
         _ownTimeline.value = false
         if (_shiftStartedAt.value != null) stopShift()
         if (_recordingPlayback.value != null) { _recordingPlayback.value = null; shiftJob?.cancel() }
@@ -1033,6 +1040,7 @@ class LiveTvPlaybackController @Inject constructor(
         stalkerGeneration++
         activeStalkerRef = null
         savedRecordingId = null
+        savedRecordingPlaylist = null
         clearStarting()
         reconnectJob?.cancel()
         stopReplayCache()

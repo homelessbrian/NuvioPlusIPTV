@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">Seek Thumbnails</string>
+    <string name="playback_section_seek_thumbnails_desc">Preview pictures above the seek bar while you seek</string>
+</resources>

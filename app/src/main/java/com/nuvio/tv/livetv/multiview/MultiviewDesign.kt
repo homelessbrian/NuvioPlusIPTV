@@ -238,7 +238,6 @@ internal fun MultiviewPane(
                     show?.let { LiveText(it.title, size = 9.sp, color = NuvioTheme.colors.TextSecondary) }
                 }
             }
-            if (show != null) MultiviewProgress(show.progress(now), Modifier.align(Alignment.BottomStart))
         }
     }
 }
