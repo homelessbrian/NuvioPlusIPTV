@@ -152,6 +152,8 @@ internal fun MultiviewChannelPicker(
     sportsMode: Boolean,
     onSportsMode: (Boolean) -> Unit,
     rows: List<SportsWatchRow>,
+    /** The games are still being fetched and matched to channels (the first time Sports is used). */
+    loadingGames: Boolean,
     selectedEventId: String?,
     hideScores: Boolean,
     onGame: (SportsWatchGame) -> Boolean,
@@ -600,9 +602,15 @@ internal fun MultiviewChannelPicker(
                         sportsMode -> {
                             if (gameAt.isEmpty()) {
                                 Column(Modifier.padding(18.dp)) {
-                                    LiveText("No live games available", size = 15.sp, weight = FontWeight.SemiBold)
-                                    LiveText("Your Sports games appear here when they are live or about to start.",
-                                        size = 12.sp, color = NuvioTheme.colors.TextSecondary, maxLines = 3)
+                                    if (loadingGames) {
+                                        LiveText("Loading games…", size = 15.sp, weight = FontWeight.SemiBold)
+                                        LiveText("Fetching today's games and finding their channels. The first time can take a moment.",
+                                            size = 12.sp, color = NuvioTheme.colors.TextSecondary, maxLines = 4)
+                                    } else {
+                                        LiveText("No live games available", size = 15.sp, weight = FontWeight.SemiBold)
+                                        LiveText("Your Sports games appear here when they are live or about to start.",
+                                            size = 12.sp, color = NuvioTheme.colors.TextSecondary, maxLines = 3)
+                                    }
                                 }
                             } else LazyColumn(state = sportsState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 4.dp)) {
                                 itemsIndexed(items, key = { _, item ->

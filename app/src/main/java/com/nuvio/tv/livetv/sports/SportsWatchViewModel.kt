@@ -87,6 +87,10 @@ class SportsWatchViewModel @Inject constructor(
         while (true) { emit(System.currentTimeMillis()); delay(15_000L) }
     }
 
+    /** Scores or channel matching are being worked on right now (Multiview shows "Loading games" meanwhile). */
+    val busy: StateFlow<Boolean> = combine(repo.loading, repo.matching) { a, b -> a || b }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     internal val games: StateFlow<List<SportsWatchGame>> = combine(
         repo.events, permissions, clock, currentProfile,
     ) { events, snapshot, now, profile ->

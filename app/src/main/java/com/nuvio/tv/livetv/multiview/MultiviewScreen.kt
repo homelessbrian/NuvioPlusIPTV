@@ -115,6 +115,18 @@ fun MultiviewScreen(
     val sportsAllowed = sports?.allowedChannels?.collectAsStateWithLifecycle()?.value ?: emptyList()
     val games = sports?.games?.collectAsStateWithLifecycle()?.value ?: emptyList()
     val sportsRows = sports?.rows?.collectAsStateWithLifecycle()?.value ?: emptyList()
+    // The first time Sports is used, its games take a while: "Loading games" until they arrive (or 30 s pass).
+    val sportsBusy = sports?.busy?.collectAsStateWithLifecycle()?.value ?: false
+    var sportsSawBusy by remember { mutableStateOf(false) }
+    var sportsWaited by remember { mutableStateOf(false) }
+    LaunchedEffect(sportsBusy) { if (sportsBusy) sportsSawBusy = true }
+    LaunchedEffect(sportsUsed) {
+        if (sportsUsed) {
+            delay(30_000L)
+            sportsWaited = true
+        }
+    }
+    val loadingGames = sportsUsed && !sportsWaited && sportsRows.none { it.games.isNotEmpty() } && (sportsBusy || !sportsSawBusy)
     val hideScores = sports?.settings?.collectAsStateWithLifecycle()?.value?.hideScores ?: false
     val request = remember { if (startOnSports) SportsWatchLaunch.take() else null }
     val session = remember {
@@ -467,6 +479,7 @@ fun MultiviewScreen(
                 sportsMode = on
             },
             rows = sportsRows,
+            loadingGames = loadingGames,
             selectedEventId = paneEvents[pane]
                 ?: games.firstOrNull { game -> game.channels.any { it.channel.key == state.panes.getOrNull(pane)?.channelKey } }?.event?.id,
             hideScores = hideScores,
