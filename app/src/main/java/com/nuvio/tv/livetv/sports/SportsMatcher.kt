@@ -123,7 +123,13 @@ internal class SportsMatcher(
         return NameData(fp, names, tokenIndex, discNames).also { nameData = it }
     }
 
-    fun match(input: Input): Result {
+    /**
+     * [onUrgent]: when given, the half-hours of games on now (or starting within a quarter of an
+     * hour) are read from the guide first and what the guide has for those games is handed over
+     * straight away, before the rest of the day is searched. Only the guide's channels: channel
+     * names, networks and your own picks come with the full result.
+     */
+    fun match(input: Input, onUrgent: ((Map<String, List<ChannelMatch>>) -> Unit)? = null): Result {
         val byKey = input.channels.associateBy { it.key }
         val rank = preferenceRank(input.settings)
         val tStart = System.currentTimeMillis()
@@ -290,59 +296,96 @@ internal class SportsMatcher(
                 toScanSig += sig
             }
         }
-        var scanned = true
-        val slotHits = runCatching { guideHitsBySlot(toScan, input.gentle, rev) }
-            .getOrElse { scanned = false; toScan.map { emptyList() } }
-        toScan.forEachIndexed { slotIndex, gs ->
-            val slot = gs.slot
-            val hits = slotHits[slotIndex]
-            val finds = ArrayList<SlotFind>()
-            // (Not kept when the guide couldn't be read: nothing found then doesn't mean nothing's there.)
-            if (scanned) toScanSig[slotIndex]?.let { newCache[it] = finds }
-            if (hits.isEmpty()) return@forEachIndexed
-            val prepared = hits.mapNotNull { (key, p0) ->
-                val ch = byKey[key] ?: return@mapNotNull null
-                val p = if (input.shiftMs == 0L) p0 else p0.copy(startMs = p0.startMs + input.shiftMs, stopMs = p0.stopMs + input.shiftMs)
-                if (fillerOrLoop(ch, p)) return@mapNotNull null
-                // The guide's own label for studio shows and replays, when it has one.
-                val cat = norm(p.category.orEmpty())
-                if (hasWord(cat, "sports non event") || hasWord(cat, "classic sport event")) return@mapNotNull null
-                // Many guides put the match-up in the episode title ("MLB Baseball" / "Cubs at
-                // Cardinals"); it's the first line of the description here: read it with the title.
-                val desc = p.description.orEmpty()
-                val sub = if ('\n' in desc) desc.substringBefore('\n').takeIf { it.length <= 90 } else null
-                val nt = norm(p.title + (sub?.let { " $it" } ?: ""))
-                if (SportsCatalog.NOT_LIVE_WORDS.any { hasWord(nt, it) }) return@mapNotNull null
-                Triple(key, p, nt to norm(desc))
-            }
-            for (ev in slot) {
-                val t = terms[ev.id] ?: continue
-                for ((key, p, texts) in prepared) {
-                    val (nt, nd) = texts
-                    // Disc golf shows never count for regular golf.
-                    if (ev.id !in discIds && (hasWord(nt, "disc golf") || hasWord(nd, "disc golf"))) continue
-                    if (p.startMs > ev.startMs + 60 * MINUTE || p.stopMs < ev.startMs + 15 * MINUTE) continue
-                    var score = t.scoreText(nt, nd)
-                    // No start time (a race weekend, a tournament): a show on now that names this
-                    // event, or the competition when nothing else of its kind is on.
-                    if (ev.id in noStart) {
-                        val hits = specificHits(ev.id, nt) + specificHits(ev.id, nd)
-                        if (!t.namesLeague(nt, nd) && hits < 2) continue
-                        when {
-                            score > 0 -> Unit
-                            hits >= 1 -> score = 88
-                            namesOther(ev.id, nt) || namesOther(ev.id, nd) -> continue
-                            rareHit(ev.id, nt) -> score = 75
-                            distinctLeague(ev.id, nt) || distinctLeague(ev.id, nd) -> score = 70
-                            else -> continue
-                        }
-                    }
-                    if (score <= 0) continue
-                    // Pre-game shows often start an hour early on the same channel; much earlier or later is less likely the game.
-                    if (p.startMs < ev.startMs - 80 * MINUTE || p.startMs > ev.startMs + 25 * MINUTE) score -= 10
-                    add(ev.id, key, score, "Guide: ${p.title}", p)
-                    if (score > 0) finds += SlotFind(ev.id, key, score, "Guide: ${p.title}", p)
+        fun channelMatches(eventId: String, m: Map<String, Found>): List<ChannelMatch>? {
+            val ev = byId[eventId] ?: return null
+            val list = m.values
+                .filter { "$eventId|${it.key}" !in input.settings.blocked }
+                .mapNotNull { f ->
+                    val ch = byKey[f.key] ?: return@mapNotNull null
+                    ChannelMatch(
+                        channel = ch,
+                        score = f.score,
+                        how = f.how,
+                        program = f.program,
+                        quality = input.quality[ch.key] ?: nameQuality(ch.name),
+                        catchup = if (ch.stalkerRef != null) f.program?.let { CatchupUrlBuilder.isAvailable(ch, it, input.now) } == true
+                        else ch.catchup != null && CatchupUrlBuilder.isAvailable(ch.catchup, f.program?.startMs ?: ev.startMs, input.now)
+                    )
                 }
+            if (list.isEmpty()) return null
+            // Every channel the guide has for it (FHD/HD/SD copies are folded into one row on the
+            // game page, other regions under "+ N from other regions"), so nothing the guide shows
+            // is left out. 40 is only a guard against a runaway list; it costs no extra searching.
+            return sortMatches(list, input.settings.bestChannelFirst, rank).take(40)
+        }
+        fun urgent(ev: SportsEvent) = ev.state == GameState.LIVE ||
+            (ev.state == GameState.PRE && ev.startMs in (input.now - 15 * MINUTE)..(input.now + 15 * MINUTE))
+        // Live games' half-hours first (a narrow read around now), then the rest of the day.
+        val urgentIdx = if (onUrgent == null) emptyList() else toScan.indices.filter { i -> toScan[i].slot.any(::urgent) }
+        val passes = if (urgentIdx.isEmpty() || urgentIdx.size == toScan.size) listOf(toScan.indices.toList())
+            else listOf(urgentIdx, toScan.indices.filter { it !in urgentIdx })
+        for ((passNo, pass) in passes.withIndex()) {
+            val passSlots = pass.map { toScan[it] }
+            var passScanned = true
+            val slotHits = runCatching { guideHitsBySlot(passSlots, input.gentle, rev) }
+                .getOrElse { passScanned = false; passSlots.map { emptyList() } }
+            passSlots.forEachIndexed { slotIndex, gs ->
+                val slot = gs.slot
+                val hits = slotHits[slotIndex]
+                val finds = ArrayList<SlotFind>()
+                // (Not kept when the guide couldn't be read: nothing found then doesn't mean nothing's there.)
+                if (passScanned) toScanSig[pass[slotIndex]]?.let { newCache[it] = finds }
+                if (hits.isEmpty()) return@forEachIndexed
+                val prepared = hits.mapNotNull { (key, p0) ->
+                    val ch = byKey[key] ?: return@mapNotNull null
+                    val p = if (input.shiftMs == 0L) p0 else p0.copy(startMs = p0.startMs + input.shiftMs, stopMs = p0.stopMs + input.shiftMs)
+                    if (fillerOrLoop(ch, p)) return@mapNotNull null
+                    // The guide's own label for studio shows and replays, when it has one.
+                    val cat = norm(p.category.orEmpty())
+                    if (hasWord(cat, "sports non event") || hasWord(cat, "classic sport event")) return@mapNotNull null
+                    // Many guides put the match-up in the episode title ("MLB Baseball" / "Cubs at
+                    // Cardinals"); it's the first line of the description here: read it with the title.
+                    val desc = p.description.orEmpty()
+                    val sub = if ('\n' in desc) desc.substringBefore('\n').takeIf { it.length <= 90 } else null
+                    val nt = norm(p.title + (sub?.let { " $it" } ?: ""))
+                    if (SportsCatalog.NOT_LIVE_WORDS.any { hasWord(nt, it) }) return@mapNotNull null
+                    Triple(key, p, nt to norm(desc))
+                }
+                for (ev in slot) {
+                    val t = terms[ev.id] ?: continue
+                    for ((key, p, texts) in prepared) {
+                        val (nt, nd) = texts
+                        // Disc golf shows never count for regular golf.
+                        if (ev.id !in discIds && (hasWord(nt, "disc golf") || hasWord(nd, "disc golf"))) continue
+                        if (p.startMs > ev.startMs + 60 * MINUTE || p.stopMs < ev.startMs + 15 * MINUTE) continue
+                        var score = t.scoreText(nt, nd)
+                        // No start time (a race weekend, a tournament): a show on now that names this
+                        // event, or the competition when nothing else of its kind is on.
+                        if (ev.id in noStart) {
+                            val hits = specificHits(ev.id, nt) + specificHits(ev.id, nd)
+                            if (!t.namesLeague(nt, nd) && hits < 2) continue
+                            when {
+                                score > 0 -> Unit
+                                hits >= 1 -> score = 88
+                                namesOther(ev.id, nt) || namesOther(ev.id, nd) -> continue
+                                rareHit(ev.id, nt) -> score = 75
+                                distinctLeague(ev.id, nt) || distinctLeague(ev.id, nd) -> score = 70
+                                else -> continue
+                            }
+                        }
+                        if (score <= 0) continue
+                        // Pre-game shows often start an hour early on the same channel; much earlier or later is less likely the game.
+                        if (p.startMs < ev.startMs - 80 * MINUTE || p.startMs > ev.startMs + 25 * MINUTE) score -= 10
+                        add(ev.id, key, score, "Guide: ${p.title}", p)
+                        if (score > 0) finds += SlotFind(ev.id, key, score, "Guide: ${p.title}", p)
+                    }
+                }
+            }
+            if (passNo == 0 && passes.size > 1 && onUrgent != null) {
+                val ids = urgentIdx.flatMap { toScan[it].slot }.filter(::urgent).mapTo(HashSet()) { it.id }
+                val early = HashMap<String, List<ChannelMatch>>()
+                for (id in ids) found[id]?.let { m -> channelMatches(id, m)?.let { early[id] = it } }
+                if (early.isNotEmpty()) runCatching { onUrgent(early) }
             }
         }
         // The guide changed while it was being read: keep nothing, search it all next time.
@@ -466,28 +509,7 @@ internal class SportsMatcher(
         }
 
         val out = HashMap<String, List<ChannelMatch>>()
-        for ((eventId, m) in found) {
-            val ev = byId[eventId] ?: continue
-            val list = m.values
-                .filter { "$eventId|${it.key}" !in input.settings.blocked }
-                .mapNotNull { f ->
-                    val ch = byKey[f.key] ?: return@mapNotNull null
-                    ChannelMatch(
-                        channel = ch,
-                        score = f.score,
-                        how = f.how,
-                        program = f.program,
-                        quality = input.quality[ch.key] ?: nameQuality(ch.name),
-                        catchup = if (ch.stalkerRef != null) f.program?.let { CatchupUrlBuilder.isAvailable(ch, it, input.now) } == true
-                        else ch.catchup != null && CatchupUrlBuilder.isAvailable(ch.catchup, f.program?.startMs ?: ev.startMs, input.now)
-                    )
-                }
-            if (list.isEmpty()) continue
-            // Every channel the guide has for it (FHD/HD/SD copies are folded into one row on the
-            // game page, other regions under "+ N from other regions"), so nothing the guide shows
-            // is left out. 40 is only a guard against a runaway list; it costs no extra searching.
-            out[eventId] = sortMatches(list, input.settings.bestChannelFirst, rank).take(40)
-        }
+        for ((eventId, m) in found) channelMatches(eventId, m)?.let { out[eventId] = it }
         // Events that run for days (golf, race weekends): what was looked for and found, for the report.
         val multi = teamEvents.filter { it.id in noStart }.joinToString(" | ") { ev ->
             val t = terms[ev.id]
@@ -527,6 +549,8 @@ internal class SportsMatcher(
      * them (it used to be searched twice a day, for up to 360 words each time), and not at all
      * when it hasn't changed since last time (then only whether each show is on now is worked
      * out again).
+     * [savedOnly]: only what was found last time (kept, or saved for this same guide); nothing
+     * when that's missing, and the guide itself is never read.
      */
     fun guideEventsDays(
         days: List<Pair<Long, Long>>,
@@ -534,7 +558,8 @@ internal class SportsMatcher(
         followedWords: List<String>,
         channels: Map<String, LiveChannel>,
         shiftMs: Long,
-        now: Long
+        now: Long,
+        savedOnly: Boolean = false
     ): Map<Long, List<SportsEvent>> {
         if (days.isEmpty()) return emptyMap()
         val leagueWords = leagues.flatMap { l -> l.guideWords.map { it to l } }
@@ -547,6 +572,12 @@ internal class SportsMatcher(
         for (w in titleWords.sorted()) key = key * 31 + w.hashCode()
         key = key * 17
         for (w in followed.sorted()) key = key * 31 + w.hashCode()
+        if (savedOnly) {
+            // Doesn't use up the one disk read at start: the words may not all be known yet.
+            if (rev != null && dayHits?.key != key) loadDays(key)?.let { dayHits = DayHits(key, it) }
+            val saved = dayHits?.takeIf { it.key == key }?.byDay ?: return emptyMap()
+            return days.associate { (ds, _) -> ds to guideEventsFrom(saved[ds].orEmpty(), leagueWords, followedWords, channels, shiftMs, now) }
+        }
         if (!daysLoaded) {
             daysLoaded = true
             if (rev != null && dayHits?.key != key) loadDays(key)?.let { dayHits = DayHits(key, it) }
@@ -1032,6 +1063,7 @@ internal class SportsMatcher(
     private fun saveJson(name: String, o: JSONObject) {
         val d = dir ?: return
         runCatching {
+            d.mkdirs()
             val tmp = File(d, "$name.tmp")
             tmp.writeText(o.toString())
             if (!tmp.renameTo(File(d, name))) { File(d, name).delete(); tmp.renameTo(File(d, name)) }

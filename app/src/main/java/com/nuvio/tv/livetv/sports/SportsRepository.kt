@@ -63,9 +63,11 @@ class SportsRepository @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val feeds = SportsFeeds()
-    private val dir = File(context.filesDir, "sports").apply { mkdirs() }
+    // In the app's cache (see SportsDiskCache); made again if "Clear cache" emptied it meanwhile.
+    private val sportsDir = SportsDiskCache.directory(context.filesDir, context.cacheDir)
+    private val dir: File get() = sportsDir.apply { mkdirs() }
     // Test builds also try the guide's sports-shows table (checked against the whole guide).
-    private val matcher = SportsMatcher(guideDb, dir, sportsTable = com.nuvio.tv.BuildConfig.NUVIO_CHANNEL == "test")
+    private val matcher = SportsMatcher(guideDb, sportsDir, sportsTable = com.nuvio.tv.BuildConfig.NUVIO_CHANNEL == "test")
 
     val settings: StateFlow<SportsSettings> = prefs.sportsSettingsJson
         .map { SportsSettings.fromJson(it) }
@@ -1462,6 +1464,11 @@ class SportsRepository @Inject constructor(
                 val chans = channelStore.displayChannels.first { it.isNotEmpty() }.associateBy { it.key }
                 if (_matches.value.isEmpty()) runCatching { restoreMatches(saved, chans) }
             }
+            // The guide-only sports those matches belong to, from the last search of this guide.
+            runCatching { restoreSavedGuideEvents() }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                Log.w(TAG, "Saved guide events unavailable", it)
+            }
         }
         // Not before the saved games are read: a search with no games found nothing, then ran again.
         cacheLoaded.first { it }
@@ -1580,20 +1587,48 @@ class SportsRepository @Inject constructor(
     private var lastSummary: String? = null
 
     // Nobody on the Sports page: low priority, out of the way of the guide and the video.
-    private suspend fun runMatch(quickOnly: Boolean = false) = withContext(if (viewers.value > 0) Dispatchers.Default else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
-        val live = prefs.settings.first()
-        val user = prefs.userState.first()
+    /** The channels Sports may show: not hidden or locked (channels you picked yourself always count). */
+    private fun matchChannels(live: com.nuvio.tv.livetv.model.LiveTvSettings, user: com.nuvio.tv.livetv.model.LiveUserState,
+                              sp: SportsSettings = settings.value): List<LiveChannel> {
         // Channels you picked yourself (Fix Channel) count even in a hidden group.
-        val sp = settings.value
         val picked = HashSet<String>().apply {
             sp.eventChannels.values.forEach { add(it.substringBeforeLast('|')) }
             addAll(sp.networkChannels.values); addAll(sp.teamChannels.values); addAll(sp.leagueChannels.values)
         }
-        val channels: List<LiveChannel> = channelStore.displayChannels.value.filter { ch ->
+        return channelStore.displayChannels.value.filter { ch ->
             (ch.key in picked || (ch.key !in user.hiddenChannels && ch.groupId !in user.hiddenGroups)) &&
                 !ParentalControls.isLocked(ch.groupId, ch.group, live, user.lockedGroups) &&
                 !(ParentalControls.enabled(live) && live.lockAdultContent && ParentalControls.isAdult(ch.name))
         }
+    }
+
+    /**
+     * At start: the sports found only in the guide last time (saved for this same guide) show
+     * straight away with their channels, instead of after the first search round. Never reads
+     * the guide; the next round replaces them.
+     */
+    private suspend fun restoreSavedGuideEvents() = withContext(Dispatchers.Default) {
+        channelStore.displayChannels.first { it.isNotEmpty() }
+        if (guideData.value.isNotEmpty()) return@withContext
+        val live = prefs.settings.first()
+        val user = prefs.userState.first()
+        val channels = matchChannels(live, user, SportsSettings.fromJson(prefs.sportsSettingsJson.first()))
+        if (channels.isEmpty()) return@withContext
+        val f = SportsFollows.fromJson(prefs.sportsMineJson.first())
+        val now = System.currentTimeMillis()
+        val days = matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) },
+            SportsCatalog.all.filter { it.guideOnly }, f.words, channels.associateBy { it.key },
+            live.epgOffsetMinutes * MINUTE, now, savedOnly = true)
+        if (days.values.any { it.isNotEmpty() } && guideData.value.isEmpty()) {
+            guideData.value = days
+            LiveTvLoadReport.add("Sports: ${days.values.sumOf { it.size }} guide-only events shown from the last search")
+        }
+    }
+
+    private suspend fun runMatch(quickOnly: Boolean = false) = withContext(if (viewers.value > 0) Dispatchers.Default else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+        val live = prefs.settings.first()
+        val user = prefs.userState.first()
+        val channels: List<LiveChannel> = matchChannels(live, user)
         if (channels.isEmpty()) return@withContext
         _matching.value = true
         try {
@@ -1652,7 +1687,25 @@ class SportsRepository @Inject constructor(
                     settings = s,
                     now = now,
                     gentle = viewers.value == 0
-                )
+                ),
+                onUrgent = { early ->
+                    // Games on now: the guide's channels as soon as their half-hours are read,
+                    // added to what's already shown (the quick matches), before the rest of the day.
+                    val rank = SportsMatcher.preferenceRank(s)
+                    _matches.update { prev ->
+                        val next = prev.toMutableMap()
+                        for ((id, list) in early) {
+                            val byChannel = prev[id].orEmpty().associateByTo(LinkedHashMap()) { it.channel.key }
+                            for (m in list) {
+                                val old = byChannel[m.channel.key]
+                                if (old == null || m.score > old.score) byChannel[m.channel.key] = m
+                            }
+                            next[id] = SportsMatcher.sortMatches(byChannel.values.toList(), s.bestChannelFirst, rank).take(40)
+                        }
+                        next
+                    }
+                    rebuildLiveScores()
+                }
             )
             _matches.value = result.matches
             if (result.summary != lastSummary) {
