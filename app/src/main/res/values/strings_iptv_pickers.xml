@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">Quick Channels</string>
+    <string name="iptv_quick_channels_subtitle">Shortcuts tucked under the play bar. Press Down on the bar to open them.</string>
+    <string name="iptv_quick_channels_show">Show Quick Channels</string>
+    <string name="iptv_quick_channels_opens_on">Opens On</string>
+    <string name="iptv_quick_channels_opens_on_hint">The list it shows first</string>
+    <string name="iptv_quick_channels_first_list">First list</string>
+    <string name="iptv_quick_channels_last_used">Last one used</string>
+    <string name="iptv_quick_channels_lists_hint">Lists in the row · OK turns one on or off, the arrows move it</string>
+    <string name="iptv_quick_channels_recent">Recently Watched</string>
+    <string name="iptv_quick_channels_favorites">Favorites</string>
+    <string name="iptv_quick_channels_built_in">Built in</string>
+    <string name="iptv_quick_channels_playlist_group">%1$s · playlist group</string>
+    <string name="iptv_quick_channels_your_group">Your group</string>
+    <string name="iptv_quick_channels_group_missing">Group not found</string>
+    <string name="iptv_quick_channels_group_missing_hint">Not in your playlists right now</string>
+    <string name="iptv_quick_channels_add_group">Add a Playlist Group…</string>
+    <string name="iptv_quick_channels_add_group_hint">Any group from any playlist, your own groups too</string>
+    <string name="iptv_quick_channels_add_groups_title">Add Playlist Groups</string>
+    <string name="iptv_quick_channels_no_groups">No groups yet. Add a playlist first.</string>
+    <string name="iptv_quick_channels_add_groups_hint">Each one you tick becomes its own list in Quick Channels.</string>
+    <string name="iptv_quick_channels_my_groups">My Groups</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="one">%1$d channel</item>
+        <item quantity="other">%1$d channels</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">Provider\'s Order</string>
+    <string name="iptv_vod_sort_name_az">A–Z</string>
+    <string name="iptv_vod_sort_name_za">Z–A</string>
+    <string name="iptv_vod_sort_newest">Newest Release</string>
+    <string name="iptv_vod_sort_oldest">Oldest Release</string>
+    <string name="iptv_vod_sort_recently_added">Recently Added</string>
+    <string name="iptv_vod_sort_highest_rated">Highest Rated</string>
+    <string name="iptv_vod_sort_shuffle">Shuffle</string>
+    <string name="iptv_vod_sort_provider_order_hint">The order your provider sends</string>
+    <string name="iptv_vod_sort_name_az_hint">Numbers and symbols first, then A to Z</string>
+    <string name="iptv_vod_sort_name_za_hint">Z to A, then numbers and symbols</string>
+    <string name="iptv_vod_sort_newest_hint">By release year, newest first</string>
+    <string name="iptv_vod_sort_oldest_hint">By release year, oldest first</string>
+    <string name="iptv_vod_sort_recently_added_hint">What your provider added most recently</string>
+    <string name="iptv_vod_sort_highest_rated_hint">By your provider\'s rating, best first</string>
+    <string name="iptv_vod_sort_shuffle_hint">A new random order each time you pick it</string>
+    <string name="iptv_vod_sort_default_hint">Follows Default Sort Order in Settings</string>
+</resources>

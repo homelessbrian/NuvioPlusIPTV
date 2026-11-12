@@ -297,16 +297,21 @@ data class PlaylistAccount(
     fun expiringSoon(now: Long = System.currentTimeMillis()): Boolean = (daysLeft(now) ?: Long.MAX_VALUE) <= 7
 
     /** "12 Mar 2027 (148 days)", "20 Oct 2026 (today)", or null. */
-    fun expiryLabel(now: Long = System.currentTimeMillis()): String? {
-        val days = daysLeft(now) ?: return null
-        val date = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(expiresAtMs))
-        val left = when {
-            expiresAtMs <= now -> "expired"
-            days == 0L -> "today"
-            days == 1L -> "1 day"
-            else -> "$days days"
+    fun expiryLabel(
+        now: Long = System.currentTimeMillis(),
+        locale: java.util.Locale = java.util.Locale.getDefault(),
+        remainingLabel: (days: Long, expired: Boolean) -> String = { days, expired ->
+            when {
+                expired -> "expired"
+                days == 0L -> "today"
+                days == 1L -> "1 day"
+                else -> "$days days"
+            }
         }
-        return "$date ($left)"
+    ): String? {
+        val days = daysLeft(now) ?: return null
+        val date = java.text.SimpleDateFormat("d MMM yyyy", locale).format(java.util.Date(expiresAtMs))
+        return "$date (${remainingLabel(days, expiresAtMs <= now)})"
     }
 }
 

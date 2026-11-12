@@ -3,6 +3,8 @@ package com.nuvio.tv.livetv.data
 import io.ktor.http.encodeURLParameter
 
 import android.content.Context
+import com.nuvio.tv.R
+import com.nuvio.tv.core.util.withAppLocale
 import android.util.Log
 import com.nuvio.tv.livetv.model.EpgAssignment
 import com.nuvio.tv.livetv.record.LiveTvNotice
@@ -584,7 +586,7 @@ class LiveTvRepository @Inject constructor(
                 now - file.lastModified() > settings.playlistRefreshHours.coerceAtLeast(1) * HOUR
             if (forcePlaylists || stale || pl.id in forceIds) {
                 LIVE_REPORT.add("Checking playlist \"${pl.name}\" for updates")
-                setStatus(loading = true, message = "Updating playlist \"${pl.name}\"…")
+                setStatus(loading = true, message = statusText(R.string.iptv_repository_status_updating_playlist, pl.name))
                 val before = if (file.exists()) file.length() to file.lastModified() else null
                 val result = runCatching {
                     if (pl.hasCatalog) {
@@ -613,7 +615,7 @@ class LiveTvRepository @Inject constructor(
                     }
                 }
                 if (err != null) {
-                    LiveTvNotice.show("Playlist \"${pl.name}\" couldn't update. $err")
+                    LiveTvNotice.show(statusText(R.string.iptv_repository_status_playlist_update_failed, pl.name, result.exceptionOrNull()?.let { playlistNoticeError(it) }.orEmpty()))
                     Log.w(TAG, "Playlist ${pl.name} failed: $err")
                     LIVE_REPORT.add("Playlist \"${pl.name}\" failed: $err" + if (pl.isXtream) " (Xtream login: server ${if (pl.xtreamServer.isBlank()) "missing" else "set"}, user ${if (pl.xtreamUsername.isBlank()) "missing" else "set"}, password ${if (pl.xtreamPassword.isBlank()) "missing" else "set"})" else "")
                 }
@@ -625,7 +627,7 @@ class LiveTvRepository @Inject constructor(
         // Build channels first so EPG matching knows which channels exist.
         if (changed || _channels.value.isEmpty()) {
             outOfTheWay()
-            setStatus(loading = true, message = addingMessage(newlyAdded) ?: "Reading channels…")
+            setStatus(loading = true, message = addingMessage(newlyAdded) ?: statusText(R.string.iptv_repository_status_reading_channels))
             buildChannels(addingMessage(newlyAdded))
             saveChannels() // so the next start uses it straight away
         }
@@ -641,7 +643,7 @@ class LiveTvRepository @Inject constructor(
             // A playlist saved again (its login, user agent…): its own guide is downloaded again too.
             val forcedHere = target.sourceId in forceIds || target.playlistId in forceIds
             if (forceEpg || stale || forcedHere || guideHoles || (target.sourceId == null && changed && !file.exists())) {
-                setStatus(loading = true, message = "Downloading guide \"${target.name}\"…")
+                setStatus(loading = true, message = statusText(R.string.iptv_repository_status_downloading_guide, target.name))
                 LIVE_REPORT.add("Downloading guide \"${target.name}\" (user agent: ${target.userAgent.ifBlank { "app default" }})")
                 val result = runCatching {
                     if (target.url.startsWith("stalker:")) {
@@ -650,7 +652,7 @@ class LiveTvRepository @Inject constructor(
                         downloadStalkerGuide(source, file, settings)
                     } else download(
                         target.url, file, target.userAgent,
-                        progressLabel = "Downloading guide \"${target.name}\"",
+                        progressLabel = { localized -> localized.getString(R.string.iptv_repository_status_downloading_guide_label, target.name) },
                         // Also whole when the guide has gone stale: a provider that keeps answering
                         // "not changed" to the short check left channels without listings overnight.
                         full = forceEpg || forcedHere || stale || guideHoles,
@@ -665,7 +667,7 @@ class LiveTvRepository @Inject constructor(
                     }
                 }
                 if (err != null) {
-                    LiveTvNotice.show("Guide \"${target.name}\" couldn't update. ${result.exceptionOrNull()?.let { plainDownloadError(it) }.orEmpty()}")
+                    LiveTvNotice.show(statusText(R.string.iptv_repository_status_guide_update_failed, target.name, result.exceptionOrNull()?.let { plainDownloadError(it) }.orEmpty()))
                     Log.w(TAG, "EPG ${target.name} failed: $err")
                     LIVE_REPORT.add("Guide \"${target.name}\" failed: $err")
                 }
@@ -681,7 +683,7 @@ class LiveTvRepository @Inject constructor(
             storedGuideEmpty = false
             guideHoles = false
             outOfTheWay()
-            setStatus(loading = true, message = "Matching guide data…")
+            setStatus(loading = true, message = statusText(R.string.iptv_repository_status_matching_data))
             // An update you asked for by hand reads every guide file again, whatever is stored.
             buildPrograms(settings, epgTargets, forceRead = forceEpg)
         }
@@ -974,7 +976,7 @@ class LiveTvRepository @Inject constructor(
         val shownAgain = skipped.filter { it in keys && it !in nowHidden }
         if (shownAgain.isNotEmpty()) {
             LIVE_REPORT.add("Guide: ${shownAgain.size} channels shown again, reading their listings")
-            setStatus(loading = true, message = "Updating guide…")
+            setStatus(loading = true, message = statusText(R.string.iptv_repository_status_updating_guide))
             buildPrograms(prefs.currentSettings(), collectEpgTargets())
             _status.value = LiveTvStatus(loading = false, loadedOnce = true)
             return@withContext
@@ -1735,11 +1737,56 @@ class LiveTvRepository @Inject constructor(
         _status.value = _status.value.copy(loading = loading, message = message, quiet = quiet, silent = routineRun && !loud)
     }
 
+    /** Resolve UI text at emission, against the app setting rather than the system locale. */
+    private fun statusText(id: Int, vararg args: Any): String =
+        context.withAppLocale().getString(id, *args)
+
+    private fun readingChannelsMessage(name: String, current: Int, total: Int): String =
+        if (total > 1) statusText(R.string.iptv_repository_status_reading_channels_from_numbered, name, current, total)
+        else statusText(R.string.iptv_repository_status_reading_channels_from, name)
+
+    private fun readingGuideMessage(name: String, current: Int = 1, total: Int = 1, percent: Long? = null): String {
+        val localized = context.withAppLocale()
+        return when {
+            percent != null && total > 1 -> localized.getString(R.string.iptv_repository_status_reading_guide_progress_numbered, name, current, total, percent)
+            percent != null -> localized.getString(R.string.iptv_repository_status_reading_guide_progress, name, percent)
+            total > 1 -> localized.getString(R.string.iptv_repository_status_reading_guide_numbered, name, current, total)
+            else -> localized.getString(R.string.iptv_repository_status_reading_guide, name)
+        }
+    }
+
+    private fun matchingGuideMessage(name: String, current: Int, total: Int): String =
+        if (total > 1) statusText(R.string.iptv_repository_status_matching_guide_numbered, name, current, total)
+        else statusText(R.string.iptv_repository_status_matching_guide, name)
+
+    private fun downloadProgressMessage(label: (Context) -> String, read: Long, total: Long?): String {
+        val localized = context.withAppLocale()
+        return if (total != null) localized.getString(R.string.iptv_repository_status_download_progress_total,
+            label(localized), statusSizeLabel(localized, read), statusSizeLabel(localized, total))
+        else localized.getString(R.string.iptv_repository_status_download_progress,
+            label(localized), statusSizeLabel(localized, read))
+    }
+
+    /** UI-only sizes: leave [sizeLabel] unchanged for logs and reports. */
+    private fun statusSizeLabel(localized: Context, bytes: Long): String = when {
+        bytes >= 1024L * 1024 * 1024 -> localized.getString(R.string.iptv_repository_status_size_gb, bytes / (1024.0 * 1024 * 1024))
+        bytes >= 1024L * 1024 -> localized.getString(R.string.iptv_repository_status_size_mb, bytes / (1024.0 * 1024))
+        else -> localized.getString(R.string.iptv_repository_status_size_kb, bytes / 1024)
+    }
+
+    /** The detailed notice only; the persisted/diagnostic error above stays unchanged. */
+    private fun playlistNoticeError(e: Throwable): String = when (e) {
+        is java.net.UnknownHostException -> statusText(R.string.iptv_repository_status_unknown_host_address,
+            e.message?.substringAfter("\"")?.substringBefore("\"") ?: statusText(R.string.iptv_repository_status_address))
+        is java.net.SocketTimeoutException -> statusText(R.string.iptv_repository_status_provider_timeout)
+        else -> e.message ?: e.javaClass.simpleName
+    }
+
     /** What went wrong with a download, in plain words (for the pill). */
     private fun plainDownloadError(e: Throwable): String = when (e) {
-        is java.net.UnknownHostException -> "Couldn't find the provider's server."
-        is java.net.SocketTimeoutException -> "The provider took too long to answer."
-        else -> e.message?.takeIf { it.isNotBlank() } ?: "Something went wrong."
+        is java.net.UnknownHostException -> statusText(R.string.iptv_repository_status_unknown_host_short)
+        is java.net.SocketTimeoutException -> statusText(R.string.iptv_repository_status_timeout_short)
+        else -> e.message?.takeIf { it.isNotBlank() } ?: statusText(R.string.iptv_repository_status_generic_error)
     }
 
     private data class EpgTarget(
@@ -1848,8 +1895,8 @@ class LiveTvRepository @Inject constructor(
     /** "Adding channels from …" for playlists just added, or null when none were. */
     private fun addingMessage(names: List<String>): String? = when (names.size) {
         0 -> null
-        1 -> "Adding channels from \"${names[0]}\"…"
-        else -> "Adding channels from ${names.size} new playlists…"
+        1 -> statusText(R.string.iptv_repository_status_adding_playlist, names[0])
+        else -> context.withAppLocale().resources.getQuantityString(R.plurals.iptv_repository_status_adding_playlists, names.size, names.size)
     }
 
     /**
@@ -1905,7 +1952,7 @@ class LiveTvRepository @Inject constructor(
                 continue
             }
             read++
-            if (fixedMessage == null) setStatus(loading = true, message = "Reading channels from \"${pl.name}\"" + (if (toRead > 1) " ($read of $toRead)" else "") + "…")
+            if (fixedMessage == null) setStatus(loading = true, message = readingChannelsMessage(pl.name, read, toRead))
             val parsed = runCatching { openMaybeGzip(file).bufferedReader().use { M3uParser.parse(it) } }
                 .onFailure { Log.w(TAG, "Parse ${pl.name} failed", it) }
                 .getOrNull() ?: continue
@@ -2058,7 +2105,6 @@ class LiveTvRepository @Inject constructor(
             if (!file.exists()) { LIVE_REPORT.add("Guide \"${target.name}\": no file downloaded yet"); return null }
             val src = target.fileId
             val stamp = targetStamp(target) + windowStamp
-            val step = if (targets.size > 1) " (${order + 1} of ${targets.size})" else ""
             val pinnedIds = overrides.values.filter { it.sourceId == target.fileId }.mapTo(HashSet()) { it.xmltvId }
             val idHits = HashMap<String, MutableSet<LiveChannel>>()
             val nameHits = HashMap<String, MutableSet<LiveChannel>>()
@@ -2147,7 +2193,7 @@ class LiveTvRepository @Inject constructor(
                 if (used() > rt.maxMemory() * 0.85) System.gc()
                 if (used() > rt.maxMemory() * 0.85) {
                     LIVE_REPORT.add("Guide \"${target.name}\" skipped: memory nearly full (${used() / 1048576} of ${rt.maxMemory() / 1048576} MB)")
-                    setStatus(loading = true, message = "Not enough memory for guide \"${target.name}\" — skipped", loud = true)
+                    setStatus(loading = true, message = statusText(R.string.iptv_repository_status_guide_memory_skipped, target.name), loud = true)
                     return fallBack()
                 }
             }
@@ -2158,10 +2204,10 @@ class LiveTvRepository @Inject constructor(
                 val at = System.currentTimeMillis()
                 if (at - shownAt > 750) {
                     shownAt = at
-                    setStatus(loading = true, message = "Reading guide \"${target.name}\"$step… ${(bytes * 100 / fileSize).coerceIn(0, 99)}%")
+                    setStatus(loading = true, message = readingGuideMessage(target.name, order + 1, targets.size, (bytes * 100 / fileSize).coerceIn(0, 99)))
                 }
             }
-            setStatus(loading = true, message = "Reading guide \"${target.name}\"$step…")
+            setStatus(loading = true, message = readingGuideMessage(target.name, order + 1, targets.size))
             val readStart = System.currentTimeMillis()
             val writer = runCatching { guideDb.startSource(src) }
                 .onFailure { Log.w(TAG, "Couldn't start storing ${target.name}", it) }.getOrNull()
@@ -2233,8 +2279,7 @@ class LiveTvRepository @Inject constructor(
             reads[target.fileId] = read
             val meta = read.meta
             val entries = read.entries
-            val step = if (targets.size > 1) " (${order + 1} of ${targets.size})" else ""
-            setStatus(loading = true, message = "Matching guide \"${target.name}\"$step…")
+            setStatus(loading = true, message = matchingGuideMessage(target.name, order + 1, targets.size))
             // How far ahead this guide's listings actually go (the file's own last show), so a
             // guide that stops early can be told apart from the app cutting it short.
             run {
@@ -2498,7 +2543,7 @@ class LiveTvRepository @Inject constructor(
                     .getOrDefault(false)
                 if (!quick) {
                     LIVE_REPORT.add("Assign EPG: guide channel lists not ready, so every guide was read")
-                    setStatus(loading = true, message = "Updating guide…")
+                    setStatus(loading = true, message = statusText(R.string.iptv_repository_status_updating_guide))
                     buildPrograms(prefs.currentSettings(), collectEpgTargets())
                 }
                 _status.value = LiveTvStatus(loading = false, loadedOnce = true)
@@ -2546,7 +2591,7 @@ class LiveTvRepository @Inject constructor(
             val target = targets.firstOrNull { it.fileId == sourceId } ?: continue
             val file = epgFile(target.fileId)
             if (!file.exists()) continue
-            setStatus(loading = true, message = "Reading guide \"${target.name}\"…")
+            setStatus(loading = true, message = readingGuideMessage(target.name))
             val parsed = openMaybeGzip(file).use { input ->
                 XmltvParser.parse(input, windowStart, windowEnd) { wanted }
             }
@@ -2626,7 +2671,7 @@ class LiveTvRepository @Inject constructor(
     fun rematchEpg() {
         scope.launch {
             mutex.withLock {
-                setStatus(loading = true, message = "Updating guide…")
+                setStatus(loading = true, message = statusText(R.string.iptv_repository_status_updating_guide))
                 buildPrograms(prefs.currentSettings(), collectEpgTargets())
                 _status.value = LiveTvStatus(loading = false, loadedOnce = true)
             }
@@ -2666,7 +2711,7 @@ class LiveTvRepository @Inject constructor(
         url: String,
         target: File,
         userAgent: String,
-        progressLabel: String? = null,
+        progressLabel: ((Context) -> String)? = null,
         /** Ask for the whole file, not "only if changed" (Update now: a cache that wrongly
          *  answers "not changed" otherwise keeps an old guide forever). */
         full: Boolean = false,
@@ -2727,7 +2772,7 @@ class LiveTvRepository @Inject constructor(
                             val now = System.currentTimeMillis()
                             if (now - shownAt > 750) {
                                 shownAt = now
-                                setStatus(loading = true, message = "$progressLabel… " + sizeLabel(read) + (total?.let { " of " + sizeLabel(it) } ?: ""))
+                                setStatus(loading = true, message = downloadProgressMessage(progressLabel, read, total))
                             }
                         }
                     }
@@ -2772,7 +2817,7 @@ class LiveTvRepository @Inject constructor(
      * checked again the same way whenever it stops working.
      */
     private suspend fun downloadM3u(pl: PlaylistSource, file: File): Boolean {
-        val label = "Downloading playlist \"${pl.name}\""
+        val label: (Context) -> String = { localized -> localized.getString(R.string.iptv_repository_status_downloading_playlist_label, pl.name) }
         val url = pl.resolvedUrl()
         if (pl.userAgent.isNotBlank()) return download(url, file, pl.userAgent, progressLabel = label)
         val first = pl.fallbackUserAgent.ifBlank { DEFAULT_UA }
@@ -3123,7 +3168,7 @@ class LiveTvRepository @Inject constructor(
                         out.write("#EXTINF:-1$attrs,$title\n")
                         out.write("$base/live/$user/$pass/$streamId.$ext\n")
                         count++
-                        if (count % 500 == 0) setStatus(loading = true, message = "Loading channels from ${pl.name}… ${"%,d".format(count)}")
+                        if (count % 500 == 0) setStatus(loading = true, message = statusText(R.string.iptv_repository_status_loading_channels, pl.name, count))
                     }
                     if (keyed) reader.endObject() else reader.endArray()
                 }
@@ -3314,10 +3359,10 @@ class LiveTvRepository @Inject constructor(
         val days = a.daysLeft() ?: return
         com.nuvio.tv.livetv.record.LiveTvNotice.show(
             when {
-                a.expiresAtMs <= System.currentTimeMillis() -> "\"$name\" has expired"
-                days == 0L -> "\"$name\" expires today"
-                days == 1L -> "\"$name\" expires tomorrow"
-                else -> "\"$name\" expires in $days days"
+                a.expiresAtMs <= System.currentTimeMillis() -> statusText(R.string.iptv_repository_status_expired, name)
+                days == 0L -> statusText(R.string.iptv_repository_status_expires_today, name)
+                days == 1L -> statusText(R.string.iptv_repository_status_expires_tomorrow, name)
+                else -> context.withAppLocale().resources.getQuantityString(R.plurals.iptv_repository_status_expires_days, days.toInt(), name, days)
             }
         )
     }

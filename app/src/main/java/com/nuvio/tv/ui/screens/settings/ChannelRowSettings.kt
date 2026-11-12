@@ -18,9 +18,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.R
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.PanelRowList
 import com.nuvio.tv.livetv.model.PanelRowLists
@@ -72,8 +75,8 @@ internal fun ChannelRowDialog(
     LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
     NuvioDialog(
         onDismiss = onDismiss,
-        title = "Quick Channels",
-        subtitle = "Shortcuts tucked under the play bar. Press Down on the bar to open them.",
+        title = stringResource(R.string.iptv_quick_channels_title),
+        subtitle = stringResource(R.string.iptv_quick_channels_subtitle),
         width = 640.dp
     ) {
         LazyColumn(
@@ -82,7 +85,7 @@ internal fun ChannelRowDialog(
         ) {
             item(key = "shown") {
                 SettingsToggleRow(
-                    title = "Show Quick Channels",
+                    title = stringResource(R.string.iptv_quick_channels_show),
                     subtitle = null,
                     checked = PanelRowLists.shown(settings),
                     onToggle = { onUpdate { PanelRowLists.setShown(it, !PanelRowLists.shown(it)) } },
@@ -91,15 +94,16 @@ internal fun ChannelRowDialog(
             }
             item(key = "opens") {
                 SettingsActionRow(
-                    title = "Opens On",
-                    subtitle = "The list it shows first",
-                    value = if (settings.panelRowOpens == "first") "First list" else "Last one used",
+                    title = stringResource(R.string.iptv_quick_channels_opens_on),
+                    subtitle = stringResource(R.string.iptv_quick_channels_opens_on_hint),
+                    value = stringResource(if (settings.panelRowOpens == "first")
+                        R.string.iptv_quick_channels_first_list else R.string.iptv_quick_channels_last_used),
                     onClick = { onUpdate { it.copy(panelRowOpens = if (it.panelRowOpens == "first") "last" else "first") } }
                 )
             }
             item(key = "heading") {
                 Text(
-                    text = "Lists in the row · OK turns one on or off, the arrows move it",
+                    text = stringResource(R.string.iptv_quick_channels_lists_hint),
                     style = MaterialTheme.typography.labelMedium,
                     color = NuvioTheme.colors.TextTertiary,
                     modifier = Modifier.padding(start = NuvioTheme.spacing.lg, top = NuvioTheme.spacing.sm, bottom = NuvioTheme.spacing.xxs)
@@ -108,10 +112,12 @@ internal fun ChannelRowDialog(
             items(lists, key = { "list:" + it.id }) { l ->
                 val index = lists.indexOf(l)
                 val (title, subtitle) = when (l.id) {
-                    PanelRowLists.RECENT -> "Recently Watched" to "Built in"
-                    PanelRowLists.FAVORITES -> "Favorites" to "Built in"
-                    else -> names[l.id]?.let { g -> g.name to (g.playlist?.let { "$it · playlist group" } ?: "Your group") }
-                        ?: ("Group not found" to "Not in your playlists right now")
+                    PanelRowLists.RECENT -> stringResource(R.string.iptv_quick_channels_recent) to stringResource(R.string.iptv_quick_channels_built_in)
+                    PanelRowLists.FAVORITES -> stringResource(R.string.iptv_quick_channels_favorites) to stringResource(R.string.iptv_quick_channels_built_in)
+                    else -> names[l.id]?.let { g -> g.name to (g.playlist?.let {
+                        stringResource(R.string.iptv_quick_channels_playlist_group, it)
+                    } ?: stringResource(R.string.iptv_quick_channels_your_group)) }
+                        ?: (stringResource(R.string.iptv_quick_channels_group_missing) to stringResource(R.string.iptv_quick_channels_group_missing_hint))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SettingsToggleRow(
@@ -127,8 +133,8 @@ internal fun ChannelRowDialog(
             }
             item(key = "add") {
                 SettingsActionRow(
-                    title = "Add a Playlist Group…",
-                    subtitle = "Any group from any playlist, your own groups too",
+                    title = stringResource(R.string.iptv_quick_channels_add_group),
+                    subtitle = stringResource(R.string.iptv_quick_channels_add_group_hint),
                     leadingIcon = Icons.Default.Add,
                     onClick = { adding = true }
                 )
@@ -149,23 +155,25 @@ private fun AddRowGroupsDialog(
     LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
     NuvioDialog(
         onDismiss = onDismiss,
-        title = "Add Playlist Groups",
-        subtitle = if (groups.isEmpty()) "No groups yet. Add a playlist first." else "Each one you tick becomes its own list in Quick Channels.",
+        title = stringResource(R.string.iptv_quick_channels_add_groups_title),
+        subtitle = stringResource(if (groups.isEmpty()) R.string.iptv_quick_channels_no_groups
+            else R.string.iptv_quick_channels_add_groups_hint),
         width = 600.dp
     ) {
         if (groups.isEmpty()) {
             SettingsDialogActionRow {
-                SettingsDialogActionButton(text = "Close", onClick = onDismiss, primary = true)
+                SettingsDialogActionButton(text = stringResource(R.string.action_close), onClick = onDismiss, primary = true)
             }
             return@NuvioDialog
         }
+        val myGroups = stringResource(R.string.iptv_quick_channels_my_groups)
         LazyColumn(
             modifier = Modifier.heightIn(max = 430.dp),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
         ) {
             var lastHeading: String? = null
             groups.forEachIndexed { i, g ->
-                val heading = g.playlist ?: "My Groups"
+                val heading = g.playlist ?: myGroups
                 if (heading != lastHeading) {
                     lastHeading = heading
                     item(key = "h:$i") {
@@ -180,7 +188,7 @@ private fun AddRowGroupsDialog(
                 item(key = "g:" + g.id) {
                     SettingsToggleRow(
                         title = g.name,
-                        subtitle = if (g.count == 1) "1 channel" else "${g.count} channels",
+                        subtitle = pluralStringResource(R.plurals.iptv_quick_channels_count, g.count, g.count),
                         checked = g.id in chosen,
                         onToggle = { onToggle(g) },
                         modifier = if (i == 0) Modifier.focusRequester(first) else Modifier

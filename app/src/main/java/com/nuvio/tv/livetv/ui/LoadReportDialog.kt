@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.livetv.model.LiveTvLoadReport
 import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.R
 
 /**
  * Developer tool: what Live TV did while loading this time (saved copies used or not and why,
@@ -52,14 +54,15 @@ import com.nuvio.tv.ui.theme.NuvioTheme
  */
 @Composable
 fun LoadReportDialog(onDismiss: () -> Unit) {
+    val reportTitle = stringResource(R.string.iptv_settings_support_report_title)
     val lines by LiveTvLoadReport.lines.collectAsStateWithLifecycle()
     val text = lines.joinToString("\n")
     // The whole report as a web page on the home network, opened from a phone (a QR code can
     // only hold the last few lines). Runs only while this screen is open.
     var handle by remember { mutableStateOf<com.nuvio.tv.livetv.crash.ReportServer.Handle?>(null) }
     var noNetwork by remember { mutableStateOf(false) }
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        val h = com.nuvio.tv.livetv.crash.ReportServer.start("Live TV start-up report", short = { LiveTvLoadReport.shortText() }) {
+    androidx.compose.runtime.DisposableEffect(reportTitle) {
+        val h = com.nuvio.tv.livetv.crash.ReportServer.start(reportTitle, short = { LiveTvLoadReport.shortText() }) {
             LiveTvLoadReport.buildLine + "\n" + LiveTvLoadReport.lines.value.joinToString("\n")
         }
         handle = h
@@ -70,9 +73,9 @@ fun LoadReportDialog(onDismiss: () -> Unit) {
         handle?.url?.let { runCatching { com.nuvio.tv.core.qr.QrCodeGenerator.generate(it, 360) }.getOrNull() }
     }
     LiveDialog(onDismiss = onDismiss, width = 860.dp) {
-        LiveText("Live TV start-up report", size = 20.sp, weight = FontWeight.Bold)
+        LiveText(reportTitle, size = 20.sp, weight = FontWeight.Bold)
         LiveText(
-            "Since the app started. ▲ ▼ to scroll.",
+            stringResource(R.string.iptv_settings_support_report_subtitle),
             color = NuvioTheme.colors.TextSecondary, size = 13.sp
         )
         LiveText(LiveTvLoadReport.buildLine, color = NuvioTheme.colors.TextSecondary, size = 13.sp)
@@ -117,7 +120,7 @@ fun LoadReportDialog(onDismiss: () -> Unit) {
                     }
                     .focusable()
             ) {
-                if (lines.isEmpty()) item { LiveText("Nothing yet: open Live TV first.", size = 13.sp) }
+                if (lines.isEmpty()) item { LiveText(stringResource(R.string.iptv_settings_support_report_empty), size = 13.sp) }
                 items(lines) { line ->
                     androidx.tv.material3.Text(
                         text = line, fontSize = 12.sp, fontFamily = FontFamily.Monospace,
@@ -126,12 +129,12 @@ fun LoadReportDialog(onDismiss: () -> Unit) {
                 }
             }
             Column(Modifier.width(210.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                LiveText("Send the whole report", size = 13.sp, weight = FontWeight.Bold)
+                LiveText(stringResource(R.string.iptv_settings_support_report_send), size = 13.sp, weight = FontWeight.Bold)
                 if (noNetwork) {
-                    LiveText("Connect this TV to Wi-Fi to send the report from your phone.", size = 11.sp, color = NuvioTheme.colors.TextSecondary)
+                    LiveText(stringResource(R.string.iptv_settings_support_report_no_network), size = 11.sp, color = NuvioTheme.colors.TextSecondary)
                 } else {
                     LiveText(
-                        "1. Put your phone on the same Wi-Fi as this TV.\n2. Scan this code with your phone's camera, or type the address below.\n3. Tap Copy short report (it fits in one Discord message), then paste it in your message.",
+                        stringResource(R.string.iptv_settings_support_report_phone_instructions),
                         size = 11.sp, color = NuvioTheme.colors.TextSecondary
                     )
                 }
@@ -146,6 +149,6 @@ fun LoadReportDialog(onDismiss: () -> Unit) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        MenuItem("Close", onClick = onDismiss)
+        MenuItem(stringResource(R.string.action_close), onClick = onDismiss)
     }
 }
