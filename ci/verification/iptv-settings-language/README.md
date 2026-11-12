@@ -2,6 +2,8 @@
 
 Captures of the same Quick Channels component using English and Spanish Activity resources in `IptvSettingsLocaleTest`. They show the final localized UI; the English capture is not a before-Spanish screenshot. Source implementation: `4641970ee0b44d444e54ad22442694c07d5f3276`.
 
+This verification covers the TV repository only. [Nuvio + IPTV Mobile](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile) is a separate codebase. The TV APK's phone launcher, a narrow test pane, and the phone setup web page do not establish coverage of that mobile application.
+
 Validation on Android 16, x86_64 emulator:
 
 - 304 Live TV JVM tests passed (33 suites, no failures/errors/skips).
