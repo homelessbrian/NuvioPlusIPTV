@@ -2971,6 +2971,7 @@ private fun syncPartLabels(context: Context, part: com.nuvio.tv.livetv.sync.Sync
         com.nuvio.tv.livetv.sync.SyncPart.FAVORITES -> R.string.iptv_settings_sync_favorites to R.string.iptv_settings_sync_favorites_description
         com.nuvio.tv.livetv.sync.SyncPart.SPORTS -> R.string.iptv_settings_sports to R.string.iptv_settings_sync_sports_description
         com.nuvio.tv.livetv.sync.SyncPart.CALENDAR -> R.string.iptv_settings_sync_calendar to R.string.iptv_settings_sync_calendar_description
+        com.nuvio.tv.livetv.sync.SyncPart.BEHAVIOR -> R.string.iptv_settings_sync_behavior to R.string.iptv_settings_sync_behavior_description
         com.nuvio.tv.livetv.sync.SyncPart.LOOK -> R.string.iptv_settings_sync_look to R.string.iptv_settings_sync_look_description
     }
     return context.getString(title) to context.getString(description)

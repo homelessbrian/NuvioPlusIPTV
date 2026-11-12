@@ -662,6 +662,8 @@
     <string name="iptv_settings_sync_sports_description">"Followed teams and leagues, and Choose Leagues."</string>
     <string name="iptv_settings_sync_calendar">"Calendar"</string>
     <string name="iptv_settings_sync_calendar_description">"Followed and hidden shows."</string>
+    <string name="iptv_settings_sync_behavior">"Behavior and options"</string>
+    <string name="iptv_settings_sync_behavior_description">"How often lists and guides refresh, recording and catch-up options, sorting, search sources and Calendar choices. Not the look, so it is shared with your phone too."</string>
     <string name="iptv_settings_sync_look">"Look and layout"</string>
     <string name="iptv_settings_sync_look_description">"Themes, menu, card styles and other options, kept the same on your TVs. Turn off to keep each TV its own."</string>
     <string name="iptv_settings_catchup_zone_description">"The clock %1$s keeps its replays on. Automatic finds it from the provider. If replays play a different show, pick the time zone whose clock matches the provider\'s."</string>

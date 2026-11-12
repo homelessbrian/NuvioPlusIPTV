@@ -662,6 +662,8 @@
     <string name="iptv_settings_sync_sports_description">"Equipos y ligas seguidos y selección de ligas."</string>
     <string name="iptv_settings_sync_calendar">"Calendario"</string>
     <string name="iptv_settings_sync_calendar_description">"Programas seguidos y ocultos."</string>
+    <string name="iptv_settings_sync_behavior">"Comportamiento y opciones"</string>
+    <string name="iptv_settings_sync_behavior_description">"Frecuencia de actualización de listas y guías, opciones de grabación y de retransmisión, orden, fuentes de búsqueda y opciones del Calendario. No incluye el aspecto, así que también se comparte con tu teléfono."</string>
     <string name="iptv_settings_sync_look">"Aspecto y diseño"</string>
     <string name="iptv_settings_sync_look_description">"Temas, menú, estilos de tarjetas y otras opciones iguales en tus televisores. Desactívalo para que cada televisor tenga sus propias opciones."</string>
     <string name="iptv_settings_catchup_zone_description">"La zona horaria que usa %1$s para sus programas en diferido. Automático la obtiene del proveedor. Si se reproduce otro programa, elige la zona horaria cuyo reloj coincida con el del proveedor."</string>
