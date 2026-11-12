@@ -118,6 +118,7 @@ fun MultiviewScreen(
         MultiviewPlaybackSession(
             context.applicationContext,
             initialLayout = request?.let { r -> MultiviewLayout.entries.first { it.paneCount == r.panes.coerceIn(1, 4) } }
+                ?: MultiviewLayoutMemory.load(context.applicationContext)
                 ?: MultiviewLayout.TWO,
             mayPlayChannel = { channel ->
                 viewModel.activeProfileId.value == openingProfile &&
@@ -145,6 +146,7 @@ fun MultiviewScreen(
     var seeded by remember { mutableStateOf(queued.isEmpty()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var editorOpen by remember { mutableStateOf(true) }
+    var layoutOpen by remember { mutableStateOf(false) }
     var editedPane by remember { mutableIntStateOf(if (request?.channelKey != null && request.panes > 1) 1 else 0) }
     val paneFocus = remember { List(4) { FocusRequester() } }
     val editFocus = remember { FocusRequester() }
@@ -280,15 +282,20 @@ fun MultiviewScreen(
             }
         }
     }
-    LaunchedEffect(editorOpen, state.layout) {
-        if (!editorOpen) paneFocus[state.focusedPane].requestFocus()
+    LaunchedEffect(editorOpen, layoutOpen, state.layout) {
+        if (!editorOpen && !layoutOpen) paneFocus[state.focusedPane].requestFocus()
+    }
+    fun applyLayout(layout: MultiviewLayout) {
+        session.setLayout(layout)
+        MultiviewLayoutMemory.save(context.applicationContext, layout)
+        editedPane = editedPane.coerceIn(0, layout.paneCount - 1)
     }
     BackHandler {
         if (editorOpen) editorOpen = false else if (startOnSports) single() else onBack()
     }
 
     Box(
-        Modifier.fillMaxSize().background(NuvioTheme.colors.Background).onPreviewKeyEvent { event ->
+        Modifier.fillMaxSize().background(NuvioTheme.colors.Background).multiviewBackdrop().onPreviewKeyEvent { event ->
             if (event.key == Key.Menu) {
                 if (event.type == KeyEventType.KeyDown) {
                     editedPane = state.focusedPane
@@ -328,8 +335,8 @@ fun MultiviewScreen(
                             .width(availableWidth * (rect.right - rect.left))
                             .height(availableHeight * (rect.bottom - rect.top)).padding(4.dp)
                             .focusRequester(paneFocus[pane.id])
-                            .focusProperties { canFocus = !editorOpen }
-                            .onFocusChanged { if (it.isFocused && !editorOpen) session.focusPane(pane.id) }
+                            .focusProperties { canFocus = !editorOpen && !layoutOpen }
+                            .onFocusChanged { if (it.isFocused && !editorOpen && !layoutOpen) session.focusPane(pane.id) }
                             .onPreviewKeyEvent { event ->
                                 val direction = when (event.key) {
                                     Key.DirectionLeft -> MultiviewDirection.LEFT
@@ -380,10 +387,7 @@ fun MultiviewScreen(
                 LiveText(if (startOnSports) "SPORTS" else "LIVE TV", size = 9.sp, color = NuvioTheme.colors.TextSecondary)
                 LiveText("Multiview", size = 13.sp, weight = FontWeight.ExtraBold)
             }
-            LiveText("Layout", size = 11.sp, color = NuvioTheme.colors.TextSecondary)
-            MULTIVIEW_LAYOUTS.forEach { (layout, label) ->
-                MultiviewChip(label, selected = state.layout == layout) { session.setLayout(layout) }
-            }
+            MultiviewLayoutButton(multiviewLayoutTitle(state.layout), state.layout) { layoutOpen = true }
             MultiviewBarDivider()
             MultiviewChip("Streams", Modifier.focusRequester(editFocus)) {
                 editedPane = state.focusedPane
@@ -444,10 +448,13 @@ fun MultiviewScreen(
         }
     }
     if (editorOpen && !sportsMode) {
-        MultiviewEditor(
+        val pane = editedPane.coerceIn(0, state.layout.paneCount - 1)
+        MultiviewChannelPicker(
             state = state,
-            paneId = editedPane.coerceIn(0, state.layout.paneCount - 1),
-            onPane = { editedPane = it },
+            paneId = pane,
+            // The panel sits on the side away from the pane being filled.
+            dockRight = multiviewPaneBounds(state.layout).firstOrNull { it.id == pane }
+                ?.let { (it.left + it.right) / 2f <= 0.5f } ?: true,
             optionsSource = allowedChannels,
             groups = pickerGroups,
             channelsIn = viewModel::channelsIn,
@@ -457,10 +464,12 @@ fun MultiviewScreen(
                 sportsUsed = true
                 sportsMode = true
             },
+            onLayout = {
+                editorOpen = false
+                layoutOpen = true
+            },
             panelBackground = panelBackground,
-            use24h = use24h,
             nowOn = viewModel::nowOn,
-            onLayout = { layout -> session.setLayout(layout); editedPane = editedPane.coerceIn(0, layout.paneCount - 1) },
             onSelect = { option ->
                 // Recheck against current permissions when OK is pressed, even during a search.
                 if (viewModel.activeProfileId.value != openingProfile) leaveChangedProfile()
@@ -476,270 +485,17 @@ fun MultiviewScreen(
             onClose = { editorOpen = false }
         )
     }
+    if (layoutOpen) {
+        MultiviewLayoutPicker(
+            current = state.layout,
+            panelBackground = panelBackground,
+            onPick = { applyLayout(it) },
+            onClose = { layoutOpen = false }
+        )
+    }
 }
-
-private val MULTIVIEW_LAYOUTS = listOf(MultiviewLayout.TWO to "2", MultiviewLayout.THREE to "3", MultiviewLayout.FOUR to "4")
 
 @Composable
 private fun MultiviewBarDivider() {
     Box(Modifier.width(1.dp).height(18.dp).background(SportsLook.Divider))
-}
-
-/** The channel picker: a floating glass card like the play bar, with a small Search button. */
-@Composable
-private fun MultiviewEditor(
-    state: MultiviewState,
-    paneId: Int,
-    onPane: (Int) -> Unit,
-    optionsSource: List<LiveChannel>,
-    groups: List<MultiviewGroup>,
-    channelsIn: suspend (String?) -> List<MultiviewChannelOption>,
-    group: String?,
-    onGroup: (String?) -> Unit,
-    onSports: () -> Unit,
-    panelBackground: String,
-    use24h: Boolean,
-    nowOn: suspend (Collection<String>) -> Map<String, EpgProgram>,
-    onLayout: (MultiviewLayout) -> Unit,
-    onSelect: (MultiviewChannelOption) -> Unit,
-    onClear: () -> Unit,
-    onRetry: () -> Unit,
-    onClose: () -> Unit
-) {
-    var query by remember { mutableStateOf("") }
-    var searching by remember { mutableStateOf(false) }
-    var searchUsed by remember { mutableStateOf(false) }
-    val closeFocus = remember { FocusRequester() }
-    val searchFocus = remember { FocusRequester() }
-    val fieldFocus = remember { FocusRequester() }
-    val firstCard = remember { FocusRequester() }
-    val selectedPane = state.panes.firstOrNull { it.id == paneId }
-    // Preparing and searching large playlists never blocks TV focus or typing. All picker state is URL-free.
-    val options by produceState(emptyList<MultiviewChannelOption>(), optionsSource) {
-        value = withContext(Dispatchers.Default) {
-            optionsSource.mapIndexed { index, channel ->
-                if (index % 128 == 0) ensureActive()
-                MultiviewChannelOption(channel.key, channel.name, channel.number, channel.group)
-            }
-        }
-    }
-    val logos by produceState(emptyMap<String, String>(), optionsSource) {
-        value = withContext(Dispatchers.Default) {
-            buildMap { optionsSource.forEach { c -> c.logo?.takeIf { it.isNotBlank() }?.let { put(c.key, it) } } }
-        }
-    }
-    // Groups: the strip can show one group's channels, or the list of groups to pick from.
-    var groupsOpen by remember { mutableStateOf(false) }
-    var cardFocusPending by remember { mutableStateOf(false) }
-    val groupTileFocus = remember { FocusRequester() }
-    // The chosen group's channels in the guide's order (your "Reorder channels" first); rebuilt when the lists change.
-    val scoped by produceState(emptyList<MultiviewChannelOption>(), group, groups, optionsSource) {
-        value = channelsIn(group?.takeIf { id -> groups.any { it.id == id } })
-    }
-    val groupTitle = group?.let { id -> groups.firstOrNull { it.id == id }?.title }
-    val results by produceState(emptyList<MultiviewChannelOption>(), scoped, query) {
-        value = searchMultiviewChannels(scoped, query)
-    }
-    val latestResults by rememberUpdatedState(results)
-    fun chooseGroup(id: String?) {
-        onGroup(id)
-        groupsOpen = false
-        cardFocusPending = true
-    }
-    // What's on now for the cards shown, after typing pauses (one short read of the stored guide).
-    val shows by produceState(emptyMap<String, EpgProgram>(), results) {
-        delay(250L)
-        value = nowOn(results.map { it.key })
-    }
-    val now = remember(shows) { System.currentTimeMillis() }
-    val paneOf = remember(state.panes) {
-        buildMap { state.panes.forEach { pane -> pane.channelKey?.let { k -> if (k !in this) put(k, pane.id) } } }
-    }
-    fun closeSearch() {
-        query = ""
-        searching = false
-    }
-    LaunchedEffect(Unit) { closeFocus.requestFocus() }
-    LaunchedEffect(searching) {
-        if (searching) runCatching { fieldFocus.requestFocus() }
-        else if (searchUsed) runCatching { searchFocus.requestFocus() }
-    }
-    LaunchedEffect(groupsOpen) {
-        if (groupsOpen) {
-            delay(80L)
-            runCatching { groupTileFocus.requestFocus() }
-        }
-    }
-    LaunchedEffect(cardFocusPending, results) {
-        if (cardFocusPending && !groupsOpen) {
-            // Wait for the chosen group's cards to be drawn, then land on the first one.
-            delay(150L)
-            if (latestResults.isNotEmpty()) runCatching { firstCard.requestFocus() }
-            else runCatching { searchFocus.requestFocus() }
-            cardFocusPending = false
-        }
-    }
-    Dialog(onDismissRequest = { if (searching) closeSearch() else if (groupsOpen) groupsOpen = false else onClose() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.15f))) {
-            Column(
-                Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 16.dp)
-                    .fillMaxWidth().height(204.dp)
-                    .multiviewPanel(panelBackground)
-                    .padding(horizontal = 16.dp, vertical = 10.dp).focusGroup(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 32.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (searching) {
-                        Box(Modifier.width(300.dp)) {
-                            LiveTextField(value = query, onValueChange = { query = it }, hint = "Search channels",
-                                focusRequester = fieldFocus,
-                                onDone = { if (results.isNotEmpty()) runCatching { firstCard.requestFocus() } })
-                        }
-                        LiveText(if (query.isBlank()) "Type part of a channel's name" else "${results.size} matches",
-                            size = 11.sp, color = NuvioTheme.colors.TextSecondary)
-                        Spacer(Modifier.weight(1f))
-                        MultiviewChip("Close search", onClick = ::closeSearch)
-                    } else {
-                        Column(Modifier.width(118.dp)) {
-                            LiveText("Multiview · Pane ${paneId + 1}", size = 9.sp, color = NuvioTheme.colors.TextSecondary)
-                            LiveText(if (groupsOpen) "Groups" else groupTitle ?: "Streams", size = 14.sp,
-                                weight = FontWeight.ExtraBold, maxLines = 1)
-                        }
-                        LiveText("Pane", size = 11.sp, color = NuvioTheme.colors.TextSecondary)
-                        state.panes.forEach { pane ->
-                            MultiviewChip("P${pane.id + 1}", selected = pane.id == paneId) { onPane(pane.id) }
-                        }
-                        Spacer(Modifier.width(4.dp))
-                        LiveText("Layout", size = 11.sp, color = NuvioTheme.colors.TextSecondary)
-                        MULTIVIEW_LAYOUTS.forEach { (layout, label) ->
-                            MultiviewChip(label, selected = state.layout == layout) { onLayout(layout) }
-                        }
-                        Spacer(Modifier.weight(1f))
-                        MultiviewChip("Groups", selected = groupsOpen || group != null, icon = Icons.Default.GridView) {
-                            groupsOpen = !groupsOpen
-                        }
-                        MultiviewChip("Sports", icon = Icons.Default.SportsSoccer, onClick = onSports)
-                        MultiviewChip("Search", Modifier.focusRequester(searchFocus), icon = Icons.Default.Search) {
-                            searchUsed = true
-                            groupsOpen = false
-                            searching = true
-                        }
-                        MultiviewChip("Clear", onClick = onClear)
-                        if (selectedPane?.error != null) MultiviewChip("Retry", onClick = onRetry)
-                        MultiviewChip("Close", Modifier.focusRequester(closeFocus), onClick = onClose)
-                    }
-                }
-                if (groupsOpen) {
-                    LazyRow(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        item(key = "all") {
-                            MultiviewGroupCard("All channels", options.size, group == null,
-                                if (group == null) Modifier.focusRequester(groupTileFocus) else Modifier) { chooseGroup(null) }
-                        }
-                        itemsIndexed(groups, key = { _, g -> g.id }) { _, g ->
-                            MultiviewGroupCard(g.title, g.count, group == g.id,
-                                if (group == g.id) Modifier.focusRequester(groupTileFocus) else Modifier) { chooseGroup(g.id) }
-                        }
-                    }
-                } else if (results.isEmpty()) {
-                    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.CenterStart) {
-                        LiveText(if (options.isEmpty()) "No available channels. Add a playlist in Live TV settings." else "No matching channels.",
-                            color = NuvioTheme.colors.TextSecondary, maxLines = 2)
-                    }
-                } else {
-                    LazyRow(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        itemsIndexed(results, key = { _, option -> option.key }) { index, option ->
-                            val inPane = paneOf[option.key]
-                            MultiviewChannelCard(
-                                option = option,
-                                logo = logos[option.key],
-                                show = shows[option.key],
-                                now = now,
-                                use24h = use24h,
-                                playingHere = selectedPane?.channelKey == option.key,
-                                otherPane = inPane?.takeIf { it != paneId },
-                                modifier = if (index == 0) Modifier.focusRequester(firstCard) else Modifier,
-                            ) { onSelect(option) }
-                        }
-                    }
-                }
-                val shown = if (query.isBlank()) "${groupTitle ?: "All channels"} · ${scoped.size}" else "${results.size} matches"
-                val capped = if ((if (query.isBlank()) scoped.size else results.size) > 200) " (first 200 shown)" else ""
-                LiveText(
-                    if (searching) "Down: matches · OK: play in P${paneId + 1} · Back: close search"
-                    else if (groupsOpen) "Groups · ${groups.size + 1} · OK: show this group's channels · Back: return to channels"
-                    else "$shown$capped · Sound: P${state.focusedPane + 1} · OK: play in P${paneId + 1} · Back: close",
-                    color = NuvioTheme.colors.TextSecondary, size = 10.sp)
-            }
-        }
-    }
-}
-
-/** A group tile in the picker strip: same card frame as the channels, with the group's name and size. */
-@Composable
-private fun MultiviewGroupCard(
-    title: String,
-    count: Int,
-    current: Boolean,
-    modifier: Modifier,
-    onClick: () -> Unit,
-) {
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        modifier.width(178.dp).fillMaxHeight()
-            .onFocusChanged { focused = it.isFocused }
-            .sportsFrame(focused, playing = current, accent = NuvioTheme.colors.Secondary, radius = 10.dp)
-            .clickable(onClick = onClick)
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Spacer(Modifier.weight(1f))
-            if (current) SportsBadge("CURRENT", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
-        }
-        Spacer(Modifier.weight(1f))
-        LiveText(title, size = 14.sp, weight = FontWeight.ExtraBold, maxLines = 2)
-        LiveText("$count channels", size = 11.sp, color = NuvioTheme.colors.TextSecondary)
-    }
-}
-
-/** A channel card in the picker strip: Sports' card frame, the channel's logo and what's on now. */
-@Composable
-private fun MultiviewChannelCard(
-    option: MultiviewChannelOption,
-    logo: String?,
-    show: EpgProgram?,
-    now: Long,
-    use24h: Boolean,
-    playingHere: Boolean,
-    otherPane: Int?,
-    modifier: Modifier,
-    onClick: () -> Unit,
-) {
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        modifier.width(200.dp).fillMaxHeight()
-            .onFocusChanged { focused = it.isFocused }
-            .sportsFrame(focused, playing = playingHere, accent = NuvioTheme.colors.Secondary, radius = 10.dp)
-            .clickable(onClick = onClick)
-            .padding(9.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Row(Modifier.fillMaxWidth().height(20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            if (logo != null) ChannelLogo(logo, 18.dp)
-            LiveText("${option.number} · ${option.group}", Modifier.weight(1f), size = 10.sp, color = NuvioTheme.colors.TextSecondary)
-            when {
-                playingHere -> SportsBadge("PLAYING", NuvioTheme.colors.Secondary, NuvioTheme.colors.OnSecondary)
-                otherPane != null -> SportsBadge("P${otherPane + 1}", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
-            }
-        }
-        LiveText(option.title, size = 13.sp, weight = FontWeight.ExtraBold, maxLines = 2)
-        if (show != null) LiveText(show.title + " · " + multiviewShowTimes(show, use24h), size = 10.sp, color = NuvioTheme.colors.TextSecondary)
-        Spacer(Modifier.weight(1f))
-        if (show != null) MultiviewProgress(show.progress(now))
-    }
 }

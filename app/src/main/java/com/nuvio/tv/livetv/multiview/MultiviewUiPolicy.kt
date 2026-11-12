@@ -34,6 +34,29 @@ fun multiviewPaneBounds(layout: MultiviewLayout): List<MultiviewPaneBounds> = wh
         MultiviewPaneBounds(2, 0f, .5f, .5f, 1f),
         MultiviewPaneBounds(3, .5f, .5f, 1f, 1f)
     )
+    MultiviewLayout.TWO_STACKED -> listOf(
+        MultiviewPaneBounds(0, 0f, 0f, 1f, .5f),
+        MultiviewPaneBounds(1, 0f, .5f, 1f, 1f)
+    )
+    // One wide pane on top, two below.
+    MultiviewLayout.THREE_WIDE_TOP -> listOf(
+        MultiviewPaneBounds(0, 0f, 0f, 1f, .6f),
+        MultiviewPaneBounds(1, 0f, .6f, .5f, 1f),
+        MultiviewPaneBounds(2, .5f, .6f, 1f, 1f)
+    )
+    // One big pane on the left, two stacked on the right.
+    MultiviewLayout.THREE_BIG_LEFT -> listOf(
+        MultiviewPaneBounds(0, 0f, 0f, .6f, 1f),
+        MultiviewPaneBounds(1, .6f, 0f, 1f, .5f),
+        MultiviewPaneBounds(2, .6f, .5f, 1f, 1f)
+    )
+    // One wide pane on top, three in a row below.
+    MultiviewLayout.FOUR_WIDE_TOP -> listOf(
+        MultiviewPaneBounds(0, 0f, 0f, 1f, .6f),
+        MultiviewPaneBounds(1, 0f, .6f, 1f / 3f, 1f),
+        MultiviewPaneBounds(2, 1f / 3f, .6f, 2f / 3f, 1f),
+        MultiviewPaneBounds(3, 2f / 3f, .6f, 1f, 1f)
+    )
 }
 
 /** Focus stays on a visible pane when a smaller layout removes the current pane. */
@@ -61,6 +84,29 @@ fun multiviewNextPane(layout: MultiviewLayout, fromPane: Int, direction: Multivi
             MultiviewDirection.RIGHT -> if (pane % 2 == 0) pane + 1 else pane
             MultiviewDirection.UP -> if (pane >= 2) pane - 2 else pane
             MultiviewDirection.DOWN -> if (pane < 2) pane + 2 else pane
+        }
+        MultiviewLayout.TWO_STACKED -> when (direction) {
+            MultiviewDirection.UP -> 0
+            MultiviewDirection.DOWN -> 1
+            else -> pane
+        }
+        MultiviewLayout.THREE_WIDE_TOP -> when (direction) {
+            MultiviewDirection.LEFT -> if (pane == 2) 1 else pane
+            MultiviewDirection.RIGHT -> if (pane == 1) 2 else pane
+            MultiviewDirection.UP -> 0
+            MultiviewDirection.DOWN -> if (pane == 0) 1 else pane
+        }
+        MultiviewLayout.THREE_BIG_LEFT -> when (direction) {
+            MultiviewDirection.LEFT -> 0
+            MultiviewDirection.RIGHT -> if (pane == 0) 1 else pane
+            MultiviewDirection.UP -> if (pane == 2) 1 else pane
+            MultiviewDirection.DOWN -> if (pane == 1) 2 else pane
+        }
+        MultiviewLayout.FOUR_WIDE_TOP -> when (direction) {
+            MultiviewDirection.LEFT -> if (pane >= 2) pane - 1 else pane
+            MultiviewDirection.RIGHT -> if (pane in 1..2) pane + 1 else pane
+            MultiviewDirection.UP -> 0
+            MultiviewDirection.DOWN -> if (pane == 0) 2 else pane
         }
     }
 }

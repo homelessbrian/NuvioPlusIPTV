@@ -2,8 +2,13 @@ package com.nuvio.tv.livetv.multiview
 
 import com.nuvio.tv.livetv.model.LiveChannel
 
+/**
+ * Keep ONE..FOUR first and in this order: code that wants "the layout with N panes" takes the
+ * first entry with that count. The others are alternative arrangements with the same count.
+ */
 enum class MultiviewLayout(val paneCount: Int) {
-    ONE(1), TWO(2), THREE(3), FOUR(4)
+    ONE(1), TWO(2), THREE(3), FOUR(4),
+    TWO_STACKED(2), THREE_WIDE_TOP(3), THREE_BIG_LEFT(3), FOUR_WIDE_TOP(4)
 }
 
 /** Download-ahead targets share one budget, including empty/hidden slots. */

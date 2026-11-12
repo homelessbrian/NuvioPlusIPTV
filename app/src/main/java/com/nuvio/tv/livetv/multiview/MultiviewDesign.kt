@@ -1,5 +1,6 @@
 package com.nuvio.tv.livetv.multiview
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,13 +26,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -62,8 +66,21 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 
 private val PaneShape = RoundedCornerShape(12.dp)
 internal val MultiviewPanelShape = RoundedCornerShape(22.dp)
-private val LabelBar = Color(0xD10B0C10)
+private val LabelChip = Color(0xB80D0D0F)
 internal val MultiviewNeutralTag = Color.White.copy(alpha = 0.14f)
+
+/** The Guide's soft glow at the top of the screen (the theme's raised colour fading into its background). */
+@Composable
+internal fun Modifier.multiviewBackdrop(): Modifier {
+    val glow = NuvioTheme.colors.BackgroundElevated
+    return this.drawBehind {
+        drawRect(Brush.radialGradient(
+            colors = listOf(glow, glow.copy(alpha = 0f)),
+            center = Offset(size.width / 2f, 0f),
+            radius = size.width * 0.75f
+        ))
+    }
+}
 
 /** The floating glass card the pickers and the top bar sit in: as dark as the play bar ("Bar darkness"). */
 @Composable
@@ -123,7 +140,7 @@ internal fun MultiviewPane(
     now: Long = 0L,
     use24h: Boolean = false,
     errorHint: String? = null,
-    emptyHint: String = "OK to pick a channel",
+    emptyHint: String = "Press OK",
 ) {
     var focused by remember { mutableStateOf(false) }
     val ring = NuvioTheme.focusRing.brush()
@@ -132,7 +149,7 @@ internal fun MultiviewPane(
         modifier.onFocusChanged { focused = it.isFocused }
             .graphicsLayer { val s = if (focused) 1.02f else 1f; scaleX = s; scaleY = s }
             .clip(PaneShape)
-            .background(if (empty) SportsLook.Card else Color.Black)
+            .background(if (empty) Color.White.copy(alpha = 0.025f) else Color.Black)
             .drawWithContent {
                 drawContent()
                 val w = (if (focused) 3.dp else 1.dp).toPx()
@@ -141,8 +158,7 @@ internal fun MultiviewPane(
                 val corner = CornerRadius((12.dp.toPx() - w / 2).coerceAtLeast(0f))
                 when {
                     focused -> drawRoundRect(brush = ring, topLeft = topLeft, size = box, cornerRadius = corner, style = Stroke(w))
-                    empty -> drawRoundRect(SportsLook.Border, topLeft = topLeft, size = box, cornerRadius = corner,
-                        style = Stroke(w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(7.dp.toPx(), 5.dp.toPx()))))
+                    empty -> drawRoundRect(Color.White.copy(alpha = 0.10f), topLeft = topLeft, size = box, cornerRadius = corner, style = Stroke(w))
                     else -> drawRoundRect(SportsLook.Border, topLeft = topLeft, size = box, cornerRadius = corner, style = Stroke(w))
                 }
             }
@@ -165,21 +181,29 @@ internal fun MultiviewPane(
                 onRelease = { it.player = null }
             )
         }
+        if (empty) {
+            LiveText("P${pane.id + 1}", Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(5.dp))
+                .background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 6.dp, vertical = 2.dp),
+                color = NuvioTheme.colors.TextSecondary, size = 9.sp, weight = FontWeight.ExtraBold)
+        }
         if (empty || pane.isBuffering || pane.error != null) {
             Column(
                 Modifier.align(Alignment.Center).padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 if (empty) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = NuvioTheme.colors.TextSecondary, modifier = Modifier.size(26.dp))
+                    Box(Modifier.size(38.dp).clip(RoundedCornerShape(19.dp)).background(Color.White.copy(alpha = 0.06f)),
+                        contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = NuvioTheme.colors.TextPrimary, modifier = Modifier.size(20.dp))
+                    }
                 }
                 LiveText(when {
                     pane.error != null -> "Stream unavailable"
                     pane.isBuffering -> "Loading…"
                     else -> "Add a channel"
                 }, size = 14.sp, weight = FontWeight.Bold)
-                if (empty) LiveText("P${pane.id + 1} · $emptyHint", color = NuvioTheme.colors.TextSecondary, size = 11.sp)
+                if (empty) LiveText(emptyHint, color = NuvioTheme.colors.TextSecondary, size = 11.sp)
                 pane.error?.let { reason ->
                     LiveText(reason, color = NuvioTheme.colors.TextSecondary, size = 11.sp, maxLines = 3)
                     LiveText(errorHint ?: "OK to replace or retry this pane", color = NuvioTheme.colors.TextPrimary,
@@ -199,22 +223,55 @@ internal fun MultiviewPane(
             }
         }
         if (pane.channelKey != null) {
-            Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().background(LabelBar)) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    SportsBadge("P${pane.id + 1}", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
-                    if (logo != null) ChannelLogo(logo, 18.dp)
-                    Column(Modifier.weight(1f)) {
-                        LiveText(pane.channelName ?: "Channel", size = 13.sp, weight = FontWeight.ExtraBold)
-                        show?.let { LiveText(it.title, size = 10.sp, color = NuvioTheme.colors.TextSecondary) }
-                    }
-                    show?.let { LiveText(multiviewShowTimes(it, use24h), size = 10.sp, color = NuvioTheme.colors.TextSecondary) }
+            Row(
+                Modifier.align(Alignment.TopStart).padding(8.dp).clip(RoundedCornerShape(10.dp))
+                    .background(LabelChip).padding(start = 5.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SportsBadge("P${pane.id + 1}", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
+                if (logo != null) ChannelLogo(logo, 16.dp)
+                Column {
+                    LiveText(pane.channelName ?: "Channel", size = 11.sp, weight = FontWeight.ExtraBold)
+                    show?.let { LiveText(it.title, size = 9.sp, color = NuvioTheme.colors.TextSecondary) }
                 }
-                if (show != null) MultiviewProgress(show.progress(now))
             }
+            if (show != null) MultiviewProgress(show.progress(now), Modifier.align(Alignment.BottomStart))
         }
+    }
+}
+
+/** The layout as a small picture (the same pane positions the screen uses), for the picker and the bar. */
+@Composable
+internal fun MultiviewLayoutIcon(layout: MultiviewLayout, modifier: Modifier = Modifier, color: Color = Color.White.copy(alpha = 0.8f)) {
+    val bounds = remember(layout) { multiviewPaneBounds(layout) }
+    Canvas(modifier) {
+        val gap = 1.5.dp.toPx()
+        val corner = CornerRadius(2.dp.toPx())
+        bounds.forEach { b ->
+            val left = b.left * size.width + gap
+            val top = b.top * size.height + gap
+            val width = ((b.right - b.left) * size.width - gap * 2).coerceAtLeast(1f)
+            val height = ((b.bottom - b.top) * size.height - gap * 2).coerceAtLeast(1f)
+            drawRoundRect(color, topLeft = Offset(left, top), size = Size(width, height), cornerRadius = corner)
+        }
+    }
+}
+
+/** The top bar's Layout button: a picture of the current layout and its name. */
+@Composable
+internal fun MultiviewLayoutButton(label: String, layout: MultiviewLayout, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        modifier.onFocusChanged { focused = it.isFocused }
+            .sportsFrame(focused, accent = NuvioTheme.colors.Secondary, radius = 8.dp)
+            .clickable(onClick = onClick)
+            .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MultiviewLayoutIcon(layout, Modifier.width(26.dp).height(16.dp))
+        LiveText(label, size = 12.sp, weight = FontWeight.Bold)
+        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = NuvioTheme.colors.TextSecondary, modifier = Modifier.size(14.dp))
     }
 }
