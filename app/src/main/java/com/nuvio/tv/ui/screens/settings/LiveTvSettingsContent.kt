@@ -1579,7 +1579,7 @@ internal fun LiveTvSettingsContent(
                 val driveProblems = remember("recordings" in open) { com.nuvio.tv.livetv.record.RecordingStorage.problems(recContext) }
                 val chosen = drives.firstOrNull { it.id == s.recordingStorage }
                 fun driveLabel(c: com.nuvio.tv.livetv.record.RecordingStorage.Choice) =
-                    c.label + " · " + com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(c.freeBytes) + context.getString(R.string.iptv_settings_free)
+                    c.label + " · " + com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(c.freeBytes, context.settingsLocale) + context.getString(R.string.iptv_settings_free)
                 var pickingDrive by remember { mutableStateOf(false) }
                 LiveSection(
                     title = context.getString(R.string.iptv_settings_recordings),
@@ -1633,7 +1633,7 @@ internal fun LiveTvSettingsContent(
                             // Plugged in but not usable: say why instead of leaving it out.
                             context.getString(R.string.iptv_settings_1_s_can_t_be_used, p.label) to {
                                 pickingDrive = false
-                                confirm(context.getString(R.string.iptv_settings_1_s_can_t_be_used_2, p.label), p.reason, "OK") { }
+                                confirm(context.getString(R.string.iptv_settings_1_s_can_t_be_used_2, p.label), p.reason, context.getString(android.R.string.ok)) { }
                             }
                         } + listOf(
                             context.getString(R.string.iptv_settings_drive_not_listed) to {
@@ -1641,7 +1641,7 @@ internal fun LiveTvSettingsContent(
                                 confirm(
                                     context.getString(R.string.iptv_settings_drive_not_listed),
                                     context.getString(R.string.iptv_settings_missing_drive_help),
-                                    "OK"
+                                    context.getString(android.R.string.ok)
                                 ) { }
                             }
                         ),

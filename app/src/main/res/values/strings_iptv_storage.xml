@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">This Device</string>
+    <string name="iptv_storage_usb_drive">USB Drive</string>
+    <string name="iptv_storage_read_only">Read only. This box can read the drive but not write to it (usually an NTFS drive). Formatting it as exFAT lets you record to it.</string>
+    <string name="iptv_storage_unsupported_format">This box can\'t read the drive\'s format. Formatting it as exFAT usually fixes this.</string>
+    <string name="iptv_storage_not_ready">Not ready yet. Wait a moment and open this list again.</string>
+    <string name="iptv_storage_no_app_folder">Android didn\'t give the app a folder on it. Unplug the drive and plug it back in, or restart the box.</string>
+    <string name="iptv_storage_unusable_state">Not usable right now (%1$s).</string>
+</resources>

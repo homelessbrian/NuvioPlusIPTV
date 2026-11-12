@@ -4,6 +4,9 @@ import android.content.Context
 import android.os.Environment
 import android.os.storage.StorageManager
 import java.io.File
+import java.util.Locale
+import com.nuvio.tv.R
+import com.nuvio.tv.core.util.withAppLocale
 
 /**
  * The places recordings can be saved: this device, and each USB drive (or SD card) that's
@@ -25,6 +28,7 @@ object RecordingStorage {
 
     /** Every place recordings can go right now (this device first). */
     fun choices(context: Context): List<Choice> {
+        val displayContext = context.withAppLocale()
         val sm = context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
         val dirs = runCatching { context.getExternalFilesDirs(null).toList() }.getOrDefault(emptyList())
         val out = ArrayList<Choice>()
@@ -35,8 +39,8 @@ object RecordingStorage {
             val vol = runCatching { sm?.getStorageVolume(base) }.getOrNull()
             val primary = i == 0 || vol?.isPrimary == true
             val id = if (primary) "" else (vol?.uuid ?: base.absolutePath)
-            val label = if (primary) "This Device"
-                else runCatching { vol?.getDescription(context) }.getOrNull()?.takeIf { it.isNotBlank() } ?: "USB Drive"
+            val label = if (primary) displayContext.getString(R.string.iptv_storage_this_device)
+                else runCatching { vol?.getDescription(context) }.getOrNull()?.takeIf { it.isNotBlank() } ?: displayContext.getString(R.string.iptv_storage_usb_drive)
             out += Choice(
                 id = id,
                 label = label,
@@ -57,7 +61,7 @@ object RecordingStorage {
             val base = appFolderOn(context, vol) ?: continue
             out += Choice(
                 id = id,
-                label = runCatching { vol.getDescription(context) }.getOrNull()?.takeIf { it.isNotBlank() } ?: "USB Drive",
+                label = runCatching { vol.getDescription(context) }.getOrNull()?.takeIf { it.isNotBlank() } ?: displayContext.getString(R.string.iptv_storage_usb_drive),
                 dir = File(base, "recordings"),
                 freeBytes = runCatching { base.usableSpace }.getOrDefault(0L),
                 totalBytes = runCatching { base.totalSpace }.getOrDefault(0L)
@@ -65,7 +69,7 @@ object RecordingStorage {
         }
         if (out.none { it.isDevice }) {
             val f = File(context.filesDir, "recordings")
-            out.add(0, Choice("", "This Device", f, runCatching { context.filesDir.usableSpace }.getOrDefault(0L), runCatching { context.filesDir.totalSpace }.getOrDefault(0L)))
+            out.add(0, Choice("", displayContext.getString(R.string.iptv_storage_this_device), f, runCatching { context.filesDir.usableSpace }.getOrDefault(0L), runCatching { context.filesDir.totalSpace }.getOrDefault(0L)))
         }
         return out.distinctBy { it.id }
     }
@@ -78,22 +82,23 @@ object RecordingStorage {
      * is missing instead of just leaving it out.
      */
     fun problems(context: Context): List<Problem> {
+        val displayContext = context.withAppLocale()
         val sm = context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
         val usable = choices(context).map { it.id }.toSet()
         return volumes(sm).filter { it.isRemovable && !it.isPrimary && (it.uuid == null || it.uuid !in usable) }
             .mapNotNull { vol ->
-                val label = runCatching { vol.getDescription(context) }.getOrNull()?.takeIf { it.isNotBlank() } ?: "USB Drive"
+                val label = runCatching { vol.getDescription(context) }.getOrNull()?.takeIf { it.isNotBlank() } ?: displayContext.getString(R.string.iptv_storage_usb_drive)
                 val reason = when (vol.state) {
                     Environment.MEDIA_MOUNTED_READ_ONLY ->
-                        "Read only. This box can read the drive but not write to it (usually an NTFS drive). Formatting it as exFAT lets you record to it."
+                        displayContext.getString(R.string.iptv_storage_read_only)
                     Environment.MEDIA_UNMOUNTABLE, Environment.MEDIA_NOFS ->
-                        "This box can't read the drive's format. Formatting it as exFAT usually fixes this."
+                        displayContext.getString(R.string.iptv_storage_unsupported_format)
                     Environment.MEDIA_CHECKING, Environment.MEDIA_UNMOUNTED, Environment.MEDIA_EJECTING ->
-                        "Not ready yet. Wait a moment and open this list again."
+                        displayContext.getString(R.string.iptv_storage_not_ready)
                     Environment.MEDIA_MOUNTED ->
-                        "Android didn't give the app a folder on it. Unplug the drive and plug it back in, or restart the box."
+                        displayContext.getString(R.string.iptv_storage_no_app_folder)
                     Environment.MEDIA_REMOVED, Environment.MEDIA_BAD_REMOVAL -> null
-                    else -> "Not usable right now (${vol.state})."
+                    else -> displayContext.getString(R.string.iptv_storage_unusable_state, vol.state)
                 } ?: return@mapNotNull null
                 Problem(label, reason)
             }
@@ -122,10 +127,13 @@ object RecordingStorage {
         return all.firstOrNull { it.id == id } ?: all.first { it.isDevice }
     }
 
-    fun sizeLabel(bytes: Long): String = when {
-        bytes >= 1024L * 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f GB", bytes / (1024.0 * 1024 * 1024))
-        bytes >= 1024L * 1024 -> String.format(java.util.Locale.US, "%.0f MB", bytes / (1024.0 * 1024))
-        else -> "${bytes / 1024} KB"
+    fun sizeLabel(bytes: Long): String = sizeLabel(bytes, Locale.US)
+
+    /** UI callers may use the app locale; existing callers retain their US-format output. */
+    fun sizeLabel(bytes: Long, locale: Locale): String = when {
+        bytes >= 1024L * 1024 * 1024 -> String.format(locale, "%.1f GB", bytes / (1024.0 * 1024 * 1024))
+        bytes >= 1024L * 1024 -> String.format(locale, "%.0f MB", bytes / (1024.0 * 1024))
+        else -> String.format(locale, "%d KB", bytes / 1024)
     }
 }
 

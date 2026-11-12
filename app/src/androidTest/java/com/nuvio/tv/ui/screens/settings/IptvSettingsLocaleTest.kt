@@ -2,10 +2,12 @@ package com.nuvio.tv.ui.screens.settings
 
 import android.content.Context
 import android.content.res.Configuration
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -14,7 +16,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -28,6 +30,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.util.withAppLocale
 import com.nuvio.tv.livetv.crash.AddFromPhoneServer
 import com.nuvio.tv.livetv.model.LiveTvSettings
+import com.nuvio.tv.livetv.record.RecordingStorage
 import com.nuvio.tv.ui.theme.NuvioTheme
 import java.io.File
 import java.util.Locale
@@ -43,9 +46,10 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class IptvSettingsLocaleTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var previousLanguage: String
+    private lateinit var previousActivityConfiguration: Configuration
     private val base: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -68,11 +72,27 @@ class IptvSettingsLocaleTest {
     @Before
     fun rememberLanguage() {
         previousLanguage = LocaleCache.localeTag
+        previousActivityConfiguration = Configuration(composeRule.activity.resources.configuration)
     }
 
     @After
+    @Suppress("DEPRECATION")
     fun restoreLanguage() {
         LocaleCache.localeTag = previousLanguage
+        composeRule.runOnUiThread {
+            val resources = composeRule.activity.resources
+            resources.updateConfiguration(previousActivityConfiguration, resources.displayMetrics)
+        }
+    }
+
+    // Dialog windows read their Activity's resources. Match the localized Activity that the
+    // app recreates on language changes, rather than overriding only the parent composition.
+    @Suppress("DEPRECATION")
+    private fun setActivityLanguage(tag: String) {
+        LocaleCache.localeTag = tag
+        val resources = composeRule.activity.resources
+        val configuration = Configuration(resources.configuration).apply { setLocale(Locale.forLanguageTag(tag)) }
+        resources.updateConfiguration(configuration, resources.displayMetrics)
     }
 
     @Test
@@ -92,36 +112,51 @@ class IptvSettingsLocaleTest {
 
     @Test
     fun quantitiesAndFormatsUseTheSelectedResources() {
-        val resources = localized("es").resources
+        LocaleCache.localeTag = "es"
+        val spanish = localized("es")
+        val resources = spanish.resources
         assertEquals("1 día", resources.getQuantityString(R.plurals.iptv_settings_days, 1, 1))
         assertEquals("2 días", resources.getQuantityString(R.plurals.iptv_settings_days, 2, 2))
         assertEquals("1 canal", resources.getQuantityString(R.plurals.iptv_settings_channel_count, 1, 1))
         assertEquals("2 canales", resources.getQuantityString(R.plurals.iptv_settings_channel_count, 2, 2))
         assertEquals("1,5 GB", resources.getString(R.string.iptv_settings_1f_gb, 1.5f))
         assertTrue(resources.getString(R.string.iptv_settings_delete_1_s, "Provider % & <TV>").contains("Provider % & <TV>"))
+        assertEquals("Este dispositivo", RecordingStorage.choices(spanish).first { it.isDevice }.label)
+        assertEquals("1,5 GB", RecordingStorage.sizeLabel(1536L * 1024 * 1024, Locale.forLanguageTag("es")))
+        assertEquals("1.5 GB", RecordingStorage.sizeLabel(1536L * 1024 * 1024))
     }
 
     @Test
-    fun quickChannelsRecomposesWhenTheAppLanguageChanges() {
+    fun quickChannelsUsesTheActivityLanguageAfterSwitchingAndReturning() {
+        composeRule.runOnUiThread { setActivityLanguage("en") }
         val context = mutableStateOf(localized("en"))
         composeRule.setContent {
-            CompositionLocalProvider(
-                LocalContext provides context.value,
-                LocalConfiguration provides Configuration(context.value.resources.configuration)
-            ) {
-                NuvioTheme {
-                    ChannelRowDialog(LiveTvSettings(), emptyList(), onUpdate = {}, onDismiss = {})
+            key(context.value) {
+                CompositionLocalProvider(
+                    LocalContext provides context.value,
+                    LocalConfiguration provides Configuration(context.value.resources.configuration)
+                ) {
+                    NuvioTheme {
+                        ChannelRowDialog(LiveTvSettings(), emptyList(), onUpdate = {}, onDismiss = {})
+                    }
                 }
             }
         }
         composeRule.onNodeWithText("Quick Channels").assertIsDisplayed()
         screenshot("en")
-        composeRule.runOnIdle { context.value = localized("es") }
+        composeRule.runOnIdle {
+            setActivityLanguage("es")
+            context.value = localized("es")
+        }
         composeRule.onNodeWithText("Canales rápidos").assertIsDisplayed()
-        composeRule.onNodeWithText("Mostrar Canales rápidos").assertIsDisplayed()
         screenshot("es")
-        composeRule.runOnIdle { context.value = localized("en") }
+        composeRule.onNodeWithText("Mostrar Canales rápidos").assertIsDisplayed()
+        composeRule.runOnIdle {
+            setActivityLanguage("en")
+            context.value = localized("en")
+        }
         composeRule.onNodeWithText("Quick Channels").assertIsDisplayed()
+        composeRule.onNodeWithText("Show Quick Channels").assertIsDisplayed()
     }
 
     @Test

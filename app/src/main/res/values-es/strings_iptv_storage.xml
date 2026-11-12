@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">Este dispositivo</string>
+    <string name="iptv_storage_usb_drive">Unidad USB</string>
+    <string name="iptv_storage_read_only">Solo lectura. Este dispositivo puede leer la unidad, pero no escribir en ella (normalmente una unidad NTFS). Formatearla como exFAT permite grabar en ella.</string>
+    <string name="iptv_storage_unsupported_format">Este dispositivo no puede leer el formato de la unidad. Formatearla como exFAT suele solucionarlo.</string>
+    <string name="iptv_storage_not_ready">Aún no está lista. Espera un momento y vuelve a abrir esta lista.</string>
+    <string name="iptv_storage_no_app_folder">Android no ha proporcionado a la aplicación una carpeta en esa unidad. Desconéctala y vuelve a conectarla o reinicia el dispositivo.</string>
+    <string name="iptv_storage_unusable_state">No se puede usar en este momento (%1$s).</string>
+</resources>
