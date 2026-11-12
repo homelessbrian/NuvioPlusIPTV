@@ -209,6 +209,9 @@ internal fun MultiviewChannelPicker(
     var gameCursor by remember { mutableIntStateOf(0) }
     var gamePlaced by remember { mutableStateOf(false) }
     var streamsGame by remember { mutableStateOf<SportsWatchGame?>(null) }
+    // Hold OK on a game: a short menu (change stream, or its page in the Sports hub).
+    var optionsGame by remember { mutableStateOf<SportsWatchGame?>(null) }
+    var optionIndex by remember { mutableIntStateOf(0) }
     var streamIndex by remember { mutableIntStateOf(0) }
     val streamState = rememberLazyListState()
     val streams = streamsGame?.channels.orEmpty().distinctBy { it.channel.key }
@@ -319,6 +322,7 @@ internal fun MultiviewChannelPicker(
     fun back() {
         when {
             searching -> closeSearch()
+            sportsMode && optionsGame != null -> optionsGame = null
             sportsMode && streamsGame != null -> streamsGame = null
             !sportsMode && level == PickerLevel.LIST -> openGroups()
             else -> onClose()
@@ -328,13 +332,15 @@ internal fun MultiviewChannelPicker(
     val inList = !sportsMode && level == PickerLevel.LIST
     val title = when {
         searching -> "Search"
+        sportsMode && optionsGame != null -> optionsGame?.event?.title ?: "Game"
         sportsMode -> streamsGame?.event?.title?.let { "Other streams" } ?: "Games"
         level == PickerLevel.GROUPS -> "Groups"
         else -> groupTitle ?: "All channels"
     }
     val hint = when {
+        sportsMode && optionsGame != null -> "OK: choose · Back: games"
         sportsMode && streamsGame != null -> "OK: play this stream in P${paneId + 1} · Back: games"
-        sportsMode -> "OK: play in P${paneId + 1} · Hold OK: game page · Right: other streams · Back: close"
+        sportsMode -> "OK: play in P${paneId + 1} · Hold OK: more options · Back: close"
         level == PickerLevel.GROUPS -> "OK: open group · Back: close"
         else -> "OK: play in P${paneId + 1} · Left: groups · Back: groups"
     }
@@ -429,6 +435,12 @@ internal fun MultiviewChannelPicker(
                             val down = event.type == KeyEventType.KeyDown
                             val ok = isPickerOk(event.key)
                             when {
+                                sportsMode && optionsGame != null -> if (down) when {
+                                    event.key == Key.DirectionDown -> { if (optionIndex < 1) optionIndex++ }
+                                    event.key == Key.DirectionUp -> { if (optionIndex > 0) optionIndex-- else runCatching { tabFocus.requestFocus() } }
+                                    event.key == Key.DirectionLeft -> optionsGame = null
+                                    ok -> optionsGame?.let { g -> if (optionIndex == 0) { optionsGame = null; openStreams(g) } else onGameInfo(g) }
+                                }
                                 sportsMode && streamsGame != null -> if (down) when {
                                     event.key == Key.DirectionDown -> { if (streamIndex < streams.lastIndex) streamIndex++ }
                                     event.key == Key.DirectionUp -> { if (streamIndex > 0) streamIndex-- else runCatching { tabFocus.requestFocus() } }
@@ -446,7 +458,7 @@ internal fun MultiviewChannelPicker(
                                                 if (event.nativeKeyEvent.repeatCount == 0) okHeld[0] = true
                                                 else if (okHeld[0]) {
                                                     okHeld[0] = false
-                                                    game?.let(onGameInfo)
+                                                    game?.let { optionsGame = it; optionIndex = 0 }
                                                 }
                                             } else if (okHeld[0]) {
                                                 okHeld[0] = false
@@ -454,7 +466,6 @@ internal fun MultiviewChannelPicker(
                                             }
                                         }
                                         !down -> Unit
-                                        event.key == Key.DirectionRight -> game?.let(::openStreams)
                                         event.key == Key.DirectionDown -> { if (gameCursor < gameAt.lastIndex) gameCursor++ }
                                         event.key == Key.DirectionUp -> { if (gameCursor > 0) gameCursor-- else runCatching { tabFocus.requestFocus() } }
                                     }
@@ -483,6 +494,14 @@ internal fun MultiviewChannelPicker(
                         .focusable()
                 ) {
                     when {
+                        sportsMode && optionsGame != null -> Column(Modifier.fillMaxSize().padding(vertical = 4.dp)) {
+                            PickerOptionRow("Change stream", "Pick another broadcast of this game", optionIndex == 0, hasFocus) {
+                                optionsGame?.let { g -> optionsGame = null; openStreams(g) }
+                            }
+                            PickerOptionRow("View in Sports hub", "Open the game's page; Back returns here", optionIndex == 1, hasFocus) {
+                                optionsGame?.let(onGameInfo)
+                            }
+                        }
                         sportsMode && streamsGame != null -> {
                             if (streams.isEmpty()) {
                                 LiveText("No streams available for this game.", Modifier.padding(18.dp),
@@ -523,7 +542,7 @@ internal fun MultiviewChannelPicker(
                                             focusedPane = paneId,
                                             hideScores = hideScores,
                                             onClick = { gameCursor = gameAt.indexOf(i).coerceAtLeast(0); playGame(item.game) },
-                                            onLongClick = { gameCursor = gameAt.indexOf(i).coerceAtLeast(0); onGameInfo(item.game) },
+                                            onLongClick = { gameCursor = gameAt.indexOf(i).coerceAtLeast(0); optionsGame = item.game; optionIndex = 0 },
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                             cursorOn = hasFocus && gameAt.getOrNull(gameCursor) == i,
                                             cardHeight = 108.dp,
@@ -572,6 +591,21 @@ internal fun MultiviewChannelPicker(
                 }
             }
         }
+    }
+}
+
+/** One choice in a game's long-press menu. */
+@Composable
+private fun PickerOptionRow(title: String, subtitle: String, selected: Boolean, active: Boolean, onClick: () -> Unit) {
+    val colors = liveCellColors(focused = selected && active, idle = if (selected) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+    Column(
+        Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 8.dp, vertical = 3.dp)
+            .clip(RowShape).background(colors.background).border(2.dp, colors.border, RowShape)
+            .clickable(onClick = onClick).padding(horizontal = 14.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        LiveText(title, color = colors.text, size = 15.sp, weight = FontWeight.SemiBold)
+        LiveText(subtitle, color = NuvioTheme.colors.TextSecondary, size = 11.sp)
     }
 }
 
