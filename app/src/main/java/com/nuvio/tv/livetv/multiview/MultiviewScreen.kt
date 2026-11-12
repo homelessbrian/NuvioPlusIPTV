@@ -66,7 +66,6 @@ import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.sports.ChannelMatch
 import com.nuvio.tv.livetv.sports.SportsBadge
-import com.nuvio.tv.livetv.sports.SportsGameStrip
 import com.nuvio.tv.livetv.sports.SportsLaunch
 import com.nuvio.tv.livetv.sports.SportsLook
 import com.nuvio.tv.livetv.sports.SportsWatchLaunch
@@ -405,49 +404,7 @@ fun MultiviewScreen(
                     .background(Color.Black.copy(alpha = 0.72f)).padding(horizontal = 12.dp, vertical = 4.dp))
         }
     }
-    if (editorOpen && sportsMode) {
-        Box(Modifier.fillMaxSize()) {
-            SportsGameStrip(
-                games = games,
-                rows = sportsRows,
-                selectedEventId = paneEvents[editedPane]
-                    ?: games.firstOrNull { game -> game.channels.any { it.channel.key == state.panes.getOrNull(editedPane)?.channelKey } }?.event?.id,
-                paneChannelKeys = state.panes.map { it.channelKey },
-                focusedPane = editedPane,
-                paneCount = state.layout.paneCount,
-                hideScores = hideScores,
-                onGame = { game -> sports?.resolve(game.event.id) != null },
-                onPlayGame = { game -> playGame(game.event.id) },
-                onStream = { game, channelKey -> playGame(game.event.id, channelKey) },
-                onAdd = {
-                    val count = session.state.value.layout.paneCount
-                    if (count < 4) {
-                        session.setLayout(MultiviewLayout.entries.first { it.paneCount == count + 1 })
-                        editedPane = count
-                    }
-                },
-                onRemove = {
-                    val count = session.state.value.layout.paneCount
-                    if (count > 1) {
-                        val removed = editedPane.coerceIn(0, count - 1)
-                        session.removePane(removed)
-                        for (pane in removed until count - 1) {
-                            val nextEvent = paneEvents[pane + 1]
-                            if (nextEvent == null) paneEvents.remove(pane) else paneEvents[pane] = nextEvent
-                        }
-                        paneEvents.remove(count - 1)
-                        editedPane = removed.coerceAtMost(count - 2)
-                    }
-                },
-                onPane = { editedPane = it },
-                onClose = { editorOpen = false },
-                onChannels = { sportsMode = false },
-                modifier = Modifier.align(Alignment.BottomCenter),
-                panelBackground = panelBackground,
-            )
-        }
-    }
-    if (editorOpen && !sportsMode) {
+    if (editorOpen) {
         val pane = editedPane.coerceIn(0, state.layout.paneCount - 1)
         MultiviewChannelPicker(
             state = state,
@@ -460,14 +417,18 @@ fun MultiviewScreen(
             channelsIn = viewModel::channelsIn,
             group = pickerGroup,
             onGroup = { pickerGroup = it },
-            onSports = {
-                sportsUsed = true
-                sportsMode = true
+            sportsMode = sportsMode,
+            onSportsMode = { on ->
+                if (on) sportsUsed = true
+                sportsMode = on
             },
-            onLayout = {
-                editorOpen = false
-                layoutOpen = true
-            },
+            rows = sportsRows,
+            selectedEventId = paneEvents[pane]
+                ?: games.firstOrNull { game -> game.channels.any { it.channel.key == state.panes.getOrNull(pane)?.channelKey } }?.event?.id,
+            hideScores = hideScores,
+            onGame = { game -> sports?.resolve(game.event.id) != null },
+            onPlayGame = { game -> playGame(game.event.id) },
+            onStream = { game, channelKey -> playGame(game.event.id, channelKey) },
             panelBackground = panelBackground,
             nowOn = viewModel::nowOn,
             onSelect = { option ->

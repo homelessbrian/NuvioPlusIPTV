@@ -625,7 +625,7 @@ private fun StripStreamCard(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun StripGameCard(
+internal fun StripGameCard(
     game: SportsWatchGame,
     selected: Boolean,
     paneChannelKeys: List<String?>,
@@ -634,8 +634,13 @@ private fun StripGameCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier,
+    /** In a list with its own cursor (the Multiview side panel): whether the cursor is on this card. */
+    cursorOn: Boolean? = null,
+    /** A card as wide as its list and this tall, instead of the strip's 250dp-wide, full-height card. */
+    cardHeight: androidx.compose.ui.unit.Dp? = null,
 ) {
-    var focused by remember { mutableStateOf(false) }
+    var ownFocus by remember { mutableStateOf(false) }
+    val focused = cursorOn ?: ownFocus
     val event = game.event
     val otherStreams = game.channels.distinctBy { it.channel.key }.size - 1
     val league = SportsCatalog.league(event.leagueId)
@@ -654,13 +659,13 @@ private fun StripGameCard(
         GameState.OFF -> event.status ?: "Unavailable"
     }
     Column(
-        modifier.width(250.dp).fillMaxHeight()
-            .onFocusChanged { focused = it.isFocused }
+        modifier.then(if (cardHeight != null) Modifier.fillMaxWidth().height(cardHeight) else Modifier.width(250.dp).fillMaxHeight())
+            .onFocusChanged { ownFocus = it.isFocused }
             .sportsFrame(focused, playing = selected || assignedPanes.isNotEmpty(),
                 accent = NuvioTheme.colors.Secondary, radius = 10.dp)
             // Unmatched games remain focusable so their status can be read; OK cannot tune them.
             .semantics(mergeDescendants = true) { if (!available) disabled() }
-            .focusProperties { canFocus = true }
+            .focusProperties { canFocus = cursorOn == null }
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Row(

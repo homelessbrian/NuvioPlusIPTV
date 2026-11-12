@@ -95,6 +95,8 @@ internal fun MultiviewChip(
     selected: Boolean = false,
     enabled: Boolean = true,
     icon: ImageVector? = null,
+    /** Label (and icon) in the middle: for chips that share a row's width, like tabs. */
+    center: Boolean = false,
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -105,7 +107,7 @@ internal fun MultiviewChip(
             .semantics { if (!enabled) disabled() }
             .clickable { if (enabled) onClick() }
             .padding(horizontal = 11.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalArrangement = if (center) Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally) else Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(13.dp))
