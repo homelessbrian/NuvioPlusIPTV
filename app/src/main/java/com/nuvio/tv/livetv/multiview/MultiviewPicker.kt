@@ -128,7 +128,7 @@ private const val ALL_GROUP = "__all__"
 /** One line of the Sports list: a section's title, or a game under it. */
 private sealed interface PanelItem {
     class Title(val key: String, val text: String) : PanelItem
-    class Game(val game: SportsWatchGame) : PanelItem
+    class Game(val game: SportsWatchGame, val rowKey: String) : PanelItem
 }
 
 /**
@@ -248,7 +248,7 @@ internal fun MultiviewChannelPicker(
             rows.forEach { row ->
                 if (row.games.isNotEmpty()) {
                     add(PanelItem.Title(row.key, row.title))
-                    row.games.forEach { add(PanelItem.Game(it)) }
+                    row.games.forEach { add(PanelItem.Game(it, row.key)) }
                 }
             }
         }
@@ -614,7 +614,8 @@ internal fun MultiviewChannelPicker(
                                 }
                             } else LazyColumn(state = sportsState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 4.dp)) {
                                 itemsIndexed(items, key = { _, item ->
-                                    when (item) { is PanelItem.Title -> "t:${item.key}"; is PanelItem.Game -> "g:${item.game.event.id}" }
+                                    // A game can sit in more than one section: each line needs its own id.
+                                    when (item) { is PanelItem.Title -> "t:${item.key}"; is PanelItem.Game -> "g:${item.rowKey}:${item.game.event.id}" }
                                 }) { i, item ->
                                     when (item) {
                                         is PanelItem.Title -> LiveText(
