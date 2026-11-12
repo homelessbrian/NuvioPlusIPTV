@@ -2077,9 +2077,42 @@ class LiveTvRepository @Inject constructor(
 
     private suspend fun buildPrograms(settings: LiveTvSettings, targets: List<EpgTarget>, forceRead: Boolean = false) {
         val t0 = System.currentTimeMillis()
+        guideSkippedForMemory = false
         BackgroundWork.guideBuilding.value = true
         try { BackgroundWork.heavy { buildProgramsInner(settings, targets, forceRead) } } finally { BackgroundWork.guideBuilding.value = false }
         LIVE_REPORT.add("Guide matched and stored: ${_programs.value.size} channels in ${System.currentTimeMillis() - t0} ms")
+        if (guideSkippedForMemory) scheduleSkippedGuideRetry()
+    }
+
+    /** A guide was left out because memory was nearly full (its earlier listings stay in use). */
+    @Volatile private var guideSkippedForMemory = false
+    private var skippedGuideRetry: kotlinx.coroutines.Job? = null
+
+    /**
+     * Tries the left-out guide again a little later, quietly, instead of waiting for the next
+     * scheduled update: memory is usually free again once the update that ran short has finished.
+     * Waits while something plays and while other heavy work runs; gives up after three tries.
+     */
+    private fun scheduleSkippedGuideRetry() {
+        if (skippedGuideRetry?.isActive == true) return
+        skippedGuideRetry = scope.launch(BackgroundWork.quietUpdate) {
+            var tries = 0
+            while (guideSkippedForMemory && tries++ < 3) {
+                delay(2 * 60_000L)
+                BackgroundWork.awaitIdle()
+                BackgroundWork.awaitNoHeavy()
+                mutex.withLock {
+                    if (!guideSkippedForMemory) return@withLock
+                    LIVE_REPORT.add("Guide: trying the guide left out for memory again (try $tries of 3)")
+                    routineRun = true
+                    try { buildPrograms(prefs.currentSettings(), collectEpgTargets()) }
+                    finally {
+                        routineRun = false
+                        _status.value = _status.value.copy(loading = false, message = null)
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -2258,6 +2291,7 @@ class LiveTvRepository @Inject constructor(
                 if (used() > rt.maxMemory() * 0.85) System.gc()
                 if (used() > rt.maxMemory() * 0.85) {
                     LIVE_REPORT.add("Guide \"${target.name}\" skipped: memory nearly full (${used() / 1048576} of ${rt.maxMemory() / 1048576} MB)")
+                    guideSkippedForMemory = true
                     // Its listings from before stay in use: nothing to see, so nothing said during
                     // an automatic update. With nothing kept from it, it's always said.
                     val kept = fallBack()

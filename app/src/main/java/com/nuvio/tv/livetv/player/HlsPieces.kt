@@ -245,7 +245,15 @@ internal object HlsPieces {
         ): Double {
             if (mapLine == null && m.mapUri != null) {
                 val init = "${prefix}init.mp4"
-                download(HlsPieces.resolve(url, m.mapUri), File(dir, init))
+                var got: Double? = null
+                for (t in 1..tries.coerceAtLeast(1)) {
+                    got = download(HlsPieces.resolve(url, m.mapUri), File(dir, init))
+                    if (got == 1.0 || stopNow()) break
+                    if (t < tries) Thread.sleep(1_000L * t)
+                }
+                // Without its start piece nothing saved after it can play: save nothing yet and
+                // try again on the next check of the channel's list.
+                if (got != 1.0) { runCatching { File(dir, init).delete() }; return 0.0 }
                 mapLine = "#EXT-X-MAP:URI=\"$init\""
             }
             if (m.pieces.isEmpty()) return 0.0
