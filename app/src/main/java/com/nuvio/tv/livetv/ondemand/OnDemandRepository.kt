@@ -1,5 +1,10 @@
 package com.nuvio.tv.livetv.ondemand
 
+import android.content.Context
+import androidx.annotation.StringRes
+import com.nuvio.tv.R
+import com.nuvio.tv.core.util.withAppLocale
+import dagger.hilt.android.qualifiers.ApplicationContext
 import android.util.JsonReader
 import android.util.JsonToken
 import android.util.Log
@@ -103,10 +108,13 @@ data class OnDemandStatus(val loading: Boolean = false, val message: String? = n
  */
 @Singleton
 class OnDemandRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val db: OnDemandDatabase,
     private val prefs: LiveTvPreferences,
     private val stalker: com.nuvio.tv.livetv.stalker.StalkerGateway
 ) {
+    private fun text(@StringRes id: Int, vararg args: Any): String = context.withAppLocale().getString(id, *args)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
     private val http = ForkHttp.builder()
@@ -233,15 +241,15 @@ class OnDemandRepository @Inject constructor(
             // while the guide is being built or Sports is finding channels.
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitNoHeavy()
-            _status.value = OnDemandStatus(true, "Importing movies and series from ${pl.name}…")
+            _status.value = OnDemandStatus(true, text(R.string.iptv_status_importing_movies_series, pl.name))
             lastProblem = null
             // Movies and series import separately, so a problem with one keeps the other.
             val movies = runCatching { importKind(pl, VodKind.MOVIE) }
-                .onFailure { Log.w(TAG, "Movies for ${pl.name} failed", it); lastProblem = "Couldn't import movies from ${pl.name}: ${it.message ?: it.javaClass.simpleName}" }
+                .onFailure { Log.w(TAG, "Movies for ${pl.name} failed", it); lastProblem = text(R.string.iptv_status_import_movies_failed, pl.name, it.message ?: it.javaClass.simpleName) }
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitNoHeavy()
             val series = runCatching { importKind(pl, VodKind.SERIES) }
-                .onFailure { Log.w(TAG, "Series for ${pl.name} failed", it); lastProblem = "Couldn't import series from ${pl.name}: ${it.message ?: it.javaClass.simpleName}" }
+                .onFailure { Log.w(TAG, "Series for ${pl.name} failed", it); lastProblem = text(R.string.iptv_status_import_series_failed, pl.name, it.message ?: it.javaClass.simpleName) }
             val ok = movies.isSuccess && series.isSuccess && lastProblem == null
             lastProblem?.let { problemByPlaylist[pl.id] = it } ?: problemByPlaylist.remove(pl.id)
             // Success: next import in a day. Failure: try again in an hour, not on every start.
@@ -375,10 +383,10 @@ class OnDemandRepository @Inject constructor(
                 categories += c.optString("category_id") to c.optString("category_name").ifBlank { "Other" }
             }
         }
-        _status.value = OnDemandStatus(true, "Importing $what from ${pl.name}…")
+        _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies else R.string.iptv_status_importing_series, pl.name))
         var n = 0
         fun progress() {
-            if (++n % 500 == 0) _status.value = OnDemandStatus(true, "Importing $what from ${pl.name}… ${"%,d".format(n)}")
+            if (++n % 500 == 0) _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies_count else R.string.iptv_status_importing_series_count, pl.name, n))
         }
 
         // 1. The whole list in one go (fastest).
@@ -396,13 +404,13 @@ class OnDemandRepository @Inject constructor(
         // 2. Some panels cut off huge lists part-way (an "EOFException" partway through).
         //    Ask again one category at a time: many small lists instead of one huge one.
         if (categories.isEmpty()) {
-            reportStop(pl, what, saved, firstProblem)
+            reportStop(pl, kind, saved, firstProblem)
             if (saved == 0) throw firstProblem
             return
         }
         Log.w(TAG, "${pl.name}: $what list stopped after $saved; importing by category", firstProblem)
         n = 0
-        _status.value = OnDemandStatus(true, "Importing $what from ${pl.name} by category…")
+        _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies_by_category else R.string.iptv_status_importing_series_by_category, pl.name))
         var failedCategories = 0
         val byCategory = sequence {
             for ((catId, _) in categories) {
@@ -423,16 +431,20 @@ class OnDemandRepository @Inject constructor(
         if (total < saved) {
             // Category by category did worse: go back to what the full list gave.
             db.replace(pl.id, kind, categories, streamItems(pl, kind, "$api&action=$listAction", onStop = {}, onItem = {}))
-            reportStop(pl, what, saved, firstProblem)
+            reportStop(pl, kind, saved, firstProblem)
         } else if (failedCategories > 0) {
-            lastProblem = "${pl.name}: imported ${"%,d".format(total)} $what, but $failedCategories categories " +
-                "didn't finish. It will try again in an hour."
+            lastProblem = text(
+                if (kind == VodKind.MOVIE) R.string.iptv_status_import_movies_incomplete else R.string.iptv_status_import_series_incomplete,
+                pl.name, total, failedCategories
+            )
         }
     }
 
-    private fun reportStop(pl: PlaylistSource, what: String, saved: Int, e: Throwable) {
-        lastProblem = "${pl.name} stopped sending $what after ${"%,d".format(saved)} " +
-            "(${e.message ?: e.javaClass.simpleName}). Those were saved; it will try again in an hour."
+    private fun reportStop(pl: PlaylistSource, kind: VodKind, saved: Int, e: Throwable) {
+        lastProblem = text(
+            if (kind == VodKind.MOVIE) R.string.iptv_status_import_movies_stopped else R.string.iptv_status_import_series_stopped,
+            pl.name, saved, e.message ?: e.javaClass.simpleName
+        )
     }
 
     /**

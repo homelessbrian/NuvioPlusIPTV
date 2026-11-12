@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">Add to Nuvio + IPTV</string>
+    <string name="iptv_phone_brand_name" translatable="false">Nuvio + IPTV</string>
+    <string name="iptv_phone_connected_to">Connected to %1$s</string>
+    <string name="iptv_phone_heading">Add to your TV</string>
+    <string name="iptv_phone_instructions">Fill this in and tap Send to TV. It shows up on your TV right away.</string>
+    <string name="iptv_phone_what_to_add">What to add</string>
+    <string name="iptv_phone_m3u_tab">M3U link</string>
+    <string name="iptv_phone_xtream_tab" translatable="false">Xtream</string>
+    <string name="iptv_phone_epg_tab">EPG only</string>
+    <string name="iptv_phone_name_label">Name (optional)</string>
+    <string name="iptv_phone_provider_placeholder">My provider</string>
+    <string name="iptv_phone_playlist_label">Playlist link</string>
+    <string name="iptv_phone_playlist_placeholder" translatable="false">http://…/playlist.m3u</string>
+    <string name="iptv_phone_epg_optional_label">EPG link (optional)</string>
+    <string name="iptv_phone_epg_placeholder" translatable="false">http://…/epg.xml.gz</string>
+    <string name="iptv_phone_user_agent_label">User agent (optional)</string>
+    <string name="iptv_phone_user_agent_placeholder">Leave empty for default</string>
+    <string name="iptv_phone_server_label">Server</string>
+    <string name="iptv_phone_server_placeholder" translatable="false">http://host:port</string>
+    <string name="iptv_phone_username_label">Username</string>
+    <string name="iptv_phone_password_label">Password</string>
+    <string name="iptv_phone_include_live">Include TV channels</string>
+    <string name="iptv_phone_include_vod">Include movies &amp; series (On Demand)</string>
+    <string name="iptv_phone_epg_label">EPG link</string>
+    <string name="iptv_phone_send">Send to TV</string>
+    <string name="iptv_phone_network_note">Only works on the same Wi‑Fi as your TV. This page stops working when you close the screen on your TV.</string>
+    <string name="iptv_phone_guide_placeholder">Guide</string>
+    <string name="iptv_phone_sending">Sending…</string>
+    <string name="iptv_phone_unreachable">Couldn\'t reach your TV. Make sure the Add from your phone screen is still open and you\'re on the same Wi‑Fi.</string>
+    <string name="iptv_phone_not_found">Not found</string>
+    <string name="iptv_phone_nothing_to_send">Nothing to send.</string>
+    <string name="iptv_phone_missing">Something is missing.</string>
+    <string name="iptv_phone_could_not_add">The TV couldn\'t add that. Try again.</string>
+    <string name="iptv_phone_playlist_missing">Paste the playlist link.</string>
+    <string name="iptv_phone_playlist_scheme">The playlist link should start with http:// or https://.</string>
+    <string name="iptv_phone_epg_scheme">The EPG link should start with http:// or https://.</string>
+    <string name="iptv_phone_server_missing">Enter the server address.</string>
+    <string name="iptv_phone_server_invalid">That doesn\'t look like a server address.</string>
+    <string name="iptv_phone_credentials_missing">Enter the username and password.</string>
+    <string name="iptv_phone_inclusion_missing">Turn on TV channels or movies &amp; series.</string>
+    <string name="iptv_phone_epg_missing">Paste the EPG link.</string>
+    <string name="iptv_phone_kind_missing">Pick what to add.</string>
+</resources>

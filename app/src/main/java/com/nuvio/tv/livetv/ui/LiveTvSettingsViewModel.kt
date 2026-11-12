@@ -1,7 +1,10 @@
 package com.nuvio.tv.livetv.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.R
+import com.nuvio.tv.core.util.withAppLocale
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.LiveTvStatus
@@ -10,6 +13,7 @@ import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.LiveUserState
 import com.nuvio.tv.livetv.model.PlaylistSource
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -18,6 +22,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class LiveTvSettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val repository: LiveTvRepository,
     private val prefs: LiveTvPreferences,
     val driveSync: com.nuvio.tv.livetv.sync.LiveTvDriveSync,
@@ -139,8 +144,10 @@ class LiveTvSettingsViewModel @Inject constructor(
     }
 
     fun testPoster(title: String) = viewModelScope.launch {
-        posterTest.value = "Searching…"
-        posterTest.value = runCatching { posterResolver.diagnose(title) }.getOrElse { "Test failed: ${it.message}" }
+        posterTest.value = context.withAppLocale().getString(R.string.iptv_settings_support_poster_searching)
+        posterTest.value = runCatching { posterResolver.diagnose(title) }.getOrElse {
+            context.withAppLocale().getString(R.string.iptv_settings_support_poster_test_failed, it.message ?: it.javaClass.simpleName)
+        }
     }
     fun removeReminder(channelKey: String, startMs: Long) = viewModelScope.launch { prefs.removeReminder(channelKey, startMs) }
     fun clearChannelCopies() = viewModelScope.launch { prefs.clearChannelCopies() }
@@ -158,7 +165,8 @@ class LiveTvSettingsViewModel @Inject constructor(
 
     /** Every group that can go in Quick Channels (see [buildRowGroupOptions]). */
     fun rowGroupOptions(): List<RowGroupOption> =
-        buildRowGroupOptions(userState.value, playlists.value, repository.channels.value)
+        buildRowGroupOptions(userState.value, playlists.value, repository.channels.value,
+            context.withAppLocale().getString(R.string.iptv_settings_support_playlist_fallback))
 
     fun groupLabel(id: String): String {
         userState.value.customGroups.firstOrNull { it.id == id }?.let { return it.name }
@@ -179,7 +187,8 @@ data class RowGroupOption(val id: String, val name: String, val playlist: String
 internal fun buildRowGroupOptions(
     user: LiveUserState,
     lists: List<PlaylistSource>,
-    channels: List<com.nuvio.tv.livetv.model.LiveChannel>
+    channels: List<com.nuvio.tv.livetv.model.LiveChannel>,
+    fallbackPlaylistName: String = "Playlist"
 ): List<RowGroupOption> {
     val names = lists.associate { it.id to it.name }
     val order = lists.withIndex().associate { (i, p) -> p.id to i }
@@ -190,6 +199,6 @@ internal fun buildRowGroupOptions(
     }
     val playlistGroups = found.entries
         .sortedBy { order[it.value.second] ?: Int.MAX_VALUE }
-        .map { (id, v) -> RowGroupOption(id, user.groupNames[id] ?: v.first, names[v.second] ?: "Playlist", v.third) }
+        .map { (id, v) -> RowGroupOption(id, user.groupNames[id] ?: v.first, names[v.second] ?: fallbackPlaylistName, v.third) }
     return user.customGroups.map { RowGroupOption(it.id, it.name, null, it.channelKeys.size) } + playlistGroups
 }

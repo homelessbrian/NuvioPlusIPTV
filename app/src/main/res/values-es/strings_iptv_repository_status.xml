@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">Actualizando la lista de reproducción «%1$s»…</string>
+    <string name="iptv_repository_status_reading_channels">Leyendo canales…</string>
+    <string name="iptv_repository_status_downloading_guide">Descargando la guía «%1$s»…</string>
+    <string name="iptv_repository_status_downloading_guide_label">Descargando la guía «%1$s»</string>
+    <string name="iptv_repository_status_matching_data">Vinculando los datos de la guía…</string>
+    <string name="iptv_repository_status_updating_guide">Actualizando la guía…</string>
+    <string name="iptv_repository_status_adding_playlist">Añadiendo canales de «%1$s»…</string>
+    <string name="iptv_repository_status_reading_channels_from">Leyendo canales de «%1$s»…</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">Leyendo canales de «%1$s» (%2$d de %3$d)…</string>
+    <string name="iptv_repository_status_guide_memory_skipped">No hay memoria suficiente para la guía «%1$s»; se ha omitido</string>
+    <string name="iptv_repository_status_reading_guide">Leyendo la guía «%1$s»…</string>
+    <string name="iptv_repository_status_reading_guide_numbered">Leyendo la guía «%1$s» (%2$d de %3$d)…</string>
+    <string name="iptv_repository_status_reading_guide_progress">Leyendo la guía «%1$s»… %2$d%%</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">Leyendo la guía «%1$s» (%2$d de %3$d)… %4$d%%</string>
+    <string name="iptv_repository_status_matching_guide">Vinculando la guía «%1$s»…</string>
+    <string name="iptv_repository_status_matching_guide_numbered">Vinculando la guía «%1$s» (%2$d de %3$d)…</string>
+    <string name="iptv_repository_status_downloading_playlist_label">Descargando la lista de reproducción «%1$s»</string>
+    <string name="iptv_repository_status_download_progress">%1$s… %2$s</string>
+    <string name="iptv_repository_status_download_progress_total">%1$s… %2$s de %3$s</string>
+    <string name="iptv_repository_status_loading_channels">Cargando canales de %1$s… %2$,d</string>
+    <string name="iptv_repository_status_size_gb">%1$.1f GB</string>
+    <string name="iptv_repository_status_size_mb">%1$.1f MB</string>
+    <string name="iptv_repository_status_size_kb">%1$d KB</string>
+    <string name="iptv_repository_status_unknown_host_short">No se ha encontrado el servidor del proveedor.</string>
+    <string name="iptv_repository_status_timeout_short">El proveedor ha tardado demasiado en responder.</string>
+    <string name="iptv_repository_status_generic_error">Se ha producido un error.</string>
+    <string name="iptv_repository_status_unknown_host_address">No se ha encontrado el servidor del proveedor (%1$s). Comprueba la dirección y tu conexión a internet o inténtalo más tarde.</string>
+    <string name="iptv_repository_status_provider_timeout">El proveedor ha tardado demasiado en responder (tiempo de espera agotado). Puede estar ocupado; inténtalo más tarde.</string>
+    <string name="iptv_repository_status_address">dirección</string>
+    <string name="iptv_repository_status_playlist_update_failed">No se ha podido actualizar la lista de reproducción «%1$s». %2$s</string>
+    <string name="iptv_repository_status_guide_update_failed">No se ha podido actualizar la guía «%1$s». %2$s</string>
+    <string name="iptv_repository_status_expired">«%1$s» ha caducado</string>
+    <string name="iptv_repository_status_expires_today">«%1$s» caduca hoy</string>
+    <string name="iptv_repository_status_expires_tomorrow">«%1$s» caduca mañana</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">Añadiendo canales de %1$d lista de reproducción nueva…</item>
+        <item quantity="other">Añadiendo canales de %1$d listas de reproducción nuevas…</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">«%1$s» caduca dentro de %2$d día</item>
+        <item quantity="other">«%1$s» caduca dentro de %2$d días</item>
+    </plurals>
+</resources>
