@@ -1545,7 +1545,12 @@ private fun PlaybackNavHost(
                 // Back on a game opened from another page: that page again, as it was (like
                 // picking it in the side menu).
                 onReturnTo = { route ->
-                    runCatching {
+                    if (route == Screen.LiveTvMultiview.route || route == Screen.SportsMultiview.route) {
+                        // Multiview is still under this page: go back to it, the pages beneath stay as they were.
+                        if (!navController.popBackStack(route, inclusive = false)) {
+                            runCatching { navController.navigate(route) { launchSingleTop = true } }
+                        }
+                    } else runCatching {
                         navController.navigate(route) {
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
                             launchSingleTop = true
@@ -1610,13 +1615,27 @@ private fun PlaybackNavHost(
         }
 
         composable(Screen.LiveTvMultiview.route) {
-            com.nuvio.tv.livetv.multiview.MultiviewScreen(onBack = { navController.popBackStack() })
+            com.nuvio.tv.livetv.multiview.MultiviewScreen(
+                onBack = { navController.popBackStack() },
+                onOpenGame = { id ->
+                    com.nuvio.tv.livetv.sports.SportsLaunch.openEvent(
+                        id, com.nuvio.tv.livetv.sports.SportsLaunch.Origin(Screen.LiveTvMultiview.route, "Multiview")
+                    )
+                    navController.navigate(Screen.Sports.route) { launchSingleTop = true }
+                }
+            )
         }
 
         composable(Screen.SportsMultiview.route) {
             com.nuvio.tv.livetv.multiview.MultiviewScreen(
                 onBack = { navController.popBackStack() },
                 startOnSports = true,
+                onOpenGame = { id ->
+                    com.nuvio.tv.livetv.sports.SportsLaunch.openEvent(
+                        id, com.nuvio.tv.livetv.sports.SportsLaunch.Origin(Screen.SportsMultiview.route, "Multiview")
+                    )
+                    navController.navigate(Screen.Sports.route) { launchSingleTop = true }
+                },
                 onSingle = {
                     // Return directly to the guide. Restoring its saved stack can resurrect a
                     // previous Multiview child that would release the incoming single player.

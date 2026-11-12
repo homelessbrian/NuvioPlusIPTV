@@ -27,10 +27,13 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -92,16 +95,20 @@ fun MultiviewScreen(
     onBack: () -> Unit,
     startOnSports: Boolean = false,
     onSingle: () -> Unit = onBack,
+    /** Opens a game's page in the Sports hub; Back there returns here (see [MultiviewReturn]). */
+    onOpenGame: (String) -> Unit = {},
     viewModel: MultiviewViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val profileId by viewModel.activeProfileId.collectAsStateWithLifecycle()
     val openingProfile = remember { profileId }
+    // Back from a game's page in the Sports hub: the layout, panes and panel as they were.
+    val restore = remember { MultiviewReturn.take(startOnSports, openingProfile) }
     val profileExitRequested = remember { booleanArrayOf(false) }
     val latestOnBack by rememberUpdatedState(onBack)
     // The Sports games come from the Sports watch model, created only once the Sports tab is used
     // (so plain Live TV Multiview doesn't pay for it).
-    var sportsUsed by remember { mutableStateOf(startOnSports) }
+    var sportsUsed by remember { mutableStateOf(startOnSports || restore?.sportsMode == true || restore?.events?.isNotEmpty() == true) }
     val sports: SportsWatchViewModel? = if (sportsUsed) hiltViewModel<SportsWatchViewModel>() else null
     val sportsRef = remember { arrayOfNulls<SportsWatchViewModel>(1) }
     SideEffect { sportsRef[0] = sports }
@@ -117,6 +124,7 @@ fun MultiviewScreen(
         MultiviewPlaybackSession(
             context.applicationContext,
             initialLayout = request?.let { r -> MultiviewLayout.entries.first { it.paneCount == r.panes.coerceIn(1, 4) } }
+                ?: restore?.layout
                 ?: MultiviewLayoutMemory.load(context.applicationContext)
                 ?: MultiviewLayout.TWO,
             mayPlayChannel = { channel ->
@@ -137,16 +145,26 @@ fun MultiviewScreen(
         return if (extra.isEmpty()) live else (live + extra).distinctBy { it.key }
     }
     val pickerGroups by viewModel.pickerGroups.collectAsStateWithLifecycle()
-    var pickerGroup by remember { mutableStateOf<String?>(null) }
-    var sportsMode by remember { mutableStateOf(startOnSports) }
-    val paneEvents = remember { mutableStateMapOf<Int, String>().apply { request?.eventId?.let { put(0, it) } } }
+    var pickerGroup by remember { mutableStateOf(restore?.group) }
+    var sportsMode by remember { mutableStateOf(startOnSports || restore?.sportsMode == true) }
+    val paneEvents = remember {
+        mutableStateMapOf<Int, String>().apply {
+            request?.eventId?.let { put(0, it) }
+            restore?.events?.let { putAll(it) }
+        }
+    }
+    // The panes' channels to put back (each when its channel is known), and the game the panel opens on.
+    val restoreChannels = remember {
+        restore?.channels?.withIndex()?.filter { it.value != null }?.associate { it.index to it.value!! }?.toMutableMap()
+    }
+    var returnGame by remember { mutableStateOf(restore?.gameId) }
     var sportsSeeded by remember { mutableStateOf(request?.channelKey == null) }
     val queued = remember { MultiviewQueue.take() }
     var seeded by remember { mutableStateOf(queued.isEmpty()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var editorOpen by remember { mutableStateOf(true) }
     var layoutOpen by remember { mutableStateOf(false) }
-    var editedPane by remember { mutableIntStateOf(if (request?.channelKey != null && request.panes > 1) 1 else 0) }
+    var editedPane by remember { mutableIntStateOf(restore?.editedPane ?: if (request?.channelKey != null && request.panes > 1) 1 else 0) }
     val paneFocus = remember { List(4) { FocusRequester() } }
     val editFocus = remember { FocusRequester() }
     val panelBackground by viewModel.panelBackground.collectAsStateWithLifecycle()
@@ -261,6 +279,15 @@ fun MultiviewScreen(
     LaunchedEffect(validChannels) {
         // Includes parental and visibility filtering; refreshes changed source details by key.
         session.validateAllowedChannels(validChannels)
+        if (restoreChannels != null && restoreChannels.isNotEmpty() && validChannels.isNotEmpty()) {
+            restoreChannels.entries.toList().forEach { (pane, channelKey) ->
+                validChannels.firstOrNull { it.key == channelKey }?.let {
+                    session.assignChannel(pane, it)
+                    restoreChannels.remove(pane)
+                }
+            }
+            restore?.focusedPane?.let { session.focusPane(it.coerceIn(0, session.state.value.layout.paneCount - 1)) }
+        }
         if (!sportsSeeded && request?.channelKey != null) {
             // Opened from Sports on a channel: it starts in the first pane.
             validChannels.firstOrNull { it.key == request.channelKey }?.takeIf { sports?.mayPlay(it) == true }?.let {
@@ -289,12 +316,27 @@ fun MultiviewScreen(
         MultiviewLayoutMemory.save(context.applicationContext, layout)
         editedPane = editedPane.coerceIn(0, layout.paneCount - 1)
     }
+    // The control bar fades away when nothing is moving, and comes back when the highlight moves.
+    var barTick by remember { mutableIntStateOf(0) }
+    var barFocused by remember { mutableStateOf(false) }
+    var barShown by remember { mutableStateOf(true) }
+    LaunchedEffect(barTick, barFocused, editorOpen, layoutOpen) {
+        barShown = true
+        if (!barFocused && !editorOpen && !layoutOpen) {
+            delay(5_000L)
+            barShown = false
+        }
+    }
+    LaunchedEffect(state.focusedPane) { barTick++ }
+    LaunchedEffect(editorOpen) { if (!editorOpen) returnGame = null }
+    val barAlpha by animateFloatAsState(if (barShown) 1f else 0f, tween(450), label = "multiviewBar")
     BackHandler {
         if (editorOpen) editorOpen = false else if (startOnSports) single() else onBack()
     }
 
     Box(
         Modifier.fillMaxSize().background(NuvioTheme.colors.Background).multiviewBackdrop().onPreviewKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown) barTick++
             if (event.key == Key.Menu) {
                 if (event.type == KeyEventType.KeyDown) {
                     editedPane = state.focusedPane
@@ -372,6 +414,8 @@ fun MultiviewScreen(
         // The control bar floating over the video: the play bar's glass, Sports' buttons.
         Row(
             Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
+                .graphicsLayer { alpha = barAlpha }
+                .onFocusChanged { barFocused = it.hasFocus }
                 .multiviewPanel(panelBackground, RoundedCornerShape(14.dp))
                 .padding(start = 14.dp, end = 8.dp, top = 5.dp, bottom = 5.dp)
                 .onPreviewKeyEvent { event ->
@@ -429,6 +473,19 @@ fun MultiviewScreen(
             onGame = { game -> sports?.resolve(game.event.id) != null },
             onPlayGame = { game -> playGame(game.event.id) },
             onStream = { game, channelKey -> playGame(game.event.id, channelKey) },
+            onGameInfo = { game ->
+                // The game's page in the Sports hub; Back there comes back to this panel, on this game.
+                MultiviewReturn.save(
+                    MultiviewReturn.Snapshot(
+                        sports = startOnSports, profile = openingProfile, layout = state.layout,
+                        channels = state.panes.map { it.channelKey }, events = paneEvents.toMap(),
+                        focusedPane = state.focusedPane, editedPane = editedPane, sportsMode = sportsMode,
+                        group = pickerGroup, gameId = game.event.id
+                    )
+                )
+                onOpenGame(game.event.id)
+            },
+            startGameId = returnGame,
             panelBackground = panelBackground,
             nowOn = viewModel::nowOn,
             onSelect = { option ->
@@ -459,4 +516,34 @@ fun MultiviewScreen(
 @Composable
 private fun MultiviewBarDivider() {
     Box(Modifier.width(1.dp).height(18.dp).background(SportsLook.Divider))
+}
+
+/**
+ * Multiview as it was when a game's page in the Sports hub was opened from its panel, kept for the
+ * one visit back (channels by key only, nothing about streams). Taken once; ignored for another
+ * profile or the other kind of Multiview.
+ */
+internal object MultiviewReturn {
+    class Snapshot(
+        val sports: Boolean,
+        val profile: Int,
+        val layout: MultiviewLayout,
+        val channels: List<String?>,
+        val events: Map<Int, String>,
+        val focusedPane: Int,
+        val editedPane: Int,
+        val sportsMode: Boolean,
+        val group: String?,
+        val gameId: String,
+    )
+
+    @Volatile private var saved: Snapshot? = null
+
+    fun save(snapshot: Snapshot) { saved = snapshot }
+
+    fun take(sports: Boolean, profile: Int): Snapshot? {
+        val s = saved
+        saved = null
+        return s?.takeIf { it.sports == sports && it.profile == profile }
+    }
 }

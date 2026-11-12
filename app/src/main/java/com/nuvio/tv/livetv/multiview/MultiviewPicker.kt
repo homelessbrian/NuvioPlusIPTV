@@ -139,6 +139,10 @@ internal fun MultiviewChannelPicker(
     onGame: (SportsWatchGame) -> Boolean,
     onPlayGame: (SportsWatchGame) -> Boolean,
     onStream: (SportsWatchGame, String) -> Unit,
+    /** Hold OK on a game: its page in the Sports hub (Back there comes back to this panel). */
+    onGameInfo: (SportsWatchGame) -> Unit,
+    /** Coming back from that page: the cursor starts on this game. */
+    startGameId: String?,
     panelBackground: String,
     nowOn: suspend (Collection<String>) -> Map<String, EpgProgram>,
     onSelect: (MultiviewChannelOption) -> Unit,
@@ -246,7 +250,8 @@ internal fun MultiviewChannelPicker(
         if (gameAt.isEmpty()) return@LaunchedEffect
         if (!gamePlaced) {
             gamePlaced = true
-            val target = items.indexOfFirst { it is PanelItem.Game && it.game.event.id == selectedEventId }.takeIf { it >= 0 }
+            val target = items.indexOfFirst { it is PanelItem.Game && it.game.event.id == startGameId }.takeIf { it >= 0 }
+                ?: items.indexOfFirst { it is PanelItem.Game && it.game.event.id == selectedEventId }.takeIf { it >= 0 }
                 ?: items.indexOfFirst { it is PanelItem.Game && it.game.channels.any { m -> m.channel.key == selectedPane?.channelKey } }.takeIf { it >= 0 }
                 ?: items.indexOfFirst { it is PanelItem.Game && it.game.channels.isNotEmpty() }.takeIf { it >= 0 }
                 ?: gameAt.first()
@@ -329,7 +334,7 @@ internal fun MultiviewChannelPicker(
     }
     val hint = when {
         sportsMode && streamsGame != null -> "OK: play this stream in P${paneId + 1} · Back: games"
-        sportsMode -> "OK: play in P${paneId + 1} · Hold OK: other streams · Back: close"
+        sportsMode -> "OK: play in P${paneId + 1} · Hold OK: game page · Right: other streams · Back: close"
         level == PickerLevel.GROUPS -> "OK: open group · Back: close"
         else -> "OK: play in P${paneId + 1} · Left: groups · Back: groups"
     }
@@ -441,7 +446,7 @@ internal fun MultiviewChannelPicker(
                                                 if (event.nativeKeyEvent.repeatCount == 0) okHeld[0] = true
                                                 else if (okHeld[0]) {
                                                     okHeld[0] = false
-                                                    game?.let(::openStreams)
+                                                    game?.let(onGameInfo)
                                                 }
                                             } else if (okHeld[0]) {
                                                 okHeld[0] = false
@@ -449,6 +454,7 @@ internal fun MultiviewChannelPicker(
                                             }
                                         }
                                         !down -> Unit
+                                        event.key == Key.DirectionRight -> game?.let(::openStreams)
                                         event.key == Key.DirectionDown -> { if (gameCursor < gameAt.lastIndex) gameCursor++ }
                                         event.key == Key.DirectionUp -> { if (gameCursor > 0) gameCursor-- else runCatching { tabFocus.requestFocus() } }
                                     }
@@ -517,7 +523,7 @@ internal fun MultiviewChannelPicker(
                                             focusedPane = paneId,
                                             hideScores = hideScores,
                                             onClick = { gameCursor = gameAt.indexOf(i).coerceAtLeast(0); playGame(item.game) },
-                                            onLongClick = { gameCursor = gameAt.indexOf(i).coerceAtLeast(0); openStreams(item.game) },
+                                            onLongClick = { gameCursor = gameAt.indexOf(i).coerceAtLeast(0); onGameInfo(item.game) },
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                             cursorOn = hasFocus && gameAt.getOrNull(gameCursor) == i,
                                             cardHeight = 108.dp,
