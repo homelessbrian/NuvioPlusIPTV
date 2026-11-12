@@ -81,6 +81,7 @@ class MultiviewViewModel @Inject constructor(
     val pickerGroups: StateFlow<List<MultiviewGroup>> = pickerInput.filterNotNull().map { input ->
         val ui = buildUi(input.channels, input.user, input.settings, null, "", true)
         val allowed = allowedKeys(ui.allVisibleChannels)
+        val sourceNames = HashMap<String, String>().also { m -> input.channels.forEach { m.putIfAbsent(it.sourceId, it.sourceName) } }
         ui.groups.asSequence()
             .filter { it.id != ChannelGroup.SEARCH && it.id != ChannelGroup.ALL && !it.locked }
             .map { g ->
@@ -88,7 +89,7 @@ class MultiviewViewModel @Inject constructor(
                 val count = if (g.id.startsWith(ChannelGroup.CUSTOM_PREFIX)) {
                     input.user.customGroups.firstOrNull { it.id == g.id }?.channelKeys?.distinct()?.count { it in allowed } ?: 0
                 } else g.count
-                MultiviewGroup(g.id, g.title, count)
+                MultiviewGroup(g.id, g.title, count, g.sourceId, g.sourceId?.let { sourceNames[it] })
             }
             .filter { it.count > 0 }
             .toList()

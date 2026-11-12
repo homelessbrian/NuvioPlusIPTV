@@ -22,7 +22,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.PlayArrow
@@ -106,7 +108,22 @@ private suspend fun androidx.compose.foundation.lazy.LazyListState.keepRowVisibl
     else if (index > last) scrollToItem((index - (last - first)).coerceAtLeast(0))
 }
 
-private enum class PickerLevel { GROUPS, LIST }
+/** One line of the channel tree: a playlist's heading, one of its groups, or a channel inside the open group. */
+private sealed interface TreeItem {
+    val key: String
+    class Head(val sourceId: String, val name: String, val count: Int, val collapsed: Boolean) : TreeItem {
+        override val key get() = "h:$sourceId"
+    }
+    class Group(val id: String, val title: String, val count: Int, val isOpen: Boolean) : TreeItem {
+        override val key get() = "g:$id"
+    }
+    class Channel(val option: MultiviewChannelOption) : TreeItem {
+        override val key get() = "c:${option.key}"
+    }
+}
+
+/** The "All channels" row's id in the tree (and in the remembered group). */
+private const val ALL_GROUP = "__all__"
 
 /** One line of the Sports list: a section's title, or a game under it. */
 private sealed interface PanelItem {
@@ -116,9 +133,11 @@ private sealed interface PanelItem {
 
 /**
  * The side panel for filling a pane. Top: Channels / Sports tabs, then Search, Clear and Retry.
- * Channels open on the groups (the last one used is highlighted) and OK opens a group's list;
- * Sports lists the games as the same cards the Sports page uses, and holding OK on one shows its
- * other streams. The whole list is one focus target with a cursor (like overlay mode's lists).
+ * Channels are one list: each playlist is a heading that folds away (remembered), its groups sit
+ * under it, and OK on a group opens its channels right underneath (one group open at a time).
+ * Sports lists the games as the same cards the Sports page uses; holding OK on one offers its other
+ * streams or its page in the Sports hub. The whole list is one focus target with a cursor (like
+ * overlay mode's lists).
  */
 @Composable
 internal fun MultiviewChannelPicker(
@@ -149,6 +168,8 @@ internal fun MultiviewChannelPicker(
     onRetry: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val selectedPane = state.panes.firstOrNull { it.id == paneId }
     val logos by produceState(emptyMap<String, String>(), optionsSource) {
         value = withContext(Dispatchers.Default) {
@@ -162,35 +183,62 @@ internal fun MultiviewChannelPicker(
     }
     var query by remember { mutableStateOf("") }
     var searching by remember { mutableStateOf(false) }
-    var searchFromGroups by remember { mutableStateOf(false) }
-    var level by remember { mutableStateOf(PickerLevel.GROUPS) }
-    // The chosen group's channels in the guide's order (your "Reorder channels" first); a search looks through all of them.
-    val scoped by produceState(emptyList<MultiviewChannelOption>(), group, groups, optionsSource) {
-        value = channelsIn(group?.takeIf { id -> groups.any { it.id == id } })
+    // Playlists folded away (remembered between visits), and the one group that's open.
+    var collapsed by remember { mutableStateOf(MultiviewCollapseMemory.load(context.applicationContext)) }
+    var openId by remember { mutableStateOf(group?.takeIf { it == ALL_GROUP || groups.any { g -> g.id == it } }) }
+    // The open group's channels in the guide's order (your "Reorder channels" first), tagged with the group they're for.
+    val openChannels by produceState(null as Pair<String?, List<MultiviewChannelOption>>?, openId, groups, optionsSource) {
+        val id = openId
+        value = if (id == null) null else id to channelsIn(id.takeIf { it != ALL_GROUP })
     }
     val everything by produceState(emptyList<MultiviewChannelOption>(), searching, optionsSource) {
         value = if (searching) channelsIn(null) else emptyList()
     }
-    val results by produceState(emptyList<MultiviewChannelOption>(), scoped, everything, searching, query) {
-        value = searchMultiviewChannels(if (searching) everything else scoped, query, 5000)
+    val results by produceState(emptyList<MultiviewChannelOption>(), everything, searching, query) {
+        value = if (searching) searchMultiviewChannels(everything, query, 5000) else emptyList()
     }
-    val groupTitle = group?.let { id -> groups.firstOrNull { it.id == id }?.title }
     val paneOf = remember(state.panes) {
         buildMap { state.panes.forEach { pane -> pane.channelKey?.let { k -> if (k !in this) put(k, pane.id) } } }
     }
     val paneKeys = remember(state.panes) { state.panes.map { it.channelKey } }
 
+    // The tree: All channels, your own groups, then each playlist with its groups; the open group's channels under it.
+    val tree = remember(groups, collapsed, openId, openChannels, optionsSource.size) {
+        val loaded = openChannels?.takeIf { it.first == openId }?.second.orEmpty()
+        buildList<TreeItem> {
+            fun addGroup(id: String, title: String, count: Int) {
+                val nowOpen = openId == id
+                add(TreeItem.Group(id, title, count, nowOpen))
+                if (nowOpen) loaded.forEach { add(TreeItem.Channel(it)) }
+            }
+            addGroup(ALL_GROUP, "All channels", optionsSource.size)
+            groups.filter { it.sourceId == null }.forEach { addGroup(it.id, it.title, it.count) }
+            val byList = LinkedHashMap<String, MutableList<MultiviewGroup>>()
+            groups.filter { it.sourceId != null }.forEach { byList.getOrPut(it.sourceId!!) { ArrayList() }.add(it) }
+            byList.forEach { (sourceId, list) ->
+                val folded = sourceId in collapsed
+                add(TreeItem.Head(sourceId, list.first().sourceName ?: "Playlist", list.size, folded))
+                if (!folded) list.forEach { addGroup(it.id, it.title, it.count) }
+            }
+        }
+    }
+
     var index by remember { mutableIntStateOf(0) }
-    var placeNext by remember { mutableStateOf(true) }
-    var groupIndex by remember { mutableIntStateOf((groups.indexOfFirst { it.id == group } + 1).coerceAtLeast(0)) }
+    var placed by remember { mutableStateOf(false) }
+    var focusKey by remember { mutableStateOf<String?>(null) }
+    var searchIndex by remember { mutableIntStateOf(0) }
     var hasFocus by remember { mutableStateOf(false) }
-    val listState = rememberLazyListState()
-    val groupState = rememberLazyListState()
+    val treeState = rememberLazyListState()
+    val searchState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val listFocus = remember { FocusRequester() }
     val fieldFocus = remember { FocusRequester() }
-    val searchFocus = remember { FocusRequester() }
+    /** The first of Search / Clear (the top row's buttons), where Up from the list goes. */
+    val actionFocus = remember { FocusRequester() }
     val tabFocus = remember { FocusRequester() }
+    val hasChannel = selectedPane?.channelKey != null
+    val failed = selectedPane?.error != null
+    val showActions = searching || !sportsMode || hasChannel || failed
 
     // Sports: the games under their section titles, a cursor over the games, and one game's streams.
     val items = remember(rows) {
@@ -208,20 +256,25 @@ internal fun MultiviewChannelPicker(
     var gameCursor by remember { mutableIntStateOf(0) }
     var gamePlaced by remember { mutableStateOf(false) }
     var streamsGame by remember { mutableStateOf<SportsWatchGame?>(null) }
-    // Hold OK on a game: a short menu (change stream, or its page in the Sports hub).
-    var optionsGame by remember { mutableStateOf<SportsWatchGame?>(null) }
-    var optionIndex by remember { mutableIntStateOf(0) }
     var streamIndex by remember { mutableIntStateOf(0) }
     val streamState = rememberLazyListState()
     val streams = streamsGame?.channels.orEmpty().distinctBy { it.channel.key }
+    // Hold OK on a game: a short menu (change stream, or its page in the Sports hub).
+    var optionsGame by remember { mutableStateOf<SportsWatchGame?>(null) }
+    var optionIndex by remember { mutableIntStateOf(0) }
     val okHeld = remember { booleanArrayOf(false) }
 
     // What's on now, read only for the rows on screen (and a few below), once scrolling pauses.
     val shows = remember { mutableStateMapOf<String, EpgProgram>() }
-    val windowKeys by remember(results) {
+    val windowKeys by remember(tree, results, searching) {
         derivedStateOf {
-            val from = listState.firstVisibleItemIndex.coerceIn(0, results.size)
-            results.subList(from, (from + 16).coerceAtMost(results.size)).map { it.key }
+            if (searching) {
+                val from = searchState.firstVisibleItemIndex.coerceIn(0, results.size)
+                results.subList(from, (from + 16).coerceAtMost(results.size)).map { it.key }
+            } else {
+                val from = treeState.firstVisibleItemIndex.coerceIn(0, tree.size)
+                tree.subList(from, (from + 16).coerceAtMost(tree.size)).mapNotNull { (it as? TreeItem.Channel)?.option?.key }
+            }
         }
     }
     LaunchedEffect(windowKeys, sportsMode) {
@@ -232,21 +285,27 @@ internal fun MultiviewChannelPicker(
     }
     val now = remember { System.currentTimeMillis() }
 
-    LaunchedEffect(results, level) {
-        if (results.isEmpty()) {
-            index = 0
-            return@LaunchedEffect
-        }
-        if (placeNext && level == PickerLevel.LIST && !searching) {
-            // Opening a group: start on the channel already in this pane, if it's in the group.
-            placeNext = false
-            index = results.indexOfFirst { it.key == selectedPane?.channelKey }.coerceAtLeast(0)
-            listState.scrollToItem((index - 2).coerceAtLeast(0))
-        } else index = index.coerceIn(0, results.lastIndex)
+    LaunchedEffect(tree) {
+        val moveTo = focusKey
+        if (moveTo != null) {
+            focusKey = null
+            tree.indexOfFirst { it.key == moveTo }.takeIf { it >= 0 }?.let { index = it }
+        } else if (!placed) {
+            // Opening: the channel already in this pane if its group is open, else the open group, else the top.
+            val loaded = openId == null || openChannels?.first == openId
+            if (!loaded) return@LaunchedEffect
+            placed = true
+            val at = tree.indexOfFirst { it is TreeItem.Channel && it.option.key == selectedPane?.channelKey }.takeIf { it >= 0 }
+                ?: tree.indexOfFirst { it is TreeItem.Group && it.id == openId }.takeIf { it >= 0 }
+                ?: 0
+            index = at
+            treeState.scrollToItem((at - 2).coerceAtLeast(0))
+        } else index = index.coerceIn(0, (tree.size - 1).coerceAtLeast(0))
     }
-    LaunchedEffect(group, query) {
-        index = 0
-        listState.scrollToItem(0)
+    LaunchedEffect(results) { searchIndex = searchIndex.coerceIn(0, (results.size - 1).coerceAtLeast(0)) }
+    LaunchedEffect(query) {
+        searchIndex = 0
+        searchState.scrollToItem(0)
     }
     LaunchedEffect(items) {
         if (gameAt.isEmpty()) return@LaunchedEffect
@@ -261,8 +320,8 @@ internal fun MultiviewChannelPicker(
             sportsState.scrollToItem((target - 1).coerceAtLeast(0))
         } else gameCursor = gameCursor.coerceIn(0, gameAt.lastIndex)
     }
-    LaunchedEffect(index) { listState.keepRowVisible(index) }
-    LaunchedEffect(groupIndex) { groupState.keepRowVisible(groupIndex) }
+    LaunchedEffect(index) { treeState.keepRowVisible(index) }
+    LaunchedEffect(searchIndex) { searchState.keepRowVisible(searchIndex) }
     LaunchedEffect(gameCursor, gameAt) {
         val at = gameAt.getOrNull(gameCursor) ?: return@LaunchedEffect
         // Moving up to a section's first game shows its title too.
@@ -274,34 +333,31 @@ internal fun MultiviewChannelPicker(
         runCatching { listFocus.requestFocus() }
     }
 
-    fun refocusList() {
-        scope.launch {
-            delay(60L)
-            runCatching { listFocus.requestFocus() }
-        }
+    fun upFromList() {
+        runCatching { (if (searching) fieldFocus else if (showActions) actionFocus else tabFocus).requestFocus() }
     }
     fun openSearch() {
-        searchFromGroups = level == PickerLevel.GROUPS
-        level = PickerLevel.LIST
         searching = true
     }
     fun closeSearch() {
         query = ""
         searching = false
-        if (searchFromGroups) level = PickerLevel.GROUPS
         scope.launch {
             delay(60L)
-            runCatching { searchFocus.requestFocus() }
+            runCatching { actionFocus.requestFocus() }
         }
     }
-    fun openGroups() {
-        groupIndex = (groups.indexOfFirst { it.id == group } + 1).coerceAtLeast(0)
-        level = PickerLevel.GROUPS
+    fun toggleList(head: TreeItem.Head) {
+        val next = if (head.collapsed) collapsed - head.sourceId else collapsed + head.sourceId
+        collapsed = next
+        MultiviewCollapseMemory.save(context.applicationContext, next)
+        focusKey = head.key
     }
-    fun openGroup(id: String?) {
-        onGroup(id)
-        placeNext = true
-        level = PickerLevel.LIST
+    fun toggleGroup(g: TreeItem.Group) {
+        openId = if (g.isOpen) null else g.id
+        if (!g.isOpen) onGroup(g.id)
+        // The row stays under the cursor even though a group above it may fold shut.
+        focusKey = g.key
     }
     fun playGame(game: SportsWatchGame) {
         if (game.channels.isEmpty()) {
@@ -323,25 +379,22 @@ internal fun MultiviewChannelPicker(
             searching -> closeSearch()
             sportsMode && optionsGame != null -> optionsGame = null
             sportsMode && streamsGame != null -> streamsGame = null
-            !sportsMode && level == PickerLevel.LIST -> openGroups()
             else -> onClose()
         }
     }
 
-    val inList = !sportsMode && level == PickerLevel.LIST
     val title = when {
         searching -> "Search"
         sportsMode && optionsGame != null -> optionsGame?.event?.title ?: "Game"
         sportsMode -> streamsGame?.event?.title?.let { "Other streams" } ?: "Games"
-        level == PickerLevel.GROUPS -> "Groups"
-        else -> groupTitle ?: "All channels"
+        else -> "Channels"
     }
     val hint = when {
+        searching -> "OK: play in P${paneId + 1} · Back: close search"
         sportsMode && optionsGame != null -> "OK: choose · Back: games"
         sportsMode && streamsGame != null -> "OK: play this stream in P${paneId + 1} · Back: games"
         sportsMode -> "OK: play in P${paneId + 1} · Hold OK: more options · Back: close"
-        level == PickerLevel.GROUPS -> "OK: open group · Back: close"
-        else -> "OK: play in P${paneId + 1} · Left: groups · Back: groups"
+        else -> "OK: open or play in P${paneId + 1} · Left: fold · Back: close"
     }
 
     Dialog(
@@ -358,16 +411,23 @@ internal fun MultiviewChannelPicker(
                     LiveText(title, size = 17.sp, weight = FontWeight.SemiBold)
                 }
                 Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)
-                        .onPreviewKeyEvent { event ->
-                            if (event.key == Key.DirectionDown) {
-                                if (event.type == KeyEventType.KeyDown) runCatching { listFocus.requestFocus() }
-                                true
-                            } else false
-                        },
+                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .onPreviewKeyEvent { event ->
+                                if (event.key == Key.DirectionDown) {
+                                    // Down goes to the buttons under the tabs, or to the list when there are none.
+                                    if (event.type == KeyEventType.KeyDown) {
+                                        if (showActions) focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
+                                        else runCatching { listFocus.requestFocus() }
+                                    }
+                                    true
+                                } else false
+                            },
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         MultiviewChip(
                             "Channels",
                             Modifier.weight(1f).then(if (!sportsMode) Modifier.focusRequester(tabFocus) else Modifier),
@@ -387,7 +447,13 @@ internal fun MultiviewChannelPicker(
                     }
                     if (searching) {
                         Row(
-                            Modifier.fillMaxWidth(),
+                            Modifier.fillMaxWidth()
+                                .onPreviewKeyEvent { event ->
+                                    if (event.key == Key.DirectionDown) {
+                                        if (event.type == KeyEventType.KeyDown) runCatching { listFocus.requestFocus() }
+                                        true
+                                    } else false
+                                },
                             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(Modifier.weight(1f)) {
@@ -400,31 +466,29 @@ internal fun MultiviewChannelPicker(
                             MultiviewChip("Done", onClick = ::closeSearch)
                         }
                         LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
-                    } else {
-                        val hasChannel = selectedPane?.channelKey != null
-                        val failed = selectedPane?.error != null
-                        if (!sportsMode || hasChannel || failed) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (!sportsMode) {
-                                    MultiviewChip("Search", Modifier.focusRequester(searchFocus), icon = Icons.Default.Search, onClick = ::openSearch)
-                                }
-                                if (hasChannel || failed) {
-                                    MultiviewChip("Clear", icon = Icons.Default.Close, onClick = onClear)
-                                }
-                                if (failed) MultiviewChip("Retry", icon = Icons.Default.Refresh, onClick = onRetry)
+                    } else if (showActions) {
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .onPreviewKeyEvent { event ->
+                                    if (event.key == Key.DirectionDown) {
+                                        if (event.type == KeyEventType.KeyDown) runCatching { listFocus.requestFocus() }
+                                        true
+                                    } else false
+                                },
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (!sportsMode) {
+                                MultiviewChip("Search", Modifier.focusRequester(actionFocus), icon = Icons.Default.Search, onClick = ::openSearch)
                             }
+                            if (hasChannel || failed) {
+                                MultiviewChip(
+                                    "Clear",
+                                    if (sportsMode) Modifier.focusRequester(actionFocus) else Modifier,
+                                    icon = Icons.Default.Close, onClick = onClear
+                                )
+                            }
+                            if (failed) MultiviewChip("Retry", icon = Icons.Default.Refresh, onClick = onRetry)
                         }
-                    }
-                }
-                if (inList && !searching) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp)
-                            .clip(RowShape).clickable(onClick = ::openGroups).padding(horizontal = 8.dp, vertical = 5.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null,
-                            tint = NuvioTheme.colors.TextSecondary, modifier = Modifier.size(14.dp))
-                        LiveText("Groups", size = 12.sp, color = NuvioTheme.colors.TextSecondary)
                     }
                 }
                 Box(
@@ -436,13 +500,13 @@ internal fun MultiviewChannelPicker(
                             when {
                                 sportsMode && optionsGame != null -> if (down) when {
                                     event.key == Key.DirectionDown -> { if (optionIndex < 1) optionIndex++ }
-                                    event.key == Key.DirectionUp -> { if (optionIndex > 0) optionIndex-- else runCatching { tabFocus.requestFocus() } }
+                                    event.key == Key.DirectionUp -> { if (optionIndex > 0) optionIndex-- else upFromList() }
                                     event.key == Key.DirectionLeft -> optionsGame = null
                                     ok -> optionsGame?.let { g -> if (optionIndex == 0) { optionsGame = null; openStreams(g) } else onGameInfo(g) }
                                 }
                                 sportsMode && streamsGame != null -> if (down) when {
                                     event.key == Key.DirectionDown -> { if (streamIndex < streams.lastIndex) streamIndex++ }
-                                    event.key == Key.DirectionUp -> { if (streamIndex > 0) streamIndex-- else runCatching { tabFocus.requestFocus() } }
+                                    event.key == Key.DirectionUp -> { if (streamIndex > 0) streamIndex-- else upFromList() }
                                     event.key == Key.DirectionLeft -> streamsGame = null
                                     ok -> streams.getOrNull(streamIndex)?.let { m ->
                                         streamsGame?.let { g -> onStream(g, m.channel.key); onClose() }
@@ -452,7 +516,7 @@ internal fun MultiviewChannelPicker(
                                     val game = (items.getOrNull(gameAt.getOrNull(gameCursor) ?: -1) as? PanelItem.Game)?.game
                                     when {
                                         ok -> {
-                                            // Hold OK (the key repeats): the game's other streams; a quick press plays it.
+                                            // Hold OK (the key repeats): more options for the game; a quick press plays it.
                                             if (down) {
                                                 if (event.nativeKeyEvent.repeatCount == 0) okHeld[0] = true
                                                 else if (okHeld[0]) {
@@ -466,24 +530,39 @@ internal fun MultiviewChannelPicker(
                                         }
                                         !down -> Unit
                                         event.key == Key.DirectionDown -> { if (gameCursor < gameAt.lastIndex) gameCursor++ }
-                                        event.key == Key.DirectionUp -> { if (gameCursor > 0) gameCursor-- else runCatching { tabFocus.requestFocus() } }
+                                        event.key == Key.DirectionUp -> { if (gameCursor > 0) gameCursor-- else upFromList() }
                                     }
                                 }
                                 !down -> Unit
-                                level == PickerLevel.GROUPS && !searching -> when {
-                                    event.key == Key.DirectionDown -> { if (groupIndex < groups.size) groupIndex++ }
-                                    event.key == Key.DirectionUp -> { if (groupIndex > 0) groupIndex-- else runCatching { tabFocus.requestFocus() } }
-                                    ok || event.key == Key.DirectionRight ->
-                                        openGroup(if (groupIndex == 0) null else groups.getOrNull(groupIndex - 1)?.id)
+                                searching -> when {
+                                    event.key == Key.DirectionDown -> { if (searchIndex < results.lastIndex) searchIndex++ }
+                                    event.key == Key.DirectionUp -> { if (searchIndex > 0) searchIndex-- else upFromList() }
+                                    ok -> results.getOrNull(searchIndex)?.let(onSelect)
                                 }
-                                else -> when {
-                                    event.key == Key.DirectionDown -> { if (index < results.lastIndex) index++ }
-                                    event.key == Key.DirectionUp -> {
-                                        if (index > 0) index--
-                                        else runCatching { (if (searching) fieldFocus else tabFocus).requestFocus() }
+                                else -> {
+                                    val item = tree.getOrNull(index)
+                                    when {
+                                        event.key == Key.DirectionDown -> { if (index < tree.lastIndex) index++ }
+                                        event.key == Key.DirectionUp -> { if (index > 0) index-- else upFromList() }
+                                        // Left folds a playlist or group shut; on a channel it goes back to its group.
+                                        event.key == Key.DirectionLeft -> when (item) {
+                                            is TreeItem.Head -> if (!item.collapsed) toggleList(item)
+                                            is TreeItem.Group -> if (item.isOpen) toggleGroup(item)
+                                            is TreeItem.Channel -> tree.indexOfLast { it is TreeItem.Group && it.isOpen }.takeIf { it >= 0 }?.let { index = it }
+                                            null -> Unit
+                                        }
+                                        event.key == Key.DirectionRight -> when (item) {
+                                            is TreeItem.Head -> if (item.collapsed) toggleList(item)
+                                            is TreeItem.Group -> if (!item.isOpen) toggleGroup(item)
+                                            else -> Unit
+                                        }
+                                        ok -> when (item) {
+                                            is TreeItem.Head -> toggleList(item)
+                                            is TreeItem.Group -> toggleGroup(item)
+                                            is TreeItem.Channel -> onSelect(item.option)
+                                            null -> Unit
+                                        }
                                     }
-                                    event.key == Key.DirectionLeft && !searching -> openGroups()
-                                    ok -> results.getOrNull(index)?.let(onSelect)
                                 }
                             }
                             true
@@ -550,37 +629,48 @@ internal fun MultiviewChannelPicker(
                                 }
                             }
                         }
-                        level == PickerLevel.GROUPS && !searching -> LazyColumn(
-                            state = groupState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 4.dp)
-                        ) {
-                            itemsIndexed(listOf<MultiviewGroup?>(null) + groups, key = { _, g -> g?.id ?: "all" }) { i, g ->
-                                PickerGroupRow(
-                                    title = g?.title ?: "All channels",
-                                    count = g?.count ?: optionsSource.size,
-                                    selected = i == groupIndex,
-                                    active = hasFocus,
-                                    current = (g?.id ?: "") == (group ?: ""),
-                                    onClick = { openGroup(g?.id) },
-                                )
+                        searching -> {
+                            if (results.isEmpty()) LiveText(
+                                if (optionsSource.isEmpty()) "No available channels. Add a playlist in Live TV settings." else "No matching channels.",
+                                Modifier.padding(18.dp), color = NuvioTheme.colors.TextSecondary, maxLines = 3
+                            ) else LazyColumn(state = searchState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 4.dp)) {
+                                itemsIndexed(results, key = { _, option -> option.key }) { i, option ->
+                                    PickerChannelRow(
+                                        option = option,
+                                        logo = logos[option.key],
+                                        show = shows[option.key],
+                                        now = now,
+                                        selected = i == searchIndex,
+                                        active = hasFocus,
+                                        playingHere = selectedPane?.channelKey == option.key,
+                                        otherPane = paneOf[option.key]?.takeIf { it != paneId },
+                                        onClick = { onSelect(option) },
+                                    )
+                                }
                             }
                         }
-                        results.isEmpty() -> LiveText(
-                            if (optionsSource.isEmpty()) "No available channels. Add a playlist in Live TV settings." else "No matching channels.",
+                        optionsSource.isEmpty() -> LiveText(
+                            "No available channels. Add a playlist in Live TV settings.",
                             Modifier.padding(18.dp), color = NuvioTheme.colors.TextSecondary, maxLines = 3
                         )
-                        else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 4.dp)) {
-                            itemsIndexed(results, key = { _, option -> option.key }) { i, option ->
-                                PickerChannelRow(
-                                    option = option,
-                                    logo = logos[option.key],
-                                    show = shows[option.key],
-                                    now = now,
-                                    selected = i == index,
-                                    active = hasFocus,
-                                    playingHere = selectedPane?.channelKey == option.key,
-                                    otherPane = paneOf[option.key]?.takeIf { it != paneId },
-                                    onClick = { onSelect(option) },
-                                )
+                        else -> LazyColumn(state = treeState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 4.dp)) {
+                            itemsIndexed(tree, key = { _, item -> item.key }) { i, item ->
+                                when (item) {
+                                    is TreeItem.Head -> PickerHeadRow(item.name, item.count, item.collapsed, i == index, hasFocus) { toggleList(item) }
+                                    is TreeItem.Group -> PickerGroupRow(item.title, item.count, item.isOpen, i == index, hasFocus) { toggleGroup(item) }
+                                    is TreeItem.Channel -> PickerChannelRow(
+                                        option = item.option,
+                                        logo = logos[item.option.key],
+                                        show = shows[item.option.key],
+                                        now = now,
+                                        selected = i == index,
+                                        active = hasFocus,
+                                        playingHere = selectedPane?.channelKey == item.option.key,
+                                        otherPane = paneOf[item.option.key]?.takeIf { it != paneId },
+                                        onClick = { onSelect(item.option) },
+                                        indent = 14.dp,
+                                    )
+                                }
                             }
                         }
                     }
@@ -590,6 +680,28 @@ internal fun MultiviewChannelPicker(
                 }
             }
         }
+    }
+}
+
+/** A playlist's heading: its name and how many groups it has, with a fold arrow; OK folds it shut or open. */
+@Composable
+private fun PickerHeadRow(name: String, count: Int, collapsed: Boolean, selected: Boolean, active: Boolean, onClick: () -> Unit) {
+    val colors = liveCellColors(focused = selected && active, idle = if (selected) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+    Row(
+        Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 8.dp, vertical = 2.dp)
+            .clip(RowShape).background(colors.background).border(2.dp, colors.border, RowShape)
+            .clickable(onClick = onClick).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            if (collapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Default.KeyboardArrowDown,
+            contentDescription = if (collapsed) "Folded" else "Open",
+            tint = NuvioTheme.colors.TextSecondary, modifier = Modifier.size(18.dp)
+        )
+        LiveText(name, Modifier.weight(1f), color = NuvioTheme.colors.TextSecondary, size = 12.sp,
+            weight = FontWeight.SemiBold, marquee = selected && active)
+        LiveText(count.toString(), color = NuvioTheme.colors.TextSecondary, size = 11.sp)
     }
 }
 
@@ -651,13 +763,15 @@ private fun PickerChannelRow(
     playingHere: Boolean,
     otherPane: Int?,
     onClick: () -> Unit,
+    /** Extra space on the left: a channel shown under its group. */
+    indent: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     val colors = liveCellColors(focused = selected && active, idle = if (selected) Color.White.copy(alpha = 0.08f) else Color.Transparent)
     // On a solid highlight the accent-coloured bits would disappear: make them white.
     val onSolid = selected && active && LocalLiveSolidHighlight.current
     val accent = if (onSolid) Color.White else NuvioTheme.colors.Secondary
     Row(
-        Modifier.fillMaxWidth().height(62.dp).padding(horizontal = 8.dp, vertical = 3.dp)
+        Modifier.fillMaxWidth().height(62.dp).padding(start = 8.dp + indent, end = 8.dp, top = 3.dp, bottom = 3.dp)
             .clip(RowShape).background(colors.background).border(2.dp, colors.border, RowShape)
             .clickable(onClick = onClick).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -684,18 +798,22 @@ private fun PickerChannelRow(
 }
 
 @Composable
-private fun PickerGroupRow(title: String, count: Int, selected: Boolean, active: Boolean, current: Boolean, onClick: () -> Unit) {
+private fun PickerGroupRow(title: String, count: Int, isOpen: Boolean, selected: Boolean, active: Boolean, onClick: () -> Unit) {
     val colors = liveCellColors(focused = selected && active, idle = if (selected) Color.White.copy(alpha = 0.08f) else Color.Transparent)
     Row(
         Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 8.dp, vertical = 2.dp)
             .clip(RowShape).background(colors.background).border(2.dp, colors.border, RowShape)
             .clickable(onClick = onClick).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        Icon(
+            if (isOpen) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null, tint = colors.text, modifier = Modifier.size(16.dp)
+        )
         LiveText(title, Modifier.weight(1f), color = colors.text, size = 15.sp,
-            weight = if (current) FontWeight.Bold else FontWeight.Normal, marquee = selected && active)
-        if (current) SportsBadge("SHOWING", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
-        else LiveText(count.toString(), color = NuvioTheme.colors.TextSecondary, size = 12.sp)
+            weight = if (isOpen) FontWeight.Bold else FontWeight.Normal, marquee = selected && active)
+        LiveText(count.toString(), color = NuvioTheme.colors.TextSecondary, size = 12.sp)
     }
 }
 
@@ -810,5 +928,18 @@ internal object MultiviewLayoutMemory {
 
     fun save(context: android.content.Context, layout: MultiviewLayout) {
         context.getSharedPreferences(FILE, android.content.Context.MODE_PRIVATE).edit().putString(KEY, layout.name).apply()
+    }
+}
+
+/** Playlists folded away in the channel list, remembered between visits (a plain preference, not synced). */
+internal object MultiviewCollapseMemory {
+    private const val FILE = "multiview"
+    private const val KEY = "collapsed_playlists"
+
+    fun load(context: android.content.Context): Set<String> =
+        context.getSharedPreferences(FILE, android.content.Context.MODE_PRIVATE).getStringSet(KEY, emptySet())?.toSet() ?: emptySet()
+
+    fun save(context: android.content.Context, collapsed: Set<String>) {
+        context.getSharedPreferences(FILE, android.content.Context.MODE_PRIVATE).edit().putStringSet(KEY, collapsed).apply()
     }
 }

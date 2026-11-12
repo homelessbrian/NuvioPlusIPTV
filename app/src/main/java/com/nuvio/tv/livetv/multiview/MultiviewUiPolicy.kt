@@ -148,4 +148,11 @@ suspend fun searchMultiviewChannels(
 }
 
 /** A group in the channel picker, in the guide's order (see MultiviewViewModel.pickerGroups). */
-data class MultiviewGroup(val id: String, val title: String, val count: Int)
+data class MultiviewGroup(
+    val id: String,
+    val title: String,
+    val count: Int,
+    /** The playlist this group comes from, and its name (null for Favorites, Recent and your own groups). */
+    val sourceId: String? = null,
+    val sourceName: String? = null,
+)
