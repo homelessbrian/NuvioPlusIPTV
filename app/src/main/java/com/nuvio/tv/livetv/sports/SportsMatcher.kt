@@ -839,9 +839,9 @@ internal class SportsMatcher(
             }
         }
         if (src == From.GUIDE) {
-            var rows = 0
+            val pace = Pacer(gentle)
             db.scanListingsGrouped(from, to, minStop) { channels, start, stop, title, descr, cat ->
-                if (gentle && ++rows % 1000 == 0) Thread.sleep(3)
+                pace.tick()
                 consider(channels, start, stop, title, descr, cat, norm(title), if (descr.isNullOrEmpty()) "" else norm(descr))
             }
         } else {
@@ -896,10 +896,10 @@ internal class SportsMatcher(
         gentle: Boolean,
         onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) -> Unit
     ) {
-        var rows = 0
+        val pace = Pacer(gentle)
         if (src == From.TABLE) {
             db.scanSportsRows(from, to, minStop) { ch, start, stop, title, descr, cat, nt, nd ->
-                if (gentle && ++rows % 1000 == 0) Thread.sleep(3)
+                pace.tick()
                 onRow(ch, start, stop, title, descr, cat, nt, if (wantDesc) nd else "")
             }
         } else {
@@ -909,10 +909,25 @@ internal class SportsMatcher(
                 val nt = norm(title)
                 val nd = if (wantDesc && !descr.isNullOrEmpty()) norm(descr) else ""
                 for (ch in channels) {
-                    if (gentle && ++rows % 1000 == 0) Thread.sleep(3)
+                    pace.tick()
                     onRow(ch, start, stop, title, descr, cat, nt, nd)
                 }
             }
+        }
+    }
+
+    /**
+     * Quiet reading: every 1000 shows, rest about as long as the last stretch of work took (at most
+     * 80 ms), so the search uses about half a core instead of a whole one while nobody is waiting on it.
+     */
+    private class Pacer(private val on: Boolean) {
+        private var rows = 0
+        private var since = System.nanoTime()
+        fun tick() {
+            if (!on || ++rows % 1000 != 0) return
+            val workedMs = (System.nanoTime() - since) / 1_000_000
+            Thread.sleep(workedMs.coerceIn(3L, 80L))
+            since = System.nanoTime()
         }
     }
 
