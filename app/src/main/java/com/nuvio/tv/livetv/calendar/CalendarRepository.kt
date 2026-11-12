@@ -429,19 +429,31 @@ class CalendarRepository @Inject constructor(
         val ss = sports.settings.value
         if (!s.calendarSports || !ss.showInSidebar) return 0
         val f = sports.follows.value
-        if (f.teams.isEmpty()) return 0
+        val eventLeagues = followedEventLeagues(f)
+        if (f.teams.isEmpty() && eventLeagues.isEmpty()) return 0
         val matches = sports.matches.value
         var h = 31 * LocalDate.now().toEpochDay().toInt() + (if (ss.hideScores) 1 else 2)
         for (ev in sports.known.value) {
-            val mine = ev.sides.firstOrNull { f.followsTeam(ev.leagueId, it.team.id) } ?: continue
+            val mine = ev.sides.firstOrNull { f.followsTeam(ev.leagueId, it.team.id) }
+            if (mine == null && ev.leagueId !in eventLeagues) continue
             h = 31 * h + java.util.Objects.hash(
-                ev.id, ev.startMs, ev.endMs, ev.hasTime, ev.state, ev.status, ev.title, ev.broadcasts.firstOrNull(), mine.team.logo,
+                ev.id, ev.startMs, ev.endMs, ev.hasTime, ev.state, ev.status, ev.title, ev.broadcasts.firstOrNull(), mine?.team?.logo,
                 ev.sides.map { listOf(it.team.name, it.team.logo, it.team.color, it.team.altColor, it.score) },
                 matches[ev.id]?.firstOrNull()?.channel?.let { listOf(it.key, it.name, it.logo) }
             )
         }
         return h
     }
+
+    /**
+     * Followed leagues whose events have no two sides (golf, racing, tennis, fights...): their
+     * events go on the Calendar too, since there is no team to follow in them. A league with
+     * teams (NFL, MLS...) stays out: only your teams' games show.
+     */
+    private fun followedEventLeagues(f: com.nuvio.tv.livetv.sports.SportsFollows): Set<String> =
+        (f.leagues + f.pins).filterTo(HashSet()) {
+            com.nuvio.tv.livetv.sports.SportsCatalog.league(it)?.kind == com.nuvio.tv.livetv.sports.LeagueKind.EVENT
+        }
 
     private fun withGames(base: List<CalendarEntry>): List<CalendarEntry> {
         val games = runCatching { gameEntries() }.getOrDefault(emptyList())
@@ -459,14 +471,16 @@ class CalendarRepository @Inject constructor(
         val ss = sports.settings.value
         if (!s.calendarSports || !ss.showInSidebar) return emptyList()
         val f = sports.follows.value
-        if (f.teams.isEmpty()) return emptyList()
+        val eventLeagues = followedEventLeagues(f)
+        if (f.teams.isEmpty() && eventLeagues.isEmpty()) return emptyList()
         val today = LocalDate.now()
         val from = today.minusDays(30)
         val to = today.plusDays(120)
         val zone = ZoneId.systemDefault()
         val matches = sports.matches.value
         return sports.known.value.mapNotNull { ev ->
-            val mine = ev.sides.firstOrNull { f.followsTeam(ev.leagueId, it.team.id) } ?: return@mapNotNull null
+            val mine = ev.sides.firstOrNull { f.followsTeam(ev.leagueId, it.team.id) }
+            if (mine == null && ev.leagueId !in eventLeagues) return@mapNotNull null
             val day = Instant.ofEpochMilli(ev.startMs).atZone(zone).toLocalDate()
             if (day.isBefore(from) || day.isAfter(to)) return@mapNotNull null
             val league = com.nuvio.tv.livetv.sports.SportsCatalog.league(ev.leagueId)
@@ -490,7 +504,7 @@ class CalendarRepository @Inject constructor(
                 contentId = "game|${ev.id}",
                 type = "game",
                 title = title,
-                poster = mine.team.logo,
+                poster = mine?.team?.logo ?: com.nuvio.tv.livetv.sports.SportsFeeds.leagueLogos[ev.leagueId],
                 background = null,
                 airMs = ev.startMs.takeIf { ev.hasTime },
                 day = day,
