@@ -99,7 +99,8 @@ data class VodInfo(
     val tech: VodTech? = null
 )
 
-data class OnDemandStatus(val loading: Boolean = false, val message: String? = null)
+/** [silent]: a routine re-import of a catalog that's already there (no bubble on screen for it). */
+data class OnDemandStatus(val loading: Boolean = false, val message: String? = null, val silent: Boolean = false)
 
 /**
  * Imports movies and series from Xtream logins that have "Import movies & series" on, keeps them
@@ -241,7 +242,10 @@ class OnDemandRepository @Inject constructor(
             // while the guide is being built or Sports is finding channels.
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitNoHeavy()
-            _status.value = OnDemandStatus(true, text(R.string.iptv_status_importing_movies_series, pl.name))
+            // The daily re-import of a catalog that's already there happens without a bubble
+            // (people took it for the app reloading everything); a first import still shows it.
+            quietImport = !force && last > 0L
+            _status.value = OnDemandStatus(true, text(R.string.iptv_status_importing_movies_series, pl.name), silent = quietImport)
             lastProblem = null
             // Movies and series import separately, so a problem with one keeps the other.
             val movies = runCatching { importKind(pl, VodKind.MOVIE) }
@@ -264,8 +268,12 @@ class OnDemandRepository @Inject constructor(
         // A problem stays visible in Settings → Live TV → On Demand (no more silent failures).
         // Every login's problem, not only the last one imported.
         problemByPlaylist.keys.retainAll(keep)
+        quietImport = false
         _status.value = OnDemandStatus(false, problemByPlaylist.values.joinToString("\n").ifBlank { null })
     }
+
+    /** The import running now is a routine re-import (see [OnDemandStatus.silent]). */
+    @Volatile private var quietImport = false
 
     /**
      * No longer used: nothing in On Demand shows genres any more, so they're not looked up
@@ -383,10 +391,10 @@ class OnDemandRepository @Inject constructor(
                 categories += c.optString("category_id") to c.optString("category_name").ifBlank { "Other" }
             }
         }
-        _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies else R.string.iptv_status_importing_series, pl.name))
+        _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies else R.string.iptv_status_importing_series, pl.name), silent = quietImport)
         var n = 0
         fun progress() {
-            if (++n % 500 == 0) _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies_count else R.string.iptv_status_importing_series_count, pl.name, n))
+            if (++n % 500 == 0) _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies_count else R.string.iptv_status_importing_series_count, pl.name, n), silent = quietImport)
         }
 
         // 1. The whole list in one go (fastest).
@@ -410,7 +418,7 @@ class OnDemandRepository @Inject constructor(
         }
         Log.w(TAG, "${pl.name}: $what list stopped after $saved; importing by category", firstProblem)
         n = 0
-        _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies_by_category else R.string.iptv_status_importing_series_by_category, pl.name))
+        _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies_by_category else R.string.iptv_status_importing_series_by_category, pl.name), silent = quietImport)
         var failedCategories = 0
         val byCategory = sequence {
             for ((catId, _) in categories) {

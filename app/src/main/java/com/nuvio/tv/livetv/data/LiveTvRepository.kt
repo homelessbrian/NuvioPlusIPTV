@@ -173,7 +173,9 @@ class LiveTvRepository @Inject constructor(
     fun reloadAfterSync(changedPlaylists: Set<String> = emptySet()) {
         scope.launch {
             rebuild()
-            refreshInternal(forcePlaylists = false, forceEpg = false, forceIds = changedPlaylists)
+            // Brought in from the other TV in the background: no bubble while this TV already has
+            // channels to show (a new TV restoring its setup still shows what it's doing).
+            refreshInternal(forcePlaylists = false, forceEpg = false, forceIds = changedPlaylists, quiet = _channels.value.isNotEmpty())
         }
     }
 
@@ -489,7 +491,8 @@ class LiveTvRepository @Inject constructor(
     private suspend fun refreshInternal(
         forcePlaylists: Boolean,
         forceEpg: Boolean,
-        forceIds: Set<String> = emptySet()
+        forceIds: Set<String> = emptySet(),
+        quiet: Boolean = false
     ): Unit {
         val automatic = !forcePlaylists && !forceEpg && forceIds.isEmpty()
         if (!automatic) {
@@ -499,7 +502,7 @@ class LiveTvRepository @Inject constructor(
             manualQueued.value = true
             if (mutex.isLocked) LIVE_REPORT.add("Update asked for: finishing the update already running first")
         }
-        mutex.withLock { refreshLocked(forcePlaylists, forceEpg, forceIds, automatic) }
+        mutex.withLock { refreshLocked(forcePlaylists, forceEpg, forceIds, automatic, quiet) }
     }
 
     /** When the last automatic check finished (see [refreshIfStale]). */
@@ -512,13 +515,14 @@ class LiveTvRepository @Inject constructor(
         forcePlaylists: Boolean,
         forceEpg: Boolean,
         forceIds: Set<String>,
-        automatic: Boolean
+        automatic: Boolean,
+        quiet: Boolean = false
     ) {
         if (!automatic) manualQueued.value = false
         val t0Update = System.currentTimeMillis()
         LIVE_REPORT.add(if (automatic) "Update check started" else "Update started")
         // A scheduled check works without a pill; an update you asked for (or a new playlist) shows it.
-        routineRun = automatic
+        routineRun = automatic || quiet
         try { refreshBody(forcePlaylists, forceEpg, forceIds, automatic) }
         finally {
             routineRun = false
@@ -701,7 +705,21 @@ class LiveTvRepository @Inject constructor(
         // The stored guide is read at the same time as the channel list (it only has to be
         // checked against the channels afterwards), so the two waits overlap.
         val guidePreRead = scope.async(Dispatchers.IO) { preReadGuide() }
-        if (!loadSavedChannels()) {
+        try {
+        val savedUsed = loadSavedChannels()
+        // The saved list was out of date but is on screen anyway (see loadSavedChannels).
+        val shownOutdated = !savedUsed && _channels.value.isNotEmpty()
+        // Channels are already there: bringing them and the guide up to date isn't announced.
+        // (Only a first setup, with nothing to show yet, says what it's doing.)
+        if (savedUsed || shownOutdated) routineRun = true
+        var guideShown = false
+        val pre = if (shownOutdated) guidePreRead.await() else null
+        if (pre?.fingerprint != null) {
+            // The stored guide too, as it was, while the changed playlists are read again.
+            guideShown = showStoredGuide(pre, checkGaps = false, targets = emptyList())
+            if (guideShown) LIVE_REPORT.add("Saved channels and stored guide shown while the channel list is brought up to date")
+        }
+        if (!savedUsed) {
             // No bubble here: buildChannels says so itself for each playlist it has to read.
             buildChannels()
             saveChannels()
@@ -709,16 +727,13 @@ class LiveTvRepository @Inject constructor(
         } else {
             LIVE_REPORT.add("Saved channel list used: ${_channels.value.size} channels in ${System.currentTimeMillis() - t0} ms")
             carryOverRenamedChannels(null, _channels.value)
-            // Channels are already there: reading the guide again at start-up isn't announced.
-            routineRun = true
         }
-        try {
         val targets = collectEpgTargets()
         val settings = prefs.currentSettings()
         // The guide as it was last matched, if nothing it depends on has changed: the guide
         // fills in straight away instead of re-reading every guide file at each start.
         t0 = System.currentTimeMillis()
-        if (!loadGuideFromDb(settings, targets, guidePreRead.await())) {
+        if (!loadGuideFromDb(settings, targets, guidePreRead.await(), alreadyShown = guideShown)) {
             if (dropRemovedPlaylistsFromGuide(settings, targets)) {
                 LIVE_REPORT.add("Guide kept: turned-off playlists' channels taken out in ${System.currentTimeMillis() - t0} ms")
             } else {
@@ -839,6 +854,15 @@ class LiveTvRepository @Inject constructor(
                     // Kept for [buildChannels] (it reuses the playlists that haven't changed and
                     // lets go of this straight after), stream links included for renamed channels.
                     reusable = Reusable(list, segmentsOf(stored))
+                    // Shown as it is in the meantime: the channels (and the stored guide) are on
+                    // screen straight away while the playlists that changed are read again,
+                    // instead of an empty Live TV until that's done. (An update cut short, for
+                    // one, left the saved list out of date and every start looked like a reload.)
+                    if (list.isNotEmpty()) {
+                        loadGroupOrder()
+                        _channels.value = list
+                        builtSegments = segmentsOf(stored)
+                    }
                     return@withContext false
                 }
                 loadGroupOrder()
@@ -1086,43 +1110,84 @@ class LiveTvRepository @Inject constructor(
      * Opening Live TV: if the guide database matches the current guide and channels, show the
      * channels you were last looking at straight away (read ahead, short form), then fill in all
      * the others in the background. Instant, however big the guide is.
+     *
+     * When it doesn't match (a guide file or playlist changed since it was stored, often an update
+     * cut short when the app was closed), the stored guide is still shown as it was, and false
+     * tells the caller to bring it up to date in the background. It used to be left out until
+     * then, so the guide stayed empty for minutes and every start looked like a full reload.
+     * [alreadyShown]: the stored guide is on screen already (see [rebuildLocked]).
      */
-    private suspend fun loadGuideFromDb(settings: LiveTvSettings, targets: List<EpgTarget>, pre: GuidePreRead?): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun loadGuideFromDb(settings: LiveTvSettings, targets: List<EpgTarget>, pre: GuidePreRead?, alreadyShown: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         if (_channels.value.isEmpty()) return@withContext false
         runCatching { savedGuideFile.delete() } // the old single-file copy isn't used any more
         val expected = guideFingerprint(settings, targets)
         val stored = pre?.fingerprint ?: runCatching { guideDb.fingerprint() }.getOrNull()
         if (stored != expected) {
             LIVE_REPORT.add(if (stored == null) "No stored guide yet" else "Stored guide out of date: ${fingerprintDiff(stored, expected)}")
+            if (stored != null && !alreadyShown && showStoredGuide(pre, checkGaps = false, targets = targets)) {
+                LIVE_REPORT.add("Stored guide shown as it was while it's brought up to date")
+            }
             return@withContext false
         }
+        if (!alreadyShown) showStoredGuide(pre, checkGaps = true, targets = targets)
+        true
+    }
+
+    /** Bumped each time a different guide goes on screen, so a slower read of the one before is dropped. */
+    private val guideShowing = java.util.concurrent.atomic.AtomicInteger()
+
+    /**
+     * Puts the stored guide on screen: the channels you were last looking at first, then every
+     * channel's hours around now, then the usual hours, each in the background. [checkGaps]: the
+     * stored guide is up to date, so look out for one that ran out (see below).
+     */
+    private suspend fun showStoredGuide(pre: GuidePreRead?, checkGaps: Boolean, targets: List<EpgTarget>): Boolean = withContext(Dispatchers.IO) {
+        if (_channels.value.isEmpty()) return@withContext false
         val now = System.currentTimeMillis()
         val from = pre?.from ?: (now - 60 * 60 * 1000L)
         val to = pre?.to ?: (now + 4 * HOUR)
-        _programs.value = pre?.window.orEmpty()
+        // A guide already on screen (shown out of date a moment ago) stays until the new one is
+        // read, rather than dropping to just the first channels for a moment.
+        val replacing = _programs.value.isNotEmpty()
+        val first = pre?.window.orEmpty()
+        val token = guideShowing.incrementAndGet()
+        if (!replacing) _programs.value = first
         fullRangeChannels.clear(); _guideGeneration.value++
-        _autoMatches.value = runCatching { guideDb.autoMatches() }.getOrDefault(emptyMap())
+        _autoMatches.value = runCatching { guideDb.autoMatches() }.getOrDefault(_autoMatches.value)
         loadedFrom = from
         loadedTo = to
         guideInDb = true
         lightPrograms = true
         epgDetailsPending = true
-        LIVE_REPORT.add("First channels' listings ready: ${_programs.value.size} channels")
-        // Everything else (short form, the usual hours), in the background, in one read.
+        LIVE_REPORT.add("First channels' listings ready: ${first.size} channels")
+        // Everything else (short form), in the background.
         rangeBusy.set(true)
         scope.launch(BackgroundWork.reads) {
           try {
             val t0 = System.currentTimeMillis()
+            /** Puts [got] on screen, keeping anything longer read for this guide meanwhile. */
+            suspend fun publish(got: Map<String, List<EpgProgram>>, gotFrom: Long, gotTo: Long): Boolean = rangeMutex.withLock {
+                // A newer guide went on screen meanwhile (an update finished): this read is old.
+                if (token != guideShowing.get()) return@withLock false
+                val merged = HashMap<String, List<EpgProgram>>(got)
+                // Replacing an out-of-date guide: only what was read from this one is kept.
+                val keep = if (replacing) first else _programs.value
+                keep.forEach { (k, v) -> if ((merged[k]?.size ?: 0) < v.size) merged[k] = v }
+                _programs.value = merged
+                loadedFrom = minOf(loadedFrom, gotFrom)
+                loadedTo = maxOf(loadedTo, gotTo)
+                true
+            }
+            // Every channel's hours around now first (what the guide shows when it opens), so a
+            // group you didn't have open last time isn't "No information" while the rest is read.
+            val near = runCatching { guideDb.range(from, to, light = true) }.getOrNull()
+            if (near != null && !publish(near, from, to)) return@launch
+            LIVE_REPORT.add("Listings around now ready for all channels: ${near?.size ?: 0} in ${System.currentTimeMillis() - t0} ms")
             val (fullFrom, fullTo) = defaultWindow()
             val rest = runCatching { guideDb.range(fullFrom, fullTo, light = true) }.getOrNull()
-            if (rest != null) rangeMutex.withLock {
-                val merged = HashMap<String, List<EpgProgram>>(rest)
-                _programs.value.forEach { (k, v) -> if ((merged[k]?.size ?: 0) < v.size) merged[k] = v }
-                _programs.value = merged
-                loadedFrom = minOf(loadedFrom, fullFrom)
-                loadedTo = maxOf(loadedTo, fullTo)
-            }
+            if (rest != null && !publish(rest, fullFrom, fullTo)) return@launch
             LIVE_REPORT.add("All channels' listings ready: ${_programs.value.size} channels in ${System.currentTimeMillis() - t0} ms")
+            if (!checkGaps) return@launch
             // The stored guide has nothing for now or the next hours (it was stored empty, or
             // all of it has run out): it was still taken as up to date, so the guide stayed
             // empty until a playlist or guide changed. Match the guide files again now (and
@@ -2193,8 +2258,11 @@ class LiveTvRepository @Inject constructor(
                 if (used() > rt.maxMemory() * 0.85) System.gc()
                 if (used() > rt.maxMemory() * 0.85) {
                     LIVE_REPORT.add("Guide \"${target.name}\" skipped: memory nearly full (${used() / 1048576} of ${rt.maxMemory() / 1048576} MB)")
-                    setStatus(loading = true, message = statusText(R.string.iptv_repository_status_guide_memory_skipped, target.name), loud = true)
-                    return fallBack()
+                    // Its listings from before stay in use: nothing to see, so nothing said during
+                    // an automatic update. With nothing kept from it, it's always said.
+                    val kept = fallBack()
+                    setStatus(loading = true, message = statusText(R.string.iptv_repository_status_guide_memory_skipped, target.name), loud = kept == null)
+                    return kept
                 }
             }
             // How far through each guide file it is, so a big guide doesn't look frozen.
@@ -2429,11 +2497,15 @@ class LiveTvRepository @Inject constructor(
             val (winFrom, winTo) = defaultWindow()
             val window = runCatching { guideDb.range(winFrom, winTo, light = true) }
                 .onFailure { Log.w(TAG, "Couldn't read the guide back", it) }.getOrDefault(emptyMap())
-            _programs.value = window
+            rangeMutex.withLock {
+                // A stored guide still being put on screen from before this update is dropped.
+                guideShowing.incrementAndGet()
+                _programs.value = window
+                loadedFrom = winFrom
+                loadedTo = winTo
+            }
             lightPrograms = true
             fullRangeChannels.clear(); _guideGeneration.value++
-            loadedFrom = winFrom
-            loadedTo = winTo
             guideInDb = true
             saveSkipped(skipped)
             if (skipped.isNotEmpty()) LIVE_REPORT.add("Guide: ${skipped.size} hidden channels left out")
