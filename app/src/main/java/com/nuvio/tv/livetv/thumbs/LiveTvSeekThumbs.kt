@@ -15,7 +15,8 @@ import kotlinx.coroutines.delay
 /**
  * Seek thumbnails in the Live TV player: saved recordings (from their pieces on this box),
  * catch-up (the part saved with Faster Catch-Up Skipping, or a streamed HLS replay), and sports
- * addon replays (one video file or HLS). Live TV and the pause buffer say why there are none.
+ * addon replays (one video file or HLS), and Live TV's rewind buffer (its pieces on this box).
+ * Plain live TV says why there are none.
  * The player is only read here, on the main thread; the engine gets copies.
  */
 @Composable
@@ -51,7 +52,10 @@ private class Seen {
         playing = p.isPlaying
         // Catch-up: time into the show (the seek bar's time); otherwise the player's own.
         val cs = vm.catchup.value
+        val anchor = SeekThumbs.origin(SeekThumbs.Owner.LIVE)
         positionMs = (if (cs != null && cs.recordingId == null) vm.catchupPositionMs() else null)
+            // The rewind buffer: clock time, counted from where its pictures start.
+            ?: (if (anchor != null) c.shiftPositionWallMs()?.minus(anchor)?.coerceAtLeast(0L) else null)
             ?: p.currentPosition.coerceAtLeast(0L)
         aheadMs = (p.bufferedPosition - p.currentPosition).coerceAtLeast(0L)
         durationMs = p.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
@@ -117,6 +121,17 @@ private fun update(
                 // connection on the account, so pictures come from the saved copy instead.
                 else -> SeekThumbs.unsupported(owner, SeekThumbs.MSG_CATCHUP_SAVE)
             }
+        }
+        // Live TV played from the rewind buffer (paused, behind live, or Rewind Anytime).
+        !c.ownTimeline.value && c.shiftPlaylistFile != null && c.shiftStartedAt.value != null -> {
+            val playlist = c.shiftPlaylistFile ?: return
+            val anchor = c.shiftStartedAt.value ?: return
+            val length = System.currentTimeMillis() - anchor
+            SeekThumbs.open(
+                context, owner,
+                SeekThumbs.Source.Buffer(playlist, "buffer|${c.playingChannel?.key}|$anchor|${playlist.path}", anchor) { c.shiftEarliestWallMs() },
+                length, seen.height, seen.hdr, seen.playback
+            )
         }
         c.ownTimeline.value && !seen.growing -> {
             // A sports addon replay or highlight.
@@ -186,12 +201,16 @@ fun LiveTvTimelineThumb(
     }
     val span = (endMs - startMs).coerceAtLeast(1L)
     val rel = (positionMs - startMs).coerceIn(0L, span)
+    // The rewind buffer counts its pictures from its own start (clock time), not the bar's.
+    val origin = SeekThumbs.origin(SeekThumbs.Owner.LIVE)
+    val at = if (origin != null) (positionMs - origin).coerceAtLeast(0L) else rel
     SeekThumbAbove(
         owner = SeekThumbs.Owner.LIVE,
-        positionMs = rel,
+        positionMs = at,
         fraction = rel.toFloat() / span,
         timeLabel = seekThumbTime(rel),
         visible = now < seekingUntil,
         modifier = modifier,
     )
 }
+

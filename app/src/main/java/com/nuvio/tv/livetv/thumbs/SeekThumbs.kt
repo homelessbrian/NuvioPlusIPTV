@@ -48,6 +48,17 @@ object SeekThumbs {
          * A streamed (HLS) link. With [programStartMs], times are placed by the stream's own clock
          * (catch-up that came as the live stream with rewind): time 0 is that clock time.
          */
+        /**
+         * Live TV's rewind buffer: pieces on this box, oldest dropping off as it rolls. Times are
+         * counted from [anchorWallMs] (clock time); [firstPieceWallMs] is the clock time of the
+         * first piece still in the list.
+         */
+        class Buffer(
+            val playlist: File,
+            override val key: String,
+            val anchorWallMs: Long,
+            val firstPieceWallMs: () -> Long?,
+        ) : Source()
         data class Hls(
             val url: String,
             val headers: Map<String, String>,
@@ -182,6 +193,13 @@ object SeekThumbs {
         return s.frame(positionMs)
     }
 
+    /**
+     * The clock time the seek bar's pictures count from, for Live TV's rewind buffer (null for
+     * everything else, which counts from the start of the bar).
+     */
+    fun origin(owner: Owner): Long? =
+        synchronized(sessions) { (sessions[owner]?.source as? Source.Buffer)?.anchorWallMs }
+
     /** Whether [owner]'s player has a working session (pictures can come). */
     fun active(owner: Owner): Boolean = synchronized(sessions) { sessions[owner]?.alive == true }
 
@@ -238,7 +256,7 @@ object SeekThumbs {
     // ------------------------------------------------------------------ one video
 
     private class Piece(val name: String, val startMs: Long, val durMs: Long)
-    private class PieceList(val modified: Long, val pieces: List<Piece>, val initName: String?)
+    private class PieceList(val modified: Long, val pieces: List<Piece>, val initName: String?, val file: File)
 
     private class Session(
         val context: Context,
@@ -254,7 +272,7 @@ object SeekThumbs {
         @Volatile var alive = true
         private val lock = Object()
         // A recording still being made gets room to grow (4 hours more) before a new session is needed.
-        private val count = ((durationMs + if (source is Source.Recording) 4 * 3_600_000L else 0L) / intervalMs + 1)
+        private val count = ((durationMs + if (source is Source.Recording || source is Source.Buffer) 4 * 3_600_000L else 0L) / intervalMs + 1)
             .toInt().coerceAtMost(3_000)
         /** 0: not tried, 1: saved, 2: tried, no picture. */
         private val state = ByteArray(count)
@@ -342,6 +360,7 @@ object SeekThumbs {
                     is Source.Recording -> "recording"
                     is Source.Remote -> "video file"
                     is Source.Hls -> "streamed link"
+                    is Source.Buffer -> "rewind buffer"
                 }
                 LiveTvLoadReport.add("Seek thumbnails: on for this $kind (one every ${intervalMs / 1000} s, $saved of $count already saved, ${mode.label.lowercase()})")
                 if (saved > 0) setMessage(owner, MSG_MAKING)
@@ -423,10 +442,17 @@ object SeekThumbs {
             // In the source's own time (catch-up that began partway in starts later on the bar).
             val srcMs = atMs - shiftMs
             if (srcMs < 0L) { state[i] = 2; return true }
+            // The rewind buffer: where that time is in the pieces still kept (older ones dropped off).
+            val bufferMs = (source as? Source.Buffer)?.let { b ->
+                val first = b.firstPieceWallMs() ?: return true
+                b.anchorWallMs + srcMs - first
+            }
+            if (bufferMs != null && bufferMs < 0L) { state[i] = 2; return true }
             val bmp = try {
                 when (val s = source) {
                     is Source.Remote -> remoteFrame(s, srcMs)
-                    is Source.Recording -> recordingFrame(s, srcMs)
+                    is Source.Recording -> recordingFrame(s.playlist, srcMs)
+                    is Source.Buffer -> recordingFrame(s.playlist, bufferMs ?: return true)
                     is Source.Hls -> hlsFrame(s, srcMs)
                 }
             } catch (e: IllegalArgumentException) {
@@ -438,10 +464,10 @@ object SeekThumbs {
             }
             if (!alive) { bmp?.recycle(); return false }
             if (bmp == null) {
-                val rec = source as? Source.Recording
-                if (rec != null && beyondRecorded(srcMs)) {
+                val list = (source as? Source.Recording)?.playlist ?: (source as? Source.Buffer)?.playlist
+                if (list != null && beyondRecorded(list, bufferMs ?: srcMs)) {
                     // Past the end: a recording still being made gets it later; a finished one never will.
-                    if (System.currentTimeMillis() - rec.playlist.lastModified() > 30_000L) state[i] = 2
+                    if (System.currentTimeMillis() - list.lastModified() > 30_000L) state[i] = 2
                     else waitFor(5_000)
                     return true
                 }
@@ -549,10 +575,18 @@ object SeekThumbs {
 
         // -------------------------------------------------------------- recordings
 
-        private fun pieces(playlist: File): PieceList? {
+        private fun pieces(listFile: File): PieceList? {
+            // Pieces saved with separate sound: the list points at the picture's own list.
+            var playlist = listFile
+            var text = runCatching { playlist.readText() }.getOrNull() ?: return null
+            if (text.contains("#EXT-X-STREAM-INF")) {
+                val video = text.lineSequence().map { it.trim() }.dropWhile { !it.startsWith("#EXT-X-STREAM-INF") }
+                    .drop(1).firstOrNull { it.isNotEmpty() && !it.startsWith("#") } ?: return null
+                playlist = File(listFile.parentFile, video)
+                text = runCatching { playlist.readText() }.getOrNull() ?: return null
+            }
             val modified = playlist.lastModified()
-            pieceList?.let { if (it.modified == modified) return it }
-            val text = runCatching { playlist.readText() }.getOrNull() ?: return null
+            pieceList?.let { if (it.modified == modified && it.file == playlist) return it }
             val out = ArrayList<Piece>()
             var init: String? = null
             var dur = 0.0
@@ -570,21 +604,20 @@ object SeekThumbs {
                     }
                 }
             }
-            return PieceList(modified, out, init).also { pieceList = it }
+            return PieceList(modified, out, init, playlist).also { pieceList = it }
         }
 
-        private fun beyondRecorded(atMs: Long): Boolean {
-            val s = source as? Source.Recording ?: return false
-            val list = pieces(s.playlist) ?: return true
+        private fun beyondRecorded(playlist: File, atMs: Long): Boolean {
+            val list = pieces(playlist) ?: return true
             val end = list.pieces.lastOrNull()?.let { it.startMs + it.durMs } ?: 0L
             return atMs >= end
         }
 
-        private fun recordingFrame(s: Source.Recording, atMs: Long): Bitmap? {
-            val list = pieces(s.playlist) ?: return null
+        private fun recordingFrame(playlist: File, atMs: Long): Bitmap? {
+            val list = pieces(playlist) ?: return null
             val piece = list.pieces.lastOrNull { it.startMs <= atMs } ?: return null
             if (atMs >= piece.startMs + piece.durMs + 1_000) return null
-            val folder = s.playlist.parentFile ?: return null
+            val folder = playlist.parentFile ?: return null
             val file = File(folder, piece.name)
             if (!file.exists()) return null
             // Pieces with a separate start file (fMP4): read as one file with it in front.

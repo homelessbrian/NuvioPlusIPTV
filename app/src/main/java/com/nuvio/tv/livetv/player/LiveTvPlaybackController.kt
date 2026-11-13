@@ -300,6 +300,13 @@ class LiveTvPlaybackController @Inject constructor(
         return start + timeshift.trimmedMs + if (shiftPrepared) p.currentPosition.coerceAtLeast(0) else 0L
     }
 
+    /** Seek thumbnails: the rewind buffer's list of pieces on this box, while playing from it. */
+    val shiftPlaylistFile: java.io.File?
+        get() {
+            if (_shiftStartedAt.value == null || !shiftPrepared) return null
+            return timeshift.session?.playUri?.path?.let { java.io.File(it) }?.takeIf { it.exists() }
+        }
+
     /** Skipping back and forward works on every recording (TS ones are saved in pieces too now). */
     fun shiftCanSeek(): Boolean = (timeshift.session != null && shiftPrepared) || _recordingPlayback.value != null || _ownTimeline.value
 

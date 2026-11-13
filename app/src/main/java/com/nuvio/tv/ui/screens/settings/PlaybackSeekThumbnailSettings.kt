@@ -44,9 +44,9 @@ internal fun PlaybackSeekThumbnailSection() {
         onToggle = { update { it.copy(enabled = !it.enabled) } }
     )
     SettingsNote(
-        "Works on: movies and shows in the main player (including streamed HLS links), your recordings, sports replays and highlights, and catch-up.\n" +
+        "Works on: movies and shows in the main player (including streamed HLS links), your recordings, sports replays and highlights, catch-up, and rewinding Live TV (the pause buffer).\n" +
             "Catch-up: pictures come from the part saved with Faster Catch-Up Skipping, or straight from the provider for streamed (HLS) catch-up.\n" +
-            "Doesn't work on: Live TV, torrents, DASH links, or protected streams."
+            "Doesn't work on: torrents, DASH links, or protected streams."
     )
     if (lowMemoryBox) {
         SettingsNote(
