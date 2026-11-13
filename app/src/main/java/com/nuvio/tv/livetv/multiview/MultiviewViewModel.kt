@@ -109,6 +109,10 @@ class MultiviewViewModel @Inject constructor(
     val use24HourClock: StateFlow<Boolean> = preferences.settings.map { it.use24HourClock }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** The Live TV "Auto-reconnect" setting, for panes whose stream drops. */
+    val autoReconnect: StateFlow<Boolean> = preferences.settings.map { it.autoReconnect }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     /** What's on now on each of these channels, read straight from the stored guide (no listings kept). */
     suspend fun nowOn(keys: Collection<String>): Map<String, EpgProgram> = withContext(Dispatchers.IO) {
         if (keys.isEmpty()) return@withContext emptyMap()

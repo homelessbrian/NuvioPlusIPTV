@@ -142,7 +142,8 @@ fun MultiviewScreen(
             mayPlayChannel = { channel ->
                 viewModel.activeProfileId.value == openingProfile &&
                     (viewModel.allowedChannels.value.any { it == channel } || sportsRef[0]?.mayPlay(channel) == true)
-            })
+            },
+            autoReconnect = { viewModel.autoReconnect.value })
     }
     val state by session.state.collectAsStateWithLifecycle()
     val soundPaused = state.isForeground && state.panes.any { it.channelKey != null } && !state.hasAudioFocus
