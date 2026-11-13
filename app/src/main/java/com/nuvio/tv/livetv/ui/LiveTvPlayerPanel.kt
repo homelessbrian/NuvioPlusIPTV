@@ -173,9 +173,14 @@ internal fun guideInfoGlass(level: String): Color {
 internal val GLASS_SHAPE = RoundedCornerShape(22.dp)
 
 /** A glass panel: rounded, see-through, with a faint edge (the bar, the gear panel). */
-internal fun Modifier.glass(color: Color, shape: androidx.compose.ui.graphics.Shape = GLASS_SHAPE): Modifier =
-    this.clip(shape)
-        .background(Brush.verticalGradient(listOf(color.copy(alpha = (color.alpha - 0.06f).coerceAtLeast(0f)), color)))
+internal fun Modifier.glass(
+    color: Color,
+    shape: androidx.compose.ui.graphics.Shape = GLASS_SHAPE,
+    /** false: same look, but things inside may reach past the edge (the seek picture over the bar). */
+    clipContent: Boolean = true,
+): Modifier =
+    (if (clipContent) this.clip(shape) else this)
+        .background(Brush.verticalGradient(listOf(color.copy(alpha = (color.alpha - 0.06f).coerceAtLeast(0f)), color)), shape)
         .border(1.dp, Color.White.copy(alpha = 0.12f), shape)
 
 /**
@@ -271,7 +276,8 @@ internal fun LiveTvPlayerPanel(
         Column(
             Modifier
                 .fillMaxWidth()
-                .glass(glassColor(background))
+                // Not trimmed at the edge, so the seek picture can rise above the card.
+                .glass(glassColor(background), clipContent = false)
                 // Equal on every side, so the poster (and everything else) sits in an evenly
                 // framed card instead of a wider gap on one axis than the other.
                 .padding(14.dp)

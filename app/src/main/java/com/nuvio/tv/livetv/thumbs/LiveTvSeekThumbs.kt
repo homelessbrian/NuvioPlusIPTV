@@ -106,8 +106,8 @@ internal fun isSegmentedLink(url: String): Boolean {
 }
 
 /**
- * The seek thumbnail over the Live TV player's seek bar: shown while the bar is selected and
- * you're moving through the video (a jump of more than a few seconds), for 2 seconds after.
+ * The seek thumbnail over the Live TV player's seek bar: shown while you're moving through the
+ * video (a jump of more than a few seconds, bar selected or not), for 2 seconds after.
  */
 @Composable
 fun LiveTvTimelineThumb(
@@ -123,7 +123,7 @@ fun LiveTvTimelineThumb(
     LaunchedEffect(positionMs, grabbed) {
         val previous = last[0]
         last[0] = positionMs
-        if (!grabbed) { seekingUntil = 0L; return@LaunchedEffect }
+        // Any jump of more than a few seconds is a seek: Up-to-seek on the bar, or ◀ ▶ with it closed.
         if (previous != Long.MIN_VALUE && kotlin.math.abs(positionMs - previous) > 6_000L) {
             seekingUntil = android.os.SystemClock.elapsedRealtime() + 2_000L
         }
@@ -138,7 +138,7 @@ fun LiveTvTimelineThumb(
         positionMs = rel,
         fraction = rel.toFloat() / span,
         timeLabel = seekThumbTime(rel),
-        visible = grabbed && now < seekingUntil,
+        visible = now < seekingUntil,
         modifier = modifier,
     )
 }
