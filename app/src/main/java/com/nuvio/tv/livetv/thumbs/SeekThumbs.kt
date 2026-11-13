@@ -26,9 +26,9 @@ import kotlin.math.roundToLong
  * (ysosrs123/NuvioTV-Fork, GPL-3.0); this is a lighter version built on Android's own frame
  * reader, so the video decoding happens in Android's media service rather than in the app's memory.
  *
- * Works on: one-file videos over HTTP (MP4, MKV and similar) in the main player and sports addon
- * replays, and saved recordings (their pieces on this device). Not on live TV, catch-up, torrents
- * or segmented streams (HLS/DASH): there is no single file to take pictures from.
+ * Works on: one-file videos over HTTP (MP4, MKV and similar), streamed HLS links (read piece by
+ * piece from their smallest version, see [SeekThumbsHls]), saved recordings and catch-up saved on
+ * this device (their pieces), and HLS catch-up. Not on live TV, torrents, DASH or protected streams.
  *
  * One session per player ([Owner]); a new video replaces that player's session. Pictures are kept
  * small (about 240x135) in a size-capped folder in the app cache, plus a few in memory.
@@ -42,8 +42,19 @@ object SeekThumbs {
         abstract val key: String
         /** A one-file video over HTTP. */
         data class Remote(val url: String, val headers: Map<String, String>, override val key: String) : Source()
-        /** A saved recording: its playlist of pieces on this device. */
+        /** A saved recording (or a catch-up saved while it plays): its playlist of pieces on this device. */
         data class Recording(val playlist: File, override val key: String) : Source()
+        /**
+         * A streamed (HLS) link. With [programStartMs], times are placed by the stream's own clock
+         * (catch-up that came as the live stream with rewind): time 0 is that clock time.
+         */
+        data class Hls(
+            val url: String,
+            val headers: Map<String, String>,
+            override val key: String,
+            val programStartMs: Long? = null,
+            val policy: com.nuvio.tv.livetv.stalker.StalkerMediaPolicy? = null,
+        ) : Source()
     }
 
     /** What the player tells the engine about playback, read from the engine's own thread. */
@@ -57,8 +68,10 @@ object SeekThumbs {
     const val MSG_MAKING = "Making thumbnails…"
     const val MSG_LOW_MEMORY = "Thumbnails paused: low memory"
     const val MSG_4K_OFF = "4K thumbnails off in settings"
-    const val MSG_LIVE = "No thumbnails for Live TV or catch-up"
-    const val MSG_STREAMED = "No thumbnails for streamed links"
+    const val MSG_LIVE = "No thumbnails for Live TV"
+    const val MSG_STREAMED = "No thumbnails for DASH links"
+    const val MSG_CATCHUP_SAVE = "Turn on Faster Catch-Up Skipping for thumbnails"
+    const val MSG_PROTECTED = "This stream is protected: no thumbnails"
     const val MSG_TORRENT = "No thumbnails for torrents"
 
     const val THUMB_W = 240
@@ -69,6 +82,7 @@ object SeekThumbs {
     /** Below this much free room in the app's own memory, making thumbnails pauses. */
     private const val APP_HEADROOM_BYTES = 24L * MB
     private const val SEEK_ACTIVE_MS = 8_000L
+    private const val FOUR_K = "4k|"
 
     /** Goes up whenever a picture is ready, so the preview redraws. */
     private val _version = MutableStateFlow(0)
@@ -104,6 +118,8 @@ object SeekThumbs {
         videoHeight: Int,
         hdr: Boolean,
         playback: Playback,
+        /** Where the source starts on the seek bar (catch-up that began partway into the show). */
+        shiftMs: Long = 0L,
     ) {
         val app = context.applicationContext
         val settings = SeekThumbSettings.load(app)
@@ -113,12 +129,13 @@ object SeekThumbs {
                 setMessage(owner, null)
                 return
             }
-            if (!settings.include4k && (videoHeight > 1088 || hdr)) {
+            // Streamed links are read from their smallest version: checked once that's known.
+            if (!settings.include4k && source !is Source.Hls && (videoHeight > 1088 || hdr)) {
                 sessions.remove(owner)?.stop()
                 setMessage(owner, MSG_4K_OFF)
                 return
             }
-            failed[source.key]?.let { reason ->
+            (failed[source.key] ?: failed[FOUR_K + source.key]?.takeIf { !settings.include4k })?.let { reason ->
                 sessions.remove(owner)?.stop()
                 setMessage(owner, reason)
                 return
@@ -126,14 +143,15 @@ object SeekThumbs {
             val interval = intervalFor(durationMs)
             val existing = sessions[owner]
             if (existing != null && existing.source.key == source.key && existing.intervalMs == interval &&
-                existing.alive && existing.covers(durationMs) && existing.mode == settings.whenToMake) {
+                existing.alive && existing.covers(durationMs) && existing.mode == settings.whenToMake &&
+                existing.shiftMs == shiftMs) {
                 existing.playback = playback
                 existing.source = source
                 existing.durationMs = durationMs
                 return
             }
             sessions.remove(owner)?.stop()
-            val s = Session(app, owner, source, durationMs, interval, playback, settings.whenToMake)
+            val s = Session(app, owner, source, durationMs, interval, playback, settings.whenToMake, shiftMs, settings.include4k)
             sessions[owner] = s
             setMessage(owner, MSG_MAKING)
             s.start()
@@ -230,6 +248,8 @@ object SeekThumbs {
         val intervalMs: Long,
         @Volatile var playback: Playback,
         val mode: SeekThumbSettings.When,
+        val shiftMs: Long,
+        val include4k: Boolean,
     ) {
         @Volatile var alive = true
         private val lock = Object()
@@ -248,6 +268,7 @@ object SeekThumbs {
         private var failures = 0
         private var lowMemoryNoted = false
         private var pieceList: PieceList? = null
+        private var hls: SeekThumbsHls? = null
         private val thread = Thread({ run() }, "SeekThumbs-$owner").apply { isDaemon = true; priority = Thread.MIN_PRIORITY + 1 }
 
         fun start() = thread.start()
@@ -317,7 +338,11 @@ object SeekThumbs {
                 }
                 trim(context, dir)
                 val saved = state.count { it == 1.toByte() }
-                val kind = when (source) { is Source.Recording -> "recording"; is Source.Remote -> "video file" }
+                val kind = when (source) {
+                    is Source.Recording -> "recording"
+                    is Source.Remote -> "video file"
+                    is Source.Hls -> "streamed link"
+                }
                 LiveTvLoadReport.add("Seek thumbnails: on for this $kind (one every ${intervalMs / 1000} s, $saved of $count already saved, ${mode.label.lowercase()})")
                 if (saved > 0) setMessage(owner, MSG_MAKING)
                 while (alive) {
@@ -385,9 +410,9 @@ object SeekThumbs {
             SeekThumbSettings.update(context) { it.copy(lastLowMemoryAt = System.currentTimeMillis()) }
         }
 
-        private fun fail(reason: String) {
+        private fun fail(reason: String, key: String = source.key) {
             alive = false
-            failed[source.key] = reason
+            failed[key] = reason
             LiveTvLoadReport.add("Seek thumbnails: $reason")
             setMessage(owner, reason)
         }
@@ -395,10 +420,14 @@ object SeekThumbs {
         /** Makes picture [i]. False when this video can't make pictures at all (the session ends). */
         private fun make(i: Int): Boolean {
             val atMs = (i * intervalMs).coerceAtMost((durationMs - 1_000L).coerceAtLeast(0L)).coerceAtLeast(if (i == 0) 1_000L else 0L)
+            // In the source's own time (catch-up that began partway in starts later on the bar).
+            val srcMs = atMs - shiftMs
+            if (srcMs < 0L) { state[i] = 2; return true }
             val bmp = try {
                 when (val s = source) {
-                    is Source.Remote -> remoteFrame(s, atMs)
-                    is Source.Recording -> recordingFrame(s, atMs)
+                    is Source.Remote -> remoteFrame(s, srcMs)
+                    is Source.Recording -> recordingFrame(s, srcMs)
+                    is Source.Hls -> hlsFrame(s, srcMs)
                 }
             } catch (e: IllegalArgumentException) {
                 failures++
@@ -410,7 +439,7 @@ object SeekThumbs {
             if (!alive) { bmp?.recycle(); return false }
             if (bmp == null) {
                 val rec = source as? Source.Recording
-                if (rec != null && beyondRecorded(atMs)) {
+                if (rec != null && beyondRecorded(srcMs)) {
                     // Past the end: a recording still being made gets it later; a finished one never will.
                     if (System.currentTimeMillis() - rec.playlist.lastModified() > 30_000L) state[i] = 2
                     else waitFor(5_000)
@@ -418,6 +447,7 @@ object SeekThumbs {
                 }
                 state[i] = 2
                 misses++
+                if (!alive) return false
                 if (failures >= 3 && made == 0) { fail("The server didn't send thumbnail pictures"); return false }
                 if (misses >= 8 && made == 0) { fail("This video's format can't make thumbnails on this device"); return false }
                 return true
@@ -471,6 +501,50 @@ object SeekThumbs {
                 return null
             }
             return grab(r, atMs * 1000L)
+        }
+
+        // -------------------------------------------------------------- streamed links
+
+        private fun hlsFrame(s: Source.Hls, srcMs: Long): Bitmap? {
+            val reader = hls ?: try {
+                SeekThumbsHls(s.url, s.headers, s.policy).also { r ->
+                    if (s.programStartMs != null && !r.hasClock()) {
+                        fail("No thumbnails for this catch-up stream")
+                        return null
+                    }
+                    if (!include4k && (r.height > 1088 || r.hdr)) {
+                        fail(MSG_4K_OFF, FOUR_K + source.key)
+                        return null
+                    }
+                    hls = r
+                }
+            } catch (e: SeekThumbsHls.Unsupported) {
+                fail(e.message ?: MSG_PROTECTED)
+                return null
+            } catch (e: java.io.IOException) {
+                failures++
+                return null
+            }
+            val tmp = File(dir, "piece.tmp")
+            return try {
+                val within = (if (s.programStartMs != null) reader.pieceAt(null, s.programStartMs + srcMs, tmp)
+                    else reader.pieceAt(srcMs, null, tmp)) ?: return null
+                val r = MediaMetadataRetriever()
+                try {
+                    r.setDataSource(tmp.path)
+                    grab(r, within.coerceAtLeast(0L) * 1000L) ?: grab(r, 0L) ?: r.frameAtTime
+                } finally {
+                    runCatching { r.release() }
+                }
+            } catch (e: SeekThumbsHls.Unsupported) {
+                fail(e.message ?: MSG_PROTECTED)
+                null
+            } catch (e: java.io.IOException) {
+                failures++
+                null
+            } finally {
+                tmp.delete()
+            }
         }
 
         // -------------------------------------------------------------- recordings

@@ -44,8 +44,9 @@ internal fun PlaybackSeekThumbnailSection() {
         onToggle = { update { it.copy(enabled = !it.enabled) } }
     )
     SettingsNote(
-        "Works on: movies and shows in the main player, your recordings, and sports replays and highlights when the add-on sends a regular video file.\n" +
-            "Doesn't work on: Live TV, catch-up, torrents, or streamed links (HLS/DASH), because there's no single file to make pictures from."
+        "Works on: movies and shows in the main player (including streamed HLS links), your recordings, sports replays and highlights, and catch-up.\n" +
+            "Catch-up: pictures come from the part saved with Faster Catch-Up Skipping, or straight from the provider for streamed (HLS) catch-up.\n" +
+            "Doesn't work on: Live TV, torrents, DASH links, or protected streams."
     )
     if (lowMemoryBox) {
         SettingsNote(
@@ -55,7 +56,7 @@ internal fun PlaybackSeekThumbnailSection() {
     }
     SettingsToggleRow(
         title = "Include 4K and HDR",
-        subtitle = "Also makes thumbnails for 4K and HDR videos. Uses more memory and data. May stutter on lower-end devices. Pictures of HDR videos can look washed out",
+        subtitle = "Also makes thumbnails for 4K and HDR videos. Starts on for devices with plenty of memory and off for lower-end ones, but you can turn it on anywhere and try it. 4K thumbnails may stutter or not work on lower-end devices, and use more data. Pictures of HDR videos can look washed out. Streamed links use their smallest version, so this rarely matters for them",
         checked = s.include4k,
         enabled = s.enabled,
         onToggle = { update { it.copy(include4k = !it.include4k) } }

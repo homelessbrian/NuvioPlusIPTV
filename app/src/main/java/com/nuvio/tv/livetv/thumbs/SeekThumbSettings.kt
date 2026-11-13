@@ -47,7 +47,8 @@ object SeekThumbSettings {
             val p = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             _values.value = Values(
                 enabled = p.getBoolean(ENABLED, false),
-                include4k = p.getBoolean(INCLUDE_4K, false),
+                // Not chosen yet: on for devices with plenty of memory, off for lower-end ones (anyone can change it).
+                include4k = if (p.contains(INCLUDE_4K)) p.getBoolean(INCLUDE_4K, false) else !isLowMemoryDevice(context.applicationContext),
                 whenToMake = runCatching { When.valueOf(p.getString(WHEN, null) ?: When.SEEKING.name) }.getOrDefault(When.SEEKING),
                 storageMb = p.getInt(STORAGE_MB, 50).takeIf { it in STORAGE_CHOICES } ?: 50,
                 lastLowMemoryAt = p.getLong(LOW_MEMORY_AT, 0L),

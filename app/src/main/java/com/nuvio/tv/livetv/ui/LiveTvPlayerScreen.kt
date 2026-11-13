@@ -119,7 +119,7 @@ fun LiveTvPlayerScreen(
 
     if (!embedded) PauseLiveTvInBackground(viewModel.playback)
     // Seek thumbnails for recordings and sports addon replays (off unless turned on in Settings).
-    com.nuvio.tv.livetv.thumbs.LiveTvSeekThumbsHook(viewModel.playback)
+    com.nuvio.tv.livetv.thumbs.LiveTvSeekThumbsHook(viewModel)
 
     DisposableEffect(Unit) {
         viewModel.playback.attach()

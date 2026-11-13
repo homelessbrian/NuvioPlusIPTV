@@ -39,17 +39,22 @@ private fun update(context: android.content.Context, viewModel: PlayerViewModel)
     if (timeline.isLive) { SeekThumbs.close(owner); return }
     if (c.isTorrentStream) { SeekThumbs.unsupported(owner, SeekThumbs.MSG_TORRENT); return }
     if (url.isBlank() || timeline.duration <= 0L) return
-    if (isSegmented(url, c.currentStreamMimeType)) { SeekThumbs.unsupported(owner, SeekThumbs.MSG_STREAMED); return }
     if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) {
         SeekThumbs.unsupported(owner, "No thumbnails for this kind of link")
         return
     }
+    val hls = isHls(url, c.currentStreamMimeType)
+    if (!hls && isSegmented(url, c.currentStreamMimeType)) { SeekThumbs.unsupported(owner, SeekThumbs.MSG_STREAMED); return }
     val file = url.substringBefore('?').substringBefore('#').trimEnd('/').substringAfterLast('/')
     val identity = c.currentVideoId ?: c.contentId ?: ""
+    val key = "$identity|$file|${timeline.duration / 1000}"
+    val headers = viewModel.getCurrentHeaders()
     SeekThumbs.open(
         context = context,
         owner = owner,
-        source = SeekThumbs.Source.Remote(url, viewModel.getCurrentHeaders(), "$identity|$file|${timeline.duration / 1000}"),
+        // Streamed (HLS) links are read piece by piece, from their smallest version.
+        source = if (hls) SeekThumbs.Source.Hls(url, headers, "hls|$key|${url.hashCode()}")
+            else SeekThumbs.Source.Remote(url, headers, key),
         durationMs = timeline.duration,
         videoHeight = c.currentVideoHeight ?: 0,
         hdr = state.isHdrVideo,
@@ -64,12 +69,23 @@ private fun update(context: android.content.Context, viewModel: PlayerViewModel)
     )
 }
 
+private val HLS_TYPES = setOf(
+    "application/x-mpegurl", "application/vnd.apple.mpegurl", "audio/mpegurl", "audio/x-mpegurl",
+)
+
+/** An HLS link: read piece by piece for thumbnails. */
+internal fun isHls(url: String, mimeType: String?): Boolean {
+    if (mimeType != null && mimeType.trim().lowercase() in HLS_TYPES) return true
+    val path = url.substringBefore('#').substringBefore('?').trimEnd('/').lowercase()
+    return path.endsWith(".m3u8") || path.endsWith(".m3u")
+}
+
 private val SEGMENTED_TYPES = setOf(
     "application/x-mpegurl", "application/vnd.apple.mpegurl", "audio/mpegurl", "audio/x-mpegurl",
     "application/dash+xml", "application/vnd.ms-sstr+xml",
 )
 
-/** HLS, DASH or Smooth Streaming: no single file to take pictures from. */
+/** HLS, DASH or Smooth Streaming. */
 internal fun isSegmented(url: String, mimeType: String?): Boolean {
     if (mimeType != null && mimeType.trim().lowercase() in SEGMENTED_TYPES) return true
     val path = url.substringBefore('#').substringBefore('?').trimEnd('/').lowercase()
