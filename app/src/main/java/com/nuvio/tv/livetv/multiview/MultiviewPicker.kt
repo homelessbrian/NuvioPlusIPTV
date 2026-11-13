@@ -171,7 +171,6 @@ internal fun MultiviewChannelPicker(
     onClose: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val selectedPane = state.panes.firstOrNull { it.id == paneId }
     val logos by produceState(emptyMap<String, String>(), optionsSource) {
         value = withContext(Dispatchers.Default) {
@@ -420,10 +419,14 @@ internal fun MultiviewChannelPicker(
                         Modifier.fillMaxWidth()
                             .onPreviewKeyEvent { event ->
                                 if (event.key == Key.DirectionDown) {
-                                    // Down goes to the buttons under the tabs, or to the list when there are none.
+                                    // Down goes to the buttons under the tabs (from either tab), or to the list when there are none.
                                     if (event.type == KeyEventType.KeyDown) {
-                                        if (showActions) focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
-                                        else runCatching { listFocus.requestFocus() }
+                                        val target = when {
+                                            searching -> fieldFocus
+                                            showActions -> actionFocus
+                                            else -> listFocus
+                                        }
+                                        if (!runCatching { target.requestFocus() }.isSuccess) runCatching { listFocus.requestFocus() }
                                     }
                                     true
                                 } else false
@@ -480,7 +483,11 @@ internal fun MultiviewChannelPicker(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             if (!sportsMode) {
-                                MultiviewChip("Search", Modifier.focusRequester(actionFocus), icon = Icons.Default.Search, onClick = ::openSearch)
+                                MultiviewChip(
+                                    "Search",
+                                    Modifier.weight(1f).focusRequester(actionFocus),
+                                    icon = Icons.Default.Search, center = true, onClick = ::openSearch
+                                )
                             }
                             if (hasChannel || failed) {
                                 MultiviewChip(
