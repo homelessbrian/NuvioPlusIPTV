@@ -51,7 +51,7 @@ private fun update(context: android.content.Context, viewModel: PlayerViewModel)
         owner = owner,
         source = SeekThumbs.Source.Remote(url, viewModel.getCurrentHeaders(), "$identity|$file|${timeline.duration / 1000}"),
         durationMs = timeline.duration,
-        videoHeight = state.videoHeight ?: 0,
+        videoHeight = c.currentVideoHeight ?: 0,
         hdr = state.isHdrVideo,
         playback = SeekThumbs.Playback(
             isPlaying = { viewModel.uiState.value.isPlaying },
