@@ -98,7 +98,12 @@ internal fun GearPanel(
     onBackground: () -> Unit,
     onToggle: (String) -> Unit,
     onReset: () -> Unit,
+    /** Stops the recording running on this channel (Record while it's recording). Null: Record isn't offered. */
     onRecord: (() -> Unit)?,
+    /** Starts recording until [stopAtMs]; null = until it's stopped by hand. */
+    onStartRecording: (stopAtMs: Long?) -> Unit = {},
+    /** When "Until the show ends" would stop (with Keep Recording After); null with no listing. */
+    showEndStopMs: Long? = null,
     onFavorite: () -> Unit,
     onTimeAction: () -> Unit,
     onPrevious: () -> Unit,
@@ -121,6 +126,7 @@ internal fun GearPanel(
         when {
             // Quick Channels' pages sit under Play bar layout: Back goes up one page at a time.
             page == "quickAdd" -> page = "quick"
+            page == "recordTime" -> page = "record"
             page == "quick" -> page = ""
             customizing || sizing || page != "" -> { customizing = false; sizing = false; page = "" }
             else -> onDismiss()
@@ -161,8 +167,14 @@ internal fun GearPanel(
                 )
             } else if (page != "") {
                 // ---- Audio, Subtitles, Sleep timer, Stream info: one page each, like the others
-                val title = when (page) { "audio" -> "Audio"; "subs" -> "Subtitles"; "sleep" -> "Sleep timer"; else -> "Stream info" }
-                val hint = when (page) { "sleep" -> "Stops playback after"; "audio" -> "Applies to this channel"; else -> null }
+                val title = when (page) {
+                    "audio" -> "Audio"; "subs" -> "Subtitles"; "sleep" -> "Sleep timer"
+                    "record" -> "Record"; "recordTime" -> "Record until"; else -> "Stream info"
+                }
+                val hint = when (page) {
+                    "sleep" -> "Stops playback after"; "audio" -> "Applies to this channel"
+                    "record" -> "Hold Record to skip this"; "recordTime" -> "◀ ▶ change the time"; else -> null
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
                     LiveText("‹  $title", size = 14.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     hint?.let { LiveText(it, size = 11.sp, color = Color.White.copy(alpha = 0.55f)) }
@@ -204,6 +216,46 @@ internal fun GearPanel(
                             choice("Off", false, true) { onPickSleep(null) }
                             listOf(15, 30, 45, 60, 90, 120).forEach { m ->
                                 choice(if (m < 60) "$m minutes" else if (m == 60) "1 hour" else "${m / 60.0} hours".replace(".0 ", " "), false, false) { onPickSleep(m) }
+                            }
+                        }
+                        "record" -> {
+                            choice("Until I stop it", false, true) { page = ""; onStartRecording(null) }
+                            showEndStopMs?.let { end ->
+                                GearRow(Modifier.fillMaxWidth(), onClick = { page = ""; onStartRecording(end) }) { focused ->
+                                    LiveText("Until the show ends", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
+                                    LiveText(formatClock(end, quickSettings.use24HourClock), size = 12.sp, color = gearText(focused, dim = true))
+                                }
+                            }
+                            GearRow(Modifier.fillMaxWidth(), onClick = { page = "recordTime" }) { focused ->
+                                LiveText("Until a set time", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
+                                LiveText("›", size = 15.sp, color = gearText(focused, dim = true))
+                            }
+                        }
+                        "recordTime" -> {
+                            // Starts at the show's end (or an hour from now); ◀ ▶ move it 5 minutes at a time.
+                            val earliest = remember { roundUpTo5Min(System.currentTimeMillis() + 60_000L) }
+                            val latest = remember { earliest + 12 * 60 * 60_000L }
+                            var stopAt by remember { mutableStateOf((showEndStopMs ?: (earliest + 55 * 60_000L)).coerceIn(earliest, latest)) }
+                            GearRow(
+                                Modifier.fillMaxWidth().focusRequester(first).onPreviewKeyEvent { e ->
+                                    if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    val step = 5 * 60_000L * (1 + minOf(e.nativeKeyEvent.repeatCount / 4, 5))
+                                    when (e.nativeKeyEvent.keyCode) {
+                                        android.view.KeyEvent.KEYCODE_DPAD_LEFT -> { stopAt = (stopAt - step).coerceIn(earliest, latest); true }
+                                        android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { stopAt = (stopAt + step).coerceIn(earliest, latest); true }
+                                        else -> false
+                                    }
+                                },
+                                onClick = { page = ""; onStartRecording(stopAt) }
+                            ) { focused ->
+                                LiveText("Stop at", size = 13.sp, weight = FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
+                                LiveText(
+                                    (if (focused) "◀  " else "") + formatClock(stopAt, quickSettings.use24HourClock) + (if (focused) "  ▶" else ""),
+                                    size = 13.sp, weight = FontWeight.Bold, color = gearText(focused)
+                                )
+                            }
+                            GearRow(Modifier.fillMaxWidth(), onClick = { page = ""; onStartRecording(stopAt) }) { focused ->
+                                LiveText("Start recording", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
                             }
                         }
                         else -> {
@@ -249,7 +301,10 @@ internal fun GearPanel(
                     fun f(): Modifier = if (!firstSet) { firstSet = true; Modifier.focusRequester(first) } else Modifier
                     if (onRecord != null) GearTile(
                         Icons.Default.FiberManualRecord, if (recording) "Stop" else "Record", if (recording) "Recording" else null,
-                        Modifier.weight(1f).then(f()), iconTint = LIVE_RED, onClick = onRecord
+                        Modifier.weight(1f).then(f()), iconTint = LIVE_RED,
+                        // Recording: stops it. Otherwise: how long to record; held, until you stop it.
+                        onClick = if (recording) onRecord else ({ page = "record" }),
+                        onLongClick = if (recording) null else ({ onStartRecording(null) })
                     )
                     GearTile(Icons.Default.VolumeUp, "Audio", audioLabel.ifBlank { null }, Modifier.weight(1f).then(f()), onClick = { page = "audio" })
                     GearTile(Icons.Default.ClosedCaption, "Subtitles", if (captionsOn) "On" else "Off", Modifier.weight(1f).then(f()), onClick = { page = "subs" })
@@ -385,6 +440,7 @@ private fun GearTile(
     value: String?,
     modifier: Modifier,
     iconTint: Color? = null,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -393,7 +449,7 @@ private fun GearTile(
             .clip(RoundedCornerShape(14.dp))
             .background(if (focused) Color.White else Color.White.copy(alpha = 0.08f))
             .onFocusChanged { focused = it.isFocused }
-            .combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onLongClick = onLongClick, onClick = onClick)
             .padding(vertical = 9.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -597,4 +653,10 @@ private fun GearArrow(icon: ImageVector, desc: String, enabled: Boolean, onClick
             modifier = Modifier.size(20.dp)
         )
     }
+}
+
+/** [ms] rounded up to the next whole 5 minutes. */
+private fun roundUpTo5Min(ms: Long): Long {
+    val step = 5 * 60_000L
+    return (ms + step - 1) / step * step
 }

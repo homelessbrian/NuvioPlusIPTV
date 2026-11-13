@@ -1404,6 +1404,8 @@ fun LiveTvPlayerScreen(
                         toast = viewModel.toggleRecording(ch)
                     }
                 },
+                onStartRecording = { stopAt -> toast = viewModel.startRecording(ch, stopAt) },
+                showEndStopMs = if (archive) null else viewModel.showEndStopMs(ch),
                 onFavorite = { viewModel.toggleFavorite(ch) },
                 onTimeAction = {
                     dialog = PlayerDialog.NONE
