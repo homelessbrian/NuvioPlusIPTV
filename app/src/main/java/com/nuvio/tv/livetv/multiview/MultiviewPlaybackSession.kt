@@ -51,6 +51,8 @@ data class MultiviewPaneState(
     val isBuffering: Boolean = false,
     val isPlaying: Boolean = false,
     val error: String? = null,
+    /** Reconnecting after a drop: the last picture stays up, with only a quiet mark if it takes a while. */
+    val isReconnecting: Boolean = false,
 )
 
 data class MultiviewState(
@@ -71,9 +73,14 @@ data class MultiviewState(
 class MultiviewPlaybackSession(
     context: Context,
     initialLayout: MultiviewLayout = MultiviewLayout.TWO,
-    mayPlayChannel: (LiveChannel) -> Boolean = { true },
+    private val mayPlayChannel: (LiveChannel) -> Boolean = { true },
     /** The Live TV "Auto-reconnect" setting: a pane whose stream drops reconnects on its own. */
     autoReconnect: () -> Boolean = { true },
+    /**
+     * Another channel for a pane whose stream keeps failing: a copy of the same channel from
+     * another playlist, or another stream of the same game. [tried] holds keys already tried.
+     */
+    private val findBackup: (paneId: Int, failed: LiveChannel, tried: Set<String>) -> LiveChannel? = { _, _, _ -> null },
 ) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -81,12 +88,18 @@ class MultiviewPlaybackSession(
     private val _state = MutableStateFlow(MultiviewState(layout = initialLayout))
     val state: StateFlow<MultiviewState> = _state.asStateFlow()
 
+    /** Backups switched to on their own: they load quietly (no "Loading…") over the last picture. */
+    private val quietUntilPlaying = HashSet<String>()
+
+    /** Channel key -> the channels already tried before switching to it (a run of backups). */
+    private val backupTried = HashMap<String, Set<String>>()
+
     private val core = MultiviewSessionCore(
         initialLayout = initialLayout,
         totalBufferBytes = MultiviewBufferBudget.totalBytes(MemoryBudget.heapMb),
         audioFocus = AndroidMultiviewAudioFocus(appContext),
         createPlayer = { _, bufferBytes, changed ->
-            AndroidMultiviewPanePlayer(appContext, bufferBytes, changed, autoReconnect)
+            AndroidMultiviewPanePlayer(appContext, bufferBytes, changed, autoReconnect, ::switchToBackup)
         },
         onChanged = ::publishState,
         mayPlayChannel = mayPlayChannel,
@@ -106,6 +119,31 @@ class MultiviewPlaybackSession(
     fun validateAllowedChannels(allowed: List<LiveChannel>) = onMain { core.validateAllowedChannels(allowed) }
     fun onForeground() = onMain { core.onForeground() }
     fun onBackground() = onMain { core.onBackground() }
+
+    /** Called by a pane whose stream keeps failing: play a backup there; false when there is none. */
+    private fun switchToBackup(player: MultiviewPanePlayer, failed: LiveChannel): Boolean {
+        if (released) return false
+        val paneId = (0 until core.layout.paneCount).firstOrNull { core.playerAt(it) === player } ?: return false
+        val tried = HashSet(backupTried[failed.key].orEmpty()).apply { add(failed.key) }
+        var pick: LiveChannel? = null
+        repeat(8) {
+            if (pick != null) return@repeat
+            val next = runCatching { findBackup(paneId, failed, tried) }.getOrNull() ?: return@repeat
+            if (next.key in tried) return@repeat
+            if (mayPlayChannel(next)) pick = next else tried += next.key
+        }
+        val backup = pick ?: return false
+        backupTried[backup.key] = tried
+        quietUntilPlaying += backup.key
+        LiveTvLoadReport.add("Multiview: ${failed.name} won't play: switched P${paneId + 1} to ${backup.name} (${backup.group})")
+        // Not from inside the failing player's own callback: it is released by the switch.
+        mainHandler.post {
+            if (!released && core.playerAt(paneId) === player && core.channelAt(paneId)?.key == failed.key) {
+                core.assignChannel(paneId, backup)
+            }
+        }
+        return true
+    }
 
     fun release() {
         checkMainThread()
@@ -133,7 +171,11 @@ class MultiviewPlaybackSession(
             hasAudioFocus = core.hasAudioFocus,
             panes = List(core.layout.paneCount) { id ->
                 val channel = core.channelAt(id)
-                val playback = core.playbackAt(id)
+                var playback = core.playbackAt(id)
+                if (channel != null && channel.key in quietUntilPlaying) {
+                    if (playback.isPlaying || playback.error != null) quietUntilPlaying -= channel.key
+                    else if (playback.isBuffering) playback = playback.copy(isBuffering = false, isReconnecting = true)
+                }
                 MultiviewPaneState(
                     id = id,
                     channelKey = channel?.key,
@@ -142,6 +184,7 @@ class MultiviewPlaybackSession(
                     isBuffering = playback.isBuffering,
                     isPlaying = playback.isPlaying,
                     error = playback.error,
+                    isReconnecting = playback.isReconnecting,
                 )
             },
         )
@@ -154,6 +197,7 @@ private class AndroidMultiviewPanePlayer(
     bufferBytes: Int,
     private val onChanged: () -> Unit,
     private val autoReconnect: () -> Boolean,
+    private val switchToBackup: (MultiviewPanePlayer, LiveChannel) -> Boolean,
 ) : MultiviewPanePlayer {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -170,6 +214,7 @@ private class AndroidMultiviewPanePlayer(
     private var reconnectAttempt = 0
     /** When the stream last started playing; a stream that keeps going a while earns fresh tries. */
     private var playingSince = 0L
+    private var reconnecting = false
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             if (!released) onChanged()
@@ -177,7 +222,10 @@ private class AndroidMultiviewPanePlayer(
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (released) return
-            if (isPlaying) playingSince = SystemClock.elapsedRealtime()
+            if (isPlaying) {
+                playingSince = SystemClock.elapsedRealtime()
+                if (reconnecting) { reconnecting = false; onChanged() }
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -205,6 +253,9 @@ private class AndroidMultiviewPanePlayer(
     private fun fail(message: String) {
         reconnectJob?.cancel()
         reconnectJob = null
+        reconnecting = false
+        // Out of tries on this channel: a backup copy (or another stream of the game) if there is one.
+        channel?.let { if (switchToBackup(this, it)) return }
         error = message
         player.volume = 0f
         player.playWhenReady = false
@@ -224,10 +275,12 @@ private class AndroidMultiviewPanePlayer(
         }
         val attempt = ++reconnectAttempt
         LiveTvLoadReport.add("Multiview: ${ch.name} dropped ($reason), reconnecting (try $attempt)")
+        // Second drop in a row, like the full-screen player: move to a backup copy if there is one.
+        if (attempt == 2 && switchToBackup(this, ch)) return true
         val expected = generation
         reconnectJob?.cancel()
-        // Shown as buffering meanwhile, not as an error.
-        resolving = true
+        // The last picture stays up meanwhile (not "Loading…"); the pane shows a quiet mark if it drags on.
+        reconnecting = true
         onChanged()
         reconnectJob = scope.launch {
             delay((attempt * 2_000L).coerceAtMost(10_000L))
@@ -289,9 +342,10 @@ private class AndroidMultiviewPanePlayer(
 
     override val playback: MultiviewPanePlayback
         get() = MultiviewPanePlayback(
-            isBuffering = !released && error == null && (resolving || player.playbackState == Player.STATE_BUFFERING),
+            isBuffering = !released && error == null && !reconnecting && (resolving || player.playbackState == Player.STATE_BUFFERING),
             isPlaying = !released && error == null && player.isPlaying,
             error = error,
+            isReconnecting = !released && error == null && reconnecting,
         )
 
     override fun prepare(channel: LiveChannel) {
@@ -300,6 +354,7 @@ private class AndroidMultiviewPanePlayer(
         reconnectJob = null
         reconnectAttempt = 0
         playingSince = 0L
+        reconnecting = false
         connect(channel)
     }
 

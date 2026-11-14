@@ -27,6 +27,8 @@ internal data class MultiviewPanePlayback(
     val isBuffering: Boolean = false,
     val isPlaying: Boolean = false,
     val error: String? = null,
+    /** The stream dropped and is being reconnected; the last picture stays up meanwhile. */
+    val isReconnecting: Boolean = false,
 )
 
 /** Ports let lifecycle and sound arbitration be tested without codecs or an Android device. */

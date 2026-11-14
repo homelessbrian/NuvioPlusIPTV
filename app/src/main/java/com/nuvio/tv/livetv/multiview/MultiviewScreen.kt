@@ -129,6 +129,8 @@ fun MultiviewScreen(
     val loadingGames = sportsUsed && !sportsWaited && sportsRows.none { it.games.isNotEmpty() } && (sportsBusy || !sportsSawBusy)
     val hideScores = sports?.settings?.collectAsStateWithLifecycle()?.value?.hideScores ?: false
     val request = remember { if (startOnSports) SportsWatchLaunch.take() else null }
+    // Kept current every composition: the session asks it when a pane's channel won't play.
+    val backupRef = remember { arrayOfNulls<(Int, LiveChannel, Set<String>) -> LiveChannel?>(1) }
     val session = remember {
         // The guide and Sports share one player. Multiview owns independent players and audio.
         viewModel.playback.stop()
@@ -143,7 +145,8 @@ fun MultiviewScreen(
                 viewModel.activeProfileId.value == openingProfile &&
                     (viewModel.allowedChannels.value.any { it == channel } || sportsRef[0]?.mayPlay(channel) == true)
             },
-            autoReconnect = { viewModel.autoReconnect.value })
+            autoReconnect = { viewModel.autoReconnect.value },
+            findBackup = { paneId, failed, tried -> backupRef[0]?.invoke(paneId, failed, tried) })
     }
     val state by session.state.collectAsStateWithLifecycle()
     val soundPaused = state.isForeground && state.panes.any { it.channelKey != null } && !state.hasAudioFocus
@@ -219,6 +222,17 @@ fun MultiviewScreen(
         val streams = game.channels.distinctBy { it.channel.key }
         val at = streams.indexOfFirst { it.channel.key == channelKey }
         return eventId to streams.drop(at + 1)
+    }
+
+    // A pane whose channel won't play: the game's next stream (a game pane), else a copy of the
+    // channel from another playlist. Follows the "Backup channel" setting, like the single player.
+    backupRef[0] = { paneId, failed, tried ->
+        if (!viewModel.autoBackup.value) null
+        else nextStreams(paneId)?.let { (eventId, candidates) ->
+            candidates.asSequence().filter { it.channel.key !in tried }
+                .mapNotNull { sports?.resolve(eventId, it.channel.key)?.channel }
+                .firstOrNull { it.key !in tried }
+        } ?: viewModel.backupFor(failed, tried)
     }
 
     /** OK on a pane whose stream failed: play the game's next stream there. */

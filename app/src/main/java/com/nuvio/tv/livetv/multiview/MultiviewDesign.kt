@@ -1,5 +1,6 @@
 package com.nuvio.tv.livetv.multiview
 
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -176,6 +178,8 @@ internal fun MultiviewPane(
                         descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                         setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                        // A dropped stream reconnects behind its last picture instead of going black.
+                        setKeepContentOnPlayerReset(true)
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -213,6 +217,23 @@ internal fun MultiviewPane(
                 }
             }
         }
+        // Reconnecting: nothing for the first few seconds (most drops are back by then), then a quiet mark.
+        var showReconnecting by remember { mutableStateOf(false) }
+        LaunchedEffect(pane.isReconnecting) {
+            showReconnecting = false
+            if (pane.isReconnecting) {
+                delay(RECONNECT_MARK_AFTER_MS)
+                showReconnecting = true
+            }
+        }
+        if (showReconnecting && pane.isReconnecting) {
+            LiveText(
+                "Reconnecting…",
+                Modifier.align(Alignment.BottomEnd).padding(9.dp).clip(RoundedCornerShape(6.dp))
+                    .background(LabelChip).padding(horizontal = 7.dp, vertical = 2.dp),
+                color = NuvioTheme.colors.TextSecondary, size = 9.sp, weight = FontWeight.SemiBold
+            )
+        }
         if (audible && pane.channelKey != null) {
             Row(
                 Modifier.align(Alignment.TopEnd).padding(9.dp).clip(RoundedCornerShape(6.dp))
@@ -241,6 +262,8 @@ internal fun MultiviewPane(
         }
     }
 }
+
+private const val RECONNECT_MARK_AFTER_MS = 4_000L
 
 /** The layout as a small picture (the same pane positions the screen uses), for the picker and the bar. */
 @Composable

@@ -43,6 +43,7 @@ class MultiviewViewModel @Inject constructor(
     repository: LiveTvRepository,
     private val guideDb: EpgDatabase,
     private val preferences: LiveTvPreferences,
+    private val hooks: com.nuvio.tv.livetv.player.LiveTvPlayerHooks,
 ) : ViewModel() {
     init {
         // A restored route may bypass both the guide and the optional Live TV startup preload.
@@ -108,6 +109,27 @@ class MultiviewViewModel @Inject constructor(
 
     val use24HourClock: StateFlow<Boolean> = preferences.settings.map { it.use24HourClock }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** The Live TV "Backup channel" setting (switch to another copy when a channel won't play). */
+    val autoBackup: StateFlow<Boolean> = preferences.settings.map { it.autoBackupChannel }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /**
+     * A copy of [failed] from another playlist (other playlists first), skipping [tried], as the
+     * full-screen player picks one: same name ignoring quality notes, never another local station.
+     */
+    fun backupFor(failed: LiveChannel, tried: Set<String>): LiveChannel? {
+        if (!autoBackup.value) return null
+        val index = hooks.backupIndex ?: return null
+        val name = com.nuvio.tv.livetv.ui.backupName(failed.name)
+        if (name.length < 2) return null
+        val note = com.nuvio.tv.livetv.ui.stationNote(failed.name)
+        return index[name].orEmpty().asSequence()
+            .filter { it.key != failed.key && it.key !in tried }
+            .filter { c -> val b = com.nuvio.tv.livetv.ui.stationNote(c.name); note == null || b == null || note == b }
+            .sortedBy { if (it.sourceId != failed.sourceId) 0 else 1 }
+            .firstOrNull()
+    }
 
     /** The Live TV "Auto-reconnect" setting, for panes whose stream drops. */
     val autoReconnect: StateFlow<Boolean> = preferences.settings.map { it.autoReconnect }
