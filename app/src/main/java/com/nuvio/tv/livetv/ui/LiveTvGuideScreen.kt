@@ -64,6 +64,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -215,7 +216,16 @@ private fun LiveTvGuideScreenBody(
     // Full screen happens right here, TiviMate style: the same video view grows from the
     // preview window to the whole screen and back. The picture never moves to a different
     // view, which is what froze it (or left it loading) on some TVs.
-    var fullscreen by remember { mutableStateOf(false) }
+    // Decide before drawing, including when an existing guide receives another request.
+    // Multiview handoffs still wait for their profile/channel checks below.
+    val queuedSportsHandoff by com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.collectAsStateWithLifecycle()
+    var fullscreenShown by remember { mutableStateOf(false) }
+    val fullscreen by remember {
+        derivedStateOf {
+            fullscreenShown || (LiveTvFullscreen.pending && queuedSportsHandoff == null &&
+                com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.value == null)
+        }
+    }
     val sportsHandoffOnOpen = remember {
         com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.value != null
     }
@@ -245,7 +255,7 @@ private fun LiveTvGuideScreenBody(
     // Back did nothing until pressed several times).
     var fullscreenComing by remember { mutableStateOf(false) }
     fun goFullscreen() {
-        fullscreen = true
+        fullscreenShown = true
     }
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -314,7 +324,6 @@ private fun LiveTvGuideScreenBody(
     }
     // Sports Multiview releases its owners before sending this key. Wait until this guide is
     // the resumed destination, then resolve the source again under the current profile rules.
-    val queuedSportsHandoff by com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.collectAsStateWithLifecycle()
     val sportsHandoff = queuedSportsHandoff
     if (sportsHandoff != null) {
         val source: com.nuvio.tv.livetv.sports.SportsWatchViewModel = hiltViewModel()
@@ -342,7 +351,7 @@ private fun LiveTvGuideScreenBody(
             LiveTvFullscreen.pending = false
             if (channel == null || source.currentProfile.value != handoff.profileId || !source.mayPlay(channel)) {
                 viewModel.playback.stop()
-                fullscreen = false
+                fullscreenShown = false
                 fullscreenComing = false
                 com.nuvio.tv.livetv.sports.SportsWatchLaunch.cancelSingleHandoff(handoff)
                 com.nuvio.tv.livetv.record.LiveTvNotice.show("This stream is no longer available for this profile.")
@@ -350,7 +359,7 @@ private fun LiveTvGuideScreenBody(
             }
             viewModel.preview(channel)
             handoff.eventId?.let(com.nuvio.tv.livetv.sports.SportsLaunch::openedFromSports)
-            fullscreen = true
+            fullscreenShown = true
             fullscreenComing = false
             com.nuvio.tv.livetv.sports.SportsWatchLaunch.finishSingleHandoff(handoff, source.currentProfile.value)
         }
@@ -685,12 +694,14 @@ private fun LiveTvGuideScreenBody(
     LaunchedEffect(fullscreenRequests) {
         if (com.nuvio.tv.livetv.sports.SportsWatchLaunch.singleHandoff.value != null) return@LaunchedEffect
         if (!LiveTvFullscreen.pending) return@LaunchedEffect
-        LiveTvFullscreen.pending = false
         fullscreenComing = true
+        fullscreenShown = true
+        LiveTvFullscreen.pending = false
         // A recording picked in Recordings or the Calendar.
         com.nuvio.tv.livetv.record.RecordingLaunch.take()?.let { r ->
             if (!viewModel.playRecording(r.recordingId, r.fromStart)) {
                 com.nuvio.tv.livetv.record.LiveTvNotice.show("That recording can't be played")
+                fullscreenShown = false
                 com.nuvio.tv.livetv.record.RecordingLaunch.takeReturn()?.let { onReturnTo(it) }
                 fullscreenComing = false
                 return@LaunchedEffect
@@ -700,8 +711,6 @@ private fun LiveTvGuideScreenBody(
         com.nuvio.tv.livetv.sports.SportsLaunch.takeCatchup()?.let { c ->
             viewModel.channelByKey(c.channelKey)?.let { ch -> viewModel.playCatchup(ch, c.program) }
         }
-        delay(150)
-        fullscreen = true
     }
     LaunchedEffect(focusGroupsOnOpen) {
         if (focusGroupsOnOpen) {
@@ -2421,19 +2430,18 @@ private fun LiveTvGuideScreenBody(
                     if (recordingReturn != null || viewModel.catchup.value?.recordingId != null) {
                         // A recording from Recordings / the Calendar: its spot is kept, and Back goes back there.
                         viewModel.stopRecordingPlayback()
-                        fullscreen = false
+                        fullscreenShown = false
                         if (recordingReturn != null) onReturnTo(recordingReturn) else exitFullscreenTick++
                     } else if (com.nuvio.tv.livetv.sports.SportsLaunch.takeReturnToSports()) {
-                        // Opened from the Sports page: back to the game you picked there.
-                        fullscreen = false
+                        // Keep the picture full screen throughout the transition back to Sports.
                         onReturnToSports()
                     } else {
                         stopIfNoPreview()
-                        fullscreen = false; exitFullscreenTick++
+                        fullscreenShown = false; exitFullscreenTick++
                     }
                 },
-                onFindInNuvio = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; fullscreen = false; exitFullscreenTick++; onFindInNuvio() },
-                onBackToGroups = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; stopIfNoPreview(); fullscreen = false; savedSpot = null; exitFullscreenTick++; focusGroups() },
+                onFindInNuvio = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; fullscreenShown = false; exitFullscreenTick++; onFindInNuvio() },
+                onBackToGroups = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; stopIfNoPreview(); fullscreenShown = false; savedSpot = null; exitFullscreenTick++; focusGroups() },
                 embedded = true,
                 onOpenSettings = onOpenSettings,
                 onOpenSportsMultiview = { panes -> onOpenSportsMultiview(panes, playback.channelKey) },
@@ -4576,7 +4584,7 @@ object LiveTvFullscreen {
     /** True while Live TV is full screen (the loading bubble stays out of the way). */
     val active = kotlinx.coroutines.flow.MutableStateFlow(false)
     val requests = kotlinx.coroutines.flow.MutableStateFlow(0)
-    @Volatile var pending = false
+    var pending by mutableStateOf(false)
     fun request() {
         pending = true
         requests.value++
