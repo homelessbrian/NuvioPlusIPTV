@@ -31,10 +31,14 @@ data class M3uPlaylist(
  */
 object M3uParser {
 
-    private val attrRegex = Regex("""([A-Za-z0-9_\-]+)\s*=\s*"([^"]*)"""")
-    private val attrRegexUnquoted = Regex("""([A-Za-z0-9_\-]+)\s*=\s*([^\s",]+)""")
+    private val KODI_HEADER_PROPS = listOf("stream_headers", "manifest_headers", "common_headers")
 
-    fun parse(reader: BufferedReader): M3uPlaylist {
+    /**
+     * [skip] is asked about each entry's link (without any "|headers") before the entry is
+     * built: movies and episodes in an "m3u_plus" link (often 100,000+) are left out right
+     * away instead of being fully read and then thrown away.
+     */
+    fun parse(reader: BufferedReader, skip: ((String) -> Boolean)? = null): M3uPlaylist {
         val epgUrls = mutableListOf<String>()
         val entries = ArrayList<M3uEntry>(4096)
 
@@ -95,10 +99,12 @@ object M3uParser {
                 line.startsWith("#") -> Unit
                 else -> {
                     val info = pendingInfo
-                    if (info != null) {
+                    val pipe = line.indexOf('|')
+                    val skipped = info != null && skip != null && skip(if (pipe > 0) line.substring(0, pipe).trim() else line)
+                    if (info != null && !skipped) {
                         // Request headers from Kodi lines: stream_headers, manifest_headers and
                         // common_headers ("User-Agent=…&Referer=…").
-                        listOf("stream_headers", "manifest_headers", "common_headers").forEach { key ->
+                        KODI_HEADER_PROPS.forEach { key ->
                             val v = pendingProps[key]
                             if (!v.isNullOrBlank()) v.split('&').forEach { part ->
                                 val k = part.substringBefore('=').trim()
@@ -106,7 +112,12 @@ object M3uParser {
                                     runCatching { java.net.URLDecoder.decode(part.substringAfter('=', ""), "UTF-8") }.getOrDefault(part.substringAfter('=', ""))
                             }
                         }
-                        entries.add(buildEntry(info, pendingGroup, line, pendingHeaders.toMap(), headerCatchup).copy(drm = drmFrom(pendingProps)))
+                        entries.add(buildEntry(
+                            info, pendingGroup, line,
+                            if (pendingHeaders.isEmpty()) emptyMap() else pendingHeaders.toMap(),
+                            headerCatchup,
+                            if (pendingProps.isEmpty()) null else drmFrom(pendingProps)
+                        ))
                     }
                     pendingInfo = null
                     pendingGroup = null
@@ -160,27 +171,32 @@ object M3uParser {
         extGroup: String?,
         urlLine: String,
         vlcHeaders: Map<String, String>,
-        playlistCatchup: Map<String, String> = emptyMap()
+        playlistCatchup: Map<String, String> = emptyMap(),
+        drm: com.nuvio.tv.livetv.model.DrmInfo? = null
     ): M3uEntry {
         // The channel's own attributes win over the playlist-wide catch-up defaults.
-        val attrs = playlistCatchup + attributes(info)
+        val attrs = if (playlistCatchup.isEmpty()) attributes(info) else playlistCatchup + attributes(info)
         // Display name follows the first comma that is outside quotes.
         val name = displayName(info).ifBlank { attrs["tvg-name"].orEmpty() }.ifBlank { "Channel" }
 
-        val headers = LinkedHashMap(vlcHeaders)
-        var url = urlLine
+        // Most channels have no headers of their own: only make a map for those that do.
         val pipe = urlLine.indexOf('|')
-        if (pipe > 0) {
-            url = urlLine.substring(0, pipe)
-            urlLine.substring(pipe + 1).split('&').forEach { part ->
-                val k = part.substringBefore('=').trim()
-                val v = java.net.URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
-                if (k.isNotEmpty()) headers[normalizeHeader(k)] = v
+        val ownHeaders = pipe > 0 || "user-agent" in attrs || "http-user-agent" in attrs || "http-referrer" in attrs
+        val headers = if (ownHeaders) LinkedHashMap(vlcHeaders) else null
+        var url = urlLine
+        if (headers != null) {
+            if (pipe > 0) {
+                url = urlLine.substring(0, pipe)
+                urlLine.substring(pipe + 1).split('&').forEach { part ->
+                    val k = part.substringBefore('=').trim()
+                    val v = java.net.URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
+                    if (k.isNotEmpty()) headers[normalizeHeader(k)] = v
+                }
             }
+            attrs["user-agent"]?.let { headers["User-Agent"] = it }
+            attrs["http-user-agent"]?.let { headers["User-Agent"] = it }
+            attrs["http-referrer"]?.let { headers["Referer"] = it }
         }
-        attrs["user-agent"]?.let { headers["User-Agent"] = it }
-        attrs["http-user-agent"]?.let { headers["User-Agent"] = it }
-        attrs["http-referrer"]?.let { headers["Referer"] = it }
 
         val catchupType = attrs["catchup"] ?: attrs["catchup-type"]
         val catchupDays = (attrs["catchup-days"] ?: attrs["tvg-rec"] ?: attrs["timeshift"])?.toIntOrNull()
@@ -202,8 +218,9 @@ object M3uParser {
                 ?.split(';')?.firstOrNull()?.trim(),
             chno = (attrs["tvg-chno"] ?: attrs["channel-number"] ?: attrs["tvg-num"])?.trim()?.toIntOrNull(),
             url = url.trim(),
-            headers = headers,
+            headers = headers ?: vlcHeaders,
             catchup = catchup,
+            drm = drm,
             // Hours ("+2", "-1.5"); set on the #EXTM3U line, it's every channel's unless a channel has its own.
             tvgShiftMinutes = attrs["tvg-shift"]?.trim()?.removePrefix("+")?.replace(',', '.')?.toDoubleOrNull()
                 ?.takeIf { it.isFinite() && kotlin.math.abs(it) <= 24 }?.let { Math.round(it * 60).toInt() } ?: 0
@@ -218,14 +235,56 @@ object M3uParser {
         else -> key
     }
 
+    /**
+     * name="value" and name=value pairs on a line, read in one pass (this used to be two
+     * regular-expression searches over every line, the slowest part of reading a big playlist).
+     * As before: names are lower-cased, a quoted value always wins over an unquoted one, and
+     * among unquoted ones the first counts.
+     */
     internal fun attributes(line: String): Map<String, String> {
-        val map = HashMap<String, String>()
-        attrRegex.findAll(line).forEach { m -> map[m.groupValues[1].lowercase()] = m.groupValues[2] }
-        attrRegexUnquoted.findAll(line).forEach { m ->
-            val key = m.groupValues[1].lowercase()
-            if (key !in map && key != "extinf") map[key] = m.groupValues[2]
+        val map = HashMap<String, String>(16)
+        val n = line.length
+        var i = 0
+        while (i < n) {
+            if (!isNameChar(line[i])) { i++; continue }
+            val nameStart = i
+            while (i < n && isNameChar(line[i])) i++
+            val nameEnd = i
+            var j = i
+            while (j < n && isSpace(line[j])) j++
+            if (j >= n || line[j] != '=') continue
+            j++
+            while (j < n && isSpace(line[j])) j++
+            if (j >= n) break
+            if (line[j] == '"') {
+                val close = line.indexOf('"', j + 1)
+                // No closing quote: not an attribute; carry on just after the quote.
+                if (close < 0) { i = j + 1; continue }
+                map[lower(line, nameStart, nameEnd)] = line.substring(j + 1, close)
+                i = close + 1
+            } else {
+                var k = j
+                while (k < n && !isSpace(line[k]) && line[k] != '"' && line[k] != ',') k++
+                if (k == j) { i = j; continue }
+                val key = lower(line, nameStart, nameEnd)
+                if (key != "extinf" && key !in map) map[key] = line.substring(j, k)
+                i = k
+            }
         }
         return map
+    }
+
+    private fun isNameChar(c: Char): Boolean =
+        c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '-'
+
+    private fun isSpace(c: Char): Boolean =
+        c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\u000B' || c == '\u000C'
+
+    /** The name, lower-cased only when it has capitals (most are already lower case). */
+    private fun lower(line: String, from: Int, to: Int): String {
+        val name = line.substring(from, to)
+        for (c in name) if (c in 'A'..'Z') return name.lowercase()
+        return name
     }
 
     internal fun displayName(info: String): String {

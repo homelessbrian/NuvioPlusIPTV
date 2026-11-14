@@ -2018,10 +2018,15 @@ class LiveTvRepository @Inject constructor(
             }
             read++
             if (fixedMessage == null) setStatus(loading = true, message = readingChannelsMessage(pl.name, read, toRead))
-            val parsed = runCatching { openMaybeGzip(file).bufferedReader().use { M3uParser.parse(it) } }
+            // Movies and episodes are left out while reading (see the check below).
+            val skipVod: ((String) -> Boolean)? = if (pl.isStalker) null else { url -> isVodEntry(url) }
+            val parsed = runCatching { openMaybeGzip(file).reader(Charsets.UTF_8).buffered(64 * 1024).use { M3uParser.parse(it, skipVod) } }
                 .onFailure { Log.w(TAG, "Parse ${pl.name} failed", it) }
                 .getOrNull() ?: continue
             embeddedEpgUrls[pl.id] = parsed.epgUrls
+            // The playlist's own User-Agent: one shared copy for every channel with no headers of its own.
+            val playlistAgent = pl.effectiveUserAgent
+            val agentOnly = if (playlistAgent.isNotBlank()) mapOf("User-Agent" to playlistAgent) else emptyMap()
             for (e in parsed.entries) {
                 // Many providers' M3U links ("m3u_plus") also list every movie and episode,
                 // often 100,000+ entries. Those aren't TV channels, and loading them all into the
@@ -2037,8 +2042,8 @@ class LiveTvRepository @Inject constructor(
                 while (!usedKeys.add(key)) { key = "$baseKey#${n++}" }
                 val number = e.chno ?: counter
                 counter = maxOf(counter, number) + 1
-                val headers = if (pl.effectiveUserAgent.isNotBlank() && "User-Agent" !in e.headers) {
-                    e.headers + ("User-Agent" to pl.effectiveUserAgent)
+                val headers = if (playlistAgent.isNotBlank() && "User-Agent" !in e.headers) {
+                    if (e.headers.isEmpty()) agentOnly else e.headers + ("User-Agent" to playlistAgent)
                 } else e.headers
                 out += LiveChannel(
                     key = key,
