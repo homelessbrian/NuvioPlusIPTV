@@ -104,7 +104,7 @@ internal fun gameExtrasPanels(
 }
 
 private fun teamColor(side: Side?, fallback: Color): Color =
-    side?.team?.color?.let { bandColor(Color(it)) }?.takeIf { it.alpha > 0f } ?: fallback
+    side?.team?.takeIf { it.color != null || it.altColor != null }?.let { bandColor(teamColor(it)) }?.takeIf { it.alpha > 0f } ?: fallback
 
 /** A panel's frame, filling the space it's given (and leaving it out when that's too small to read). */
 @Composable

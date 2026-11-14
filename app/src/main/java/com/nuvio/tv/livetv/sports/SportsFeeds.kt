@@ -121,6 +121,9 @@ internal class SportsFeeds {
     /** Every game of the next week with its TV channels by country (TheSportsDB's TV listings, kept by the nuvio-data job). */
     fun tvListingsRaw(): String = get(DATA_URL + "sportsdb/tv.json")
 
+    /** Team colours from TheSportsDB for every team-sport league in nuvio-data (re-read weekly by its job). */
+    fun teamColorsRaw(): String = get(DATA_URL + "sportsdb/colors.json")
+
     /** A TheSportsDB game's goals, cards, stats and line-ups (the nuvio-data job writes them). */
     /** The list of teams that have players (kept by the nuvio-data job). */
     fun playersIndexRaw(): String = get(DATA_URL + "sportsdb/players/index.json")
@@ -323,12 +326,15 @@ internal class SportsFeeds {
          */
         class TsdbLeague(val league: League, val teams: List<TeamInfo>, val tsdbId: String = league.id.removePrefix("tsdb/"), val alias: Boolean = false)
 
-        /** Club colours aren't in the data: a steady colour per club, from its name. */
+        /**
+         * Colours missing from the data: a steady stand-in per team, from its name. The app knows a
+         * colour is one of these by working it out again (TeamColors), so never change them.
+         */
         private val CLUB_COLORS = longArrayOf(
             0xFFB71C1C, 0xFF0D47A1, 0xFF1B5E20, 0xFF4A148C, 0xFFE65100, 0xFF006064,
             0xFF880E4F, 0xFF263238, 0xFF33691E, 0xFF1A237E, 0xFFBF360C, 0xFF3E2723
         )
-        private fun clubColor(name: String): Long = CLUB_COLORS[Math.floorMod(name.lowercase(Locale.ROOT).hashCode(), CLUB_COLORS.size)]
+        fun clubColor(name: String): Long = CLUB_COLORS[Math.floorMod(name.lowercase(Locale.ROOT).hashCode(), CLUB_COLORS.size)]
 
         private fun clubAbbr(name: String): String {
             val words = name.split(' ', '-').filter { it.isNotBlank() && it.lowercase(Locale.ROOT) !in setOf("fc", "afc", "town", "city", "united", "the", "and", "&") }

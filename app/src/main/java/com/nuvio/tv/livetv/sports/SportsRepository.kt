@@ -133,8 +133,11 @@ class SportsRepository @Inject constructor(
     @Volatile private var timedCopies: Map<SportsEvent, SportsEvent> = java.util.IdentityHashMap()
 
     /** The newest data, before Score Delay: only [events] reads it. */
-    private val withChannels: StateFlow<List<SportsEvent>> = combine(plainEvents(), tvData, tvCountries) { ev, tv, countries ->
-        runCatching { SportsTvListings.addChannels(ev, tv, countries, tvCache) }.getOrDefault(ev)
+    private val withChannels: StateFlow<List<SportsEvent>> = combine(plainEvents(), tvData, tvCountries, TeamColors.version) { ev, tv, countries, _ ->
+        val listed = runCatching { SportsTvListings.addChannels(ev, tv, countries, tvCache) }.getOrDefault(ev)
+        // Each team in the same colours everywhere (see TeamColors).
+        TeamColors.learnAll(listed)
+        TeamColors.paintAll(listed)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /** Score Delay (Sports settings), see [SportsScoreDelay]. */
@@ -267,13 +270,21 @@ class SportsRepository @Inject constructor(
      * Everything we know, for My Teams: the page's days plus your teams' whole seasons and the
      * non-league seasons. A game in both counts once (the fresher copy, from the page's days).
      */
-    val known: StateFlow<List<SportsEvent>> = combine(events, scheduleData, tsdbData, aheadData, lookedUp) { ev, s, t, a, lu ->
-        val seen = HashSet<String>(ev.size * 2)
-        ev.forEach { seen += dedupeKey(it) }
-        val extra = (a.values.flatMap { it.events } + s.values.flatMap { it.events } + t.values.flatMap { it.events } + lu.values.flatMap { it.events })
-            .filter { seen.add(dedupeKey(it)) }
-        ev + extra
-    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+    val known: StateFlow<List<SportsEvent>> = combine(
+        combine(events, scheduleData, tsdbData, aheadData, lookedUp) { ev, s, t, a, lu ->
+            val seen = HashSet<String>(ev.size * 2)
+            ev.forEach { seen += dedupeKey(it) }
+            val extra = (a.values.flatMap { it.events } + s.values.flatMap { it.events } + t.values.flatMap { it.events } + lu.values.flatMap { it.events })
+                .filter { seen.add(dedupeKey(it)) }
+            ev + extra
+        },
+        TeamColors.version
+    ) { all, _ ->
+        // Games further ahead come from team schedules and season files, which often have no
+        // colours: the same ones as the page's own days and the rest of the app.
+        TeamColors.learnAll(all)
+        TeamColors.paintAll(all)
+    }.flowOn(Dispatchers.Default).stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /**
      * The same weekly wrestling show in the schedule file and in your guide, up to a day and a
@@ -575,6 +586,7 @@ class SportsRepository @Inject constructor(
         var lastKick = -1
         var lastFixtures = 0L
         var lastTv = 0L
+        var lastColors = 0L
         var extrasJob: kotlinx.coroutines.Job? = null
         while (true) {
             val active = foreground.value && (settings.value.showInSidebar || viewers.value > 0)
@@ -591,6 +603,10 @@ class SportsRepository @Inject constructor(
                 if (System.currentTimeMillis() - lastTv > 4 * HOUR) {
                     lastTv = System.currentTimeMillis()
                     runCatching { updateTv() }
+                }
+                if (System.currentTimeMillis() - lastColors > 12 * HOUR) {
+                    lastColors = System.currentTimeMillis()
+                    runCatching { updateTeamColors() }
                 }
                 if (System.currentTimeMillis() - lastFixtures > 12 * HOUR) {
                     lastFixtures = System.currentTimeMillis()
@@ -1081,18 +1097,22 @@ class SportsRepository @Inject constructor(
         // filled in from the league's team list and today's games, so every card has its colours.
         val known = HashMap<String, TeamInfo>()
         fun learn(t: TeamInfo) {
-            if (t.color == null && t.altColor == null) return
+            // Only real colours: the feed's stand-in for a team it gave none for doesn't count.
+            if (!TeamColors.isReal(t)) return
+            TeamColors.learn(t)
             known.putIfAbsent(SportsCatalog.teamFamily(t.leagueId) + "|" + t.id, t)
         }
         raws.map { it.first }.distinctBy { it.id }.forEach { l -> cachedTeams(l).forEach(::learn) }
         (leagueData.value.values + weekData.value.values).forEach { d -> d.events.forEach { ev -> ev.sides.forEach { learn(it.team) } } }
         synchronized(teamCache) { teamCache.values.toList() }.forEach { list -> list.forEach(::learn) }
         fun fill(side: Side?): Side? {
-            if (side == null || side.team.color != null) return side
+            // The schedule has no colours, so each team got a stand-in from its name: replaced
+            // with the real ones whenever the league's list or today's games have them.
+            if (side == null || TeamColors.isReal(side.team)) return side
             val k = known[SportsCatalog.teamFamily(side.team.leagueId) + "|" + side.team.id] ?: return side
             return side.copy(team = side.team.copy(color = k.color, altColor = k.altColor, logo = side.team.logo ?: k.logo))
         }
-        return byId.values.map { ev -> if (ev.sides.all { it.team.color != null }) ev else ev.copy(away = fill(ev.away), home = fill(ev.home)) }
+        return byId.values.map { ev -> if (ev.sides.all { TeamColors.isReal(it.team) }) ev else ev.copy(away = fill(ev.away), home = fill(ev.home)) }
             .sortedBy { it.startMs }
     }
 
@@ -1246,6 +1266,12 @@ class SportsRepository @Inject constructor(
 
     private suspend fun coroutineScopeFetch(list: List<League>, block: suspend (League) -> Unit) {
         kotlinx.coroutines.coroutineScope { list.map { l -> async { block(l) } }.awaitAll() }
+    }
+
+    /** TheSportsDB's team colours (nuvio-data's sportsdb/colors.json); the saved copy when it can't be reached. */
+    private fun updateTeamColors() {
+        val raw = runCatching { feeds.teamColorsRaw() }.getOrNull() ?: return
+        if (TeamColors.loadFile(raw)) runCatching { File(dir, "team_colors.json").writeText(raw) }
     }
 
     /** TheSportsDB's TV listings (a few hundred games' channels in many countries); the last saved copy when the file can't be reached. */
@@ -1412,6 +1438,7 @@ class SportsRepository @Inject constructor(
                 if (list.isNotEmpty()) tvData.value = list
             }
         }
+        runCatching { File(dir, "team_colors.json").takeIf { it.exists() }?.readText()?.let { TeamColors.loadFile(it) } }
     }
 
     // ------------------------------------------------------------------ matching channels
