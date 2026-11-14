@@ -1627,9 +1627,15 @@ private fun PlaybackNavHost(
         }
 
         composable(Screen.SportsMultiview.route) {
+            // Opened from the Sports hub: Back goes back to the hub. Opened from Live TV: Back
+            // goes to the single screen with the focused channel.
+            val fromSportsHub = androidx.compose.runtime.remember {
+                navController.previousBackStackEntry?.destination?.route == Screen.Sports.route
+            }
             com.nuvio.tv.livetv.multiview.MultiviewScreen(
                 onBack = { navController.popBackStack() },
                 startOnSports = true,
+                returnToSingle = !fromSportsHub,
                 onOpenGame = { id ->
                     com.nuvio.tv.livetv.sports.SportsLaunch.openEvent(
                         id, com.nuvio.tv.livetv.sports.SportsLaunch.Origin(Screen.SportsMultiview.route, "Multiview")

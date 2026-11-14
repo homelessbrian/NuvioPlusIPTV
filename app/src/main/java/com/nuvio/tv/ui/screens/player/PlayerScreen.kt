@@ -3245,12 +3245,33 @@ private fun PlayerControlsProgressBarHost(
     }
 }
 
-/** Live TV fork: the seek thumbnail above the bar while a seek is under way. */
+/**
+ * Live TV fork: true while a seek is under way and for a moment after the button is let go,
+ * so a single tap still shows the picture (as the seek bar does).
+ */
 @Composable
-private fun BoxScope.SeekThumbOverBar(viewModel: PlayerViewModel, positionMs: Long, durationMs: Long) {
+private fun rememberSeekThumbShown(viewModel: PlayerViewModel): Boolean {
     val pending by remember(viewModel) {
         viewModel.uiState.map { it.pendingPreviewSeekPosition != null }.distinctUntilChanged()
     }.collectAsState(initial = false)
+    var lingering by remember { mutableStateOf(false) }
+    LaunchedEffect(pending) {
+        if (pending) {
+            lingering = true
+        } else if (lingering) {
+            delay(SEEK_THUMB_LINGER_MS)
+            lingering = false
+        }
+    }
+    return pending || lingering
+}
+
+private const val SEEK_THUMB_LINGER_MS = 1_500L
+
+/** Live TV fork: the seek thumbnail above the bar while a seek is under way. */
+@Composable
+private fun BoxScope.SeekThumbOverBar(viewModel: PlayerViewModel, positionMs: Long, durationMs: Long) {
+    val pending = rememberSeekThumbShown(viewModel)
     com.nuvio.tv.livetv.thumbs.SeekThumbAbove(
         owner = com.nuvio.tv.livetv.thumbs.SeekThumbs.Owner.MAIN,
         positionMs = positionMs,
@@ -3651,9 +3672,7 @@ private fun SeekOverlay(
 private fun SeekOverlayHost(viewModel: PlayerViewModel, chapters: List<PlayerChapter>) {
     val playbackTimeline by viewModel.playbackTimeline.collectAsState()
 
-    val pending by remember(viewModel) {
-        viewModel.uiState.map { it.pendingPreviewSeekPosition != null }.distinctUntilChanged()
-    }.collectAsState(initial = false)
+    val pending = rememberSeekThumbShown(viewModel)
     SeekOverlay(
         currentPosition = playbackTimeline.currentPosition,
         duration = playbackTimeline.duration,

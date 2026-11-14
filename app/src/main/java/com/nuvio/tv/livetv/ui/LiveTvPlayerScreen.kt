@@ -358,12 +358,15 @@ fun LiveTvPlayerScreen(
         positionMs = target
         scrubTargetMs = null
     }
-    fun scrub(forward: Boolean, repeat: Int) {
+    // Each press 10 seconds (as in the Nuvio player and Rewind Anytime); held, faster.
+    // The on-screen ⟲30 / ⟳30 buttons pass their own 30 seconds.
+    fun scrub(forward: Boolean, repeat: Int, stepMs: Long? = null) {
         val s = catchupSession ?: return
-        val step = when {
-            repeat > 20 -> 300_000L
-            repeat > 8 -> 120_000L
-            else -> 30_000L
+        val step = stepMs ?: when {
+            repeat > 20 -> 120_000L
+            repeat > 8 -> 60_000L
+            repeat > 2 -> 30_000L
+            else -> 10_000L
         }
         val length = s.program.stopMs - s.program.startMs
         val from = scrubTargetMs ?: positionMs
@@ -521,8 +524,8 @@ fun LiveTvPlayerScreen(
                 }
                 val archive = playback.catchupTitle != null
                 val shifting = shiftStartedAt != null || ownTimeline
-                // ---- the remote's Fast Forward and Rewind: 30 seconds on (or back) in catch-up
-                // and in Rewind Anytime, wherever the highlight is.
+                // ---- the remote's Fast Forward and Rewind: in catch-up and recordings 10 seconds
+                // a press (held, faster), in Rewind Anytime 30 seconds, wherever the highlight is.
                 val mediaCode = e.nativeKeyEvent.keyCode
                 if (mediaCode == AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD || mediaCode == AndroidKeyEvent.KEYCODE_MEDIA_REWIND ||
                     mediaCode == AndroidKeyEvent.KEYCODE_MEDIA_SKIP_FORWARD || mediaCode == AndroidKeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD
@@ -530,7 +533,7 @@ fun LiveTvPlayerScreen(
                     if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent true
                     val forward = mediaCode == AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD || mediaCode == AndroidKeyEvent.KEYCODE_MEDIA_SKIP_FORWARD
                     when {
-                        // Each press 30 seconds; held, faster (as with ◀ / ▶).
+                        // Each press 10 seconds; held, faster (as with ◀ / ▶).
                         archive -> scrub(forward = forward, repeat = e.nativeKeyEvent.repeatCount)
                         shifting && viewModel.playback.shiftCanSeek() -> {
                             viewModel.playback.shiftSeekBy(if (forward) 30_000L else -30_000L); showBanner()
@@ -681,8 +684,8 @@ fun LiveTvPlayerScreen(
                         isOk -> {
                             if (e.nativeKeyEvent.repeatCount > 0) return@onPreviewKeyEvent true
                             when (buttons.getOrNull(i)) {
-                                PanelControl.BACK -> if (archive) scrub(forward = false, repeat = 0) else viewModel.playback.shiftSeekBy(-30_000)
-                                PanelControl.FORWARD -> if (archive) scrub(forward = true, repeat = 0) else viewModel.playback.shiftSeekBy(30_000)
+                                PanelControl.BACK -> if (archive) scrub(forward = false, repeat = 0, stepMs = 30_000L) else viewModel.playback.shiftSeekBy(-30_000)
+                                PanelControl.FORWARD -> if (archive) scrub(forward = true, repeat = 0, stepMs = 30_000L) else viewModel.playback.shiftSeekBy(30_000)
                                 PanelControl.PLAY -> viewModel.playback.togglePause()
                                 PanelControl.LIVE -> {
                                     if (playingRecording) onBack()

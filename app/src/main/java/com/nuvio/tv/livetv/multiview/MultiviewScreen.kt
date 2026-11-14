@@ -86,8 +86,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * One Multiview for everything. The channel picker (with Groups) and the Sports games are two
- * tabs of the same screen; [startOnSports] opens it on the games (from the Sports section) and
- * Back from there returns to the single screen via [onSingle].
+ * tabs of the same screen; [startOnSports] opens it on the games. Back returns to the single
+ * screen via [onSingle] when [returnToSingle] (opened from Live TV), otherwise [onBack] (e.g. the
+ * Sports hub it was opened from).
  * Selections live only for this screen visit. Navigation and saved state contain no stream links.
  */
 @Composable
@@ -95,6 +96,7 @@ fun MultiviewScreen(
     onBack: () -> Unit,
     startOnSports: Boolean = false,
     onSingle: () -> Unit = onBack,
+    returnToSingle: Boolean = startOnSports,
     /** Opens a game's page in the Sports hub; Back there returns here (see [MultiviewReturn]). */
     onOpenGame: (String) -> Unit = {},
     viewModel: MultiviewViewModel = hiltViewModel()
@@ -358,7 +360,7 @@ fun MultiviewScreen(
     LaunchedEffect(editorOpen) { if (!editorOpen) returnGame = null }
     val barAlpha by animateFloatAsState(if (barShown) 1f else 0f, tween(450), label = "multiviewBar")
     BackHandler {
-        if (editorOpen) editorOpen = false else if (startOnSports) single() else onBack()
+        if (editorOpen) editorOpen = false else if (startOnSports && returnToSingle) single() else onBack()
     }
 
     Box(
