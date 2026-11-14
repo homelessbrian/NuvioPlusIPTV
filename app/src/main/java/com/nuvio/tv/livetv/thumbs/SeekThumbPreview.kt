@@ -1,6 +1,7 @@
 package com.nuvio.tv.livetv.thumbs
 
 import androidx.compose.foundation.Image
+import com.nuvio.tv.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -55,7 +56,8 @@ fun SeekThumbAbove(
     val messages by SeekThumbs.messages.collectAsState()
     LaunchedEffect(owner, positionMs) { SeekThumbs.want(owner, positionMs) }
     val bitmap = remember(owner, positionMs, version) { SeekThumbs.frame(owner, positionMs) }
-    val message = messages[owner]
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val message = messages[owner]?.let { seekThumbMessageText(context, it) }
     // Nothing to say and no picture: the player has no session (e.g. live) and gave no reason.
     if (bitmap == null && message == null) return
     Layout(
@@ -118,4 +120,27 @@ fun seekThumbTime(ms: Long): String {
     val m = (s % 3600) / 60
     val sec = s % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
+}
+
+/** The seek bar's thumbnail messages in the app's language (anything not listed shows as is). */
+private fun seekThumbMessageText(context: android.content.Context, message: String): String {
+    val res = when (message) {
+        SeekThumbs.MSG_MAKING -> R.string.iptv_thumbs_msg_making
+        SeekThumbs.MSG_LOW_MEMORY -> R.string.iptv_thumbs_msg_low_memory
+        SeekThumbs.MSG_LIVE -> R.string.iptv_thumbs_msg_live
+        SeekThumbs.MSG_STREAMED -> R.string.iptv_thumbs_msg_dash
+        SeekThumbs.MSG_CATCHUP_SAVE -> R.string.iptv_thumbs_msg_catchup_save
+        SeekThumbs.MSG_PROTECTED -> R.string.iptv_thumbs_msg_protected
+        SeekThumbs.MSG_TORRENT -> R.string.iptv_thumbs_msg_torrent
+        "No thumbnails for this kind of link" -> R.string.iptv_thumbs_msg_link_kind
+        "This stream couldn't be read for thumbnails" -> R.string.iptv_thumbs_msg_unreadable
+        "This stream's pieces are too large for thumbnails" -> R.string.iptv_thumbs_msg_pieces_large
+        "Thumbnails stopped working for this video" -> R.string.iptv_thumbs_msg_stopped
+        "The server didn't send thumbnail pictures" -> R.string.iptv_thumbs_msg_no_pictures
+        "This video's format can't make thumbnails on this device" -> R.string.iptv_thumbs_msg_format
+        "This video couldn't be opened for thumbnails" -> R.string.iptv_thumbs_msg_open_failed
+        "No thumbnails for this catch-up stream" -> R.string.iptv_thumbs_msg_catchup_stream
+        else -> return message
+    }
+    return context.getString(res)
 }
