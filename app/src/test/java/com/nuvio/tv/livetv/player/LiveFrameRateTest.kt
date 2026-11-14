@@ -216,6 +216,38 @@ class LiveFrameRateTest {
         }
     }
 
+    @Test
+    fun `video faster than the screen is still measured from the frames the screen shows`() {
+        // Screen already switched by an earlier channel (24 or 50 Hz), then a 60 fps channel.
+        for ((case, expected) in listOf(
+            Triple(60.0, 24.0, "60 on 24 Hz") to 60f,
+            Triple(ntsc60, 24_000.0 / 1001, "59.94 on 23.976 Hz") to 59.94f,
+            Triple(60.0, 50.0, "60 on 50 Hz") to 60f,
+            Triple(ntsc60, 50.0, "59.94 on 50 Hz") to 59.94f,
+            Triple(30.0, 24.0, "30 on 24 Hz") to 30f,
+            Triple(50.0, 24.0, "50 on 24 Hz") to 50f,
+            Triple(24.0, 50.0, "24 on 50 Hz") to 24f,
+            Triple(50.0, 60.0, "50 on 60 Hz") to 50f
+        )) {
+            val (fps, screenHz, label) = case
+            val estimator = LiveFrameRateEstimator()
+            for (pts in shownOnScreen(fps, screenHz, seconds = 15)) estimator.onFrame(pts)
+            assertEquals(label, expected, LiveFrameRateStabilizer.standardRate(estimator.framesPerSecond), 0f)
+        }
+    }
+
+    /** Timestamps of the frames a screen at [screenHz] actually shows: the newest frame at each refresh. */
+    private fun shownOnScreen(fps: Double, screenHz: Double, seconds: Int): List<Long> {
+        val out = ArrayList<Long>()
+        var last = -1
+        for (refresh in 0..(screenHz * seconds).toInt()) {
+            val frame = kotlin.math.floor(refresh * fps / screenHz + 1e-9).toInt()
+            if (frame != last) out += millisecondTimestamp(frame, fps)
+            last = frame
+        }
+        return out
+    }
+
     private fun feed(estimator: LiveFrameRateEstimator, fps: Double, seconds: Int, firstFrame: Int = 0) {
         for (frame in firstFrame..(fps * seconds).toInt()) estimator.onFrame(millisecondTimestamp(frame, fps))
     }

@@ -79,7 +79,10 @@ internal class LiveFrameRateEstimator {
                 baseCount++
             }
         }
-        if (baseCount < 12) return
+        if (baseCount < 12) {
+            estimateFromStandardSteps(samples)
+            return
+        }
         val cadenceUs = baseUs.toDouble() / baseCount
         var acceptedUs = 0L
         var acceptedCount = 0
@@ -100,6 +103,41 @@ internal class LiveFrameRateEstimator {
         if (acceptedUs >= MIN_DURATION_US && acceptedCount >= 24 && directIntervals >= 12 && acceptedCount * 4 >= size * 3) {
             val estimate = (1_000_000.0 * intervals / acceptedUs).toFloat()
             framesPerSecond = if (estimate in 10f..120.1f) estimate else -1f
+            // Some gaps didn't fit that cadence: a steady skip pattern (50 fps on a 24 Hz
+            // screen looks like 25 fps with odd gaps). A standard step that fits them all wins.
+            if (acceptedCount < size) estimateFromStandardSteps(samples)
+        } else {
+            estimateFromStandardSteps(samples)
+        }
+    }
+
+    /**
+     * When the screen is already set to a lower refresh rate than the video (60 fps shown at
+     * 24 or 50 Hz), the player has to skip frames in a steady pattern, so there may be no run of
+     * evenly spaced frames to measure. Every gap is still a whole number of the video's own
+     * frame steps, though: the lowest standard rate whose step fits (almost) every gap is the
+     * video's rate. The exact rate (59.94 or 60) then comes from the total time covered.
+     */
+    private fun estimateFromStandardSteps(samples: LongArray) {
+        if (samples.size < 24) return
+        for (rate in STEP_RATES) {
+            val stepUs = 1_000_000.0 / rate
+            var acceptedUs = 0L
+            var acceptedCount = 0
+            var intervals = 0L
+            for (sample in samples) {
+                val multiple = (sample / stepUs).roundToInt()
+                if (multiple in 1..12 && abs(sample - stepUs * multiple) <= STEP_TOLERANCE_US) {
+                    acceptedUs += sample
+                    acceptedCount++
+                    intervals += multiple
+                }
+            }
+            if (acceptedUs >= MIN_DURATION_US && acceptedCount * 100 >= samples.size * 97) {
+                val estimate = (1_000_000.0 * intervals / acceptedUs).toFloat()
+                if (estimate in 10f..120.1f) framesPerSecond = estimate
+                return
+            }
         }
     }
 
@@ -127,6 +165,10 @@ internal class LiveFrameRateEstimator {
         // the rolling four-second window keeps that precision without retaining a whole stream.
         const val MIN_DURATION_US = 3_000_000L
         const val WINDOW_US = 4_000_000L
+        // Lowest first; 23.976/29.97/59.94 share a step with 24/30/60 within the tolerance.
+        val STEP_RATES = doubleArrayOf(24.0, 25.0, 30.0, 48.0, 50.0, 60.0, 100.0, 120.0)
+        // Millisecond timestamps can be up to 1 ms off at each end of a gap.
+        const val STEP_TOLERANCE_US = 1_200.0
     }
 }
 
