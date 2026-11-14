@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Buscando…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Teste falhou: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Playlist"</string>
+    <string name="iptv_settings_support_remote_title">"Teste de botões do controle"</string>
+    <string name="iptv_settings_support_remote_instructions">"Pressione qualquer botão. Os mais novos no topo; linhas coloridas são outro botão até 250 ms depois do anterior (por exemplo OK enviado com Para cima/Para baixo). Pressione Voltar 3 vezes seguidas para fechar."</string>
+    <string name="iptv_settings_support_remote_waiting">"Aguardando um botão…"</string>
+    <string name="iptv_settings_support_remote_action_down">"DOWN"</string>
+    <string name="iptv_settings_support_remote_action_up">"UP"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"MULTI"</string>
+    <string name="iptv_settings_support_remote_repeat">"repetição %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"pressionado longo"</string>
+    <string name="iptv_settings_support_remote_canceled">"cancelado"</string>
+    <string name="iptv_settings_support_remote_held">"segurado %1$d ms"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Relatório de inicialização da TV ao vivo"</string>
+    <string name="iptv_settings_support_report_subtitle">"Desde que o app abriu. ▲ ▼ para rolar."</string>
+    <string name="iptv_settings_support_report_empty">"Nada ainda: abra a TV ao vivo primeiro."</string>
+    <string name="iptv_settings_support_report_send">"Enviar o relatório completo"</string>
+    <string name="iptv_settings_support_report_no_network">"Conecte esta TV ao Wi-Fi para enviar o relatório pelo celular."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Conecte o celular ao mesmo Wi-Fi desta TV.\n2. Leia este código com a câmera do celular, ou digite o endereço abaixo.\n3. Toque em Copiar relatório curto (cabe numa mensagem do Discord) e cole na sua mensagem."</string>
+</resources>

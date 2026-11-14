@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"Miniaturas de busca"</string>
+    <string name="playback_section_seek_thumbnails_desc">"Imagens de prévia acima da barra de busca enquanto você avança ou volta"</string>
+    <string name="iptv_thumbs_title">"Miniaturas de busca"</string>
+    <string name="iptv_thumbs_subtitle">"Mostra uma imagem de prévia acima da barra de busca enquanto você avança ou volta. As imagens são feitas nesta TV a partir do próprio vídeo"</string>
+    <string name="iptv_thumbs_works_on">"Funciona em: filmes e séries no player principal (incluindo links HLS por streaming), suas gravações, replays e melhores momentos de esportes, catch-up e ao voltar a TV ao vivo (buffer de pausa).\nCatch-up: as imagens vêm da parte salva com \"Avanço mais rápido no catch-up\", ou direto do provedor no catch-up por streaming (HLS).\nNão funciona em: torrents, links DASH ou streams protegidos."</string>
+    <string name="iptv_thumbs_low_memory_note">"Este aparelho tem pouca memória. As miniaturas podem causar travadas. Se isso acontecer, elas pausam sozinhas e a barra de busca avisa."</string>
+    <string name="iptv_thumbs_include_4k">"Incluir 4K e HDR"</string>
+    <string name="iptv_thumbs_include_4k_desc">"Também faz miniaturas de vídeos 4K e HDR. Começa ligado em aparelhos com bastante memória e desligado nos mais simples, mas você pode ligar em qualquer um e testar. Miniaturas 4K podem travar ou não funcionar em aparelhos mais simples, e usam mais dados. Imagens de vídeos HDR podem parecer desbotadas. Links por streaming usam a menor versão, então isso raramente importa para eles"</string>
+    <string name="iptv_thumbs_when_to_make">"Quando fazer as miniaturas"</string>
+    <string name="iptv_thumbs_when_seeking">"Só ao pausar ou buscar"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"A opção mais leve: nada é feito enquanto o vídeo só reproduz"</string>
+    <string name="iptv_thumbs_when_watching">"Enquanto assiste"</string>
+    <string name="iptv_thumbs_when_watching_desc">"Também feitas em segundo plano enquanto o vídeo reproduz, quando ele já carregou bem à frente"</string>
+    <string name="iptv_thumbs_when_right_away">"Na hora"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"O vídeo todo, desde o começo, assim que abre. Usa mais dados"</string>
+    <string name="iptv_thumbs_storage_limit">"Limite de armazenamento"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"As miniaturas salvas ocupam no máximo este espaço; as dos vídeos assistidos há mais tempo são apagadas primeiro"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"Limpar miniaturas salvas"</string>
+    <string name="iptv_thumbs_clear_desc">"Apaga todas as miniaturas salvas. Elas são feitas de novo quando precisar"</string>
+    <string name="iptv_thumbs_last_paused">"Última pausa por pouca memória: %1$s, %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"Fazendo miniaturas…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"Miniaturas pausadas: pouca memória"</string>
+    <string name="iptv_thumbs_msg_live">"Sem miniaturas na TV ao vivo"</string>
+    <string name="iptv_thumbs_msg_dash">"Sem miniaturas para links DASH"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"Ative \"Avanço mais rápido no catch-up\" para ter miniaturas"</string>
+    <string name="iptv_thumbs_msg_protected">"Este stream é protegido: sem miniaturas"</string>
+    <string name="iptv_thumbs_msg_torrent">"Sem miniaturas para torrents"</string>
+    <string name="iptv_thumbs_msg_link_kind">"Sem miniaturas para este tipo de link"</string>
+    <string name="iptv_thumbs_msg_unreadable">"Não foi possível ler este stream para as miniaturas"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"As partes deste stream são grandes demais para as miniaturas"</string>
+    <string name="iptv_thumbs_msg_stopped">"As miniaturas pararam de funcionar neste vídeo"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"O servidor não enviou imagens para as miniaturas"</string>
+    <string name="iptv_thumbs_msg_format">"O formato deste vídeo não permite fazer miniaturas neste aparelho"</string>
+    <string name="iptv_thumbs_msg_open_failed">"Não foi possível abrir este vídeo para as miniaturas"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"Sem miniaturas para este stream de catch-up"</string>
+</resources>

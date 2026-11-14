@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"Dit apparaat"</string>
+    <string name="iptv_storage_usb_drive">"USB-schijf"</string>
+    <string name="iptv_storage_read_only">"Alleen-lezen. Deze box kan de schijf lezen maar er niet op schrijven (meestal een NTFS-schijf). Formatteer hem als exFAT om erop op te nemen."</string>
+    <string name="iptv_storage_unsupported_format">"Deze box kan het formaat van de schijf niet lezen. Formatteren als exFAT lost dit meestal op."</string>
+    <string name="iptv_storage_not_ready">"Nog niet klaar. Wacht even en open deze lijst opnieuw."</string>
+    <string name="iptv_storage_no_app_folder">"Android heeft de app er geen map op gegeven. Koppel de schijf los en sluit hem weer aan, of herstart de box."</string>
+    <string name="iptv_storage_unusable_state">"Nu niet bruikbaar (%1$s)."</string>
+</resources>

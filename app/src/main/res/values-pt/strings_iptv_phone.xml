@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"Adicionar ao Nuvio + IPTV"</string>
+    <string name="iptv_phone_connected_to">"Conectado a %1$s"</string>
+    <string name="iptv_phone_heading">"Adicionar à sua TV"</string>
+    <string name="iptv_phone_instructions">"Preencha e toque em Enviar para a TV. Aparece na sua TV na hora."</string>
+    <string name="iptv_phone_what_to_add">"O que adicionar"</string>
+    <string name="iptv_phone_m3u_tab">"Link M3U"</string>
+    <string name="iptv_phone_epg_tab">"Só EPG"</string>
+    <string name="iptv_phone_name_label">"Nome (opcional)"</string>
+    <string name="iptv_phone_provider_placeholder">"Meu provedor"</string>
+    <string name="iptv_phone_playlist_label">"Link da playlist"</string>
+    <string name="iptv_phone_epg_optional_label">"Link do EPG (opcional)"</string>
+    <string name="iptv_phone_user_agent_label">"User agent (opcional)"</string>
+    <string name="iptv_phone_user_agent_placeholder">"Deixe vazio para o padrão"</string>
+    <string name="iptv_phone_server_label">"Servidor"</string>
+    <string name="iptv_phone_username_label">"Usuário"</string>
+    <string name="iptv_phone_password_label">"Senha"</string>
+    <string name="iptv_phone_include_live">"Incluir canais de TV"</string>
+    <string name="iptv_phone_include_vod">"Incluir filmes e séries (On Demand)"</string>
+    <string name="iptv_phone_epg_label">"Link do EPG"</string>
+    <string name="iptv_phone_send">"Enviar para a TV"</string>
+    <string name="iptv_phone_network_note">"Só funciona na mesma rede Wi‑Fi da sua TV. Esta página para de funcionar quando você fecha a tela na TV."</string>
+    <string name="iptv_phone_guide_placeholder">"Guia"</string>
+    <string name="iptv_phone_sending">"Enviando…"</string>
+    <string name="iptv_phone_unreachable">"Não foi possível alcançar sua TV. Confira se a tela Adicionar pelo celular ainda está aberta e se você está na mesma rede Wi‑Fi."</string>
+    <string name="iptv_phone_not_found">"Não encontrado"</string>
+    <string name="iptv_phone_nothing_to_send">"Nada para enviar."</string>
+    <string name="iptv_phone_missing">"Está faltando algo."</string>
+    <string name="iptv_phone_could_not_add">"A TV não conseguiu adicionar isso. Tente de novo."</string>
+    <string name="iptv_phone_playlist_missing">"Cole o link da playlist."</string>
+    <string name="iptv_phone_playlist_scheme">"O link da playlist deve começar com http:// ou https://."</string>
+    <string name="iptv_phone_epg_scheme">"O link do EPG deve começar com http:// ou https://."</string>
+    <string name="iptv_phone_server_missing">"Digite o endereço do servidor."</string>
+    <string name="iptv_phone_server_invalid">"Isso não parece um endereço de servidor."</string>
+    <string name="iptv_phone_credentials_missing">"Digite o usuário e a senha."</string>
+    <string name="iptv_phone_inclusion_missing">"Ative canais de TV ou filmes e séries."</string>
+    <string name="iptv_phone_epg_missing">"Cole o link do EPG."</string>
+    <string name="iptv_phone_kind_missing">"Escolha o que adicionar."</string>
+</resources>

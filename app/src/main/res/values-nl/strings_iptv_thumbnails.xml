@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"Voorbeeldbeelden bij spoelen"</string>
+    <string name="playback_section_seek_thumbnails_desc">"Voorbeeldbeelden boven de zoekbalk tijdens het spoelen"</string>
+    <string name="iptv_thumbs_title">"Voorbeeldbeelden bij spoelen"</string>
+    <string name="iptv_thumbs_subtitle">"Toont tijdens het spoelen een voorbeeldbeeld boven de zoekbalk. De beelden worden op deze tv uit de video zelf gemaakt"</string>
+    <string name="iptv_thumbs_works_on">"Werkt bij: films en series in de hoofdspeler (ook gestreamde HLS-links), je opnames, sportherhalingen en hoogtepunten, catch-up en terugspoelen in live tv (de pauzebuffer).\nCatch-up: de beelden komen uit het deel dat is opgeslagen met \"Sneller spoelen bij catch-up\", of direct van de provider bij gestreamde (HLS) catch-up.\nWerkt niet bij: torrents, DASH-links of beveiligde streams."</string>
+    <string name="iptv_thumbs_low_memory_note">"Dit apparaat heeft weinig geheugen. Voorbeeldbeelden kunnen haperingen veroorzaken. Gebeurt dat, dan pauzeren ze vanzelf en meldt de zoekbalk het."</string>
+    <string name="iptv_thumbs_include_4k">"4K en HDR meenemen"</string>
+    <string name="iptv_thumbs_include_4k_desc">"Maakt ook voorbeeldbeelden voor 4K- en HDR-video’s. Staat standaard aan op apparaten met veel geheugen en uit op eenvoudigere, maar je kunt het overal aanzetten en proberen. 4K-voorbeeldbeelden kunnen op eenvoudigere apparaten haperen of niet werken, en gebruiken meer data. Beelden van HDR-video’s kunnen flets ogen. Gestreamde links gebruiken hun kleinste versie, dus voor hen maakt het zelden uit"</string>
+    <string name="iptv_thumbs_when_to_make">"Wanneer voorbeeldbeelden maken"</string>
+    <string name="iptv_thumbs_when_seeking">"Alleen bij pauzeren of spoelen"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"De lichtste keuze: er wordt niets gemaakt terwijl de video gewoon speelt"</string>
+    <string name="iptv_thumbs_when_watching">"Tijdens het kijken"</string>
+    <string name="iptv_thumbs_when_watching_desc">"Ook op de achtergrond gemaakt terwijl de video speelt, als hij ver genoeg vooruit heeft geladen"</string>
+    <string name="iptv_thumbs_when_right_away">"Meteen"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"De hele video, vanaf het begin, zodra hij opent. Gebruikt de meeste data"</string>
+    <string name="iptv_thumbs_storage_limit">"Opslaglimiet"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"Opgeslagen voorbeeldbeelden nemen hooguit zoveel ruimte in; die van de langst niet bekeken video’s worden het eerst gewist"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"Opgeslagen voorbeeldbeelden wissen"</string>
+    <string name="iptv_thumbs_clear_desc">"Verwijdert alle opgeslagen voorbeeldbeelden. Ze worden opnieuw gemaakt als dat nodig is"</string>
+    <string name="iptv_thumbs_last_paused">"Laatst gepauzeerd wegens weinig geheugen: %1$s, %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"Voorbeeldbeelden maken…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"Voorbeeldbeelden gepauzeerd: weinig geheugen"</string>
+    <string name="iptv_thumbs_msg_live">"Geen voorbeeldbeelden bij live tv"</string>
+    <string name="iptv_thumbs_msg_dash">"Geen voorbeeldbeelden bij DASH-links"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"Zet \"Sneller spoelen bij catch-up\" aan voor voorbeeldbeelden"</string>
+    <string name="iptv_thumbs_msg_protected">"Deze stream is beveiligd: geen voorbeeldbeelden"</string>
+    <string name="iptv_thumbs_msg_torrent">"Geen voorbeeldbeelden bij torrents"</string>
+    <string name="iptv_thumbs_msg_link_kind">"Geen voorbeeldbeelden voor dit soort link"</string>
+    <string name="iptv_thumbs_msg_unreadable">"Deze stream kon niet worden gelezen voor voorbeeldbeelden"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"De stukken van deze stream zijn te groot voor voorbeeldbeelden"</string>
+    <string name="iptv_thumbs_msg_stopped">"Voorbeeldbeelden werken niet meer bij deze video"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"De server stuurde geen voorbeeldbeelden"</string>
+    <string name="iptv_thumbs_msg_format">"Met het formaat van deze video kunnen op dit apparaat geen voorbeeldbeelden worden gemaakt"</string>
+    <string name="iptv_thumbs_msg_open_failed">"Deze video kon niet worden geopend voor voorbeeldbeelden"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"Geen voorbeeldbeelden voor deze catch-up-stream"</string>
+</resources>

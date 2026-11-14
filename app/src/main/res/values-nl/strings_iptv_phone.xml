@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"Toevoegen aan Nuvio + IPTV"</string>
+    <string name="iptv_phone_connected_to">"Verbonden met %1$s"</string>
+    <string name="iptv_phone_heading">"Toevoegen aan je tv"</string>
+    <string name="iptv_phone_instructions">"Vul dit in en tik op Naar tv sturen. Het verschijnt meteen op je tv."</string>
+    <string name="iptv_phone_what_to_add">"Wat toevoegen"</string>
+    <string name="iptv_phone_m3u_tab">"M3U-link"</string>
+    <string name="iptv_phone_epg_tab">"Alleen EPG"</string>
+    <string name="iptv_phone_name_label">"Naam (optioneel)"</string>
+    <string name="iptv_phone_provider_placeholder">"Mijn provider"</string>
+    <string name="iptv_phone_playlist_label">"Playlistlink"</string>
+    <string name="iptv_phone_epg_optional_label">"EPG-link (optioneel)"</string>
+    <string name="iptv_phone_user_agent_label">"User-agent (optioneel)"</string>
+    <string name="iptv_phone_user_agent_placeholder">"Leeg laten voor standaard"</string>
+    <string name="iptv_phone_server_label">"Server"</string>
+    <string name="iptv_phone_username_label">"Gebruikersnaam"</string>
+    <string name="iptv_phone_password_label">"Wachtwoord"</string>
+    <string name="iptv_phone_include_live">"Tv-zenders meenemen"</string>
+    <string name="iptv_phone_include_vod">"Films en series meenemen (On Demand)"</string>
+    <string name="iptv_phone_epg_label">"EPG-link"</string>
+    <string name="iptv_phone_send">"Naar tv sturen"</string>
+    <string name="iptv_phone_network_note">"Werkt alleen op hetzelfde wifi-netwerk als je tv. Deze pagina werkt niet meer zodra je het scherm op je tv sluit."</string>
+    <string name="iptv_phone_guide_placeholder">"Gids"</string>
+    <string name="iptv_phone_sending">"Versturen…"</string>
+    <string name="iptv_phone_unreachable">"Je tv was niet bereikbaar. Controleer of het scherm Toevoegen via je telefoon nog open is en of je op hetzelfde wifi-netwerk zit."</string>
+    <string name="iptv_phone_not_found">"Niet gevonden"</string>
+    <string name="iptv_phone_nothing_to_send">"Niets om te versturen."</string>
+    <string name="iptv_phone_missing">"Er ontbreekt iets."</string>
+    <string name="iptv_phone_could_not_add">"De tv kon dat niet toevoegen. Probeer het opnieuw."</string>
+    <string name="iptv_phone_playlist_missing">"Plak de playlistlink."</string>
+    <string name="iptv_phone_playlist_scheme">"De playlistlink moet beginnen met http:// of https://."</string>
+    <string name="iptv_phone_epg_scheme">"De EPG-link moet beginnen met http:// of https://."</string>
+    <string name="iptv_phone_server_missing">"Vul het serveradres in."</string>
+    <string name="iptv_phone_server_invalid">"Dat lijkt geen serveradres."</string>
+    <string name="iptv_phone_credentials_missing">"Vul de gebruikersnaam en het wachtwoord in."</string>
+    <string name="iptv_phone_inclusion_missing">"Zet tv-zenders of films en series aan."</string>
+    <string name="iptv_phone_epg_missing">"Plak de EPG-link."</string>
+    <string name="iptv_phone_kind_missing">"Kies wat je wilt toevoegen."</string>
+</resources>
