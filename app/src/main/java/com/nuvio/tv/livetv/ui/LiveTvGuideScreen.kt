@@ -767,8 +767,7 @@ private fun LiveTvGuideScreenBody(
         highlightKey = null
     }
 
-    // Back: full screen on the playing channel; with nothing playing, leave program browsing,
-    // then go to the groups, then open Nuvio's menu.
+    // Back: leave program browsing, then leave a group for All channels, then open Nuvio's menu.
     val sidebarExpanded = com.nuvio.tv.LocalSidebarExpanded.current
     val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
     // Right from Nuvio's menu back into Live TV: back to the group you left from. Left to
@@ -782,24 +781,8 @@ private fun LiveTvGuideScreenBody(
             if (!fullscreen) focusGroups()
         }
     }
-    val backContext = androidx.compose.ui.platform.LocalContext.current
     BackHandler(enabled = !sidebarExpanded) {
         when {
-            // A channel playing: Back closes the guide and goes full screen on it, in its own
-            // group (like TiviMate). Left still steps over to the groups and the menu.
-            !groupsOpen && playback.channelKey != null && playback.error == null -> {
-                savedSpot = ui.selectedGroupId to channels.getOrNull(row)?.key
-                column = GuideColumn.CHANNEL
-                windowStart = floorSlot(now)
-                cursorMs = now
-                scope.launch {
-                    viewModel.channelByKey(playback.channelKey)?.let { playing ->
-                        viewModel.groupToShow(playing)?.let { viewModel.selectGroup(it) }
-                    }
-                    goFullscreen()
-                }
-                GuideBackTip.showOnce(backContext)
-            }
             column == GuideColumn.PROGRAM -> {
                 column = GuideColumn.CHANNEL
                 windowStart = floorSlot(now)
@@ -5085,18 +5068,5 @@ private fun LogoFromPhoneDialog(channelName: String, onDismiss: () -> Unit, onUr
         }
         Spacer(Modifier.height(12.dp))
         MenuItem("Close", onClick = onDismiss)
-    }
-}
-
-/** The one-time tip the first time Back in the guide goes full screen (a plain preference, not synced). */
-internal object GuideBackTip {
-    private const val FILE = "livetv_guide"
-    private const val KEY = "back_tip_shown"
-
-    fun showOnce(context: android.content.Context) {
-        val prefs = context.applicationContext.getSharedPreferences(FILE, android.content.Context.MODE_PRIVATE)
-        if (prefs.getBoolean(KEY, false)) return
-        prefs.edit().putBoolean(KEY, true).apply()
-        com.nuvio.tv.livetv.record.LiveTvNotice.show("Back now returns to your channel · press Left for groups and the menu")
     }
 }

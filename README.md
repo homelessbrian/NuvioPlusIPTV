@@ -31,7 +31,6 @@
 - **🖼️ Seek thumbnails:** preview pictures above the seek bar in movies, shows, catch-up, recordings, sports replays and paused live TV.
 - **📣 Full-time alerts** with the final score, and **Score alerts** for any single game, straight from its game page.
 - **⏺️ Record options** in the player: until you stop it, until the show ends, or until a set time.
-- **↩️ Back from the guide** returns to the channel you're watching in full screen, like TiviMate.
 - **🌍 Live TV in more languages:** German, French, Spanish, Portuguese, Italian, Dutch, Polish, Turkish and Russian.
 - **Built on Nuvio 1.2.0-beta.1,** with its subtitle fonts and styles, chapters, and fallback to the next source when one fails.
 
