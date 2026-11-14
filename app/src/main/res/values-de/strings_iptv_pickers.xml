@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"Schnellsender"</string>
+    <string name="iptv_quick_channels_subtitle">"Verknüpfungen unter der Wiedergabeleiste. Drücke auf der Leiste nach unten, um sie zu öffnen."</string>
+    <string name="iptv_quick_channels_show">"Schnellsender anzeigen"</string>
+    <string name="iptv_quick_channels_opens_on">"Öffnet mit"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"Die Liste, die zuerst angezeigt wird"</string>
+    <string name="iptv_quick_channels_first_list">"Erste Liste"</string>
+    <string name="iptv_quick_channels_last_used">"Zuletzt verwendete"</string>
+    <string name="iptv_quick_channels_lists_hint">"Listen in der Reihe · OK schaltet eine ein oder aus, die Pfeile verschieben sie"</string>
+    <string name="iptv_quick_channels_recent">"Zuletzt gesehen"</string>
+    <string name="iptv_quick_channels_favorites">"Favoriten"</string>
+    <string name="iptv_quick_channels_built_in">"Integriert"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · Playlist-Gruppe"</string>
+    <string name="iptv_quick_channels_your_group">"Deine Gruppe"</string>
+    <string name="iptv_quick_channels_group_missing">"Gruppe nicht gefunden"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"Gerade nicht in deinen Playlists"</string>
+    <string name="iptv_quick_channels_add_group">"Playlist-Gruppe hinzufügen…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"Jede Gruppe aus jeder Playlist, auch deine eigenen Gruppen"</string>
+    <string name="iptv_quick_channels_add_groups_title">"Playlist-Gruppen hinzufügen"</string>
+    <string name="iptv_quick_channels_no_groups">"Noch keine Gruppen. Füge zuerst eine Playlist hinzu."</string>
+    <string name="iptv_quick_channels_add_groups_hint">"Jede angehakte Gruppe wird zu einer eigenen Liste in den Schnellsendern."</string>
+    <string name="iptv_quick_channels_my_groups">"Meine Gruppen"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="one">"%1$d Sender"</item>
+        <item quantity="other">"%1$d Sender"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"Reihenfolge des Anbieters"</string>
+    <string name="iptv_vod_sort_name_az">"A–Z"</string>
+    <string name="iptv_vod_sort_name_za">"Z–A"</string>
+    <string name="iptv_vod_sort_newest">"Neueste zuerst"</string>
+    <string name="iptv_vod_sort_oldest">"Älteste zuerst"</string>
+    <string name="iptv_vod_sort_recently_added">"Zuletzt hinzugefügt"</string>
+    <string name="iptv_vod_sort_highest_rated">"Beste Bewertung"</string>
+    <string name="iptv_vod_sort_shuffle">"Zufällig"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"Die Reihenfolge, die dein Anbieter liefert"</string>
+    <string name="iptv_vod_sort_name_az_hint">"Zahlen und Symbole zuerst, dann A bis Z"</string>
+    <string name="iptv_vod_sort_name_za_hint">"Z bis A, dann Zahlen und Symbole"</string>
+    <string name="iptv_vod_sort_newest_hint">"Nach Erscheinungsjahr, neueste zuerst"</string>
+    <string name="iptv_vod_sort_oldest_hint">"Nach Erscheinungsjahr, älteste zuerst"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"Was dein Anbieter zuletzt hinzugefügt hat"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"Nach Bewertung deines Anbieters, beste zuerst"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"Jedes Mal, wenn du es wählst, eine neue zufällige Reihenfolge"</string>
+    <string name="iptv_vod_sort_default_hint">"Folgt der Standard-Sortierung in den Einstellungen"</string>
+</resources>

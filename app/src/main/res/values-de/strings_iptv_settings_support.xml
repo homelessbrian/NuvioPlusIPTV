@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Suche läuft…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Test fehlgeschlagen: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Playlist"</string>
+    <string name="iptv_settings_support_remote_title">"Fernbedienungstest"</string>
+    <string name="iptv_settings_support_remote_instructions">"Drücke eine beliebige Taste. Neueste oben; farbige Zeilen sind eine andere Taste innerhalb von 250 ms nach der vorherigen (z. B. OK zusammen mit Hoch/Runter gesendet). Drücke dreimal hintereinander Zurück, um zu schließen."</string>
+    <string name="iptv_settings_support_remote_waiting">"Warte auf eine Taste…"</string>
+    <string name="iptv_settings_support_remote_action_down">"DOWN"</string>
+    <string name="iptv_settings_support_remote_action_up">"UP"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"MULTI"</string>
+    <string name="iptv_settings_support_remote_repeat">"Wiederholung %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"lang gedrückt"</string>
+    <string name="iptv_settings_support_remote_canceled">"abgebrochen"</string>
+    <string name="iptv_settings_support_remote_held">"%1$d ms gehalten"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Live-TV-Startbericht"</string>
+    <string name="iptv_settings_support_report_subtitle">"Seit dem App-Start. ▲ ▼ zum Scrollen."</string>
+    <string name="iptv_settings_support_report_empty">"Noch nichts: Öffne zuerst Live-TV."</string>
+    <string name="iptv_settings_support_report_send">"Den ganzen Bericht senden"</string>
+    <string name="iptv_settings_support_report_no_network">"Verbinde diesen Fernseher mit dem WLAN, um den Bericht vom Handy zu senden."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Verbinde dein Handy mit demselben WLAN wie diesen Fernseher.\n2. Scanne diesen Code mit der Kamera deines Handys oder gib die Adresse unten ein.\n3. Tippe auf „Kurzbericht kopieren“ (passt in eine Discord-Nachricht) und füge ihn in deine Nachricht ein."</string>
+</resources>

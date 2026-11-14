@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="one">"%1$d playlist"</item>
+        <item quantity="many">"%1$d playlists"</item>
+        <item quantity="other">"%1$d playlists"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="one">"%1$d guide"</item>
+        <item quantity="many">"%1$d guides"</item>
+        <item quantity="other">"%1$d guides"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="one">"%1$d chaîne"</item>
+        <item quantity="many">"%1$d chaînes"</item>
+        <item quantity="other">"%1$d chaînes"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="one">"%1$d programme associé"</item>
+        <item quantity="many">"%1$d programmes associés"</item>
+        <item quantity="other">"%1$d programmes associés"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="one">"%1$d supprimé"</item>
+        <item quantity="many">"%1$d supprimés"</item>
+        <item quantity="other">"%1$d supprimés"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="one">"%1$d min"</item>
+        <item quantity="many">"%1$d min"</item>
+        <item quantity="other">"%1$d min"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="one">"%1$d jour"</item>
+        <item quantity="many">"%1$d jours"</item>
+        <item quantity="other">"%1$d jours"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="one">"%1$d heure"</item>
+        <item quantity="many">"%1$d heures"</item>
+        <item quantity="other">"%1$d heures"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="one">"%1$d seconde"</item>
+        <item quantity="many">"%1$d secondes"</item>
+        <item quantity="other">"%1$d secondes"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="one">"il y a %1$d jour"</item>
+        <item quantity="many">"il y a %1$d jours"</item>
+        <item quantity="other">"il y a %1$d jours"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="one">"il y a %1$d semaine"</item>
+        <item quantity="many">"il y a %1$d semaines"</item>
+        <item quantity="other">"il y a %1$d semaines"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="one">"il y a %1$d mois"</item>
+        <item quantity="many">"il y a %1$d mois"</item>
+        <item quantity="other">"il y a %1$d mois"</item>
+    </plurals>
+</resources>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Recherche…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Échec du test : %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Playlist"</string>
+    <string name="iptv_settings_support_remote_title">"Test des touches de la télécommande"</string>
+    <string name="iptv_settings_support_remote_instructions">"Appuyez sur n’importe quelle touche. Les plus récentes en haut ; les lignes en couleur sont une autre touche moins de 250 ms après la précédente (par exemple OK envoyé avec Haut/Bas). Appuyez 3 fois de suite sur Retour pour fermer."</string>
+    <string name="iptv_settings_support_remote_waiting">"En attente d’une touche…"</string>
+    <string name="iptv_settings_support_remote_action_down">"DOWN"</string>
+    <string name="iptv_settings_support_remote_action_up">"UP"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"MULTI"</string>
+    <string name="iptv_settings_support_remote_repeat">"répétition %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"appui long"</string>
+    <string name="iptv_settings_support_remote_canceled">"annulé"</string>
+    <string name="iptv_settings_support_remote_held">"maintenu %1$d ms"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Rapport de démarrage TV en direct"</string>
+    <string name="iptv_settings_support_report_subtitle">"Depuis le démarrage de l’app. ▲ ▼ pour faire défiler."</string>
+    <string name="iptv_settings_support_report_empty">"Rien pour l’instant : ouvrez d’abord la TV en direct."</string>
+    <string name="iptv_settings_support_report_send">"Envoyer le rapport complet"</string>
+    <string name="iptv_settings_support_report_no_network">"Connectez ce téléviseur au Wi-Fi pour envoyer le rapport depuis votre téléphone."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Connectez votre téléphone au même Wi-Fi que ce téléviseur.\n2. Scannez ce code avec l’appareil photo de votre téléphone, ou tapez l’adresse ci-dessous.\n3. Appuyez sur Copier le rapport court (il tient dans un message Discord), puis collez-le dans votre message."</string>
+</resources>
