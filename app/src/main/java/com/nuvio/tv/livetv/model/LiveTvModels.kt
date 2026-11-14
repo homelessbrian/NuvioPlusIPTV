@@ -318,6 +318,8 @@ data class PlaylistAccount(
 data class LiveTvSettings(
     val showInSidebar: Boolean = true,
     val showChannelNames: Boolean = true,
+    /** Long channel names wrap onto a second line in the guide instead of being cut off. */
+    val twoLineChannelNames: Boolean = false,
     val showChannelNumbers: Boolean = true,
     /** A red outline around the channel you're watching, in the guide's channel list. */
     val markPlayingChannel: Boolean = true,
@@ -882,7 +884,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-14 12:50"
+    const val KIT_STAMP = "2026-11-14 14:35"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

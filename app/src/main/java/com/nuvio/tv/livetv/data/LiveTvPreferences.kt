@@ -77,6 +77,7 @@ class LiveTvPreferences @Inject constructor(
         val showInSidebar = booleanPreferencesKey("show_in_sidebar")
         val showImportProgress = booleanPreferencesKey("show_import_progress")
         val showNames = booleanPreferencesKey("show_channel_names")
+        val twoLineNames = booleanPreferencesKey("two_line_channel_names")
         val showNumbers = booleanPreferencesKey("show_channel_numbers")
         val markPlaying = booleanPreferencesKey("mark_playing_channel")
         val showLogos = booleanPreferencesKey("show_channel_logos")
@@ -397,6 +398,7 @@ class LiveTvPreferences @Inject constructor(
         return LiveTvSettings(
             showInSidebar = p[Keys.showInSidebar] ?: d.showInSidebar,
             showChannelNames = p[Keys.showNames] ?: d.showChannelNames,
+            twoLineChannelNames = p[Keys.twoLineNames] ?: d.twoLineChannelNames,
             showChannelNumbers = p[Keys.showNumbers] ?: d.showChannelNumbers,
             markPlayingChannel = p[Keys.markPlaying] ?: d.markPlayingChannel,
             showChannelLogos = p[Keys.showLogos] ?: d.showChannelLogos,
@@ -729,6 +731,7 @@ class LiveTvPreferences @Inject constructor(
     private fun writeSettings(p: MutablePreferences, s: LiveTvSettings) {
         p[Keys.showInSidebar] = s.showInSidebar
         p[Keys.showNames] = s.showChannelNames
+        p[Keys.twoLineNames] = s.twoLineChannelNames
         p[Keys.showNumbers] = s.showChannelNumbers
         p[Keys.markPlaying] = s.markPlayingChannel
         p[Keys.showLogos] = s.showChannelLogos

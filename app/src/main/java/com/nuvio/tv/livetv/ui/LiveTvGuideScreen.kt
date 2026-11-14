@@ -2811,14 +2811,19 @@ private fun GuideRow(
                 Spacer(Modifier.width(8.dp))
             }
             if (settings.showChannelNames) {
+                val twoLines = settings.twoLineChannelNames
                 LiveText(
                     channel.name,
                     modifier = Modifier.weight(1f),
                     color = cell.text,
                     size = gsp(14f),
                     weight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
+                    // "Two-line channel names": a long name wraps onto a second line instead of
+                    // being cut off (no scrolling then, both lines already show).
+                    maxLines = if (twoLines) 2 else 1,
+                    lineHeight = if (twoLines) gsp(16f) else androidx.compose.ui.unit.TextUnit.Unspecified,
                     // The row you're on scrolls a long name (also when the name itself has the highlight).
-                    marquee = focusColumn != null || nameFocused || moving
+                    marquee = !twoLines && (focusColumn != null || nameFocused || moving)
                 )
             } else {
                 Spacer(Modifier.weight(1f))
@@ -4585,11 +4590,22 @@ private const val OK_WITH_ARROW_MS = 250L
 internal const val LONG_PRESS_MS = 550L
 
 /** How tall each channel row is: compact or normal, taller when show times are shown. */
-private fun guideRowHeight(s: LiveTvSettings): Dp = when (s.effectiveGuideSize) {
-    "COMPACT" -> if (s.showProgramTimes) 44.dp else 32.dp
-    "LARGE" -> if (s.showProgramTimes) 64.dp else 47.dp
-    "XLARGE" -> if (s.showProgramTimes) 76.dp else 56.dp
-    else -> if (s.showProgramTimes) 52.dp else 38.dp
+private fun guideRowHeight(s: LiveTvSettings): Dp {
+    val h = when (s.effectiveGuideSize) {
+        "COMPACT" -> if (s.showProgramTimes) 44.dp else 32.dp
+        "LARGE" -> if (s.showProgramTimes) 64.dp else 47.dp
+        "XLARGE" -> if (s.showProgramTimes) 76.dp else 56.dp
+        else -> if (s.showProgramTimes) 52.dp else 38.dp
+    }
+    // Two-line channel names need room for two lines of the name.
+    if (!s.twoLineChannelNames || !s.showChannelNames) return h
+    val twoLineMin = when (s.effectiveGuideSize) {
+        "COMPACT" -> 40.dp
+        "LARGE" -> 50.dp
+        "XLARGE" -> 58.dp
+        else -> 44.dp
+    }
+    return maxOf(h, twoLineMin)
 }
 
 /** Guide Size: how much bigger (or smaller) the guide's text is than Standard. */

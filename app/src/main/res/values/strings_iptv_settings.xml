@@ -231,6 +231,8 @@
     <string name="iptv_settings_the_text_about_the_show">"The text about the show"</string>
     <string name="iptv_settings_channel_rows">"Channel Rows"</string>
     <string name="iptv_settings_show_channel_names">"Show Channel Names"</string>
+    <string name="iptv_settings_two_line_channel_names">"Two-Line Channel Names"</string>
+    <string name="iptv_settings_two_line_channel_names_desc">"Long names wrap onto a second line, so details like HD, FHD or 4K at the end stay visible"</string>
     <string name="iptv_settings_off_just_numbers_and_logos_which_leaves_more">"Off: just numbers and logos, which leaves more room for the schedule"</string>
     <string name="iptv_settings_show_channel_numbers">"Show Channel Numbers"</string>
     <string name="iptv_settings_the_number_in_front_of_each_channel">"The number in front of each channel"</string>

@@ -957,6 +957,14 @@ internal fun LiveTvSettingsContent(
                         s.showChannelNames,
                         { update { it.copy(showChannelNames = !it.showChannelNames) } }
                     )
+                    if (s.showChannelNames) {
+                        SettingsToggleRow(
+                            context.getString(R.string.iptv_settings_two_line_channel_names),
+                            context.getString(R.string.iptv_settings_two_line_channel_names_desc),
+                            s.twoLineChannelNames,
+                            { update { it.copy(twoLineChannelNames = !it.twoLineChannelNames) } }
+                        )
+                    }
                     SettingsToggleRow(
                         context.getString(R.string.iptv_settings_show_channel_numbers),
                         context.getString(R.string.iptv_settings_the_number_in_front_of_each_channel),
