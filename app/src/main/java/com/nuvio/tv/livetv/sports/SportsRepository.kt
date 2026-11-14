@@ -200,7 +200,16 @@ class SportsRepository @Inject constructor(
                     else sameFight.isEmpty()
                 }
             }
-            else same.none { dayOf(it.startMs) == dayOf(fx.startMs) }
+            else {
+                // A date only: anything of its league that day stands in for it, except for a fight
+                // (a Zuffa card, say), which only gives way to a listing of the same fight.
+                val sides = if (SportsCatalog.league(fx.leagueId)?.sport == Sport.FIGHTING) SportsCatalog.fightSides(fx.title) else null
+                same.none { gEv ->
+                    dayOf(gEv.startMs) == dayOf(fx.startMs) && (sides == null || SportsCatalog.norm(gEv.title + " " + (gEv.subtitle ?: "")).let { text ->
+                        sides.first.any { SportsCatalog.hasWord(text, it) } && sides.second.any { SportsCatalog.hasWord(text, it) }
+                    })
+                }
+            }
         }
         val espn = l.values.flatMap { it.events } + w.values.flatMap { it.events }
         // A match ESPN lists, found again in the guide (or a schedule file) under a guide-only
