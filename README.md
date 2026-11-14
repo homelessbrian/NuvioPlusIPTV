@@ -2,7 +2,7 @@
 
 # Nuvio + IPTV
 
-**Everything in Nuvio, plus everything IPTV: a TiviMate-style Live TV guide, a Sports hub that finds every game on your own channels, a Calendar of your shows, movies and games, catch-up, recordings, your provider's movies and series, and a built-in VPN for your playback, all in one app for Google TV, Android TV and Fire TV. Your setup follows your Nuvio account, and there's a [phone app](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile) too.**
+**Everything in Nuvio, plus everything IPTV: a TiviMate-style Live TV guide, Multiview for up to four channels at once, a Sports hub that finds every game on your own channels, a Calendar of your shows, movies and games, catch-up, recordings, your provider's movies and series, and a built-in VPN for your playback, all in one app for Google TV, Android TV and Fire TV. Your setup follows your Nuvio account, and there's a [phone app](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile) too.**
 
 [![Latest release](https://img.shields.io/github/v/release/homelessbrian/NuvioPlusIPTV?include_prereleases&label=latest&style=for-the-badge)](https://github.com/homelessbrian/NuvioPlusIPTV/releases)
 [![Downloads](https://img.shields.io/github/downloads/homelessbrian/NuvioPlusIPTV/total?style=for-the-badge)](https://github.com/homelessbrian/NuvioPlusIPTV/releases)
@@ -13,12 +13,39 @@
 
 **Downloader code: 6532491**
 
-[Sports hub](#-sports-hub) · [Calendar](#-calendar) · [VPN](#-built-in-vpn) · [Sync](#-your-setup-everywhere) · [Phone app](#-on-your-phone-too) · [Download](#-installation) · [Features](#-features) · [Setup](#-getting-started) · [Remote controls](CONTROLS.md) · [Report a bug](#-reporting-bugs-and-requesting-features) · [Discord](https://discord.gg/NvK5JVvvm) · [Support](#-support-the-project)
+[What's new](#-new-in-this-update) · [Multiview](#-multiview) · [Sports hub](#-sports-hub) · [Calendar](#-calendar) · [VPN](#-built-in-vpn) · [Sync](#-your-setup-everywhere) · [Phone app](#-on-your-phone-too) · [Download](#-installation) · [Features](#-features) · [Setup](#-getting-started) · [Remote controls](CONTROLS.md) · [Report a bug](#-reporting-bugs-and-requesting-features) · [Discord](https://discord.gg/NvK5JVvvm) · [Support](#-support-the-project)
 
 > ### 🙌 Big thanks to [ghbarker](https://github.com/ghbarker)
-> The **built-in VPN** is his work. He wrote the WireGuard and OpenVPN support and contributed it to this project, so your playback can be protected without a separate VPN app. Thank you!
+> The **built-in VPN**, **Multiview** and **Stalker / Ministra portals** are his work. He wrote them and contributed them to this project. Thank you!
 
 </div>
+
+---
+
+## 🆕 New in this update
+
+- **🖥️ Multiview:** watch up to four channels or games at once, with a layout picker, live games from Sports, and the sound following the pane you pick. [More below](#-multiview).
+- **📡 Stalker / Ministra portals:** add them as a source for Live TV and On Demand, next to your M3U playlists and Xtream logins.
+- **📱 Add from your phone:** scan a QR code and type playlists, Xtream logins and guides on your phone instead of with the remote.
+- **⚡ The guide opens straight away,** every time. Guide updates happen quietly in the background, playlists load much faster, and the app uses less memory.
+- **🖼️ Seek thumbnails:** preview pictures above the seek bar in movies, shows, catch-up, recordings, sports replays and paused live TV.
+- **📣 Full-time alerts** with the final score, and **Score alerts** for any single game, straight from its game page.
+- **⏺️ Record options** in the player: until you stop it, until the show ends, or until a set time.
+- **↩️ Back from the guide** returns to the channel you're watching in full screen, like TiviMate.
+- **🌍 Live TV in more languages:** German, French, Spanish, Portuguese, Italian, Dutch, Polish, Turkish and Russian.
+- **Built on Nuvio 1.2.0-beta.1,** with its subtitle fonts and styles, chapters, and fallback to the next source when one fails.
+
+---
+
+## 🖥️ Multiview
+
+Watch several channels, or several games, side by side.
+
+- **Up to four at once:** open it from the guide's top row or the **Multiview** button on the play bar, or choose **Add to Multiview** in a channel's menu.
+- **Layouts with pictures:** 1 screen, 2 side by side, 2 stacked, three ways to show 3, and 4 (2 × 2, or one big + three). It opens in the layout you used last.
+- **Pick channels like overlay mode:** a see-through list of your groups and channels with what's on now, plus a **Sports** tab of live games. OK on a game plays it; hold OK for its other streams or its Sports page.
+- **The sound follows the pane you're on.**
+- **Keeps itself going:** a pane that drops reconnects by itself, and one that won't play moves to a backup copy of the channel.
 
 ---
 
@@ -103,7 +130,8 @@ Have a sports addon installed in Nuvio, like **HighFly** or **StremVerse**? Spor
   - **Up to a team** and OK for its team card
 - **Scores everywhere:**
   - the score shows on Live TV's info bar when you're watching a game
-  - **scoring alerts** pop up in the corner when your team scores, wherever you are in the app
+  - **scoring alerts** pop up in the corner when your team scores, wherever you are in the app, and a **Full time / Final** alert shows the final score
+  - **Score alerts on any game:** turn them on from a game's page, even for teams you don't follow
 - **Spoiler-free:** **Hide Scores** keeps results off the screen until you're ready.
 
 ### Never miss it
@@ -162,7 +190,7 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 
 ## 📱 On your phone too
 
-**[Nuvio + IPTV Mobile](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile)** brings Live TV, the guide, Sports, catch-up, recordings and On Demand to Android phones and tablets. Sign in to the same Nuvio account and it uses the same setup as your TV.
+**[Nuvio + IPTV Mobile](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile)** brings Live TV, the guide, Multiview, Sports, catch-up, recordings and On Demand to Android phones and tablets. Sign in to the same Nuvio account and it uses the same setup as your TV.
 
 ---
 
@@ -171,7 +199,10 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 ### 📺 A proper TV guide
 - **TiviMate-style guide:** channels down the side, a timeline across, and a line marking "now" (which you can hide). It fits **8 or more channels** on screen.
 - **Guide Size:** Compact, Standard, Large or Extra Large. It sets the size of overlay mode too.
+- **Opens straight away:** the guide is on screen as soon as Live TV opens, and updates happen quietly in the background.
 - **Fast browsing:** hold Left to step back through earlier shows at double speed.
+- **Back to the video:** while a channel plays, Back from the guide returns to it in full screen. Left still goes to the groups and the menu.
+- **Two-Line Channel Names** for long names.
 - **Group list:**
   - **Opening it:** it slides out with a tap of Left.
   - **Grouping:** optionally grouped by playlist.
@@ -190,6 +221,8 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 
 ### 📡 Your sources, your way
 - **Multiple M3U playlists** and **multiple XMLTV guides,** merged into one guide.
+- **Stalker / Ministra portals** for Live TV and On Demand.
+- **Add from your phone:** scan the QR code in **Settings → Live TV** and fill in playlists, logins and guides on your phone.
 - **Xtream Codes logins:**
   - **Pick what to include:** TV channels, movies & series, or both.
   - **Stream format:** Auto, TS or HLS. M3U link playlists have it too, including Dispatcharr.
@@ -198,12 +231,13 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Catch-up:**
   - **Watch past shows** with a seek bar, or **restart what's on now**. Skips land where you aimed, even with providers that are slow to jump.
   - **Follow-on playback:** carries straight on into the next show.
-  - **Guide time shift** and **Catch-up time shift** for providers that are off by an hour or more.
+  - **Guide time shift** and **Catch-up time shift** (up to 24 hours) for providers that are off.
 - **Backup channels:** a button on the info bar lists the other copies of the channel you're watching, hidden ones included, so you can switch when one is having trouble. Copies match even when the name has a sound layout like 5.1.
 - **Channel name editor** (like TiviMate): strip "USA:", "HD", "24/7" and similar from channel names. Prefixes followed by just a space ("USA ESPN") are removed too when a playlist uses them on lots of channels.
 
 ### ⏺️ Recordings
-- **Record a show, or a whole series,** from the guide. Series recordings skip repeats of episodes already recorded. Shows on catch-up channels are saved from catch-up after they end, which is the most reliable way.
+- **Record a show, or a whole series,** from the guide or overlay mode. Series recordings skip repeats and episodes you cancelled.
+- **Record from the player:** until you stop it, until the show ends, or until a set time. Shows on catch-up channels are saved from catch-up after they end, which is the most reliable way.
 - **Save to this device or a USB drive.** Choose what happens when space runs low: stop recording, or delete the oldest.
 - **Choose the padding:** how early recordings start and how long they keep going after the show.
 - **Recordings carry on with the app closed or the box in standby**, and catch-up saves wait for the connection to come back.
@@ -229,6 +263,7 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Start in Full Screen:** open the app straight into the last channel you watched.
 - **Zap** with Up/Down, type a channel number, or jump to the **last channel**.
 - **Pause and rewind live TV**, even on channels without catch-up.
+- **Seek thumbnails:** preview pictures above the seek bar, up to 4K. On by default except on low-memory boxes, and you can switch them on or off any time under **Settings → Playback** (they may not work well on lower-end devices).
 - **Reminders:** "Remind me" on any upcoming show, with a pop-up and a Watch button.
 - **Player menu:** audio, **closed captions**, screen size, **picture shape**, stream info, **sleep timer**, record, find & stream, and watch from the beginning.
 - **Your audio choice is remembered for each channel** (a second language, or 5.1 over stereo).
@@ -248,7 +283,7 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Open the App On:** start straight on Home, Live TV, Sports, the Calendar, On Demand and more.
 - **Home screen row:** your favorite channels and what's on now, next to Continue watching.
 - **Rows on your TV's home screen:** Live Now in Sports, Favorite Channels and Recently Watched Channels for Google TV, Projectivy and similar launchers, with Wide, Tall or Square cards.
-- **One search** for movies, shows, channels and On Demand.
+- **One search** for movies, shows, channels and On Demand. Live TV results put the best matches first.
 - **Live TV in Nuvio search:**
   - **Your order:** choose which results come first.
   - **Preview behind search:** live channels play in the background while you search.
@@ -285,14 +320,14 @@ Requires **Android 7.0 or newer** (Fire OS 6 or later). It installs **alongside*
 
 **On a phone or tablet?** Get **[Nuvio + IPTV Mobile](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile/releases)** instead.
 
-**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.1.0-beta.11).
+**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.2.0-beta.1).
 
 ---
 
 ## 🚀 Getting started
 
 1. Open **Settings → Live TV**.
-2. Choose **Add M3U Playlist** or **Add Xtream Codes Login**. For Xtream, pick **Include TV channels** and/or **Include movies & series**.
+2. Choose **Add M3U Playlist**, **Add Xtream Codes Login** or **Add Stalker / Ministra Portal** (or **Add from your phone** to type it there). For Xtream, pick **Include TV channels** and/or **Include movies & series**.
 3. Optionally **Add EPG Source** for an extra TV guide.
 4. Open **Live TV**, **On Demand** or **Sports** from the side menu. The first load can take a minute on big providers; a small progress bubble shows what's happening.
 5. Optional, all in **Settings → Live TV**:
@@ -473,7 +508,7 @@ Nuvio + IPTV is free. If it's made your TV better and you'd like to say thanks, 
 
 ## 🙏 Credits
 
-- **🙌 [ghbarker](https://github.com/ghbarker): a huge thank you.** He built the **built-in VPN** (WireGuard and OpenVPN playback protection) and contributed it to this project. He also made the original [phone port](https://github.com/ghbarker/NuvioMobile-IPTV) that the phone app is built on.
+- **🙌 [ghbarker](https://github.com/ghbarker): a huge thank you.** He built the **built-in VPN** (WireGuard and OpenVPN playback protection), **Multiview** and **Stalker / Ministra portals**, and contributed them to this project, along with a lot of speed work. He also made the original [phone port](https://github.com/ghbarker/NuvioMobile-IPTV) that the phone app is built on.
 - **[Nuvio](https://github.com/NuvioMedia/NuvioTV)** by the NuvioMedia team: Nuvio + IPTV is built on their work and follows their releases.
 - Guide and overlay design inspired by **TiviMate**.
 - Channel logo libraries from **[iptv-org](https://github.com/iptv-org)** and **[tv-logos](https://github.com/tv-logo/tv-logos)**.
