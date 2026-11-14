@@ -19,16 +19,17 @@ internal data class SportsWatchRules(
     val enabledAddonPrefixes: Set<String>,
     val unlockedGroups: Set<String>,
 ) {
-    private val explicitChannels = buildSet {
-        sports.eventChannels.values.forEach { add(it.substringBeforeLast('|')) }
-        addAll(sports.networkChannels.values)
-        addAll(sports.teamChannels.values)
-        addAll(sports.leagueChannels.values)
-    }
+    private val explicitChannels = SportsPickedChannels.keys(sports)
+    // The same picks by playlist + tvg-id, for channels the provider renamed since.
+    private val explicitStable = explicitChannels.mapNotNullTo(HashSet()) { SportsPickedChannels.stableId(it) }
+
+    private fun picked(channel: LiveChannel): Boolean =
+        channel.key in explicitChannels ||
+            (explicitStable.isNotEmpty() && SportsPickedChannels.stableId(channel.key)?.let { it in explicitStable } == true)
 
     fun permits(channel: LiveChannel): Boolean {
         if (!sports.showInSidebar) return false
-        if (channel.key !in explicitChannels &&
+        if (!picked(channel) &&
             (channel.key in user.hiddenChannels || channel.groupId in user.hiddenGroups)) return false
         if (ParentalControls.enabled(live)) {
             if (channel.groupId !in unlockedGroups &&

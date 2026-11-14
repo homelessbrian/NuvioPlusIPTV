@@ -1590,12 +1590,11 @@ class SportsRepository @Inject constructor(
     /** The channels Sports may show: not hidden or locked (channels you picked yourself always count). */
     private fun matchChannels(live: com.nuvio.tv.livetv.model.LiveTvSettings, user: com.nuvio.tv.livetv.model.LiveUserState,
                               sp: SportsSettings = settings.value): List<LiveChannel> {
-        // Channels you picked yourself (Fix Channel) count even in a hidden group.
-        val picked = HashSet<String>().apply {
-            sp.eventChannels.values.forEach { add(it.substringBeforeLast('|')) }
-            addAll(sp.networkChannels.values); addAll(sp.teamChannels.values); addAll(sp.leagueChannels.values)
-        }
-        return channelStore.displayChannels.value.filter { ch ->
+        // Channels you picked yourself (Fix Channel) count even in a hidden group (also
+        // after the provider renamed them).
+        val all = channelStore.displayChannels.value
+        val picked = SportsPickedChannels.keys(SportsPickedChannels.resolve(sp, all))
+        return all.filter { ch ->
             (ch.key in picked || (ch.key !in user.hiddenChannels && ch.groupId !in user.hiddenGroups)) &&
                 !ParentalControls.isLocked(ch.groupId, ch.group, live, user.lockedGroups) &&
                 !(ParentalControls.enabled(live) && live.lockAdultContent && ParentalControls.isAdult(ch.name))
@@ -1634,7 +1633,9 @@ class SportsRepository @Inject constructor(
         try {
             val now = System.currentTimeMillis()
             val shift = live.epgOffsetMinutes * MINUTE
-            val s = settings.value
+            val saved = settings.value
+            // Your picks on channels the provider has since renamed: on the renamed channel.
+            val s = SportsPickedChannels.resolve(saved, channelStore.displayChannels.value)
             val f = follows.value
             // Sports ESPN doesn't cover, from the guide: yesterday to tomorrow, every one of
             // them, not just your region's (this is a local guide search, not an API call, so
@@ -1707,7 +1708,7 @@ class SportsRepository @Inject constructor(
                     rebuildLiveScores()
                 }
             )
-            _matches.value = result.matches
+            _matches.value = keepPicksMadeMeanwhile(result.matches, saved)
             if (result.summary != lastSummary) {
                 lastSummary = result.summary
                 LiveTvLoadReport.add(result.summary)
@@ -1716,6 +1717,34 @@ class SportsRepository @Inject constructor(
         } finally {
             _matching.value = false
         }
+    }
+
+    /**
+     * A channel you fixed (or said isn't showing a game) while a search was already running:
+     * that search started before your fix, so its results put the old channels back and your
+     * fix looked wiped until the next search, which waits while video plays full screen.
+     * Your fixes made since [before] go back on top of the results straight away.
+     */
+    private fun keepPicksMadeMeanwhile(found: Map<String, List<ChannelMatch>>, before: SportsSettings): Map<String, List<ChannelMatch>> {
+        val latest = settings.value
+        if (latest.eventChannels == before.eventChannels && latest.blocked == before.blocked) return found
+        val channels = channelStore.displayChannels.value
+        val now = SportsPickedChannels.resolve(latest, channels)
+        val byKey = channels.associateBy { it.key }
+        val out = HashMap(found)
+        for ((id, v) in now.eventChannels) {
+            if (before.eventChannels[id] == latest.eventChannels[id]) continue
+            val ch = byKey[v.substringBeforeLast('|')] ?: continue
+            val mine = ChannelMatch(ch, 200, "Your pick", null, SportsMatcher.nameQuality(ch.name), false)
+            out[id] = listOf(mine) + out[id].orEmpty().filter { it.channel.key != ch.key }
+        }
+        val newlyBlocked = latest.blocked - before.blocked
+        for (b in newlyBlocked) {
+            val id = out.keys.firstOrNull { b.startsWith("$it|") } ?: continue
+            val key = b.removePrefix("$id|")
+            out[id] = out[id].orEmpty().filter { it.channel.key != key }
+        }
+        return out
     }
 
     // ------------------------------------------------------------------ scores elsewhere in the app
