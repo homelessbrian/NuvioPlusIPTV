@@ -1692,7 +1692,8 @@ private fun LegacySidebarScaffold(
     // Live TV fork: full screen now happens inside the Live TV screen (one video view that just
     // grows), which is one of the menu's pages, so the menu has to step aside for it.
     val liveTvFullscreen by com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.collectAsState()
-    val showSidebar = currentRoute in rootRoutes && !liveTvFullscreen
+    val showSidebar = currentRoute in rootRoutes && !liveTvFullscreen &&
+        !com.nuvio.tv.livetv.ui.LiveTvFullscreen.pending
 
     LaunchedEffect(currentRoute) {
         longPressBackHeld.value = false
@@ -2231,7 +2232,8 @@ private fun ModernSidebarScaffold(
     // Live TV fork: full screen now happens inside the Live TV screen (one video view that just
     // grows), which is one of the menu's pages, so the menu has to step aside for it.
     val liveTvFullscreen by com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.collectAsState()
-    val showSidebar = currentRoute in rootRoutes && !liveTvFullscreen
+    val showSidebar = currentRoute in rootRoutes && !liveTvFullscreen &&
+        !com.nuvio.tv.livetv.ui.LiveTvFullscreen.pending
     val sidebarTokens = NuvioComponents.tokens.sidebar
     val collapsedSidebarWidth = if (sidebarCollapsed) NuvioTheme.spacing.none else sidebarTokens.collapsedWidth
     val openSidebarWidth = sidebarTokens.expandedWidth

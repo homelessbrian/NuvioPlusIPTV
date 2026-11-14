@@ -112,14 +112,16 @@ object SportsLaunch {
     /** A replay from the start, for Live TV to start when it opens. */
     data class Catchup(val channelKey: String, val program: com.nuvio.tv.livetv.model.EpgProgram)
 
+    /** A network channel can return to Sports without having an associated game. */
+    private data class SportsReturn(val eventId: String?)
     /** Live TV was opened from the Sports page (Back goes back there), and on which game. */
-    @Volatile private var returnTo: String? = null
+    @Volatile private var returnTo: SportsReturn? = null
     @Volatile private var focusEvent: String? = null
     @Volatile private var returnSetAt = 0L
-    fun openedFromSports(eventId: String) { returnTo = eventId; focusEvent = eventId; returnSetAt = System.currentTimeMillis() }
+    fun openedFromSports(eventId: String? = null) { returnTo = SportsReturn(eventId); focusEvent = eventId; returnSetAt = System.currentTimeMillis() }
     fun takeReturnToSports(): Boolean = (returnTo != null).also { returnTo = null }
     val isWatchingFromSports: Boolean get() = returnTo != null
-    val watchingEventId: String? get() = returnTo
+    val watchingEventId: String? get() = returnTo?.eventId
     fun clearReturn() { returnTo = null; focusEvent = null }
     /** Live TV closed some other way: Back there no longer goes to Sports. */
     fun dropReturn() {
@@ -291,7 +293,7 @@ fun SportsScreen(
     var backStartedHere by remember { mutableStateOf(false) }
     fun backToFullscreen() {
         val key = playingKey ?: return
-        events.firstOrNull { ev -> matches[ev.id]?.any { it.channel.key == key } == true }?.let { SportsLaunch.openedFromSports(it.id) }
+        SportsLaunch.openedFromSports(events.firstOrNull { ev -> matches[ev.id]?.any { it.channel.key == key } == true }?.id)
         onOpenLive()
     }
     // Remote Buttons (Settings → Remote Buttons): the jobs a button can be given on Sports.
@@ -437,7 +439,7 @@ fun SportsScreen(
                 onQuickWatch = ::quickWatch,
                 onPick = { picker = true },
                 onOpenMultiview = { onOpenMultiview(playingKey) },
-                onWatchChannel = { ch -> viewModel.watchChannel(ch); onOpenLive() }
+                onWatchChannel = { ch -> SportsLaunch.openedFromSports(); viewModel.watchChannel(ch); onOpenLive() }
             )
         }
         // The picture, on top of the page where its slot is (one view for every page, so it
