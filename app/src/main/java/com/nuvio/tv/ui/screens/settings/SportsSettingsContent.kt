@@ -193,7 +193,7 @@ fun SportsSettingsContent(
                     )
                     SettingsToggleRow(
                         "Scoring Alerts for My Teams",
-                        "A small card in the corner when one of your teams scores, wherever you are in the app",
+                        "A small card in the corner when one of your teams scores, and the final score when the game ends, wherever you are in the app",
                         s.scoringAlerts,
                         { update { it.copy(scoringAlerts = !it.scoringAlerts) } }
                     )

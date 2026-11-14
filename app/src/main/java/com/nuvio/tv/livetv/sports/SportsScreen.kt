@@ -1536,6 +1536,19 @@ private fun GamePage(
                     }
                 }
             }
+            // Score alerts for just this game (its scores and the final result), when its teams aren't followed.
+            if ((ev.state == GameState.PRE || ev.state == GameState.LIVE) && sides.size == 2 && !settings.hideScores &&
+                !viewModel.repo.alertsFromFollows(ev, follows)
+            ) {
+                val m = f()
+                item {
+                    val on = follows.alertGames.any { it.eventId == ev.id }
+                    SportsAction(if (on) "📣  Score alerts on" else "📣  Score alerts", modifier = m, selected = on, onClick = {
+                        viewModel.repo.toggleGameAlerts(ev)
+                        LiveTvNotice.show(if (on) "Score alerts off for this game" else "You'll see this game's scores and the final result wherever you are")
+                    })
+                }
+            }
             // Record: pick the channel and how long.
             if (ev.hasTime && (ev.state == GameState.PRE || ev.state == GameState.LIVE) && ownChannels.isNotEmpty()) {
                 val m = f()

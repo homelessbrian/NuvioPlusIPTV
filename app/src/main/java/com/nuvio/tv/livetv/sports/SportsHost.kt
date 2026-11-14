@@ -209,7 +209,7 @@ fun SportsHost(navController: NavController) {
     LaunchedEffect(alert) {
         val a = alert ?: return@LaunchedEffect
         delay(7_000)
-        if (SportsLive.alerts.value == a) SportsLive.alerts.value = null
+        SportsLive.done(a)
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopEnd) {
         AnimatedVisibility(
@@ -288,7 +288,7 @@ private fun SwitchCountdown(ev: SportsEvent, match: ChannelMatch, onSwitch: () -
     LaunchedEffect(ev.id) { delay(80); runCatching { first.requestFocus() } }
 }
 
-/** "Bears score!": the game's two bands with the new score, in the corner for a few seconds. */
+/** "Bears score!" (or "Full time"): the game's two bands with the score, in the corner for a few seconds. */
 @Composable
 private fun ScoringAlertCard(a: SportsAlert) {
     val ev = a.event
@@ -300,9 +300,10 @@ private fun ScoringAlertCard(a: SportsAlert) {
             .sportsFrame(focused = false, playing = true, accent = SportsLook.Flash)
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            SportsBadge("${a.team.name.uppercase()} SCORE!", SportsLook.Flash, SportsLook.Ink)
+            if (a.final) SportsBadge(if (a.league.sport == Sport.FOOTBALL) "FULL TIME" else "FINAL", Color.White, SportsLook.Ink)
+            else SportsBadge("${a.team.name.uppercase()} SCORE!", SportsLook.Flash, SportsLook.Ink)
             Spacer(Modifier.weight(1f))
-            ev.status?.let { LiveText(it, color = Color.White, size = 11.sp, weight = FontWeight.Black) }
+            if (!a.final) ev.status?.let { LiveText(it, color = Color.White, size = 11.sp, weight = FontWeight.Black) }
         }
         if (sides.size == 2) {
             val lead = sides.maxByOrNull { it.score?.toDoubleOrNull() ?: 0.0 }
