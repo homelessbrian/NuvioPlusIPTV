@@ -155,7 +155,11 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Build APK
+        env:
+          # The app key for cloud sync and the sports files (same as APP_KEY in the Worker).
+          LIVETV_APP_KEY: ${{ secrets.LIVETV_APP_KEY }}
         run: |
+          if [ -z "$LIVETV_APP_KEY" ]; then echo "::error::Add the LIVETV_APP_KEY secret first (cloud sync and Sports need it)."; exit 1; fi
           chmod +x gradlew
           ./gradlew :app:assembleFullRelease --stacktrace \
             -PlivetvBuildNumber=${{ steps.version.outputs.number }} \

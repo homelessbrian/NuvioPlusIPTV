@@ -149,6 +149,8 @@ jobs:
           # The test app's key for checking for new test builds (secret LIVETV_TESTER_KEY). Without it the
           # build works as before, but the test app can't update itself.
           LIVETV_TESTER_KEY: ${{ secrets.LIVETV_TESTER_KEY }}
+          # The app key for cloud sync and the sports files (same as APP_KEY in the Worker).
+          LIVETV_APP_KEY: ${{ secrets.LIVETV_APP_KEY }}
         run: |
           chmod +x gradlew
           # The release lint check is skipped: it's slow and not needed for a test build.

@@ -400,6 +400,11 @@ val livetvIsTestBuild = (findProperty("livetvTestBuild") as String?)?.toBoolean(
 val livetvTesterKey = if (livetvIsTestBuild) {
     (System.getenv("LIVETV_TESTER_KEY") ?: localProperties.getProperty("LIVETV_TESTER_KEY", "")).trim()
 } else ""
+// Our own builds carry the app key (GitHub secret LIVETV_APP_KEY, never in the code), which our
+// livetv-cloud service asks for before it hands out cloud sync and the sports files. Builds
+// without it fall back to the old public addresses.
+val livetvAppKey = (System.getenv("LIVETV_APP_KEY") ?: localProperties.getProperty("LIVETV_APP_KEY", "")).trim()
+android.defaultConfig.buildConfigField("String", "LIVETV_APP_KEY", buildConfigString(livetvAppKey))
 android.defaultConfig.buildConfigField("String", "NUVIO_CHANNEL", "\"${if (livetvIsTestBuild) "test" else "stable"}\"")
 android.defaultConfig.buildConfigField("String", "TEST_UPDATES_URL", "\"https://livetv-cloud.nuvioplusiptv.workers.dev\"")
 android.defaultConfig.buildConfigField("String", "TESTER_KEY", buildConfigString(livetvTesterKey))

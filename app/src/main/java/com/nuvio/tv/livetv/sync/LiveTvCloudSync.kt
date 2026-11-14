@@ -1,5 +1,6 @@
 package com.nuvio.tv.livetv.sync
 
+import com.nuvio.tv.livetv.data.ForkService
 import android.content.Context
 import androidx.annotation.StringRes
 import com.nuvio.tv.R
@@ -618,9 +619,10 @@ class LiveTvCloudSync @Inject constructor(
         val token = auth.currentAccessTokenOrNull()?.takeIf { it.isNotBlank() }
             ?: return@withContext Reply(401, null)
         val request = Request.Builder()
-            .url(CLOUD_URL + path)
+            .url(CLOUD_URL + ForkService.syncPath(path))
             .header("Authorization", "Bearer $token")
             .header("apikey", serverConfiguration.publishableKey)
+            .apply { if (ForkService.hasKey) header(ForkService.HEADER, ForkService.appKey) }
             .method(method, body?.toString()?.toRequestBody(json))
             .build()
         http.newCall(request).execute().use { response ->
