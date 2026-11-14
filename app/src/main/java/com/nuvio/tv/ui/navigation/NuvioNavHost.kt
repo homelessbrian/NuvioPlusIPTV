@@ -91,6 +91,16 @@ fun NuvioNavHost(
             PlaybackNavHost(navController, startDestination, hideBuiltInHeaders, discoverIsRoot)
         }
     }
+    // Live TV fork: "Remind me" messages, shown on top of whatever screen you're on.
+    com.nuvio.tv.livetv.reminders.LiveTvReminderHost(navController)
+    // Live TV fork: Nuvio account sync: starts when the app opens, and asks its one-time questions.
+    com.nuvio.tv.livetv.sync.CloudSyncHost()
+    // Live TV fork: "Loading channels… / Importing movies…" pill while things download.
+    com.nuvio.tv.livetv.ui.LiveTvLoadingHost(navController)
+    // Live TV fork: Sports reminders and scoring alerts, on top of whatever screen you're on.
+    com.nuvio.tv.livetv.sports.SportsHost(navController)
+    // Live TV fork: pinned game scoreboards in the corner while something plays.
+    com.nuvio.tv.livetv.sports.SportsPinsHost(navController)
 }
 
 // Root destinations carry the legacy sidebar inset themselves so the NavHost container
@@ -106,16 +116,6 @@ private fun NavGraphBuilder.rootComposable(
             content(backStackEntry)
         }
     }
-    // Live TV fork: "Remind me" messages, shown on top of whatever screen you're on.
-    com.nuvio.tv.livetv.reminders.LiveTvReminderHost(navController)
-    // Live TV fork: Nuvio account sync: starts when the app opens, and asks its one-time questions.
-    com.nuvio.tv.livetv.sync.CloudSyncHost()
-    // Live TV fork: "Loading channels… / Importing movies…" pill while things download.
-    com.nuvio.tv.livetv.ui.LiveTvLoadingHost(navController)
-    // Live TV fork: Sports reminders and scoring alerts, on top of whatever screen you're on.
-    com.nuvio.tv.livetv.sports.SportsHost(navController)
-    // Live TV fork: pinned game scoreboards in the corner while something plays.
-    com.nuvio.tv.livetv.sports.SportsPinsHost(navController)
 }
 
 /**
