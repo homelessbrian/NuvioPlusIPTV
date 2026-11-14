@@ -189,15 +189,17 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val isHls = resolvedMimeType == MimeTypes.APPLICATION_M3U8
         val isDash = resolvedMimeType == MimeTypes.APPLICATION_MPD
         val httpDataSourceFactory = if (stalkerMediaPolicy != null) {
+            // Stalker links can be single-use: no extra segment reads (HLS start check) here.
             DefaultDataSource.Factory(context, stalkerMediaPolicy!!.httpFactory())
         } else if (isHls || isDash) {
-            DefaultDataSource.Factory(
+            val adaptiveFactory = DefaultDataSource.Factory(
                 context,
                 PlayerPlaybackNetworking.createHttpDataSourceFactory(
                     sanitizedHeaders,
                     useLongReadTimeout = isLoopbackUrl(url),
                 ),
             )
+            if (isHls) HlsParameterSetInitDataSource.Factory(adaptiveFactory) else adaptiveFactory
         } else {
             PlayerPlaybackNetworking.createDataSourceFactory(context, sanitizedHeaders)
         }
@@ -1033,7 +1035,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
             query.split('&').forEach { parameter ->
                 val key = parameter.substringBefore('=', missingDelimiterValue = "").trim()
-                val value = parameter.substringAfter('=', missingDelimiterValue = "").trim()
+                val rawValue = parameter.substringAfter('=', missingDelimiterValue = "").trim()
+                val value = runCatching {
+                    URLDecoder.decode(rawValue.replace("+", "%2B"), Charsets.UTF_8.name())
+                }.getOrDefault(rawValue).lowercase(Locale.US)
                 if (key.isBlank() || value.isBlank()) return@forEach
 
                 when (key) {

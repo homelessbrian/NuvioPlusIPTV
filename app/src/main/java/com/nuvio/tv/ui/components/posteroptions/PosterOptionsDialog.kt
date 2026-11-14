@@ -4,6 +4,10 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,11 +27,13 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
@@ -36,6 +42,7 @@ import com.nuvio.tv.core.tracking.TrackingMembershipRemovalConfirmation
 import com.nuvio.tv.core.tracking.LOCAL_LIBRARY_LIST_KEY
 import com.nuvio.tv.core.tracking.supportsMembershipFor
 import com.nuvio.tv.domain.model.LibraryListTab
+import com.nuvio.tv.domain.model.isSeriesLikeType
 import com.nuvio.tv.domain.model.localizedMembershipTitle
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.ui.components.NuvioDialog
@@ -47,8 +54,6 @@ fun PosterOptionsDialog(
     isInLibrary: Boolean,
     isLibraryPending: Boolean,
     showManageLists: Boolean,
-    isMovie: Boolean,
-    isSeries: Boolean = false,
     isWatched: Boolean,
     isWatchedPending: Boolean,
     onDismiss: () -> Unit,
@@ -118,24 +123,22 @@ fun PosterOptionsDialog(
             }
         }
 
-        if (isMovie || isSeries) {
-            Button(
-                onClick = onToggleWatched,
-                enabled = !isWatchedPending,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioTheme.colors.BackgroundCard,
-                    contentColor = NuvioTheme.colors.TextPrimary
-                )
-            ) {
-                Text(
-                    if (isWatched) {
-                        stringResource(R.string.hero_mark_unwatched)
-                    } else {
-                        stringResource(R.string.hero_mark_watched)
-                    }
-                )
-            }
+        Button(
+            onClick = onToggleWatched,
+            enabled = !isWatchedPending,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioTheme.colors.BackgroundCard,
+                contentColor = NuvioTheme.colors.TextPrimary
+            )
+        ) {
+            Text(
+                if (isWatched) {
+                    stringResource(R.string.hero_mark_unwatched)
+                } else {
+                    stringResource(R.string.hero_mark_watched)
+                }
+            )
         }
     }
 }
@@ -194,15 +197,26 @@ fun PosterListPickerDialog(
                         toggleableState = if (selected) ToggleableState.On else ToggleableState.Off
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = if (selected) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard,
+                        containerColor = NuvioTheme.colors.BackgroundCard,
                         contentColor = NuvioTheme.colors.TextPrimary
                     )
                 ) {
                     Text(
                         text = tab.localizedMembershipTitle(),
+                        modifier = Modifier.weight(1f),
+                        fontWeight = if (selected) FontWeight.SemiBold else null,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (selected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .padding(start = 12.dp)
+                                .size(20.dp)
+                        )
+                    }
                 }
             }
         }
@@ -234,10 +248,7 @@ fun PosterOptionsHost(
 ) {
     val target = state.target
     if (target != null) {
-        val isMovie = target.apiType.equals("movie", ignoreCase = true)
-        val isSeries = target.apiType.equals("series", ignoreCase = true) ||
-            target.apiType.equals("tv", ignoreCase = true) ||
-            target.apiType.equals("anime", ignoreCase = true)
+        val isSeries = isSeriesLikeType(target.apiType)
         val bell = if (calendarBell && isSeries) {
             com.nuvio.tv.livetv.calendar.rememberShowBell(target.id, null, target.name, target.poster, target.background)
         } else null
@@ -246,8 +257,6 @@ fun PosterOptionsHost(
             isInLibrary = state.isInLibrary,
             isLibraryPending = state.isLibraryPending,
             showManageLists = state.librarySourceMode != LibrarySourceMode.LOCAL,
-            isMovie = isMovie,
-            isSeries = isSeries,
             isWatched = state.isWatched,
             isWatchedPending = state.isWatchedPending,
             onDismiss = { controller.dismiss() },
@@ -264,10 +273,10 @@ fun PosterOptionsHost(
                 }
             },
             onToggleWatched = {
-                if (isMovie) {
-                    controller.toggleMovieWatched()
-                } else {
+                if (isSeries) {
                     controller.toggleSeriesWatched()
+                } else {
+                    controller.toggleMovieWatched()
                 }
                 controller.dismiss()
             },

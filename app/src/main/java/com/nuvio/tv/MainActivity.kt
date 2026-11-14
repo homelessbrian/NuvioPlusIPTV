@@ -230,6 +230,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 val LocalSidebarExpanded = compositionLocalOf { false }
+val LocalRootContentInset = compositionLocalOf { 0.dp }
+
+/** Live TV fork pages' room for the older side menu (only while the menu is showing). */
+val LocalForkPageInset = compositionLocalOf { 0.dp }
 
 /** Opens Nuvio's side menu from a screen (used by Live TV's back button). */
 val LocalOpenSidebar = compositionLocalOf<() -> Unit> { {} }
@@ -460,7 +464,11 @@ open class MainActivity : ComponentActivity() {
         }
 
         // Extract extras set by the Continue Watching launcher channel preview programs.
-        val launchContentId = intent?.getStringExtra("contentId")
+        val isFreshLaunch = isFreshLaunchIntent(
+            hasSavedInstanceState = savedInstanceState != null,
+            intentFlags = intent?.flags ?: 0
+        )
+        val launchContentId = intent?.getStringExtra("contentId")?.takeIf { isFreshLaunch }
         val launchContentType = intent?.getStringExtra("contentType")
         val launchMode = intent?.getStringExtra("launchMode")
         val launchVideoId = intent?.getStringExtra("videoId")
@@ -959,6 +967,23 @@ open class MainActivity : ComponentActivity() {
                     LaunchedEffect(actualRoute) {
                         optimisticRoute = null
                         ambientIdleController.onInteraction()
+                    }
+
+                    // The player and home are routes inside this activity, so leaving the
+                    // player or returning home never reaches onResume. Ask for the same
+                    // throttled watch state pull a foreground return gets.
+                    LaunchedEffect(navController) {
+                        var previousRoute: String? = null
+                        navController.currentBackStackEntryFlow.collect { entry ->
+                            val route = entry.destination.route
+                            if (route == previousRoute) return@collect
+                            val leftPlayer = previousRoute == Screen.Player.route
+                            val returnedHome = previousRoute != null && route == Screen.Home.route
+                            if (leftPlayer || returnedHome) {
+                                startupSyncService.requestNavigationSync()
+                            }
+                            previousRoute = route
+                        }
                     }
 
                     // Auto-play next episode for EXTERNAL players: the tracker resolves the
@@ -1941,19 +1966,30 @@ private fun LegacySidebarScaffold(
         }
         }
     ) {
-        val contentStartPadding by animateDpAsState(
+        // Applied per root destination (not on the NavHost container) so it only changes
+        // with the collapse setting, never during a navigation transition.
+        val rootContentInset by animateDpAsState(
+            targetValue = if (sidebarCollapsed) {
+                NuvioTheme.spacing.none
+            } else {
+                NuvioLayout.tokens.sidebarContentOffset
+            },
+            animationSpec = tween(NuvioMotion.tokens.durations.medium),
+            label = "rootContentInset"
+        )
+        // Live TV fork pages keep the old rule: room for the menu only while it's showing.
+        val forkPageInset by animateDpAsState(
             targetValue = if (showSidebar && !sidebarCollapsed) {
                 NuvioLayout.tokens.sidebarContentOffset
             } else {
                 NuvioTheme.spacing.none
             },
             animationSpec = tween(NuvioMotion.tokens.durations.medium),
-            label = "contentStartPadding"
+            label = "forkPageInset"
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = contentStartPadding)
                 .onPreviewKeyEvent { keyEvent ->
                     // Long-press Back on a root route directly opens the sidebar,
                     // bypassing the "scroll row to start" BackHandler in home content.
@@ -2005,6 +2041,8 @@ private fun LegacySidebarScaffold(
         ) {
             CompositionLocalProvider(
                 LocalSidebarExpanded provides (drawerState.currentValue == DrawerValue.Open),
+                LocalRootContentInset provides rootContentInset,
+                LocalForkPageInset provides forkPageInset,
                 LocalContentFocusRequester provides contentFocusRequester,
                 LocalOpenSidebar provides {
                     pendingSidebarFocusRequest = true
@@ -2014,7 +2052,8 @@ private fun LegacySidebarScaffold(
                 NuvioNavHost(
                     navController = navController,
                     startDestination = startDestination,
-                    hideBuiltInHeaders = hideBuiltInHeaders
+                    hideBuiltInHeaders = hideBuiltInHeaders,
+                    discoverIsRoot = Screen.Discover.route in rootRoutes
                 )
             }
         }
