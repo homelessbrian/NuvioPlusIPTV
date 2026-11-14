@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="one">"%1$d oynatma listesi"</item>
+        <item quantity="other">"%1$d oynatma listesi"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="one">"%1$d rehber"</item>
+        <item quantity="other">"%1$d rehber"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="one">"%1$d kanal"</item>
+        <item quantity="other">"%1$d kanal"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="one">"%1$d program eşleşti"</item>
+        <item quantity="other">"%1$d program eşleşti"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="one">"%1$d kaldırıldı"</item>
+        <item quantity="other">"%1$d kaldırıldı"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="one">"%1$d dk"</item>
+        <item quantity="other">"%1$d dk"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="one">"%1$d gün"</item>
+        <item quantity="other">"%1$d gün"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="one">"%1$d saat"</item>
+        <item quantity="other">"%1$d saat"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="one">"%1$d saniye"</item>
+        <item quantity="other">"%1$d saniye"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="one">"%1$d gün önce"</item>
+        <item quantity="other">"%1$d gün önce"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="one">"%1$d hafta önce"</item>
+        <item quantity="other">"%1$d hafta önce"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="one">"%1$d ay önce"</item>
+        <item quantity="other">"%1$d ay önce"</item>
+    </plurals>
+</resources>

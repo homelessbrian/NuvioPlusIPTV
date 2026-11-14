@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Szukanie…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Test nieudany: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Playlista"</string>
+    <string name="iptv_settings_support_remote_title">"Test przycisków pilota"</string>
+    <string name="iptv_settings_support_remote_instructions">"Naciśnij dowolny przycisk. Najnowsze na górze; kolorowe wiersze to inny przycisk w ciągu 250 ms od poprzedniego (np. OK wysłane razem z W górę/W dół). Naciśnij Wstecz 3 razy z rzędu, aby zamknąć."</string>
+    <string name="iptv_settings_support_remote_waiting">"Czekam na przycisk…"</string>
+    <string name="iptv_settings_support_remote_action_down">"DOWN"</string>
+    <string name="iptv_settings_support_remote_action_up">"UP"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"MULTI"</string>
+    <string name="iptv_settings_support_remote_repeat">"powtórzenie %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"długie naciśnięcie"</string>
+    <string name="iptv_settings_support_remote_canceled">"anulowano"</string>
+    <string name="iptv_settings_support_remote_held">"przytrzymano %1$d ms"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Raport uruchomienia telewizji na żywo"</string>
+    <string name="iptv_settings_support_report_subtitle">"Od uruchomienia aplikacji. ▲ ▼, aby przewijać."</string>
+    <string name="iptv_settings_support_report_empty">"Jeszcze nic: najpierw otwórz telewizję na żywo."</string>
+    <string name="iptv_settings_support_report_send">"Wyślij cały raport"</string>
+    <string name="iptv_settings_support_report_no_network">"Połącz ten telewizor z Wi-Fi, aby wysłać raport z telefonu."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Połącz telefon z tą samą siecią Wi-Fi co ten telewizor.\n2. Zeskanuj ten kod aparatem telefonu lub wpisz adres poniżej.\n3. Stuknij Kopiuj krótki raport (mieści się w jednej wiadomości na Discordzie), a potem wklej go w wiadomości."</string>
+</resources>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"Обновление плейлиста «%1$s»…"</string>
+    <string name="iptv_repository_status_reading_channels">"Чтение каналов…"</string>
+    <string name="iptv_repository_status_downloading_guide">"Загрузка телегида «%1$s»…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"Загрузка телегида «%1$s»"</string>
+    <string name="iptv_repository_status_matching_data">"Сопоставление данных телегида…"</string>
+    <string name="iptv_repository_status_updating_guide">"Обновление телегида…"</string>
+    <string name="iptv_repository_status_adding_playlist">"Добавление каналов из «%1$s»…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"Чтение каналов из «%1$s»…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"Чтение каналов из «%1$s» (%2$d из %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"Недостаточно памяти для телегида «%1$s» — пропущен"</string>
+    <string name="iptv_repository_status_reading_guide">"Чтение телегида «%1$s»…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"Чтение телегида «%1$s» (%2$d из %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"Чтение телегида «%1$s»… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"Чтение телегида «%1$s» (%2$d из %3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"Сопоставление телегида «%1$s»…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"Сопоставление телегида «%1$s» (%2$d из %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"Загрузка плейлиста «%1$s»"</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s из %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"Загрузка каналов из %1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f ГБ"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f МБ"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d КБ"</string>
+    <string name="iptv_repository_status_unknown_host_short">"Сервер провайдера не найден."</string>
+    <string name="iptv_repository_status_timeout_short">"Провайдер слишком долго не отвечал."</string>
+    <string name="iptv_repository_status_generic_error">"Что-то пошло не так."</string>
+    <string name="iptv_repository_status_unknown_host_address">"Сервер провайдера не найден (%1$s). Проверьте адрес и интернет или попробуйте позже."</string>
+    <string name="iptv_repository_status_provider_timeout">"Провайдер слишком долго не отвечал (тайм-аут). Возможно, он перегружен; попробуйте позже."</string>
+    <string name="iptv_repository_status_address">"адрес"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"Не удалось обновить плейлист «%1$s». %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"Не удалось обновить телегид «%1$s». %2$s"</string>
+    <string name="iptv_repository_status_expired">"Срок «%1$s» истёк"</string>
+    <string name="iptv_repository_status_expires_today">"Срок «%1$s» истекает сегодня"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"Срок «%1$s» истекает завтра"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">"Добавление каналов из %1$d нового плейлиста…"</item>
+        <item quantity="few">"Добавление каналов из %1$d новых плейлистов…"</item>
+        <item quantity="many">"Добавление каналов из %1$d новых плейлистов…"</item>
+        <item quantity="other">"Добавление каналов из %1$d нового плейлиста…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">"Срок «%1$s» истекает через %2$d день"</item>
+        <item quantity="few">"Срок «%1$s» истекает через %2$d дня"</item>
+        <item quantity="many">"Срок «%1$s» истекает через %2$d дней"</item>
+        <item quantity="other">"Срок «%1$s» истекает через %2$d дня"</item>
+    </plurals>
+</resources>

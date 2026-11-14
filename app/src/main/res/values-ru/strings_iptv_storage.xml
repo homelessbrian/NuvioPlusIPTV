@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"Это устройство"</string>
+    <string name="iptv_storage_usb_drive">"USB-диск"</string>
+    <string name="iptv_storage_read_only">"Только чтение. Приставка может читать диск, но не записывать на него (обычно это диск NTFS). Отформатируйте его в exFAT, чтобы записывать на него."</string>
+    <string name="iptv_storage_unsupported_format">"Приставка не может прочитать формат диска. Обычно помогает форматирование в exFAT."</string>
+    <string name="iptv_storage_not_ready">"Ещё не готов. Подождите немного и откройте список снова."</string>
+    <string name="iptv_storage_no_app_folder">"Android не выделил приложению папку на диске. Отключите и снова подключите диск или перезапустите приставку."</string>
+    <string name="iptv_storage_unusable_state">"Сейчас нельзя использовать (%1$s)."</string>
+</resources>

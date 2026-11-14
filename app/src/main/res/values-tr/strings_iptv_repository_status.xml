@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"\"%1$s\" oynatma listesi güncelleniyor…"</string>
+    <string name="iptv_repository_status_reading_channels">"Kanallar okunuyor…"</string>
+    <string name="iptv_repository_status_downloading_guide">"\"%1$s\" rehberi indiriliyor…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"\"%1$s\" rehberi indiriliyor"</string>
+    <string name="iptv_repository_status_matching_data">"Rehber verileri eşleştiriliyor…"</string>
+    <string name="iptv_repository_status_updating_guide">"Rehber güncelleniyor…"</string>
+    <string name="iptv_repository_status_adding_playlist">"\"%1$s\" listesinden kanallar ekleniyor…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"\"%1$s\" listesinden kanallar okunuyor…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"\"%1$s\" listesinden kanallar okunuyor (%2$d / %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"\"%1$s\" rehberi için yeterli bellek yok — atlandı"</string>
+    <string name="iptv_repository_status_reading_guide">"\"%1$s\" rehberi okunuyor…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"\"%1$s\" rehberi okunuyor (%2$d / %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"\"%1$s\" rehberi okunuyor… %%%2$d"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"\"%1$s\" rehberi okunuyor (%2$d / %3$d)… %%%4$d"</string>
+    <string name="iptv_repository_status_matching_guide">"\"%1$s\" rehberi eşleştiriliyor…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"\"%1$s\" rehberi eşleştiriliyor (%2$d / %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"\"%1$s\" oynatma listesi indiriliyor"</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s / %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"%1$s kaynağından kanallar yükleniyor… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"Sağlayıcının sunucusu bulunamadı."</string>
+    <string name="iptv_repository_status_timeout_short">"Sağlayıcının yanıt vermesi çok uzun sürdü."</string>
+    <string name="iptv_repository_status_generic_error">"Bir sorun oluştu."</string>
+    <string name="iptv_repository_status_unknown_host_address">"Sağlayıcının sunucusu bulunamadı (%1$s). Adresi ve internet bağlantını kontrol et ya da daha sonra tekrar dene."</string>
+    <string name="iptv_repository_status_provider_timeout">"Sağlayıcının yanıt vermesi çok uzun sürdü (zaman aşımı). Yoğun olabilir; daha sonra tekrar dene."</string>
+    <string name="iptv_repository_status_address">"adres"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"\"%1$s\" oynatma listesi güncellenemedi. %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"\"%1$s\" rehberi güncellenemedi. %2$s"</string>
+    <string name="iptv_repository_status_expired">"\"%1$s\" süresi doldu"</string>
+    <string name="iptv_repository_status_expires_today">"\"%1$s\" bugün sona eriyor"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"\"%1$s\" yarın sona eriyor"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">"%1$d yeni oynatma listesinden kanallar ekleniyor…"</item>
+        <item quantity="other">"%1$d yeni oynatma listesinden kanallar ekleniyor…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">"\"%1$s\" %2$d gün içinde sona eriyor"</item>
+        <item quantity="other">"\"%1$s\" %2$d gün içinde sona eriyor"</item>
+    </plurals>
+</resources>

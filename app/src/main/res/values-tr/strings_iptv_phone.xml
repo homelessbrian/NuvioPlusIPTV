@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"Nuvio + IPTV’ye ekle"</string>
+    <string name="iptv_phone_connected_to">"%1$s cihazına bağlı"</string>
+    <string name="iptv_phone_heading">"TV’ne ekle"</string>
+    <string name="iptv_phone_instructions">"Bunu doldur ve TV’ye gönder’e dokun. Hemen TV’nde görünür."</string>
+    <string name="iptv_phone_what_to_add">"Ne eklenecek"</string>
+    <string name="iptv_phone_m3u_tab">"M3U bağlantısı"</string>
+    <string name="iptv_phone_epg_tab">"Yalnızca EPG"</string>
+    <string name="iptv_phone_name_label">"Ad (isteğe bağlı)"</string>
+    <string name="iptv_phone_provider_placeholder">"Sağlayıcım"</string>
+    <string name="iptv_phone_playlist_label">"Oynatma listesi bağlantısı"</string>
+    <string name="iptv_phone_epg_optional_label">"EPG bağlantısı (isteğe bağlı)"</string>
+    <string name="iptv_phone_user_agent_label">"User agent (isteğe bağlı)"</string>
+    <string name="iptv_phone_user_agent_placeholder">"Varsayılan için boş bırak"</string>
+    <string name="iptv_phone_server_label">"Sunucu"</string>
+    <string name="iptv_phone_username_label">"Kullanıcı adı"</string>
+    <string name="iptv_phone_password_label">"Şifre"</string>
+    <string name="iptv_phone_include_live">"TV kanallarını dahil et"</string>
+    <string name="iptv_phone_include_vod">"Filmleri ve dizileri dahil et (On Demand)"</string>
+    <string name="iptv_phone_epg_label">"EPG bağlantısı"</string>
+    <string name="iptv_phone_send">"TV’ye gönder"</string>
+    <string name="iptv_phone_network_note">"Yalnızca TV’nle aynı Wi‑Fi ağında çalışır. TV’deki ekranı kapattığında bu sayfa çalışmayı bırakır."</string>
+    <string name="iptv_phone_guide_placeholder">"Rehber"</string>
+    <string name="iptv_phone_sending">"Gönderiliyor…"</string>
+    <string name="iptv_phone_unreachable">"TV’ne ulaşılamadı. Telefondan ekle ekranının hâlâ açık olduğundan ve aynı Wi‑Fi ağında olduğundan emin ol."</string>
+    <string name="iptv_phone_not_found">"Bulunamadı"</string>
+    <string name="iptv_phone_nothing_to_send">"Gönderilecek bir şey yok."</string>
+    <string name="iptv_phone_missing">"Bir şey eksik."</string>
+    <string name="iptv_phone_could_not_add">"TV bunu ekleyemedi. Tekrar dene."</string>
+    <string name="iptv_phone_playlist_missing">"Oynatma listesi bağlantısını yapıştır."</string>
+    <string name="iptv_phone_playlist_scheme">"Oynatma listesi bağlantısı http:// veya https:// ile başlamalı."</string>
+    <string name="iptv_phone_epg_scheme">"EPG bağlantısı http:// veya https:// ile başlamalı."</string>
+    <string name="iptv_phone_server_missing">"Sunucu adresini gir."</string>
+    <string name="iptv_phone_server_invalid">"Bu bir sunucu adresine benzemiyor."</string>
+    <string name="iptv_phone_credentials_missing">"Kullanıcı adını ve şifreyi gir."</string>
+    <string name="iptv_phone_inclusion_missing">"TV kanallarını ya da filmleri ve dizileri aç."</string>
+    <string name="iptv_phone_epg_missing">"EPG bağlantısını yapıştır."</string>
+    <string name="iptv_phone_kind_missing">"Ne ekleneceğini seç."</string>
+</resources>

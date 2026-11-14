@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"Hızlı kanallar"</string>
+    <string name="iptv_quick_channels_subtitle">"Oynatma çubuğunun altındaki kısayollar. Açmak için çubukta Aşağı’ya bas."</string>
+    <string name="iptv_quick_channels_show">"Hızlı kanalları göster"</string>
+    <string name="iptv_quick_channels_opens_on">"Açılış listesi"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"İlk gösterilen liste"</string>
+    <string name="iptv_quick_channels_first_list">"İlk liste"</string>
+    <string name="iptv_quick_channels_last_used">"Son kullanılan"</string>
+    <string name="iptv_quick_channels_lists_hint">"Satırdaki listeler · OK birini açar veya kapatır, oklar taşır"</string>
+    <string name="iptv_quick_channels_recent">"Son izlenenler"</string>
+    <string name="iptv_quick_channels_favorites">"Favoriler"</string>
+    <string name="iptv_quick_channels_built_in">"Yerleşik"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · oynatma listesi grubu"</string>
+    <string name="iptv_quick_channels_your_group">"Grubun"</string>
+    <string name="iptv_quick_channels_group_missing">"Grup bulunamadı"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"Şu anda oynatma listelerinde yok"</string>
+    <string name="iptv_quick_channels_add_group">"Oynatma listesi grubu ekle…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"Herhangi bir listeden herhangi bir grup, kendi grupların da"</string>
+    <string name="iptv_quick_channels_add_groups_title">"Oynatma listesi grupları ekle"</string>
+    <string name="iptv_quick_channels_no_groups">"Henüz grup yok. Önce bir oynatma listesi ekle."</string>
+    <string name="iptv_quick_channels_add_groups_hint">"İşaretlediğin her grup, Hızlı kanallarda kendi listesi olur."</string>
+    <string name="iptv_quick_channels_my_groups">"Gruplarım"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="one">"%1$d kanal"</item>
+        <item quantity="other">"%1$d kanal"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"Sağlayıcı sırası"</string>
+    <string name="iptv_vod_sort_name_az">"A–Z"</string>
+    <string name="iptv_vod_sort_name_za">"Z–A"</string>
+    <string name="iptv_vod_sort_newest">"En yeni çıkış"</string>
+    <string name="iptv_vod_sort_oldest">"En eski çıkış"</string>
+    <string name="iptv_vod_sort_recently_added">"Son eklenenler"</string>
+    <string name="iptv_vod_sort_highest_rated">"En yüksek puanlı"</string>
+    <string name="iptv_vod_sort_shuffle">"Karışık"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"Sağlayıcının gönderdiği sıra"</string>
+    <string name="iptv_vod_sort_name_az_hint">"Önce rakamlar ve simgeler, sonra A’dan Z’ye"</string>
+    <string name="iptv_vod_sort_name_za_hint">"Z’den A’ya, sonra rakamlar ve simgeler"</string>
+    <string name="iptv_vod_sort_newest_hint">"Çıkış yılına göre, en yeniler önce"</string>
+    <string name="iptv_vod_sort_oldest_hint">"Çıkış yılına göre, en eskiler önce"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"Sağlayıcının en son eklediği"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"Sağlayıcının puanına göre, en iyiler önce"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"Her seçtiğinde yeni bir rastgele sıra"</string>
+    <string name="iptv_vod_sort_default_hint">"Ayarlardaki varsayılan sıralamayı izler"</string>
+</resources>
