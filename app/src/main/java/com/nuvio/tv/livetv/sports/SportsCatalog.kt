@@ -634,7 +634,20 @@ object SportsCatalog {
     )
 
     /** [term] (already normalized, no padding) as whole words in [normText] (from [norm]). */
-    fun hasWord(normText: String, term: String): Boolean = term.isNotBlank() && normText.contains(" $term ")
+    fun hasWord(normText: String, term: String): Boolean {
+        if (term.isBlank()) return false
+        // Check the same literal space boundaries without allocating a padded term on every lookup.
+        var at = normText.indexOf(term)
+        while (at >= 0) {
+            val end = at + term.length
+            if (at > 0 && end < normText.length && normText[at - 1] == ' ' && normText[end] == ' ') return true
+            // A later whole-word match must begin after an ASCII space.
+            val boundary = normText.indexOf(' ', at)
+            if (boundary < 0) return false
+            at = normText.indexOf(term, boundary + 1)
+        }
+        return false
+    }
 
     private val MARKS = Regex("\\p{M}+")
     private val NOT_WORD = Regex("[^a-z0-9]+")
