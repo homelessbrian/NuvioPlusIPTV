@@ -71,8 +71,46 @@ class LiveTvSearchResults(
     val preview: (LiveSearchHit) -> Unit = {}
 )
 
-private const val MAX_HITS = 40
+private const val MAX_HITS = 200
 private const val UPCOMING_WINDOW_MS = 6L * 60 * 60 * 1000
+
+/** Words after a channel's name that only say which copy it is (its quality). */
+private val QUALITY_WORDS = setOf("hd", "fhd", "uhd", "sd", "4k", "hevc", "h265", "backup", "1080p", "720p")
+
+/** The channel's name without its region prefix and quality tags: "US: TNT HD" -> "tnt". */
+private fun cleanChannelName(name: String): String =
+    name.substringAfterLast(':').substringAfterLast('|').trim().lowercase()
+        .split(' ', '-', '_').filter { it.isNotEmpty() && it !in QUALITY_WORDS }.joinToString(" ")
+
+/** How good this copy is, best first: 4K, then FHD, HD, no tag, SD, and backups last. */
+private fun qualityRank(name: String): Int {
+    val words = name.lowercase().split(' ', '-', '_', '|', ':', '(', ')', '[', ']').filter { it.isNotEmpty() }.toSet()
+    return when {
+        "backup" in words -> 5
+        words.any { it == "4k" || it == "uhd" || it == "2160p" } -> 0
+        words.any { it == "fhd" || it == "1080p" } -> 1
+        words.any { it == "hd" || it == "720p" || it == "hevc" || it == "h265" } -> 2
+        "sd" in words -> 4
+        else -> 3
+    }
+}
+
+/** 0 = the channel's name is exactly [q], 1 = starts with it, 2 = a word in it starts with it, 3 = contains it. */
+private fun nameMatchTier(name: String, q: String): Int {
+    // "US: CNN HD" / "UK | TNT Sports 1" -> "cnn" / "tnt sports 1": no region prefix, no quality tags.
+    val words = name.substringAfterLast(':').substringAfterLast('|').trim().lowercase()
+        .split(' ', '-', '_').filter { it.isNotEmpty() && it !in QUALITY_WORDS }
+    val clean = words.joinToString(" ")
+    // Quality words typed in the search ("tnt hd") are dropped like the ones in channel names.
+    val query = q.lowercase().split(' ').filter { it.isNotEmpty() && it !in QUALITY_WORDS }.joinToString(" ")
+        .ifEmpty { q.lowercase() }
+    return when {
+        clean == query -> 0
+        clean.startsWith(query) -> 1
+        words.any { it.startsWith(query) } -> 2
+        else -> 3
+    }
+}
 
 /**
  * Live TV matches for Nuvio's search screen: channels whose name matches, then channels
@@ -95,18 +133,28 @@ fun rememberLiveTvSearchResults(
         ).liveTvPreferences()
     }
     val liveSettings by prefs.settings.collectAsStateWithLifecycle(initialValue = null)
+    // Whose channels come first in the results: the "Channels from" pick in Sports settings, else
+    // the TV's own region (its language/region setting). "" = no preference.
+    val sportsJson by prefs.sportsSettingsJson.collectAsStateWithLifecycle(initialValue = null)
+    val preferredRegion = remember(sportsJson) {
+        val st = com.nuvio.tv.livetv.sports.SportsSettings.fromJson(sportsJson)
+        st.channelRegion.ifBlank {
+            com.nuvio.tv.livetv.sports.SportsCatalog.regionOf(st).takeIf { it != "OTHER" }.orEmpty()
+        }
+    }
     val s = liveSettings
     // What this search shows (by where it was opened from; see rememberSearchScope).
     if (s == null || !enabled) {
         return remember { LiveTvSearchResults(emptyList(), false, {}, { null }) }
     }
-    return rememberLiveTvSearchResultsEnabled(query, onOpened)
+    return rememberLiveTvSearchResultsEnabled(query, onOpened, preferredRegion)
 }
 
 @Composable
 private fun rememberLiveTvSearchResultsEnabled(
     query: String,
     onOpened: () -> Unit,
+    preferredRegion: String,
     viewModel: LiveTvViewModel = hiltViewModel()
 ): LiveTvSearchResults {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
@@ -125,19 +173,33 @@ private fun rememberLiveTvSearchResultsEnabled(
         value = q
     }
     val searchLive = true
-    val hits by produceState(initialValue = emptyList<LiveSearchHit>(), settled, ui.allVisibleChannels, programs, now, searchLive) {
+    val hits by produceState(initialValue = emptyList<LiveSearchHit>(), settled, ui.allVisibleChannels, programs, now, searchLive, preferredRegion) {
         val q = settled
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             if (!searchLive || q.length < 2) return@withContext emptyList()
             val out = ArrayList<LiveSearchHit>()
             val seen = HashSet<String>()
-            for (c in ui.allVisibleChannels) {
-                if (out.size >= MAX_HITS) break
-                if (c.name.contains(q, ignoreCase = true) || c.number.toString() == q) {
-                    val current = programs[c.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
-                    out += LiveSearchHit(c, current, matchedProgram = false)
-                    seen += c.key
+            // Every channel whose name matches, best match first (the exact name, then names that
+            // start with it, then the rest); at the same match, your region's channels first, then
+            // channels with no region in their name, then other regions'. Playlist order otherwise.
+            val matched = ui.allVisibleChannels.filter { c ->
+                c.name.contains(q, ignoreCase = true) || c.number.toString() == q
+            }
+            val ranked = if (matched.size < 2) matched else {
+                val tiers = HashMap<String, Int>(matched.size)
+                for (c in matched) {
+                    tiers[c.key] = if (c.number.toString() == q) 0 else nameMatchTier(c.name, q)
                 }
+                // Same match: names A to Z, and each name's copies best quality first.
+                matched.sortedWith(
+                    compareBy<LiveChannel>({ tiers[it.key] ?: 3 }, { cleanChannelName(it.name) }, { qualityRank(it.name) })
+                )
+            }
+            for (c in ranked) {
+                if (out.size >= MAX_HITS) break
+                val current = programs[c.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
+                out += LiveSearchHit(c, current, matchedProgram = false)
+                seen += c.key
             }
             if (out.size < MAX_HITS) {
                 for (c in ui.allVisibleChannels) {

@@ -124,6 +124,7 @@ internal fun PlayerRuntimeController.preparePlaybackBeforeStart(
 }
 
 private fun String.safeScrobbleHost(): String {
+    if (com.nuvio.tv.core.player.isStalkerPlaybackAddress(this)) return "stalker"
     return runCatching {
         android.net.Uri.parse(this).host ?: substringBefore("://").takeIf { it.isNotBlank() } ?: "unknown"
     }.getOrDefault("unknown")

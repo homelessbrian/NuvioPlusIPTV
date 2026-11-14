@@ -4,8 +4,6 @@ import android.util.Xml
 import com.nuvio.tv.livetv.model.EpgProgram
 import org.xmlpull.v1.XmlPullParser
 import java.io.InputStream
-import java.util.Calendar
-import java.util.TimeZone
 
 data class XmltvChannel(
     val id: String,
@@ -62,6 +60,7 @@ object XmltvParser {
 
         val channels = LinkedHashMap<String, XmltvChannel>()
         val programs = HashMap<String, MutableList<EpgProgram>>()
+        val providerIdentities = ProgrammeIdentityPool()
         var wanted: Set<String>? = null
         var wantedResolved = false
         val seenIds = HashSet<String>()
@@ -70,7 +69,7 @@ object XmltvParser {
         var buf = ArrayList<EpgProgram>()
         fun flush() {
             val id = bufId ?: return
-            if (buf.isNotEmpty()) onPrograms?.invoke(id, buf.sortedBy { it.startMs })
+            if (buf.isNotEmpty()) onPrograms?.invoke(id, orderedPrograms(buf))
             buf = ArrayList()
             bufId = null
         }
@@ -95,7 +94,7 @@ object XmltvParser {
                             else -> true
                         }
                         if (keep) {
-                            val program = readProgramme(parser, windowStartMs, windowEndMs)
+                            val program = readProgramme(parser, windowStartMs, windowEndMs, providerIdentities)
                             if (program != null) {
                                 if (onPrograms != null) {
                                     if (bufId != channelId) { flush(); bufId = channelId }
@@ -127,8 +126,20 @@ object XmltvParser {
         }
         // The last channel's shows (also when the guide broke partway: what was read is kept).
         runCatching { flush() }
-        val sorted = programs.mapValues { (_, list) -> list.sortedBy { it.startMs } }
+        val sorted = programs.mapValues { (_, list) -> orderedPrograms(list) }
         return XmltvResult(channels, sorted, error, seenIds)
+    }
+
+    /** Most guides already put a channel's shows in time order. Hand off the owned list without
+     * copying it; sort only the occasional shuffled run. A flushed list is never reused. */
+    private fun orderedPrograms(programs: MutableList<EpgProgram>): List<EpgProgram> {
+        for (i in 1 until programs.size) {
+            if (programs[i - 1].startMs > programs[i].startMs) {
+                programs.sortBy { it.startMs }
+                break
+            }
+        }
+        return programs
     }
 
     private fun readChannel(parser: XmlPullParser): XmltvChannel? {
@@ -154,7 +165,9 @@ object XmltvParser {
         return XmltvChannel(id, names, icon)
     }
 
-    private fun readProgramme(parser: XmlPullParser, windowStart: Long, windowEnd: Long): EpgProgram? {
+    private fun readProgramme(parser: XmlPullParser, windowStart: Long, windowEnd: Long, providerIdentities: ProgrammeIdentityPool): EpgProgram? {
+        val providerProgramId = parser.getAttributeValue(null, "stalker-id")
+        val providerSourceIdentity = providerIdentities.share(parser.getAttributeValue(null, "stalker-source"))
         val start = parseTime(parser.getAttributeValue(null, "start"))
         val stop = parseTime(parser.getAttributeValue(null, "stop"))
         if (start == null || stop == null || stop <= windowStart || start >= windowEnd) {
@@ -168,7 +181,7 @@ object XmltvParser {
         var subTitle: String? = null
         var icon: String? = null
         var date: String? = null
-        val people = ArrayList<String>()
+        var people: ArrayList<String>? = null
         val depth = parser.depth
         var event = parser.next()
         while (!(event == XmlPullParser.END_TAG && parser.depth == depth)) {
@@ -189,7 +202,7 @@ object XmltvParser {
                     }
                     "icon" -> { icon = parser.getAttributeValue(null, "src"); skip(parser) }
                     "date" -> { val t = readText(parser); if (date == null) date = t }
-                    "credits" -> readCredits(parser, people)
+                    "credits" -> readCredits(parser, people ?: ArrayList<String>().also { people = it })
                     else -> skip(parser)
                 }
             }
@@ -217,7 +230,9 @@ object XmltvParser {
             episode = episode?.intern(),
             icon = icon?.intern(),
             year = year,
-            people = people.take(12)
+            people = people?.take(12) ?: emptyList(),
+            providerProgramId = providerProgramId,
+            providerSourceIdentity = providerSourceIdentity
         )
     }
 
@@ -285,15 +300,26 @@ object XmltvParser {
     }
 
     private fun readText(parser: XmlPullParser): String {
-        val sb = StringBuilder()
+        // Pull parsers normally return one text event, even for adjacent entity/CDATA tokens.
+        // Keep that immutable String directly; build a concatenation only for nested/multi-part text.
+        var first: String? = null
+        var joined: StringBuilder? = null
         val depth = parser.depth
         var event = parser.next()
         while (!(event == XmlPullParser.END_TAG && parser.depth == depth)) {
-            if (event == XmlPullParser.TEXT) sb.append(parser.text)
+            if (event == XmlPullParser.TEXT) {
+                val text = parser.text
+                val previous = first
+                if (previous == null) first = text
+                else {
+                    val output = joined ?: StringBuilder(previous.length + text.length).append(previous).also { joined = it }
+                    output.append(text)
+                }
+            }
             if (event == XmlPullParser.END_DOCUMENT) break
             event = parser.next()
         }
-        return sb.toString()
+        return joined?.toString() ?: first.orEmpty()
     }
 
     /** Skips a show, stopping at the next <programme> if this one was never closed. */
@@ -334,25 +360,47 @@ object XmltvParser {
 
     /** Parses "YYYYMMDDhhmmss +zzzz" (seconds and offset optional). */
     internal fun parseTime(value: String?): Long? {
-        if (value.isNullOrBlank()) return null
-        val v = value.trim()
-        val digits = v.takeWhile { it.isDigit() }
-        if (digits.length < 12) return null
-        val year = digits.substring(0, 4).toInt()
-        val month = digits.substring(4, 6).toInt()
-        val day = digits.substring(6, 8).toInt()
-        val hour = digits.substring(8, 10).toInt()
-        val minute = digits.substring(10, 12).toInt()
-        val second = if (digits.length >= 14) digits.substring(12, 14).toInt() else 0
+        if (value == null) return null
+        var begin = 0
+        var end = value.length
+        while (begin < end && value[begin].isWhitespace()) begin++
+        while (end > begin && value[end - 1].isWhitespace()) end--
+        var digitsEnd = begin
+        while (digitsEnd < end && value[digitsEnd].isDigit()) digitsEnd++
+        if (digitsEnd - begin < 12) return null
+        // Two timestamps per programme used to create a digit string, six component substrings,
+        // and offset substrings. Read the same fields in place instead.
+        val year = decimalPair(value, begin) * 100 + decimalPair(value, begin + 2)
+        val month = decimalPair(value, begin + 4)
+        val day = decimalPair(value, begin + 6)
+        val hour = decimalPair(value, begin + 8)
+        val minute = decimalPair(value, begin + 10)
+        val second = if (digitsEnd - begin >= 14) decimalPair(value, begin + 12) else 0
         if (month !in 1..12 || day !in 1..31) return null
         var ms = (daysFromCivil(year, month, day) * 86_400L + hour * 3_600L + minute * 60L + second) * 1_000L
-        val offset = v.substring(digits.length).trim()
-        if (offset.length >= 5 && (offset[0] == '+' || offset[0] == '-')) {
-            val sign = if (offset[0] == '-') -1 else 1
-            val oh = offset.substring(1, 3).toIntOrNull() ?: 0
-            val om = offset.substring(3, 5).toIntOrNull() ?: 0
+        var offset = digitsEnd
+        while (offset < end && value[offset].isWhitespace()) offset++
+        if (end - offset >= 5 && (value[offset] == '+' || value[offset] == '-')) {
+            val sign = if (value[offset] == '-') -1 else 1
+            val oh = signedPairOrZero(value, offset + 1)
+            val om = signedPairOrZero(value, offset + 3)
             ms -= sign * (oh * 3_600_000L + om * 60_000L)
         }
         return ms
+    }
+
+    private fun decimalDigit(c: Char): Int = if (c in '0'..'9') c - '0' else Character.digit(c, 10)
+
+    /** The caller has already checked that both characters are decimal digits. */
+    private fun decimalPair(value: String, at: Int): Int = decimalDigit(value[at]) * 10 + decimalDigit(value[at + 1])
+
+    /** Match the former two-character toIntOrNull fallback, including malformed signed offsets. */
+    private fun signedPairOrZero(value: String, at: Int): Int {
+        val first = value[at]
+        val second = decimalDigit(value[at + 1])
+        if (second < 0) return 0
+        if (first == '+' || first == '-') return if (first == '-') -second else second
+        val leading = decimalDigit(first)
+        return if (leading < 0) 0 else leading * 10 + second
     }
 }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">Searching…</string>
+    <string name="iptv_settings_support_poster_test_failed">Test failed: %1$s</string>
+    <string name="iptv_settings_support_playlist_fallback">Playlist</string>
+    <string name="iptv_settings_support_remote_title">Remote button tester</string>
+    <string name="iptv_settings_support_remote_instructions">Press any button. Newest at the top; lines in color are a different button within 250 ms of the one before (for example OK sent with Up/Down). Press Back 3 times in a row to close.</string>
+    <string name="iptv_settings_support_remote_waiting">Waiting for a button…</string>
+    <string name="iptv_settings_support_remote_action_down">DOWN</string>
+    <string name="iptv_settings_support_remote_action_up">UP</string>
+    <string name="iptv_settings_support_remote_action_multiple">MULTI</string>
+    <string name="iptv_settings_support_remote_repeat">repeat %1$d</string>
+    <string name="iptv_settings_support_remote_long_press">long press</string>
+    <string name="iptv_settings_support_remote_canceled">canceled</string>
+    <string name="iptv_settings_support_remote_held">held %1$d ms</string>
+    <string name="iptv_settings_support_remote_event">%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s</string>
+    <string name="iptv_settings_support_report_title">Live TV start-up report</string>
+    <string name="iptv_settings_support_report_subtitle">Since the app started. ▲ ▼ to scroll.</string>
+    <string name="iptv_settings_support_report_empty">Nothing yet: open Live TV first.</string>
+    <string name="iptv_settings_support_report_send">Send the whole report</string>
+    <string name="iptv_settings_support_report_no_network">Connect this TV to Wi-Fi to send the report from your phone.</string>
+    <string name="iptv_settings_support_report_phone_instructions">1. Put your phone on the same Wi-Fi as this TV.\n2. Scan this code with your phone\'s camera, or type the address below.\n3. Tap Copy short report (it fits in one Discord message), then paste it in your message.</string>
+</resources>

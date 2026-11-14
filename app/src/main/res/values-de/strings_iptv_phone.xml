@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"Zu Nuvio + IPTV hinzufügen"</string>
+    <string name="iptv_phone_connected_to">"Verbunden mit %1$s"</string>
+    <string name="iptv_phone_heading">"Zu deinem Fernseher hinzufügen"</string>
+    <string name="iptv_phone_instructions">"Fülle das aus und tippe auf „An TV senden“. Es erscheint sofort auf deinem Fernseher."</string>
+    <string name="iptv_phone_what_to_add">"Was hinzufügen"</string>
+    <string name="iptv_phone_m3u_tab">"M3U-Link"</string>
+    <string name="iptv_phone_epg_tab">"Nur EPG"</string>
+    <string name="iptv_phone_name_label">"Name (optional)"</string>
+    <string name="iptv_phone_provider_placeholder">"Mein Anbieter"</string>
+    <string name="iptv_phone_playlist_label">"Playlist-Link"</string>
+    <string name="iptv_phone_epg_optional_label">"EPG-Link (optional)"</string>
+    <string name="iptv_phone_user_agent_label">"User-Agent (optional)"</string>
+    <string name="iptv_phone_user_agent_placeholder">"Leer lassen für Standard"</string>
+    <string name="iptv_phone_server_label">"Server"</string>
+    <string name="iptv_phone_username_label">"Benutzername"</string>
+    <string name="iptv_phone_password_label">"Passwort"</string>
+    <string name="iptv_phone_include_live">"TV-Sender einbeziehen"</string>
+    <string name="iptv_phone_include_vod">"Filme &amp; Serien einbeziehen (On Demand)"</string>
+    <string name="iptv_phone_epg_label">"EPG-Link"</string>
+    <string name="iptv_phone_send">"An TV senden"</string>
+    <string name="iptv_phone_network_note">"Funktioniert nur im selben WLAN wie dein Fernseher. Diese Seite funktioniert nicht mehr, sobald du den Bildschirm auf dem Fernseher schließt."</string>
+    <string name="iptv_phone_guide_placeholder">"Programmführer"</string>
+    <string name="iptv_phone_sending">"Wird gesendet…"</string>
+    <string name="iptv_phone_unreachable">"Dein Fernseher war nicht erreichbar. Achte darauf, dass der Bildschirm „Vom Handy hinzufügen“ noch geöffnet ist und du im selben WLAN bist."</string>
+    <string name="iptv_phone_not_found">"Nicht gefunden"</string>
+    <string name="iptv_phone_nothing_to_send">"Nichts zu senden."</string>
+    <string name="iptv_phone_missing">"Es fehlt etwas."</string>
+    <string name="iptv_phone_could_not_add">"Der Fernseher konnte das nicht hinzufügen. Versuche es erneut."</string>
+    <string name="iptv_phone_playlist_missing">"Füge den Playlist-Link ein."</string>
+    <string name="iptv_phone_playlist_scheme">"Der Playlist-Link sollte mit http:// oder https:// beginnen."</string>
+    <string name="iptv_phone_epg_scheme">"Der EPG-Link sollte mit http:// oder https:// beginnen."</string>
+    <string name="iptv_phone_server_missing">"Gib die Serveradresse ein."</string>
+    <string name="iptv_phone_server_invalid">"Das sieht nicht wie eine Serveradresse aus."</string>
+    <string name="iptv_phone_credentials_missing">"Gib Benutzername und Passwort ein."</string>
+    <string name="iptv_phone_inclusion_missing">"Schalte TV-Sender oder Filme &amp; Serien ein."</string>
+    <string name="iptv_phone_epg_missing">"Füge den EPG-Link ein."</string>
+    <string name="iptv_phone_kind_missing">"Wähle aus, was hinzugefügt werden soll."</string>
+</resources>

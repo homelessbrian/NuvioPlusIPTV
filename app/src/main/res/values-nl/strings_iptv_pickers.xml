@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"Snelle zenders"</string>
+    <string name="iptv_quick_channels_subtitle">"Snelkoppelingen onder de afspeelbalk. Druk op Omlaag op de balk om ze te openen."</string>
+    <string name="iptv_quick_channels_show">"Snelle zenders tonen"</string>
+    <string name="iptv_quick_channels_opens_on">"Opent op"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"De lijst die als eerste wordt getoond"</string>
+    <string name="iptv_quick_channels_first_list">"Eerste lijst"</string>
+    <string name="iptv_quick_channels_last_used">"Laatst gebruikte"</string>
+    <string name="iptv_quick_channels_lists_hint">"Lijsten in de rij · OK zet er een aan of uit, de pijlen verplaatsen hem"</string>
+    <string name="iptv_quick_channels_recent">"Onlangs bekeken"</string>
+    <string name="iptv_quick_channels_favorites">"Favorieten"</string>
+    <string name="iptv_quick_channels_built_in">"Ingebouwd"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · playlistgroep"</string>
+    <string name="iptv_quick_channels_your_group">"Jouw groep"</string>
+    <string name="iptv_quick_channels_group_missing">"Groep niet gevonden"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"Staat nu niet in je playlists"</string>
+    <string name="iptv_quick_channels_add_group">"Playlistgroep toevoegen…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"Elke groep uit elke playlist, ook je eigen groepen"</string>
+    <string name="iptv_quick_channels_add_groups_title">"Playlistgroepen toevoegen"</string>
+    <string name="iptv_quick_channels_no_groups">"Nog geen groepen. Voeg eerst een playlist toe."</string>
+    <string name="iptv_quick_channels_add_groups_hint">"Elke groep die je aanvinkt, wordt een eigen lijst in Snelle zenders."</string>
+    <string name="iptv_quick_channels_my_groups">"Mijn groepen"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="one">"%1$d zender"</item>
+        <item quantity="other">"%1$d zenders"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"Volgorde van provider"</string>
+    <string name="iptv_vod_sort_name_az">"A–Z"</string>
+    <string name="iptv_vod_sort_name_za">"Z–A"</string>
+    <string name="iptv_vod_sort_newest">"Nieuwste uitgave"</string>
+    <string name="iptv_vod_sort_oldest">"Oudste uitgave"</string>
+    <string name="iptv_vod_sort_recently_added">"Onlangs toegevoegd"</string>
+    <string name="iptv_vod_sort_highest_rated">"Hoogst beoordeeld"</string>
+    <string name="iptv_vod_sort_shuffle">"Willekeurig"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"De volgorde die je provider stuurt"</string>
+    <string name="iptv_vod_sort_name_az_hint">"Cijfers en symbolen eerst, dan A tot Z"</string>
+    <string name="iptv_vod_sort_name_za_hint">"Z tot A, dan cijfers en symbolen"</string>
+    <string name="iptv_vod_sort_newest_hint">"Op jaar van uitgave, nieuwste eerst"</string>
+    <string name="iptv_vod_sort_oldest_hint">"Op jaar van uitgave, oudste eerst"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"Wat je provider het laatst heeft toegevoegd"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"Op beoordeling van je provider, beste eerst"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"Elke keer dat je het kiest een nieuwe willekeurige volgorde"</string>
+    <string name="iptv_vod_sort_default_hint">"Volgt de standaardsortering in Instellingen"</string>
+</resources>

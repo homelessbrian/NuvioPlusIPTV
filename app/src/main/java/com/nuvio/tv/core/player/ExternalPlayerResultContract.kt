@@ -56,6 +56,7 @@ data class ExternalPlayerResult(
 class ExternalPlayerResultContract : ActivityResultContract<ExternalPlayerInput, ExternalPlayerResult?>() {
 
     override fun createIntent(context: Context, input: ExternalPlayerInput): Intent {
+        require(!isStalkerPlaybackAddress(input.url)) { STALKER_EXTERNAL_PLAYBACK_UNAVAILABLE }
         return Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(Uri.parse(input.url), "video/*")
 

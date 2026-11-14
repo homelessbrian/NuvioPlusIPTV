@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"Dieses Gerät"</string>
+    <string name="iptv_storage_usb_drive">"USB-Laufwerk"</string>
+    <string name="iptv_storage_read_only">"Nur lesbar. Diese Box kann das Laufwerk lesen, aber nicht beschreiben (meist ein NTFS-Laufwerk). Formatiere es als exFAT, um darauf aufzunehmen."</string>
+    <string name="iptv_storage_unsupported_format">"Diese Box kann das Format des Laufwerks nicht lesen. Eine Formatierung als exFAT behebt das meist."</string>
+    <string name="iptv_storage_not_ready">"Noch nicht bereit. Warte einen Moment und öffne diese Liste erneut."</string>
+    <string name="iptv_storage_no_app_folder">"Android hat der App keinen Ordner darauf gegeben. Ziehe das Laufwerk ab und stecke es wieder an, oder starte die Box neu."</string>
+    <string name="iptv_storage_unusable_state">"Gerade nicht nutzbar (%1$s)."</string>
+</resources>

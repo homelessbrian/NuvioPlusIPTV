@@ -1,0 +1,140 @@
+Sports whole-word helper: recorded before/after measurements
+Baseline: e4d3d6e801c79835e53d3d967339268029f587b2
+Kotlin: 2.3.0, JVM target 17, harness Java release 17, Temurin 21.0.12.1.
+Desktop flags: -Xms128m -Xmx128m; ART flags: -Xms16m -Xmx128m.
+ART: Android 16/API 36 x86_64 TV emulator, standalone app_process; no APK or streams.
+Each workload: 4 paired warmups, 7 measured pairs with alternating variant order.
+sports: 1048576 calls/sample; stress workloads: 8192 calls/sample.
+These are helper measurements, not whole-app/Fire TV speed or peak-RAM results.
+ART byte counters are process-wide and can include runtime allocations/counter granularity.
+Heap and PSS are post-pass samples from the same process, not retained-memory savings.
+
+Baseline function SHA256: f9225a3cf2df2fe536150809eb84441dffe9468d923a30e7eca6335f0089a099
+Candidate function SHA256: 4e85defce14bea3df263cff20053ad48f7cae5d3a2eac972023cb703d627c1fb
+
+Medians (before -> after):
+art-overlap-misses-results.jsonl: 15.2352 -> 9.2664 ms
+  Allocated bytes: 196608 -> 0
+art-sports-results.jsonl: 464.7966 -> 206.6944 ms
+  Allocated bytes: 32604160 -> 0
+  heap_used_bytes_after median: 6.219 -> 3.336 MiB
+  heap_used_bytes_after sampled max: 9.422 -> 6.891 MiB
+  pss_kb_after median: 77.411 -> 74.599 MiB
+  pss_kb_after sampled max: 80.751 -> 78.114 MiB
+  GC count median: 5 -> 0
+art-substring-misses-results.jsonl: 19.7583 -> 17.6510 ms
+  Allocated bytes: 196608 -> 0
+jvm-overlap-misses-results.jsonl: 0.7544 -> 0.3773 ms
+  Allocated bytes: 196608 -> 0
+jvm-sports-results.jsonl: 36.3331 -> 23.8371 ms
+  Allocated bytes: 32201728 -> 0
+jvm-substring-misses-results.jsonl: 0.9883 -> 2.7635 ms
+  Allocated bytes: 196608 -> 0
+
+Tradeoff: repeated internal manchester/man misses are slower on desktop JVM.
+All measured ART scenarios improved, but this does not imply a universal speedup.
+Separate -Xbatch desktop diagnostic confirmed the substring-miss tradeoff (0.576 -> 2.776 ms).
+
+Raw measured pairs (source-extracted helpers above; corpus hashes in each metadata row):
+
+=== art-overlap-misses-results.jsonl ===
+{"metadata":true,"scenario":"overlap-misses","corpus_sha256":"1ba181bcb5ce7a8a89e66c5a2b536151780b914f1141bf14f48ba5083960bd70","java_version":"0"}
+{"runtime":"android-art","pair":0,"variant":"baseline","calls":8192,"hits":0,"nanos":11881100,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":6168720,"pss_kb_after":76649}
+{"runtime":"android-art","pair":0,"variant":"candidate","calls":8192,"hits":0,"nanos":14775300,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":8753824,"pss_kb_after":81478}
+{"runtime":"android-art","pair":1,"variant":"candidate","calls":8192,"hits":0,"nanos":7737900,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":8753824,"pss_kb_after":81482}
+{"runtime":"android-art","pair":1,"variant":"baseline","calls":8192,"hits":0,"nanos":9772300,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":8950432,"pss_kb_after":81678}
+{"runtime":"android-art","pair":2,"variant":"baseline","calls":8192,"hits":0,"nanos":6925900,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":9147040,"pss_kb_after":81874}
+{"runtime":"android-art","pair":2,"variant":"candidate","calls":8192,"hits":0,"nanos":21108100,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":9179808,"pss_kb_after":81882}
+{"runtime":"android-art","pair":3,"variant":"candidate","calls":8192,"hits":0,"nanos":17552900,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":9179808,"pss_kb_after":81894}
+{"runtime":"android-art","pair":3,"variant":"baseline","calls":8192,"hits":0,"nanos":15235200,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":9376416,"pss_kb_after":82090}
+{"runtime":"android-art","pair":4,"variant":"baseline","calls":8192,"hits":0,"nanos":15602000,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":9573024,"pss_kb_after":82290}
+{"runtime":"android-art","pair":4,"variant":"candidate","calls":8192,"hits":0,"nanos":4658800,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":9573024,"pss_kb_after":82294}
+{"runtime":"android-art","pair":5,"variant":"candidate","calls":8192,"hits":0,"nanos":5718900,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":9573024,"pss_kb_after":82298}
+{"runtime":"android-art","pair":5,"variant":"baseline","calls":8192,"hits":0,"nanos":20369800,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":9769632,"pss_kb_after":82710}
+{"runtime":"android-art","pair":6,"variant":"baseline","calls":8192,"hits":0,"nanos":15715000,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":9966240,"pss_kb_after":82998}
+{"runtime":"android-art","pair":6,"variant":"candidate","calls":8192,"hits":0,"nanos":9266400,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":9999008,"pss_kb_after":83029}
+
+=== art-sports-results.jsonl ===
+{"metadata":true,"scenario":"sports","corpus_sha256":"d7518e089187225d5c8b8daac81133830e6766a5c3f84ad2c6e69ef834899344","java_version":"0"}
+{"runtime":"android-art","pair":0,"variant":"baseline","calls":1048576,"hits":492800,"nanos":608068900,"allocated_bytes_process":32899072,"gc_count":8,"heap_used_bytes_after":6520976,"pss_kb_after":77111}
+{"runtime":"android-art","pair":0,"variant":"candidate","calls":1048576,"hits":492800,"nanos":243265700,"allocated_bytes_process":65536,"gc_count":1,"heap_used_bytes_after":3498160,"pss_kb_after":76385}
+{"runtime":"android-art","pair":1,"variant":"candidate","calls":1048576,"hits":492800,"nanos":206694400,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":3498160,"pss_kb_after":76389}
+{"runtime":"android-art","pair":1,"variant":"baseline","calls":1048576,"hits":492800,"nanos":435613500,"allocated_bytes_process":26836992,"gc_count":4,"heap_used_bytes_after":3162288,"pss_kb_after":75645}
+{"runtime":"android-art","pair":2,"variant":"baseline","calls":1048576,"hits":492800,"nanos":514844200,"allocated_bytes_process":32604160,"gc_count":5,"heap_used_bytes_after":7225520,"pss_kb_after":79977}
+{"runtime":"android-art","pair":2,"variant":"candidate","calls":1048576,"hits":492800,"nanos":203651000,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":7225520,"pss_kb_after":79985}
+{"runtime":"android-art","pair":3,"variant":"candidate","calls":1048576,"hits":492800,"nanos":202095600,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":7225520,"pss_kb_after":79989}
+{"runtime":"android-art","pair":3,"variant":"baseline","calls":1048576,"hits":492800,"nanos":422782800,"allocated_bytes_process":32604160,"gc_count":5,"heap_used_bytes_after":6504624,"pss_kb_after":79269}
+{"runtime":"android-art","pair":4,"variant":"baseline","calls":1048576,"hits":492800,"nanos":464796600,"allocated_bytes_process":32636928,"gc_count":5,"heap_used_bytes_after":9781424,"pss_kb_after":82649}
+{"runtime":"android-art","pair":4,"variant":"candidate","calls":1048576,"hits":492800,"nanos":213757000,"allocated_bytes_process":65536,"gc_count":1,"heap_used_bytes_after":3096752,"pss_kb_after":75953}
+{"runtime":"android-art","pair":5,"variant":"candidate","calls":1048576,"hits":492800,"nanos":200012400,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":3096752,"pss_kb_after":75957}
+{"runtime":"android-art","pair":5,"variant":"baseline","calls":1048576,"hits":492800,"nanos":415806600,"allocated_bytes_process":32505856,"gc_count":4,"heap_used_bytes_after":9879728,"pss_kb_after":82689}
+{"runtime":"android-art","pair":6,"variant":"baseline","calls":1048576,"hits":492800,"nanos":466882400,"allocated_bytes_process":32669696,"gc_count":6,"heap_used_bytes_after":5849264,"pss_kb_after":78637}
+{"runtime":"android-art","pair":6,"variant":"candidate","calls":1048576,"hits":492800,"nanos":230032500,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":5849264,"pss_kb_after":78645}
+
+=== art-substring-misses-results.jsonl ===
+{"metadata":true,"scenario":"substring-misses","corpus_sha256":"b41380221ba8130ab42d32235a90a2bcdb50fa9eb29460a3854d66209d7c2248","java_version":"0"}
+{"runtime":"android-art","pair":0,"variant":"baseline","calls":8192,"hits":0,"nanos":7500900,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":4452496,"pss_kb_after":75071}
+{"runtime":"android-art","pair":0,"variant":"candidate","calls":8192,"hits":0,"nanos":8084500,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":7066272,"pss_kb_after":80121}
+{"runtime":"android-art","pair":1,"variant":"candidate","calls":8192,"hits":0,"nanos":27082500,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":4227248,"pss_kb_after":84120}
+{"runtime":"android-art","pair":1,"variant":"baseline","calls":8192,"hits":0,"nanos":8257000,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":4423856,"pss_kb_after":84324}
+{"runtime":"android-art","pair":2,"variant":"baseline","calls":8192,"hits":0,"nanos":19758300,"allocated_bytes_process":491520,"gc_count":1,"heap_used_bytes_after":4686000,"pss_kb_after":77620}
+{"runtime":"android-art","pair":2,"variant":"candidate","calls":8192,"hits":0,"nanos":17651000,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":4686000,"pss_kb_after":77624}
+{"runtime":"android-art","pair":3,"variant":"candidate","calls":8192,"hits":0,"nanos":15299000,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":4686000,"pss_kb_after":77628}
+{"runtime":"android-art","pair":3,"variant":"baseline","calls":8192,"hits":0,"nanos":21747500,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":4882608,"pss_kb_after":77884}
+{"runtime":"android-art","pair":4,"variant":"baseline","calls":8192,"hits":0,"nanos":11382800,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":5079216,"pss_kb_after":78024}
+{"runtime":"android-art","pair":4,"variant":"candidate","calls":8192,"hits":0,"nanos":19889800,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":5111984,"pss_kb_after":78028}
+{"runtime":"android-art","pair":5,"variant":"candidate","calls":8192,"hits":0,"nanos":14482300,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":5111984,"pss_kb_after":78036}
+{"runtime":"android-art","pair":5,"variant":"baseline","calls":8192,"hits":0,"nanos":43401600,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":5308592,"pss_kb_after":78232}
+{"runtime":"android-art","pair":6,"variant":"baseline","calls":8192,"hits":0,"nanos":20271800,"allocated_bytes_process":196608,"gc_count":0,"heap_used_bytes_after":5505200,"pss_kb_after":78428}
+{"runtime":"android-art","pair":6,"variant":"candidate","calls":8192,"hits":0,"nanos":23323100,"allocated_bytes_process":0,"gc_count":0,"heap_used_bytes_after":5505200,"pss_kb_after":78432}
+
+=== jvm-overlap-misses-results.jsonl ===
+{"metadata":true,"scenario":"overlap-misses","corpus_sha256":"1ba181bcb5ce7a8a89e66c5a2b536151780b914f1141bf14f48ba5083960bd70","java_version":"21.0.12.1"}
+{"runtime":"desktop-jvm","pair":0,"variant":"baseline","calls":8192,"hits":0,"nanos":415200,"allocated_bytes":196608}
+{"runtime":"desktop-jvm","pair":0,"variant":"candidate","calls":8192,"hits":0,"nanos":4538300,"allocated_bytes":320}
+{"runtime":"desktop-jvm","pair":1,"variant":"candidate","calls":8192,"hits":0,"nanos":2887000,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":1,"variant":"baseline","calls":8192,"hits":0,"nanos":3170600,"allocated_bytes":393216}
+{"runtime":"desktop-jvm","pair":2,"variant":"baseline","calls":8192,"hits":0,"nanos":2717700,"allocated_bytes":393288}
+{"runtime":"desktop-jvm","pair":2,"variant":"candidate","calls":8192,"hits":0,"nanos":566400,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":3,"variant":"candidate","calls":8192,"hits":0,"nanos":375100,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":3,"variant":"baseline","calls":8192,"hits":0,"nanos":536100,"allocated_bytes":196632}
+{"runtime":"desktop-jvm","pair":4,"variant":"baseline","calls":8192,"hits":0,"nanos":570100,"allocated_bytes":196608}
+{"runtime":"desktop-jvm","pair":4,"variant":"candidate","calls":8192,"hits":0,"nanos":377300,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":5,"variant":"candidate","calls":8192,"hits":0,"nanos":372800,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":5,"variant":"baseline","calls":8192,"hits":0,"nanos":754400,"allocated_bytes":196608}
+{"runtime":"desktop-jvm","pair":6,"variant":"baseline","calls":8192,"hits":0,"nanos":765100,"allocated_bytes":196608}
+{"runtime":"desktop-jvm","pair":6,"variant":"candidate","calls":8192,"hits":0,"nanos":370700,"allocated_bytes":0}
+
+=== jvm-sports-results.jsonl ===
+{"metadata":true,"scenario":"sports","corpus_sha256":"d7518e089187225d5c8b8daac81133830e6766a5c3f84ad2c6e69ef834899344","java_version":"21.0.12.1"}
+{"runtime":"desktop-jvm","pair":0,"variant":"baseline","calls":1048576,"hits":492800,"nanos":36333100,"allocated_bytes":32201728}
+{"runtime":"desktop-jvm","pair":0,"variant":"candidate","calls":1048576,"hits":492800,"nanos":36900800,"allocated_bytes":320}
+{"runtime":"desktop-jvm","pair":1,"variant":"candidate","calls":1048576,"hits":492800,"nanos":22203900,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":1,"variant":"baseline","calls":1048576,"hits":492800,"nanos":39574600,"allocated_bytes":32201728}
+{"runtime":"desktop-jvm","pair":2,"variant":"baseline","calls":1048576,"hits":492800,"nanos":35429100,"allocated_bytes":32201728}
+{"runtime":"desktop-jvm","pair":2,"variant":"candidate","calls":1048576,"hits":492800,"nanos":22386300,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":3,"variant":"candidate","calls":1048576,"hits":492800,"nanos":25275800,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":3,"variant":"baseline","calls":1048576,"hits":492800,"nanos":42111400,"allocated_bytes":32201728}
+{"runtime":"desktop-jvm","pair":4,"variant":"baseline","calls":1048576,"hits":492800,"nanos":34951100,"allocated_bytes":32201728}
+{"runtime":"desktop-jvm","pair":4,"variant":"candidate","calls":1048576,"hits":492800,"nanos":18731800,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":5,"variant":"candidate","calls":1048576,"hits":492800,"nanos":23837100,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":5,"variant":"baseline","calls":1048576,"hits":492800,"nanos":33102700,"allocated_bytes":32201728}
+{"runtime":"desktop-jvm","pair":6,"variant":"baseline","calls":1048576,"hits":492800,"nanos":36677400,"allocated_bytes":32201728}
+{"runtime":"desktop-jvm","pair":6,"variant":"candidate","calls":1048576,"hits":492800,"nanos":25057600,"allocated_bytes":0}
+
+=== jvm-substring-misses-results.jsonl ===
+{"metadata":true,"scenario":"substring-misses","corpus_sha256":"b41380221ba8130ab42d32235a90a2bcdb50fa9eb29460a3854d66209d7c2248","java_version":"21.0.12.1"}
+{"runtime":"desktop-jvm","pair":0,"variant":"baseline","calls":8192,"hits":0,"nanos":516800,"allocated_bytes":196608}
+{"runtime":"desktop-jvm","pair":0,"variant":"candidate","calls":8192,"hits":0,"nanos":13808900,"allocated_bytes":320}
+{"runtime":"desktop-jvm","pair":1,"variant":"candidate","calls":8192,"hits":0,"nanos":5386600,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":1,"variant":"baseline","calls":8192,"hits":0,"nanos":4139300,"allocated_bytes":393216}
+{"runtime":"desktop-jvm","pair":2,"variant":"baseline","calls":8192,"hits":0,"nanos":1819200,"allocated_bytes":237576}
+{"runtime":"desktop-jvm","pair":2,"variant":"candidate","calls":8192,"hits":0,"nanos":2574900,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":3,"variant":"candidate","calls":8192,"hits":0,"nanos":2763500,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":3,"variant":"baseline","calls":8192,"hits":0,"nanos":988300,"allocated_bytes":196608}
+{"runtime":"desktop-jvm","pair":4,"variant":"baseline","calls":8192,"hits":0,"nanos":708500,"allocated_bytes":196608}
+{"runtime":"desktop-jvm","pair":4,"variant":"candidate","calls":8192,"hits":0,"nanos":2428100,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":5,"variant":"candidate","calls":8192,"hits":0,"nanos":2915000,"allocated_bytes":0}
+{"runtime":"desktop-jvm","pair":5,"variant":"baseline","calls":8192,"hits":0,"nanos":1431400,"allocated_bytes":196608}
+{"runtime":"desktop-jvm","pair":6,"variant":"baseline","calls":8192,"hits":0,"nanos":709100,"allocated_bytes":196608}
+{"runtime":"desktop-jvm","pair":6,"variant":"candidate","calls":8192,"hits":0,"nanos":2539500,"allocated_bytes":0}

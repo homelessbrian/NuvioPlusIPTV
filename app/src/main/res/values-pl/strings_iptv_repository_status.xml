@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"Aktualizowanie playlisty „%1$s”…"</string>
+    <string name="iptv_repository_status_reading_channels">"Odczytywanie kanałów…"</string>
+    <string name="iptv_repository_status_downloading_guide">"Pobieranie przewodnika „%1$s”…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"Pobieranie przewodnika „%1$s”"</string>
+    <string name="iptv_repository_status_matching_data">"Dopasowywanie danych przewodnika…"</string>
+    <string name="iptv_repository_status_updating_guide">"Aktualizowanie przewodnika…"</string>
+    <string name="iptv_repository_status_adding_playlist">"Dodawanie kanałów z „%1$s”…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"Odczytywanie kanałów z „%1$s”…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"Odczytywanie kanałów z „%1$s” (%2$d z %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"Za mało pamięci na przewodnik „%1$s” — pominięto"</string>
+    <string name="iptv_repository_status_reading_guide">"Odczytywanie przewodnika „%1$s”…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"Odczytywanie przewodnika „%1$s” (%2$d z %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"Odczytywanie przewodnika „%1$s”… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"Odczytywanie przewodnika „%1$s” (%2$d z %3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"Dopasowywanie przewodnika „%1$s”…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"Dopasowywanie przewodnika „%1$s” (%2$d z %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"Pobieranie playlisty „%1$s”"</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s z %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"Wczytywanie kanałów z %1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"Nie znaleziono serwera dostawcy."</string>
+    <string name="iptv_repository_status_timeout_short">"Dostawca zbyt długo nie odpowiadał."</string>
+    <string name="iptv_repository_status_generic_error">"Coś poszło nie tak."</string>
+    <string name="iptv_repository_status_unknown_host_address">"Nie znaleziono serwera dostawcy (%1$s). Sprawdź adres i połączenie z internetem albo spróbuj później."</string>
+    <string name="iptv_repository_status_provider_timeout">"Dostawca zbyt długo nie odpowiadał (przekroczono limit czasu). Może być przeciążony; spróbuj później."</string>
+    <string name="iptv_repository_status_address">"adres"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"Nie udało się zaktualizować playlisty „%1$s”. %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"Nie udało się zaktualizować przewodnika „%1$s”. %2$s"</string>
+    <string name="iptv_repository_status_expired">"„%1$s” wygasł"</string>
+    <string name="iptv_repository_status_expires_today">"„%1$s” wygasa dzisiaj"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"„%1$s” wygasa jutro"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">"Dodawanie kanałów z %1$d nowej playlisty…"</item>
+        <item quantity="few">"Dodawanie kanałów z %1$d nowych playlist…"</item>
+        <item quantity="many">"Dodawanie kanałów z %1$d nowych playlist…"</item>
+        <item quantity="other">"Dodawanie kanałów z %1$d nowej playlisty…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">"„%1$s” wygasa za %2$d dzień"</item>
+        <item quantity="few">"„%1$s” wygasa za %2$d dni"</item>
+        <item quantity="many">"„%1$s” wygasa za %2$d dni"</item>
+        <item quantity="other">"„%1$s” wygasa za %2$d dnia"</item>
+    </plurals>
+</resources>

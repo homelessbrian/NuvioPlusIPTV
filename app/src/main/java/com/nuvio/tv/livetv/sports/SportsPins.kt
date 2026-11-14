@@ -55,7 +55,9 @@ fun SportsPinsHost(navController: NavController) {
     val events by repo.events.collectAsState()
     val entry by navController.currentBackStackEntryAsState()
     val route = entry?.destination?.route
-    val playing = route == Screen.LiveTvPlayer.route || route?.startsWith("player/") == true
+    // Live TV full screen is the guide itself grown to fill the screen, so it has its own flag.
+    val liveFullscreen by com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.collectAsState()
+    val playing = route == Screen.LiveTvPlayer.route || route?.startsWith("player/") == true || liveFullscreen
 
     // Housekeeping: a finished game goes after two minutes; one that vanished from the lists after ten.
     val over = remember { HashMap<String, Long>() }

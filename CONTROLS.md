@@ -12,7 +12,7 @@ How to get around Nuvio + IPTV with your TV remote. [Back to the README](README.
 | **◀** (hold) | Scroll back through earlier shows (catch-up channels) |
 | **▲ / ▼** · **CH+ / CH−** | Channels · page up / down |
 | **0–9** | Jump to a channel number |
-| **Long-press OK** | Channel menu: favorites, **Remind me**, **Record**, **Watch from the beginning**, hide, **Manage visibility**, **Reorder**, **Copy**, rename, renumber, **Assign EPG** |
+| **Long-press OK** | Channel menu: favorites, **Remind me**, **Add to Multiview**, **Record**, **Watch from the beginning**, hide, **Manage visibility**, **Reorder**, **Copy**, rename, renumber, **Assign EPG** |
 | **Hold Back** or **Play/Pause** | Back to full screen on what's playing |
 | **Back** | Back to "now" → the group list → the side menu |
 
@@ -24,7 +24,7 @@ How to get around Nuvio + IPTV with your TV remote. [Back to the README](README.
 | **◀** | Overlay mode (catch-up: skip back) |
 | **▶** | Catch-up: skip forward (hold to skip faster) |
 | **⏪ / ⏩** | Catch-up and paused live TV: 30 seconds back / forward (hold to go faster) |
-| **Long-press OK** or **Menu** | Audio, subtitles, screen size, picture shape, stream info, sleep timer, record, watch from the beginning, find & stream |
+| **Long-press OK** or **Menu** | Audio, subtitles, screen size, picture shape, stream info, sleep timer, record, **Add to Multiview**, watch from the beginning, find & stream |
 | **Back** | Back to the guide |
 
 ### Overlay mode

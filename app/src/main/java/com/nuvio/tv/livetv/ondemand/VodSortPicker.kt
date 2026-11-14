@@ -1,5 +1,6 @@
 package com.nuvio.tv.livetv.ondemand
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,21 +14,37 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.nuvio.tv.R
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.screens.settings.SettingsActionRow
 import com.nuvio.tv.ui.theme.NuvioTheme
 
+/** Display resources are independent of the persisted enum names and shuffle seed. */
+@StringRes
+internal fun vodSortLabelResource(sort: VodSort): Int = when (sort) {
+    VodSort.DEFAULT -> R.string.iptv_vod_sort_provider_order
+    VodSort.NAME_AZ -> R.string.iptv_vod_sort_name_az
+    VodSort.NAME_ZA -> R.string.iptv_vod_sort_name_za
+    VodSort.NEWEST -> R.string.iptv_vod_sort_newest
+    VodSort.OLDEST -> R.string.iptv_vod_sort_oldest
+    VodSort.RECENTLY_ADDED -> R.string.iptv_vod_sort_recently_added
+    VodSort.RATING -> R.string.iptv_vod_sort_highest_rated
+    VodSort.SHUFFLE -> R.string.iptv_vod_sort_shuffle
+}
+
 /** What each sort does, under its name in the list. */
-internal fun VodSort.hint(): String = when (this) {
-    VodSort.DEFAULT -> "The order your provider sends"
-    VodSort.NAME_AZ -> "Numbers and symbols first, then A to Z"
-    VodSort.NAME_ZA -> "Z to A, then numbers and symbols"
-    VodSort.NEWEST -> "By release year, newest first"
-    VodSort.OLDEST -> "By release year, oldest first"
-    VodSort.RECENTLY_ADDED -> "What your provider added most recently"
-    VodSort.RATING -> "By your provider's rating, best first"
-    VodSort.SHUFFLE -> "A new random order each time you pick it"
+@StringRes
+internal fun vodSortHintResource(sort: VodSort): Int = when (sort) {
+    VodSort.DEFAULT -> R.string.iptv_vod_sort_provider_order_hint
+    VodSort.NAME_AZ -> R.string.iptv_vod_sort_name_az_hint
+    VodSort.NAME_ZA -> R.string.iptv_vod_sort_name_za_hint
+    VodSort.NEWEST -> R.string.iptv_vod_sort_newest_hint
+    VodSort.OLDEST -> R.string.iptv_vod_sort_oldest_hint
+    VodSort.RECENTLY_ADDED -> R.string.iptv_vod_sort_recently_added_hint
+    VodSort.RATING -> R.string.iptv_vod_sort_highest_rated_hint
+    VodSort.SHUFFLE -> R.string.iptv_vod_sort_shuffle_hint
 }
 
 /** The label for a saved sort ("SHUFFLE:123" -> "Shuffle"), or null when none is saved. */
@@ -61,8 +78,8 @@ internal fun VodSortPicker(
             itemsIndexed(choices) { i, sort ->
                 val selected = sort == current
                 SettingsActionRow(
-                    title = sort?.label ?: useDefaultLabel.orEmpty(),
-                    subtitle = sort?.hint() ?: "Follows Default Sort Order in Settings",
+                    title = if (sort != null) stringResource(vodSortLabelResource(sort)) else useDefaultLabel.orEmpty(),
+                    subtitle = stringResource(if (sort != null) vodSortHintResource(sort) else R.string.iptv_vod_sort_default_hint),
                     onClick = { onPick(sort) },
                     trailingIcon = if (selected) Icons.Default.Check else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     modifier = if (i == focusIndex) Modifier.focusRequester(first) else Modifier

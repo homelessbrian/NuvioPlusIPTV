@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">Ajouter à Nuvio + IPTV</string>
+    <string name="iptv_phone_connected_to">Connexion à %1$s</string>
+    <string name="iptv_phone_heading">Ajouter à votre téléviseur</string>
+    <string name="iptv_phone_instructions">Remplissez ce formulaire et appuyez sur « Envoyer au téléviseur ». L’ajout apparaît immédiatement sur votre téléviseur.</string>
+    <string name="iptv_phone_what_to_add">Élément à ajouter</string>
+    <string name="iptv_phone_m3u_tab">Lien M3U</string>
+    <string name="iptv_phone_epg_tab">EPG uniquement</string>
+    <string name="iptv_phone_name_label">Nom (facultatif)</string>
+    <string name="iptv_phone_provider_placeholder">Mon fournisseur</string>
+    <string name="iptv_phone_playlist_label">Lien de la liste de lecture</string>
+    <string name="iptv_phone_epg_optional_label">Lien EPG (facultatif)</string>
+    <string name="iptv_phone_user_agent_label">Agent utilisateur (facultatif)</string>
+    <string name="iptv_phone_user_agent_placeholder">Laisser vide pour utiliser la valeur par défaut</string>
+    <string name="iptv_phone_server_label">Serveur</string>
+    <string name="iptv_phone_username_label">Nom d’utilisateur</string>
+    <string name="iptv_phone_password_label">Mot de passe</string>
+    <string name="iptv_phone_include_live">Inclure les chaînes TV</string>
+    <string name="iptv_phone_include_vod">Inclure les films et séries (à la demande)</string>
+    <string name="iptv_phone_epg_label">Lien EPG</string>
+    <string name="iptv_phone_send">Envoyer au téléviseur</string>
+    <string name="iptv_phone_network_note">Fonctionne uniquement sur le même réseau Wi‑Fi que votre téléviseur. Cette page cesse de fonctionner lorsque vous fermez cet écran sur le téléviseur.</string>
+    <string name="iptv_phone_guide_placeholder">Guide</string>
+    <string name="iptv_phone_sending">Envoi…</string>
+    <string name="iptv_phone_unreachable">Impossible de joindre votre téléviseur. Vérifiez que l’écran « Ajouter depuis votre téléphone » est toujours ouvert et que vous êtes sur le même réseau Wi‑Fi.</string>
+    <string name="iptv_phone_not_found">Introuvable</string>
+    <string name="iptv_phone_nothing_to_send">Aucune donnée à envoyer.</string>
+    <string name="iptv_phone_missing">Il manque des informations.</string>
+    <string name="iptv_phone_could_not_add">Le téléviseur n’a pas pu effectuer l’ajout. Réessayez.</string>
+    <string name="iptv_phone_playlist_missing">Collez le lien de la liste de lecture.</string>
+    <string name="iptv_phone_playlist_scheme">Le lien de la liste de lecture doit commencer par http:// ou https://.</string>
+    <string name="iptv_phone_epg_scheme">Le lien EPG doit commencer par http:// ou https://.</string>
+    <string name="iptv_phone_server_missing">Saisissez l’adresse du serveur.</string>
+    <string name="iptv_phone_server_invalid">Cette adresse ne semble pas être celle d’un serveur.</string>
+    <string name="iptv_phone_credentials_missing">Saisissez le nom d’utilisateur et le mot de passe.</string>
+    <string name="iptv_phone_inclusion_missing">Activez les chaînes TV ou les films et séries.</string>
+    <string name="iptv_phone_epg_missing">Collez le lien EPG.</string>
+    <string name="iptv_phone_kind_missing">Choisissez l’élément à ajouter.</string>
+</resources>

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"Canais rápidos"</string>
+    <string name="iptv_quick_channels_subtitle">"Atalhos guardados sob a barra de reprodução. Pressione Para baixo na barra para abri-los."</string>
+    <string name="iptv_quick_channels_show">"Mostrar canais rápidos"</string>
+    <string name="iptv_quick_channels_opens_on">"Abre em"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"A lista mostrada primeiro"</string>
+    <string name="iptv_quick_channels_first_list">"Primeira lista"</string>
+    <string name="iptv_quick_channels_last_used">"A última usada"</string>
+    <string name="iptv_quick_channels_lists_hint">"Listas na fileira · OK liga ou desliga uma, as setas a movem"</string>
+    <string name="iptv_quick_channels_recent">"Assistidos recentemente"</string>
+    <string name="iptv_quick_channels_favorites">"Favoritos"</string>
+    <string name="iptv_quick_channels_built_in">"Integradas"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · grupo da playlist"</string>
+    <string name="iptv_quick_channels_your_group">"Seu grupo"</string>
+    <string name="iptv_quick_channels_group_missing">"Grupo não encontrado"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"Não está nas suas playlists agora"</string>
+    <string name="iptv_quick_channels_add_group">"Adicionar um grupo da playlist…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"Qualquer grupo de qualquer playlist, os seus próprios grupos também"</string>
+    <string name="iptv_quick_channels_add_groups_title">"Adicionar grupos da playlist"</string>
+    <string name="iptv_quick_channels_no_groups">"Ainda não há grupos. Adicione uma playlist primeiro."</string>
+    <string name="iptv_quick_channels_add_groups_hint">"Cada grupo marcado vira uma lista própria nos canais rápidos."</string>
+    <string name="iptv_quick_channels_my_groups">"Meus grupos"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="one">"%1$d canal"</item>
+        <item quantity="many">"%1$d canais"</item>
+        <item quantity="other">"%1$d canais"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"Ordem do provedor"</string>
+    <string name="iptv_vod_sort_name_az">"A–Z"</string>
+    <string name="iptv_vod_sort_name_za">"Z–A"</string>
+    <string name="iptv_vod_sort_newest">"Lançamento mais recente"</string>
+    <string name="iptv_vod_sort_oldest">"Lançamento mais antigo"</string>
+    <string name="iptv_vod_sort_recently_added">"Adicionados recentemente"</string>
+    <string name="iptv_vod_sort_highest_rated">"Mais bem avaliados"</string>
+    <string name="iptv_vod_sort_shuffle">"Aleatório"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"A ordem enviada pelo seu provedor"</string>
+    <string name="iptv_vod_sort_name_az_hint">"Números e símbolos primeiro, depois de A a Z"</string>
+    <string name="iptv_vod_sort_name_za_hint">"De Z a A, depois números e símbolos"</string>
+    <string name="iptv_vod_sort_newest_hint">"Por ano de lançamento, os mais recentes primeiro"</string>
+    <string name="iptv_vod_sort_oldest_hint">"Por ano de lançamento, os mais antigos primeiro"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"O que o seu provedor adicionou mais recentemente"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"Pela nota do seu provedor, os melhores primeiro"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"Uma nova ordem aleatória sempre que você escolher"</string>
+    <string name="iptv_vod_sort_default_hint">"Segue a ordem de classificação padrão nas configurações"</string>
+</resources>

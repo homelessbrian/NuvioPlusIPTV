@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="one">"%1$d плейлист"</item>
+        <item quantity="few">"%1$d плейлиста"</item>
+        <item quantity="many">"%1$d плейлистов"</item>
+        <item quantity="other">"%1$d плейлиста"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="one">"%1$d телегид"</item>
+        <item quantity="few">"%1$d телегида"</item>
+        <item quantity="many">"%1$d телегидов"</item>
+        <item quantity="other">"%1$d телегида"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="one">"%1$d канал"</item>
+        <item quantity="few">"%1$d канала"</item>
+        <item quantity="many">"%1$d каналов"</item>
+        <item quantity="other">"%1$d канала"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="one">"Сопоставлена %1$d передача"</item>
+        <item quantity="few">"Сопоставлено %1$d передачи"</item>
+        <item quantity="many">"Сопоставлено %1$d передач"</item>
+        <item quantity="other">"Сопоставлено %1$d передачи"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="one">"Удалено: %1$d"</item>
+        <item quantity="few">"Удалено: %1$d"</item>
+        <item quantity="many">"Удалено: %1$d"</item>
+        <item quantity="other">"Удалено: %1$d"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="one">"%1$d мин"</item>
+        <item quantity="few">"%1$d мин"</item>
+        <item quantity="many">"%1$d мин"</item>
+        <item quantity="other">"%1$d мин"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="one">"%1$d день"</item>
+        <item quantity="few">"%1$d дня"</item>
+        <item quantity="many">"%1$d дней"</item>
+        <item quantity="other">"%1$d дня"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="one">"%1$d час"</item>
+        <item quantity="few">"%1$d часа"</item>
+        <item quantity="many">"%1$d часов"</item>
+        <item quantity="other">"%1$d часа"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="one">"%1$d секунда"</item>
+        <item quantity="few">"%1$d секунды"</item>
+        <item quantity="many">"%1$d секунд"</item>
+        <item quantity="other">"%1$d секунды"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="one">"%1$d день назад"</item>
+        <item quantity="few">"%1$d дня назад"</item>
+        <item quantity="many">"%1$d дней назад"</item>
+        <item quantity="other">"%1$d дня назад"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="one">"%1$d неделю назад"</item>
+        <item quantity="few">"%1$d недели назад"</item>
+        <item quantity="many">"%1$d недель назад"</item>
+        <item quantity="other">"%1$d недели назад"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="one">"%1$d месяц назад"</item>
+        <item quantity="few">"%1$d месяца назад"</item>
+        <item quantity="many">"%1$d месяцев назад"</item>
+        <item quantity="other">"%1$d месяца назад"</item>
+    </plurals>
+</resources>

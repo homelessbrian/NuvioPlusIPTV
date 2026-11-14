@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"Atualizando a playlist \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels">"Lendo os canais…"</string>
+    <string name="iptv_repository_status_downloading_guide">"Baixando o guia \"%1$s\"…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"Baixando o guia \"%1$s\""</string>
+    <string name="iptv_repository_status_matching_data">"Associando os dados do guia…"</string>
+    <string name="iptv_repository_status_updating_guide">"Atualizando o guia…"</string>
+    <string name="iptv_repository_status_adding_playlist">"Adicionando canais de \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"Lendo os canais de \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"Lendo os canais de \"%1$s\" (%2$d de %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"Memória insuficiente para o guia \"%1$s\" — ignorado"</string>
+    <string name="iptv_repository_status_reading_guide">"Lendo o guia \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"Lendo o guia \"%1$s\" (%2$d de %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"Lendo o guia \"%1$s\"… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"Lendo o guia \"%1$s\" (%2$d de %3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"Associando o guia \"%1$s\"…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"Associando o guia \"%1$s\" (%2$d de %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"Baixando a playlist \"%1$s\""</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s de %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"Carregando canais de %1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"Não foi possível encontrar o servidor do provedor."</string>
+    <string name="iptv_repository_status_timeout_short">"O provedor demorou demais para responder."</string>
+    <string name="iptv_repository_status_generic_error">"Algo deu errado."</string>
+    <string name="iptv_repository_status_unknown_host_address">"Não foi possível encontrar o servidor do provedor (%1$s). Confira o endereço e a sua internet, ou tente mais tarde."</string>
+    <string name="iptv_repository_status_provider_timeout">"O provedor demorou demais para responder (tempo esgotado). Ele pode estar ocupado; tente mais tarde."</string>
+    <string name="iptv_repository_status_address">"endereço"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"A playlist \"%1$s\" não pôde ser atualizada. %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"O guia \"%1$s\" não pôde ser atualizado. %2$s"</string>
+    <string name="iptv_repository_status_expired">"\"%1$s\" expirou"</string>
+    <string name="iptv_repository_status_expires_today">"\"%1$s\" expira hoje"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"\"%1$s\" expira amanhã"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">"Adicionando canais de %1$d nova playlist…"</item>
+        <item quantity="many">"Adicionando canais de %1$d novas playlists…"</item>
+        <item quantity="other">"Adicionando canais de %1$d novas playlists…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">"\"%1$s\" expira em %2$d dia"</item>
+        <item quantity="many">"\"%1$s\" expira em %2$d dias"</item>
+        <item quantity="other">"\"%1$s\" expira em %2$d dias"</item>
+    </plurals>
+</resources>

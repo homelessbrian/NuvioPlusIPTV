@@ -79,7 +79,7 @@ import kotlin.math.roundToInt
 fun OnDemandHomeScreen(
     homeSettings: HomeUiState?,
     onOpenDetail: (itemId: String, itemType: String, addonBaseUrl: String?, onDemandUid: String) -> Unit,
-    onPlay: (url: String, title: String, type: String, poster: String?) -> Unit,
+    onPlay: (url: String, title: String, type: String, poster: String?, contentId: String, contentName: String, season: Int?, episode: Int?, episodeName: String?) -> Unit,
     /** The search button: Nuvio's own search. */
     onOpenSearch: () -> Unit,
     /** Home's own trailer lookup and results (trailers follow Nuvio's trailer settings). */
@@ -520,9 +520,13 @@ fun OnDemandHomeScreen(
             item = item,
             viewModel = viewModel,
             onDismiss = { providerItem = null },
-            onPlay = { url, title, poster ->
+            onPlay = { url, title, poster, season, episode, episodeName ->
                 providerItem = null
-                onPlay(url, title, if (item.kind == VodKind.SERIES) "series" else "movie", poster)
+                // Played with the title's id, so Nuvio tracks progress: resumes, and Continue Watching.
+                onPlay(
+                    url, title, if (item.kind == VodKind.SERIES) "series" else "movie", poster,
+                    VodHomeIds.metaId(item.uid), OnDemandDatabase.displayTitle(item.name), season, episode, episodeName
+                )
             }
         )
     }

@@ -1,5 +1,8 @@
 package com.nuvio.tv.livetv.model
 
+import com.nuvio.stalker.StalkerConfig
+import com.nuvio.stalker.StalkerStreamRef
+
 /**
  * A user-added M3U playlist. Xtream Codes logins are stored as a playlist too; the
  * URL is built from the server, username and password when the source is refreshed.
@@ -10,6 +13,12 @@ data class PlaylistSource(
     val url: String,
     val enabled: Boolean = true,
     val userAgent: String = "",
+    /**
+     * Found automatically: a media-player user agent this M3U link needed because it sent
+     * a web page or video (not channels) to the app's default one. Used only while
+     * [userAgent] is blank; "" = the default works.
+     */
+    val fallbackUserAgent: String = "",
     /** Also load the EPG URL advertised in the playlist header (url-tvg / x-tvg-url). */
     val useEmbeddedEpg: Boolean = true,
     val xtreamServer: String = "",
@@ -58,24 +67,32 @@ data class PlaylistSource(
      * Minutes to move the time asked for in this playlist's catch-up (and catch-up saves): for
      * providers whose archive runs on a different clock than their guide.
      */
-    val catchupShiftMinutes: Int = 0
+    val catchupShiftMinutes: Int = 0,
+    /** Explicit type survives a malformed portal configuration without treating it as M3U. */
+    val sourceType: String = "",
+    val stalkerConfig: StalkerConfig? = null
 ) {
-    val isXtream: Boolean get() = xtreamServer.isNotBlank()
+    /** The user agent requests for this playlist go out with ("" = the app default). */
+    val effectiveUserAgent: String get() = userAgent.ifBlank { fallbackUserAgent }
+    val isStalker: Boolean get() = sourceType == "stalker" || stalkerConfig != null
+    val isXtream: Boolean get() = !isStalker && xtreamServer.isNotBlank()
+    val hasCatalog: Boolean get() = isXtream || isStalker
 
     /** The time zone catch-up links are written in: the one picked in settings, else the server's. */
     val catchupZone: String get() = catchupTimezone.ifBlank { serverTimezone }
 
     /** Whether this source's live channels (and their guide) are loaded. */
-    val liveEnabled: Boolean get() = enabled && (!isXtream || importLive)
+    val liveEnabled: Boolean get() = enabled && (!hasCatalog || importLive)
 
     fun resolvedUrl(): String {
+        if (isStalker) return ""
         if (!isXtream) return tidyLink(url)
         return "${xtreamBase()}/get.php?username=${enc(xtreamUsername)}&password=${enc(xtreamPassword)}&type=m3u_plus&output=ts"
     }
 
     /** A channel link from this M3U playlist in the chosen stream format (unchanged on Auto). */
     fun m3uStreamLink(link: String): String {
-        if (isXtream) return link
+        if (hasCatalog) return link
         return when (streamFormat) {
             "ts", "m3u8" -> streamLinkAs(link, streamFormat)
             else -> link
@@ -209,7 +226,11 @@ data class LiveChannel(
     /** Protected (DRM) stream details from the playlist, e.g. MPEG-DASH with a license. */
     val drm: DrmInfo? = null,
     /** The playlist's "tvg-shift" for this channel, in minutes: moves its guide listings. */
-    val tvgShiftMinutes: Int = 0
+    val tvgShiftMinutes: Int = 0,
+    /** Numbered by the app (the playlist gave no number): changes with the playlists before it. */
+    val autoNumber: Boolean = false,
+    /** Resolve only when playback starts; never cache the temporary playback URL here. */
+    val stalkerRef: StalkerStreamRef? = null
 )
 
 /**
@@ -236,7 +257,11 @@ data class EpgProgram(
     /** Release year from the guide (XMLTV <date>, or "(1990)" in the title/description). */
     val year: Int? = null,
     /** Actors and directors from the guide's <credits>, when it has them. */
-    val people: List<String> = emptyList()
+    val people: List<String> = emptyList(),
+    /** Provider archive identifier, retained through guide storage and time shifts. */
+    val providerProgramId: String? = null,
+    /** Portal identity which issued the archive id; other guides can still provide the text. */
+    val providerSourceIdentity: String? = null
 ) {
     fun isLive(nowMs: Long): Boolean = nowMs in startMs until stopMs
     fun progress(nowMs: Long): Float {
@@ -272,22 +297,29 @@ data class PlaylistAccount(
     fun expiringSoon(now: Long = System.currentTimeMillis()): Boolean = (daysLeft(now) ?: Long.MAX_VALUE) <= 7
 
     /** "12 Mar 2027 (148 days)", "20 Oct 2026 (today)", or null. */
-    fun expiryLabel(now: Long = System.currentTimeMillis()): String? {
-        val days = daysLeft(now) ?: return null
-        val date = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(expiresAtMs))
-        val left = when {
-            expiresAtMs <= now -> "expired"
-            days == 0L -> "today"
-            days == 1L -> "1 day"
-            else -> "$days days"
+    fun expiryLabel(
+        now: Long = System.currentTimeMillis(),
+        locale: java.util.Locale = java.util.Locale.getDefault(),
+        remainingLabel: (days: Long, expired: Boolean) -> String = { days, expired ->
+            when {
+                expired -> "expired"
+                days == 0L -> "today"
+                days == 1L -> "1 day"
+                else -> "$days days"
+            }
         }
-        return "$date ($left)"
+    ): String? {
+        val days = daysLeft(now) ?: return null
+        val date = java.text.SimpleDateFormat("d MMM yyyy", locale).format(java.util.Date(expiresAtMs))
+        return "$date (${remainingLabel(days, expiresAtMs <= now)})"
     }
 }
 
 data class LiveTvSettings(
     val showInSidebar: Boolean = true,
     val showChannelNames: Boolean = true,
+    /** Long channel names wrap onto a second line in the guide instead of being cut off. */
+    val twoLineChannelNames: Boolean = false,
     val showChannelNumbers: Boolean = true,
     /** A red outline around the channel you're watching, in the guide's channel list. */
     val markPlayingChannel: Boolean = true,
@@ -852,7 +884,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-09 19:10"
+    const val KIT_STAMP = "2026-11-14 20:25"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

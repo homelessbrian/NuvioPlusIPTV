@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"Vorschaubilder beim Spulen"</string>
+    <string name="playback_section_seek_thumbnails_desc">"Vorschaubilder über der Suchleiste beim Spulen"</string>
+    <string name="iptv_thumbs_title">"Vorschaubilder beim Spulen"</string>
+    <string name="iptv_thumbs_subtitle">"Zeigt beim Spulen ein Vorschaubild über der Suchleiste. Die Bilder werden auf diesem Fernseher aus dem Video selbst erstellt"</string>
+    <string name="iptv_thumbs_works_on">"Funktioniert bei: Filmen und Serien im Haupt-Player (auch gestreamte HLS-Links), deinen Aufnahmen, Sport-Wiederholungen und Highlights, Catch-up und beim Zurückspulen von Live-TV (Pausenpuffer).\nCatch-up: Die Bilder stammen aus dem mit „Schnelleres Spulen bei Catch-up“ gespeicherten Teil oder bei gestreamtem (HLS) Catch-up direkt vom Anbieter.\nFunktioniert nicht bei: Torrents, DASH-Links oder geschützten Streams."</string>
+    <string name="iptv_thumbs_low_memory_note">"Dieses Gerät hat wenig Arbeitsspeicher. Vorschaubilder können Ruckler verursachen. Dann pausieren sie von selbst und die Suchleiste zeigt es an."</string>
+    <string name="iptv_thumbs_include_4k">"4K und HDR einbeziehen"</string>
+    <string name="iptv_thumbs_include_4k_desc">"Erstellt auch Vorschaubilder für 4K- und HDR-Videos. Auf Geräten mit viel Speicher anfangs an, auf schwächeren aus, aber du kannst es überall einschalten und ausprobieren. 4K-Vorschaubilder können auf schwächeren Geräten ruckeln oder nicht funktionieren und verbrauchen mehr Daten. Bilder von HDR-Videos können blass aussehen. Gestreamte Links nutzen ihre kleinste Version, daher spielt das für sie selten eine Rolle"</string>
+    <string name="iptv_thumbs_when_to_make">"Wann Vorschaubilder erstellt werden"</string>
+    <string name="iptv_thumbs_when_seeking">"Nur bei Pause oder Spulen"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"Die leichteste Wahl: Während das Video nur läuft, wird nichts erstellt"</string>
+    <string name="iptv_thumbs_when_watching">"Beim Zuschauen"</string>
+    <string name="iptv_thumbs_when_watching_desc">"Werden auch im Hintergrund erstellt, während das Video läuft, wenn es weit genug vorgeladen hat"</string>
+    <string name="iptv_thumbs_when_right_away">"Sofort"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"Das ganze Video, von Anfang an, sobald es geöffnet wird. Verbraucht die meisten Daten"</string>
+    <string name="iptv_thumbs_storage_limit">"Speicherlimit"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"Gespeicherte Vorschaubilder belegen höchstens so viel Platz; die am längsten nicht gesehenen Videos werden zuerst gelöscht"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"Gespeicherte Vorschaubilder löschen"</string>
+    <string name="iptv_thumbs_clear_desc">"Löscht alle gespeicherten Vorschaubilder. Sie werden bei Bedarf neu erstellt"</string>
+    <string name="iptv_thumbs_last_paused">"Zuletzt wegen wenig Speicher pausiert: %1$s, %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"Vorschaubilder werden erstellt…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"Vorschaubilder pausiert: wenig Speicher"</string>
+    <string name="iptv_thumbs_msg_live">"Keine Vorschaubilder bei Live-TV"</string>
+    <string name="iptv_thumbs_msg_dash">"Keine Vorschaubilder bei DASH-Links"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"Schalte „Schnelleres Spulen bei Catch-up“ für Vorschaubilder ein"</string>
+    <string name="iptv_thumbs_msg_protected">"Dieser Stream ist geschützt: keine Vorschaubilder"</string>
+    <string name="iptv_thumbs_msg_torrent">"Keine Vorschaubilder bei Torrents"</string>
+    <string name="iptv_thumbs_msg_link_kind">"Keine Vorschaubilder für diese Art von Link"</string>
+    <string name="iptv_thumbs_msg_unreadable">"Dieser Stream konnte für Vorschaubilder nicht gelesen werden"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"Die Teile dieses Streams sind für Vorschaubilder zu groß"</string>
+    <string name="iptv_thumbs_msg_stopped">"Vorschaubilder funktionieren bei diesem Video nicht mehr"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"Der Server hat keine Vorschaubilder gesendet"</string>
+    <string name="iptv_thumbs_msg_format">"Mit dem Format dieses Videos können auf diesem Gerät keine Vorschaubilder erstellt werden"</string>
+    <string name="iptv_thumbs_msg_open_failed">"Dieses Video konnte für Vorschaubilder nicht geöffnet werden"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"Keine Vorschaubilder für diesen Catch-up-Stream"</string>
+</resources>

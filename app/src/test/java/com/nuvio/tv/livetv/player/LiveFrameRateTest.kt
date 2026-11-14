@@ -99,6 +99,84 @@ class LiveFrameRateTest {
     }
 
     @Test
+    fun `repeated decoder timestamps do not keep discarding the measurement window`() {
+        for ((rate, expected) in listOf(50.0 to 50f, ntsc60 to 59.94f)) {
+            val estimator = LiveFrameRateEstimator()
+            for (frame in 0..(rate * 20).toInt()) {
+                val pts = millisecondTimestamp(frame, rate)
+                estimator.onFrame(pts)
+                estimator.onFrame(pts)
+            }
+            assertEquals(expected, LiveFrameRateStabilizer.standardRate(estimator.framesPerSecond), 0f)
+        }
+    }
+
+    @Test
+    fun `metadata less stream becomes measurable despite sustained dropped frames`() {
+        for ((rate, expected) in listOf(24_000.0 / 1001 to 23.976f, 50.0 to 50f, ntsc60 to 59.94f)) {
+            val estimator = LiveFrameRateEstimator()
+            // Two of every five decoded frames are absent. Their timestamp gaps still describe
+            // the source cadence, rather than restarting/shortening the measurement forever.
+            for (frame in 0..(rate * 30).toInt()) {
+                if (frame % 5 in 2..3) continue
+                estimator.onFrame(millisecondTimestamp(frame, rate))
+            }
+            assertEquals("Dropped frames at $rate", expected, LiveFrameRateStabilizer.standardRate(estimator.framesPerSecond), 0f)
+        }
+    }
+
+    @Test
+    fun `very sparse callbacks cannot masquerade as a usable low frame rate`() {
+        val estimator = LiveFrameRateEstimator()
+        for (frame in 0..200) estimator.onFrame(frame * 200_000L)
+        assertEquals(-1f, estimator.framesPerSecond, 0f)
+    }
+
+    @Test
+    fun `late timestamp measurement can select a mode after earlier missing inputs`() {
+        val estimator = LiveFrameRateEstimator()
+        val matcher = LiveFrameRateStabilizer()
+        for (second in 0..30 step 3) assertEquals(-1f, matcher.update(-1f, second * 1000L), 0f)
+        feed(estimator, 50.0, seconds = 8)
+        assertEquals(50f, matcher.update(estimator.framesPerSecond, 38_000L), 0f)
+    }
+
+    @Test
+    fun `measured timing works without metadata and stopped session timing is ignored`() {
+        assertEquals(50f, liveFrameRateForSession(true, 50f, -1f), 0f)
+        assertEquals(25f, liveFrameRateForSession(true, -1f, 25f), 0f)
+        assertEquals(-1f, liveFrameRateForSession(false, 50f, 25f), 0f)
+        assertEquals(-1f, liveFrameRateForSession(false, -1f, 25f), 0f)
+        assertEquals(-1f, liveFrameRateForSession(true, Float.NaN, -1f), 0f)
+    }
+
+    @Test
+    fun `quantized dropped frame bursts do not select fractional mode for an integer source`() {
+        for ((rate, expected) in listOf(60.0 to 60f, ntsc60 to 59.94f, 120.0 to 120f, 120_000.0 / 1001 to 119.88f)) {
+            val estimator = LiveFrameRateEstimator()
+            val matcher = LiveFrameRateStabilizer()
+            var frame = 0
+            var delivered = 0
+            var nextPollUs = 3_000_000L
+            var matched = 0
+            while (frame <= rate * 600) {
+                val pts = millisecondTimestamp(frame, rate)
+                estimator.onFrame(pts)
+                if (pts >= nextPollUs) {
+                    val selected = matcher.update(estimator.framesPerSecond, pts / 1000)
+                    if (selected > 0f) {
+                        assertEquals("$rate with burst loss at ${pts / 1_000_000}s", expected, selected, 0f)
+                        matched++
+                    }
+                    nextPollUs += 3_000_000L
+                }
+                frame += if (++delivered % 29 == 0) 8 else 1
+            }
+            assertTrue("Must actually match $rate despite bursts", matched >= 190)
+        }
+    }
+
+    @Test
     fun `timestamp discontinuity requires a fresh measurement window`() {
         val estimator = LiveFrameRateEstimator()
         feed(estimator, 50.0, seconds = 8)
@@ -136,6 +214,38 @@ class LiveFrameRateTest {
         for (fps in listOf(-1f, 0f, Float.NaN, Float.POSITIVE_INFINITY, 1f, 200f)) {
             assertEquals(-1f, matcher.update(fps, 0), 0f)
         }
+    }
+
+    @Test
+    fun `video faster than the screen is still measured from the frames the screen shows`() {
+        // Screen already switched by an earlier channel (24 or 50 Hz), then a 60 fps channel.
+        for ((case, expected) in listOf(
+            Triple(60.0, 24.0, "60 on 24 Hz") to 60f,
+            Triple(ntsc60, 24_000.0 / 1001, "59.94 on 23.976 Hz") to 59.94f,
+            Triple(60.0, 50.0, "60 on 50 Hz") to 60f,
+            Triple(ntsc60, 50.0, "59.94 on 50 Hz") to 59.94f,
+            Triple(30.0, 24.0, "30 on 24 Hz") to 30f,
+            Triple(50.0, 24.0, "50 on 24 Hz") to 50f,
+            Triple(24.0, 50.0, "24 on 50 Hz") to 24f,
+            Triple(50.0, 60.0, "50 on 60 Hz") to 50f
+        )) {
+            val (fps, screenHz, label) = case
+            val estimator = LiveFrameRateEstimator()
+            for (pts in shownOnScreen(fps, screenHz, seconds = 15)) estimator.onFrame(pts)
+            assertEquals(label, expected, LiveFrameRateStabilizer.standardRate(estimator.framesPerSecond), 0f)
+        }
+    }
+
+    /** Timestamps of the frames a screen at [screenHz] actually shows: the newest frame at each refresh. */
+    private fun shownOnScreen(fps: Double, screenHz: Double, seconds: Int): List<Long> {
+        val out = ArrayList<Long>()
+        var last = -1
+        for (refresh in 0..(screenHz * seconds).toInt()) {
+            val frame = kotlin.math.floor(refresh * fps / screenHz + 1e-9).toInt()
+            if (frame != last) out += millisecondTimestamp(frame, fps)
+            last = frame
+        }
+        return out
     }
 
     private fun feed(estimator: LiveFrameRateEstimator, fps: Double, seconds: Int, firstFrame: Int = 0) {

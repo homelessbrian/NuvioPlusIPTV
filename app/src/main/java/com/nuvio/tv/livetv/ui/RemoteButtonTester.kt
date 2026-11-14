@@ -24,6 +24,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.R
 
 /**
  * Developer tool: shows every button the remote sends, as the app receives it (name, code,
@@ -40,6 +43,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
  */
 @Composable
 fun RemoteButtonTester(onClose: () -> Unit) {
+    val context = LocalContext.current
     data class Entry(val text: String, val highlight: Boolean)
     val entries = remember { mutableStateListOf<Entry>() }
     val focus = remember { FocusRequester() }
@@ -60,17 +64,22 @@ fun RemoteButtonTester(onClose: () -> Unit) {
                     val k = e.nativeKeyEvent
                     val gap = if (lastTime[0] == 0L) 0L else k.eventTime - lastTime[0]
                     lastTime[0] = k.eventTime
-                    val action = when (k.action) { KeyEvent.ACTION_DOWN -> "DOWN"; KeyEvent.ACTION_UP -> "UP  "; else -> "MULTI" }
+                    val action = context.getString(when (k.action) {
+                        KeyEvent.ACTION_DOWN -> R.string.iptv_settings_support_remote_action_down
+                        KeyEvent.ACTION_UP -> R.string.iptv_settings_support_remote_action_up
+                        else -> R.string.iptv_settings_support_remote_action_multiple
+                    })
                     val name = KeyEvent.keyCodeToString(k.keyCode).removePrefix("KEYCODE_")
                     val extras = buildList {
-                        if (k.repeatCount > 0) add("repeat ${k.repeatCount}")
-                        if (k.isLongPress) add("long press")
-                        if (k.isCanceled) add("canceled")
-                        if (k.action == KeyEvent.ACTION_UP) add("held ${k.eventTime - k.downTime} ms")
+                        if (k.repeatCount > 0) add(context.getString(R.string.iptv_settings_support_remote_repeat, k.repeatCount))
+                        if (k.isLongPress) add(context.getString(R.string.iptv_settings_support_remote_long_press))
+                        if (k.isCanceled) add(context.getString(R.string.iptv_settings_support_remote_canceled))
+                        if (k.action == KeyEvent.ACTION_UP) add(context.getString(R.string.iptv_settings_support_remote_held, k.eventTime - k.downTime))
                     }.joinToString(", ")
                     // Two different buttons arriving close together (like OK with Up/Down).
                     val close = gap in 1..250 && entries.firstOrNull()?.text?.contains(name) == false
-                    entries.add(0, Entry("%-5s %-16s code %-4d  +%5d ms  %s".format(action, name, k.keyCode, gap, extras), close))
+                    entries.add(0, Entry(context.getString(R.string.iptv_settings_support_remote_event,
+                        action, name, k.keyCode, gap, extras), close))
                     if (entries.size > 40) entries.removeAt(entries.lastIndex)
                     if (k.keyCode == KeyEvent.KEYCODE_BACK && k.action == KeyEvent.ACTION_UP) {
                         backPresses[0]++
@@ -83,14 +92,14 @@ fun RemoteButtonTester(onClose: () -> Unit) {
                 .padding(40.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                LiveText("Remote button tester", size = 22.sp, weight = FontWeight.Bold, color = Color.White)
+                LiveText(stringResource(R.string.iptv_settings_support_remote_title), size = 22.sp, weight = FontWeight.Bold, color = Color.White)
                 LiveText(
-                    "Press any button. Newest at the top; lines in color are a different button within 250 ms of the one before (for example OK sent with Up/Down). Press Back 3 times in a row to close.",
+                    stringResource(R.string.iptv_settings_support_remote_instructions),
                     size = 13.sp, color = Color.White.copy(alpha = 0.7f), maxLines = 3
                 )
                 Spacer(Modifier.height(10.dp))
                 if (entries.isEmpty()) {
-                    LiveText("Waiting for a button…", size = 15.sp, color = Color.White.copy(alpha = 0.6f))
+                    LiveText(stringResource(R.string.iptv_settings_support_remote_waiting), size = 15.sp, color = Color.White.copy(alpha = 0.6f))
                 }
                 entries.forEach { e ->
                     Row(

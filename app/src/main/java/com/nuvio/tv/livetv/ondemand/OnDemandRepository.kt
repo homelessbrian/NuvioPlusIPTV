@@ -1,5 +1,10 @@
 package com.nuvio.tv.livetv.ondemand
 
+import android.content.Context
+import androidx.annotation.StringRes
+import com.nuvio.tv.R
+import com.nuvio.tv.core.util.withAppLocale
+import dagger.hilt.android.qualifiers.ApplicationContext
 import android.util.JsonReader
 import android.util.JsonToken
 import android.util.Log
@@ -77,7 +82,9 @@ data class VodEpisode(
     val plot: String?,
     val image: String?,
     val url: String,
-    val tech: VodTech? = null
+    val tech: VodTech? = null,
+    val stalkerRef: com.nuvio.stalker.StalkerStreamRef? = null,
+    val playlistId: String = ""
 )
 
 /** What the provider says about a movie or series (for the fallback detail screen). */
@@ -92,7 +99,8 @@ data class VodInfo(
     val tech: VodTech? = null
 )
 
-data class OnDemandStatus(val loading: Boolean = false, val message: String? = null)
+/** [silent]: a routine re-import of a catalog that's already there (no bubble on screen for it). */
+data class OnDemandStatus(val loading: Boolean = false, val message: String? = null, val silent: Boolean = false)
 
 /**
  * Imports movies and series from Xtream logins that have "Import movies & series" on, keeps them
@@ -101,9 +109,13 @@ data class OnDemandStatus(val loading: Boolean = false, val message: String? = n
  */
 @Singleton
 class OnDemandRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val db: OnDemandDatabase,
-    private val prefs: LiveTvPreferences
+    private val prefs: LiveTvPreferences,
+    private val stalker: com.nuvio.tv.livetv.stalker.StalkerGateway
 ) {
+    private fun text(@StringRes id: Int, vararg args: Any): String = context.withAppLocale().getString(id, *args)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
     private val http = ForkHttp.builder()
@@ -174,7 +186,7 @@ class OnDemandRepository @Inject constructor(
             // Learn each provider's title tags (for catalogs imported before this existed).
             runCatching {
                 db.loadPrefixes()
-                prefs.playlists.first().filter { it.isXtream && it.importVod }.forEach { pl ->
+                prefs.playlists.first().filter { it.hasCatalog && it.importVod }.forEach { pl ->
                     if (!db.hasLearnedPrefixes(pl.id)) db.learnPrefixes(pl.id)
                 }
                 _version.value++
@@ -186,7 +198,7 @@ class OnDemandRepository @Inject constructor(
         // import it straight away. One that's gone is dropped the same way.
         scope.launch {
             prefs.playlists
-                .map { list -> list.filter { it.enabled && it.isXtream && it.importVod }.map { it.id }.toSet() }
+                .map { list -> list.filter { it.enabled && it.hasCatalog && it.importVod }.map { it.id to if (it.isStalker) it.stalkerConfig else null }.toSet() }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect { refreshSoon() }
@@ -212,7 +224,8 @@ class OnDemandRepository @Inject constructor(
      * With [onlyId], only that provider is imported (the others are kept as they are).
      */
     suspend fun refresh(force: Boolean, onlyId: String? = null) = mutex.withLock {
-        val playlists = prefs.playlists.first().filter { it.enabled && it.isXtream && it.importVod }
+        val playlists = prefs.playlists.first().filter { it.enabled && it.hasCatalog && it.importVod }
+        if (force) infoCache.clear()
         val keep = playlists.map { it.id }.toSet()
         val dropped = runCatching { db.removeExcept(keep) }.getOrDefault(emptySet())
         // A provider switched off forgets when it was last imported, so switching it back on
@@ -229,15 +242,18 @@ class OnDemandRepository @Inject constructor(
             // while the guide is being built or Sports is finding channels.
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitNoHeavy()
-            _status.value = OnDemandStatus(true, "Importing movies and series from ${pl.name}…")
+            // The daily re-import of a catalog that's already there happens without a bubble
+            // (people took it for the app reloading everything); a first import still shows it.
+            quietImport = !force && last > 0L
+            _status.value = OnDemandStatus(true, text(R.string.iptv_status_importing_movies_series, pl.name), silent = quietImport)
             lastProblem = null
             // Movies and series import separately, so a problem with one keeps the other.
             val movies = runCatching { importKind(pl, VodKind.MOVIE) }
-                .onFailure { Log.w(TAG, "Movies for ${pl.name} failed", it); lastProblem = "Couldn't import movies from ${pl.name}: ${it.message ?: it.javaClass.simpleName}" }
+                .onFailure { Log.w(TAG, "Movies for ${pl.name} failed", it); lastProblem = text(R.string.iptv_status_import_movies_failed, pl.name, it.message ?: it.javaClass.simpleName) }
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitNoHeavy()
             val series = runCatching { importKind(pl, VodKind.SERIES) }
-                .onFailure { Log.w(TAG, "Series for ${pl.name} failed", it); lastProblem = "Couldn't import series from ${pl.name}: ${it.message ?: it.javaClass.simpleName}" }
+                .onFailure { Log.w(TAG, "Series for ${pl.name} failed", it); lastProblem = text(R.string.iptv_status_import_series_failed, pl.name, it.message ?: it.javaClass.simpleName) }
             val ok = movies.isSuccess && series.isSuccess && lastProblem == null
             lastProblem?.let { problemByPlaylist[pl.id] = it } ?: problemByPlaylist.remove(pl.id)
             // Success: next import in a day. Failure: try again in an hour, not on every start.
@@ -252,8 +268,12 @@ class OnDemandRepository @Inject constructor(
         // A problem stays visible in Settings → Live TV → On Demand (no more silent failures).
         // Every login's problem, not only the last one imported.
         problemByPlaylist.keys.retainAll(keep)
+        quietImport = false
         _status.value = OnDemandStatus(false, problemByPlaylist.values.joinToString("\n").ifBlank { null })
     }
+
+    /** The import running now is a routine re-import (see [OnDemandStatus.silent]). */
+    @Volatile private var quietImport = false
 
     /**
      * No longer used: nothing in On Demand shows genres any more, so they're not looked up
@@ -312,12 +332,49 @@ class OnDemandRepository @Inject constructor(
         }
     }
 
-    private fun importKind(pl: PlaylistSource, kind: VodKind) {
+    private suspend fun importKind(pl: PlaylistSource, kind: VodKind) {
         val t0 = System.currentTimeMillis()
-        try { importKindInner(pl, kind) } finally {
+        try { if (pl.isStalker) importStalkerKind(pl, kind) else importKindInner(pl, kind) } finally {
             com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
                 "On Demand \"${pl.name}\": ${if (kind == VodKind.MOVIE) "movies" else "series"} imported in ${(System.currentTimeMillis() - t0) / 1000} s"
             )
+        }
+    }
+
+    private suspend fun ensureCurrentStalker(source: PlaylistSource) {
+        stalker.assertCurrent(source)
+    }
+
+    private suspend fun importStalkerKind(pl: PlaylistSource, kind: VodKind) {
+        val client = stalker.client(pl)
+        val identity = com.nuvio.tv.livetv.stalker.StalkerGateway.identity(pl)
+        // Fetch every page successfully before replacing anything; a truncated import keeps the old catalogue.
+        if (kind == VodKind.MOVIE) {
+            val categories = client.vodCategories().associate { it.id to it.name }.toMutableMap()
+            val movies = client.movies()
+            movies.forEach { if (!it.isSeries) categories.putIfAbsent(it.categoryId.orEmpty(), "Uncategorized") }
+            ensureCurrentStalker(pl)
+            prefs.withCurrentPlaylist(pl) { db.replace(pl.id, kind, categories.toList(), movies.asSequence().filterNot { it.isSeries }.map { movie ->
+                VodItem(pl.id, kind, movie.id, movie.title, movie.poster, movie.categoryId.orEmpty(),
+                    null, null, movie.year?.take(4)?.toIntOrNull(), movie.rating, 0L, genre = movie.genre,
+                    stalkerRef = movie.stream.copy(sourceIdentity = identity), providerPlot = movie.plot, providerDurationSeconds = movie.durationSeconds)
+            }) }
+        } else {
+            val nativeCategories = try { client.seriesCategories() } catch (e: com.nuvio.stalker.StalkerException) {
+                if (e.error == com.nuvio.stalker.StalkerError.UNSUPPORTED) emptyList() else throw e
+            }
+            val vodCategories = try { client.vodCategories() } catch (e: com.nuvio.stalker.StalkerException) {
+                if (e.error == com.nuvio.stalker.StalkerError.UNSUPPORTED) emptyList() else throw e
+            }
+            val categories = (nativeCategories.map { "CLASSIC:${it.id}" to it.name } + vodCategories.map { "VOD:${it.id}" to it.name }).toMap().toMutableMap()
+            val series = client.series()
+            series.forEach { categories.putIfAbsent("${it.variant.name}:${it.categoryId.orEmpty()}", "Uncategorized") }
+            ensureCurrentStalker(pl)
+            prefs.withCurrentPlaylist(pl) { db.replace(pl.id, kind, categories.toList(), series.asSequence().map { show ->
+                VodItem(pl.id, kind, "${show.variant.name}:${show.id}", show.title, show.poster, "${show.variant.name}:${show.categoryId.orEmpty()}",
+                    null, null, show.year?.take(4)?.toIntOrNull(), show.rating, 0L, genre = show.genre,
+                    stalkerRef = show.stream.copy(sourceIdentity = identity), stalkerSeriesVariant = show.variant.name, providerPlot = show.plot)
+            }) }
         }
     }
 
@@ -334,10 +391,10 @@ class OnDemandRepository @Inject constructor(
                 categories += c.optString("category_id") to c.optString("category_name").ifBlank { "Other" }
             }
         }
-        _status.value = OnDemandStatus(true, "Importing $what from ${pl.name}…")
+        _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies else R.string.iptv_status_importing_series, pl.name), silent = quietImport)
         var n = 0
         fun progress() {
-            if (++n % 500 == 0) _status.value = OnDemandStatus(true, "Importing $what from ${pl.name}… ${"%,d".format(n)}")
+            if (++n % 500 == 0) _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies_count else R.string.iptv_status_importing_series_count, pl.name, n), silent = quietImport)
         }
 
         // 1. The whole list in one go (fastest).
@@ -355,13 +412,13 @@ class OnDemandRepository @Inject constructor(
         // 2. Some panels cut off huge lists part-way (an "EOFException" partway through).
         //    Ask again one category at a time: many small lists instead of one huge one.
         if (categories.isEmpty()) {
-            reportStop(pl, what, saved, firstProblem)
+            reportStop(pl, kind, saved, firstProblem)
             if (saved == 0) throw firstProblem
             return
         }
         Log.w(TAG, "${pl.name}: $what list stopped after $saved; importing by category", firstProblem)
         n = 0
-        _status.value = OnDemandStatus(true, "Importing $what from ${pl.name} by category…")
+        _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies_by_category else R.string.iptv_status_importing_series_by_category, pl.name), silent = quietImport)
         var failedCategories = 0
         val byCategory = sequence {
             for ((catId, _) in categories) {
@@ -382,16 +439,20 @@ class OnDemandRepository @Inject constructor(
         if (total < saved) {
             // Category by category did worse: go back to what the full list gave.
             db.replace(pl.id, kind, categories, streamItems(pl, kind, "$api&action=$listAction", onStop = {}, onItem = {}))
-            reportStop(pl, what, saved, firstProblem)
+            reportStop(pl, kind, saved, firstProblem)
         } else if (failedCategories > 0) {
-            lastProblem = "${pl.name}: imported ${"%,d".format(total)} $what, but $failedCategories categories " +
-                "didn't finish. It will try again in an hour."
+            lastProblem = text(
+                if (kind == VodKind.MOVIE) R.string.iptv_status_import_movies_incomplete else R.string.iptv_status_import_series_incomplete,
+                pl.name, total, failedCategories
+            )
         }
     }
 
-    private fun reportStop(pl: PlaylistSource, what: String, saved: Int, e: Throwable) {
-        lastProblem = "${pl.name} stopped sending $what after ${"%,d".format(saved)} " +
-            "(${e.message ?: e.javaClass.simpleName}). Those were saved; it will try again in an hour."
+    private fun reportStop(pl: PlaylistSource, kind: VodKind, saved: Int, e: Throwable) {
+        lastProblem = text(
+            if (kind == VodKind.MOVIE) R.string.iptv_status_import_movies_stopped else R.string.iptv_status_import_series_stopped,
+            pl.name, saved, e.message ?: e.javaClass.simpleName
+        )
     }
 
     /**
@@ -576,13 +637,47 @@ class OnDemandRepository @Inject constructor(
     /** Movie link: /movie/user/pass/<id>.<ext> */
     suspend fun movieUrl(item: VodItem): String? {
         val pl = playlist(item.playlistId) ?: return null
+        if (pl.isStalker) return item.stalkerRef?.let { com.nuvio.stalker.StalkerPlaybackLocator(pl.id, it).encode() }
         return "${pl.xtreamBase()}/movie/${enc(pl.xtreamUsername)}/${enc(pl.xtreamPassword)}/${item.id}.${item.ext ?: "mp4"}"
+    }
+
+    suspend fun episodeUrl(episode: VodEpisode): String? =
+        if (episode.stalkerRef != null) com.nuvio.stalker.StalkerPlaybackLocator(episode.playlistId, episode.stalkerRef).encode()
+        else episode.url
+
+    private suspend fun stalkerInfo(item: VodItem, pl: PlaylistSource): VodInfo {
+        val episodes = ArrayList<VodEpisode>()
+        val identity = com.nuvio.tv.livetv.stalker.StalkerGateway.identity(pl)
+        if (item.kind == VodKind.SERIES) {
+            val ref = item.stalkerRef ?: throw com.nuvio.stalker.StalkerException(com.nuvio.stalker.StalkerError.INVALID_RESPONSE)
+            if (ref.sourceIdentity != identity)
+                throw com.nuvio.stalker.StalkerException(com.nuvio.stalker.StalkerError.STALE_SESSION)
+            val variant = com.nuvio.stalker.StalkerSeriesVariant.entries.firstOrNull { it.name == item.stalkerSeriesVariant }
+                ?: com.nuvio.stalker.StalkerSeriesVariant.CLASSIC
+            val show = com.nuvio.stalker.StalkerSeries(ref.providerId, item.name, ref, variant,
+                categoryId = item.categoryId, poster = item.icon, plot = item.providerPlot)
+            val client = stalker.client(pl)
+            for ((seasonIndex, season) in client.seasons(show).withIndex()) {
+                for ((episodeIndex, episode) in client.episodes(season).withIndex()) {
+                    val episodeRef = episode.stream.copy(sourceIdentity = identity)
+                    val number = episode.number ?: episodeIndex + 1
+                    episodes += VodEpisode(season.number ?: episode.seasonNumber ?: seasonIndex + 1,
+                        number, episode.id, "", episode.title.ifBlank { "Episode $number" }, episode.plot, episode.poster,
+                        com.nuvio.stalker.StalkerPlaybackLocator(pl.id, episodeRef).encode(),
+                        stalkerRef = episodeRef, playlistId = pl.id)
+                }
+            }
+        }
+        return VodInfo(item.providerPlot, item.icon, null, item.genre, item.year?.toString(),
+            item.providerDurationSeconds?.let { "${it / 60} min" }, episodes.sortedWith(compareBy({ it.season }, { it.episode })))
     }
 
     /** Provider details for a movie or series (series include every episode). Cached. */
     suspend fun info(item: VodItem): VodInfo? = withContext(Dispatchers.IO) {
-        infoCache[item.uid]?.let { return@withContext it }
         val pl = playlist(item.playlistId) ?: return@withContext null
+        val cacheKey = if (pl.isStalker) "${item.uid}:${com.nuvio.tv.livetv.stalker.StalkerGateway.identity(pl)}" else item.uid
+        infoCache[cacheKey]?.let { return@withContext it }
+        if (pl.isStalker) return@withContext stalkerInfo(item, pl).also { ensureCurrentStalker(pl); infoCache[cacheKey] = it }
         val api = pl.xtreamApiUrl()
         val action = if (item.kind == VodKind.MOVIE) "get_vod_info&vod_id=${item.id}" else "get_series_info&series_id=${item.id}"
         val json = runCatching { JSONObject(getText("$api&action=$action", pl.userAgent)) }.getOrNull() ?: return@withContext null
@@ -741,7 +836,7 @@ class OnDemandRepository @Inject constructor(
                         ?.firstOrNull { it.episode == episode }
                     ?: continue
                 out += OnDemandSource(
-                    "${pl.name} · S${season}E${episode} · ${ep.ext.uppercase()}", ep.url, headers,
+                    "${pl.name} · S${season}E${episode} · ${ep.ext.uppercase()}", episodeUrl(ep) ?: continue, headers,
                     title = item.name, year = item.year, providerName = pl.name, ext = ep.ext, tech = ep.tech,
                     episodeTag = "S%02dE%02d".format(season, episode)
                 )

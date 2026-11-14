@@ -209,7 +209,7 @@ fun SportsHost(navController: NavController) {
     LaunchedEffect(alert) {
         val a = alert ?: return@LaunchedEffect
         delay(7_000)
-        if (SportsLive.alerts.value == a) SportsLive.alerts.value = null
+        SportsLive.done(a)
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopEnd) {
         AnimatedVisibility(
@@ -288,7 +288,7 @@ private fun SwitchCountdown(ev: SportsEvent, match: ChannelMatch, onSwitch: () -
     LaunchedEffect(ev.id) { delay(80); runCatching { first.requestFocus() } }
 }
 
-/** "Bears score!": the game's two bands with the new score, in the corner for a few seconds. */
+/** "Bears score!" (or "Full time"): the game's two bands with the score, in the corner for a few seconds. */
 @Composable
 private fun ScoringAlertCard(a: SportsAlert) {
     val ev = a.event
@@ -300,9 +300,10 @@ private fun ScoringAlertCard(a: SportsAlert) {
             .sportsFrame(focused = false, playing = true, accent = SportsLook.Flash)
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            SportsBadge("${a.team.name.uppercase()} SCORE!", SportsLook.Flash, SportsLook.Ink)
+            if (a.final) SportsBadge(if (a.league.sport == Sport.FOOTBALL) "FULL TIME" else "FINAL", Color.White, SportsLook.Ink)
+            else SportsBadge("${a.team.name.uppercase()} SCORE!", SportsLook.Flash, SportsLook.Ink)
             Spacer(Modifier.weight(1f))
-            ev.status?.let { LiveText(it, color = Color.White, size = 11.sp, weight = FontWeight.Black) }
+            if (!a.final) ev.status?.let { LiveText(it, color = Color.White, size = 11.sp, weight = FontWeight.Black) }
         }
         if (sides.size == 2) {
             val lead = sides.maxByOrNull { it.score?.toDoubleOrNull() ?: 0.0 }
@@ -414,7 +415,8 @@ fun rememberLiveGameOn(channelKey: String?): SportsEvent? {
 
 /**
  * A game as a poster, for the guide's poster space: the two teams on flat halves of their colours,
- * the score in a dark chip between them (unless scores are hidden), the clock under it. Sized to whatever poster box
+ * the score written straight on the colours (no box behind it, like the Calendar's game cards),
+ * the team behind dimmed, and a LIVE tag with the clock under it. Sized to whatever poster box
  * it's in (the small info panel's too).
  */
 @Composable
@@ -431,38 +433,53 @@ fun SportsPosterCard(ev: SportsEvent, modifier: Modifier = Modifier) {
     val bottom = bandColor(teamColor(sides[1].team))
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.background(SportsLook.Ink)) {
         val h = maxHeight
-        val logo = h * 0.27f
+        val logo = h * 0.25f
         val tiny = h < 100.dp
-        // Two flat halves, one per team, with a thin dark seam; the score sits in a dark chip.
         Column(Modifier.fillMaxSize()) {
             androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth().background(top))
             androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth().background(bottom))
         }
-        androidx.compose.foundation.layout.Box(
-            Modifier.align(Alignment.Center).fillMaxWidth().height(2.dp).background(SportsLook.Ink)
-        )
         Column(
             Modifier.fillMaxSize().padding(vertical = if (tiny) 4.dp else 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceEvenly
         ) {
             TeamLogo(sides[0].team, logo)
-            val score = if (!hideScores && ev.hasScore) "${sides[0].score} – ${sides[1].score}" else "vs"
-            Column(
-                Modifier
-                    .background(SportsLook.Ink, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                    .padding(horizontal = if (tiny) 6.dp else 10.dp, vertical = if (tiny) 1.dp else 3.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                LiveText(
-                    score,
-                    color = Color.White,
-                    size = (h.value * (if (score == "vs") 0.10f else 0.13f)).sp,
-                    weight = FontWeight.Black,
-                    maxLines = 1
-                )
-                if (!tiny) ev.status?.takeIf { it.isNotBlank() }?.let {
-                    LiveText(it, color = Color.White.copy(alpha = 0.9f), size = (h.value * 0.065f).coerceAtLeast(9f).sp, weight = FontWeight.Bold, maxLines = 1)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val showScore = !hideScores && ev.hasScore
+                if (showScore) {
+                    val a = sides[0].score.orEmpty()
+                    val b = sides[1].score.orEmpty()
+                    val da = a.toDoubleOrNull()
+                    val db = b.toDoubleOrNull()
+                    // The team behind is dimmed, as on the Sports cards; a tie stays bright.
+                    val dimA = da != null && db != null && da < db
+                    val dimB = da != null && db != null && db < da
+                    // A long score (112 – 124) steps down instead of running off the poster.
+                    val size = (h.value * (if (a.length + b.length >= 6) 0.10f else 0.12f)).sp
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        LiveText(a, color = Color.White.copy(alpha = if (dimA) 0.6f else 1f), size = size, weight = FontWeight.Black, shadow = true)
+                        LiveText(" – ", color = Color.White, size = size, weight = FontWeight.Black, shadow = true)
+                        LiveText(b, color = Color.White.copy(alpha = if (dimB) 0.6f else 1f), size = size, weight = FontWeight.Black, shadow = true)
+                    }
+                } else {
+                    LiveText("vs", color = Color.White, size = (h.value * 0.10f).sp, weight = FontWeight.Black, maxLines = 1, shadow = true)
+                }
+                if (!tiny) {
+                    val status = ev.status?.takeIf { it.isNotBlank() }
+                    val live = ev.state == GameState.LIVE
+                    if (live || status != null) {
+                        Spacer(Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (live) {
+                                com.nuvio.tv.livetv.ui.LiveTag("● LIVE", SportsLook.Live, Color.White)
+                                if (status != null) Spacer(Modifier.width(6.dp))
+                            }
+                            status?.let {
+                                LiveText(it, color = Color.White, size = (h.value * 0.055f).coerceAtLeast(9f).sp, weight = FontWeight.Bold, maxLines = 1, shadow = true)
+                            }
+                        }
+                    }
                 }
             }
             TeamLogo(sides[1].team, logo)

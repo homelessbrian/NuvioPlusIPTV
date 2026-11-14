@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">Seek Thumbnails</string>
+    <string name="playback_section_seek_thumbnails_desc">Preview pictures above the seek bar while you seek</string>
+    <string name="iptv_thumbs_title">Seek Thumbnails</string>
+    <string name="iptv_thumbs_subtitle">Shows a preview picture above the seek bar while you seek. Pictures are made on this TV from the video itself</string>
+    <string name="iptv_thumbs_works_on">"Works on: movies and shows in the main player (including streamed HLS links), your recordings, sports replays and highlights, catch-up, and rewinding Live TV (the pause buffer).\nCatch-up: pictures come from the part saved with Faster Catch-Up Skipping, or straight from the provider for streamed (HLS) catch-up.\nDoesn't work on: torrents, DASH links, or protected streams."</string>
+    <string name="iptv_thumbs_low_memory_note">This device has limited memory. Thumbnails may cause stutter. If they do, they pause by themselves and the seek bar says so.</string>
+    <string name="iptv_thumbs_include_4k">Include 4K and HDR</string>
+    <string name="iptv_thumbs_include_4k_desc">Also makes thumbnails for 4K and HDR videos. Starts on for devices with plenty of memory and off for lower-end ones, but you can turn it on anywhere and try it. 4K thumbnails may stutter or not work on lower-end devices, and use more data. Pictures of HDR videos can look washed out. Streamed links use their smallest version, so this rarely matters for them</string>
+    <string name="iptv_thumbs_when_to_make">When to Make Thumbnails</string>
+    <string name="iptv_thumbs_when_seeking">Only When Paused or Seeking</string>
+    <string name="iptv_thumbs_when_seeking_desc">The lightest choice: nothing is made while the video just plays</string>
+    <string name="iptv_thumbs_when_watching">While Watching</string>
+    <string name="iptv_thumbs_when_watching_desc">Also made in the background while the video plays, when it has loaded well ahead</string>
+    <string name="iptv_thumbs_when_right_away">Right Away</string>
+    <string name="iptv_thumbs_when_right_away_desc">The whole video, from the start, as soon as it opens. Uses the most data</string>
+    <string name="iptv_thumbs_storage_limit">Storage Limit</string>
+    <string name="iptv_thumbs_storage_limit_desc">Saved thumbnails take up to this much space; the videos watched longest ago are cleared first</string>
+    <string name="iptv_thumbs_size_mb">%1$s MB</string>
+    <string name="iptv_thumbs_size_kb">%1$s KB</string>
+    <string name="iptv_thumbs_clear">Clear Saved Thumbnails</string>
+    <string name="iptv_thumbs_clear_desc">Deletes every saved thumbnail. They\'re made again when needed</string>
+    <string name="iptv_thumbs_last_paused">Last paused for low memory: %1$s, %2$s</string>
+    <string name="iptv_thumbs_msg_making">Making thumbnails…</string>
+    <string name="iptv_thumbs_msg_low_memory">Thumbnails paused: low memory</string>
+    <string name="iptv_thumbs_msg_live">No thumbnails for Live TV</string>
+    <string name="iptv_thumbs_msg_dash">No thumbnails for DASH links</string>
+    <string name="iptv_thumbs_msg_catchup_save">Turn on Faster Catch-Up Skipping for thumbnails</string>
+    <string name="iptv_thumbs_msg_protected">This stream is protected: no thumbnails</string>
+    <string name="iptv_thumbs_msg_torrent">No thumbnails for torrents</string>
+    <string name="iptv_thumbs_msg_link_kind">No thumbnails for this kind of link</string>
+    <string name="iptv_thumbs_msg_unreadable">This stream couldn\'t be read for thumbnails</string>
+    <string name="iptv_thumbs_msg_pieces_large">This stream\'s pieces are too large for thumbnails</string>
+    <string name="iptv_thumbs_msg_stopped">Thumbnails stopped working for this video</string>
+    <string name="iptv_thumbs_msg_no_pictures">The server didn\'t send thumbnail pictures</string>
+    <string name="iptv_thumbs_msg_format">This video\'s format can\'t make thumbnails on this device</string>
+    <string name="iptv_thumbs_msg_open_failed">This video couldn\'t be opened for thumbnails</string>
+    <string name="iptv_thumbs_msg_catchup_stream">No thumbnails for this catch-up stream</string>
+</resources>

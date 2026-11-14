@@ -327,7 +327,7 @@ internal fun ArrowButton(up: Boolean, enabled: Boolean, onClick: () -> Unit) {
     ) {
         androidx.tv.material3.Icon(
             if (up) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-            contentDescription = if (up) "Move up" else "Move down",
+            contentDescription = androidx.compose.ui.res.stringResource(if (up) com.nuvio.tv.R.string.iptv_settings_move_up else com.nuvio.tv.R.string.iptv_settings_move_down),
             tint = focusedTextColor(focused).copy(alpha = if (enabled) 1f else 0.3f),
             modifier = Modifier.size(22.dp)
         )

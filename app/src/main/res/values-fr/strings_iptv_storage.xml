@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"Cet appareil"</string>
+    <string name="iptv_storage_usb_drive">"Disque USB"</string>
+    <string name="iptv_storage_read_only">"Lecture seule. Ce boîtier peut lire le disque mais pas y écrire (généralement un disque NTFS). Le formater en exFAT permet d’y enregistrer."</string>
+    <string name="iptv_storage_unsupported_format">"Ce boîtier ne peut pas lire le format du disque. Le formater en exFAT règle généralement le problème."</string>
+    <string name="iptv_storage_not_ready">"Pas encore prêt. Patientez un instant et rouvrez cette liste."</string>
+    <string name="iptv_storage_no_app_folder">"Android n’a pas donné de dossier à l’app sur ce disque. Débranchez et rebranchez le disque, ou redémarrez le boîtier."</string>
+    <string name="iptv_storage_unusable_state">"Inutilisable pour le moment (%1$s)."</string>
+</resources>

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="one">"%1$d playlist"</item>
+        <item quantity="other">"%1$d playlists"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="one">"%1$d gids"</item>
+        <item quantity="other">"%1$d gidsen"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="one">"%1$d zender"</item>
+        <item quantity="other">"%1$d zenders"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="one">"%1$d programma gekoppeld"</item>
+        <item quantity="other">"%1$d programma’s gekoppeld"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="one">"%1$d verwijderd"</item>
+        <item quantity="other">"%1$d verwijderd"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="one">"%1$d min"</item>
+        <item quantity="other">"%1$d min"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="one">"%1$d dag"</item>
+        <item quantity="other">"%1$d dagen"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="one">"%1$d uur"</item>
+        <item quantity="other">"%1$d uur"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="one">"%1$d seconde"</item>
+        <item quantity="other">"%1$d seconden"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="one">"%1$d dag geleden"</item>
+        <item quantity="other">"%1$d dagen geleden"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="one">"%1$d week geleden"</item>
+        <item quantity="other">"%1$d weken geleden"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="one">"%1$d maand geleden"</item>
+        <item quantity="other">"%1$d maanden geleden"</item>
+    </plurals>
+</resources>

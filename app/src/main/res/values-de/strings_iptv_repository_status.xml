@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"Playlist „%1$s“ wird aktualisiert…"</string>
+    <string name="iptv_repository_status_reading_channels">"Sender werden gelesen…"</string>
+    <string name="iptv_repository_status_downloading_guide">"Programmführer „%1$s“ wird heruntergeladen…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"Programmführer „%1$s“ wird heruntergeladen"</string>
+    <string name="iptv_repository_status_matching_data">"Programmdaten werden zugeordnet…"</string>
+    <string name="iptv_repository_status_updating_guide">"Programmführer wird aktualisiert…"</string>
+    <string name="iptv_repository_status_adding_playlist">"Sender aus „%1$s“ werden hinzugefügt…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"Sender aus „%1$s“ werden gelesen…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"Sender aus „%1$s“ werden gelesen (%2$d von %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"Nicht genug Speicher für Programmführer „%1$s“ – übersprungen"</string>
+    <string name="iptv_repository_status_reading_guide">"Programmführer „%1$s“ wird gelesen…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"Programmführer „%1$s“ wird gelesen (%2$d von %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"Programmführer „%1$s“ wird gelesen… %2$d %%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"Programmführer „%1$s“ wird gelesen (%2$d von %3$d)… %4$d %%"</string>
+    <string name="iptv_repository_status_matching_guide">"Programmführer „%1$s“ wird zugeordnet…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"Programmführer „%1$s“ wird zugeordnet (%2$d von %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"Playlist „%1$s“ wird heruntergeladen"</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s von %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"Sender aus %1$s werden geladen… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"Der Server des Anbieters wurde nicht gefunden."</string>
+    <string name="iptv_repository_status_timeout_short">"Der Anbieter hat zu lange gebraucht."</string>
+    <string name="iptv_repository_status_generic_error">"Etwas ist schiefgelaufen."</string>
+    <string name="iptv_repository_status_unknown_host_address">"Der Server des Anbieters (%1$s) wurde nicht gefunden. Prüfe die Adresse und deine Internetverbindung oder versuche es später erneut."</string>
+    <string name="iptv_repository_status_provider_timeout">"Der Anbieter hat zu lange gebraucht (Zeitüberschreitung). Er ist vielleicht ausgelastet; versuche es später erneut."</string>
+    <string name="iptv_repository_status_address">"Adresse"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"Playlist „%1$s“ konnte nicht aktualisiert werden. %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"Programmführer „%1$s“ konnte nicht aktualisiert werden. %2$s"</string>
+    <string name="iptv_repository_status_expired">"„%1$s“ ist abgelaufen"</string>
+    <string name="iptv_repository_status_expires_today">"„%1$s“ läuft heute ab"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"„%1$s“ läuft morgen ab"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">"Sender aus %1$d neuen Playlist werden hinzugefügt…"</item>
+        <item quantity="other">"Sender aus %1$d neuen Playlists werden hinzugefügt…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">"„%1$s“ läuft in %2$d Tag ab"</item>
+        <item quantity="other">"„%1$s“ läuft in %2$d Tagen ab"</item>
+    </plurals>
+</resources>

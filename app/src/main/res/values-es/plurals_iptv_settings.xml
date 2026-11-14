@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="one">"%1$d lista de reproducción"</item>
+        <item quantity="other">"%1$d listas de reproducción"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="one">"%1$d guía"</item>
+        <item quantity="other">"%1$d guías"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="one">"%1$d canal"</item>
+        <item quantity="other">"%1$d canales"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="one">"%1$d programa coincidente"</item>
+        <item quantity="other">"%1$d programas coincidentes"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="one">"%1$d eliminado"</item>
+        <item quantity="other">"%1$d eliminados"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="one">"%1$d min"</item>
+        <item quantity="other">"%1$d min"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="one">"%1$d día"</item>
+        <item quantity="other">"%1$d días"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="one">"%1$d hora"</item>
+        <item quantity="other">"%1$d horas"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="one">"%1$d segundo"</item>
+        <item quantity="other">"%1$d segundos"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="one">"hace %1$d día"</item>
+        <item quantity="other">"hace %1$d días"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="one">"hace %1$d semana"</item>
+        <item quantity="other">"hace %1$d semanas"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="one">"hace %1$d mes"</item>
+        <item quantity="other">"hace %1$d meses"</item>
+    </plurals>
+</resources>

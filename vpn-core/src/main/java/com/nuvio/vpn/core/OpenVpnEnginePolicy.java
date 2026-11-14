@@ -3,8 +3,10 @@ package com.nuvio.vpn.core;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** Engine selection is a property of a validated profile, never a retry after a connection failure. */
 public final class OpenVpnEnginePolicy {
@@ -48,8 +50,10 @@ public final class OpenVpnEnginePolicy {
             if (option.equals("fragment") || option.equals("--fragment")) fragment = true;
         }
         if (!fragment) return Engine.OPENVPN3;
+        // Only this compatibility path may discard a proven redundant legacy option.
+        legacyKeysizeLine(text);
 
-        int fragments = 0;
+        int fragments = 0, legacyCertTypes = 0;
         for (String directive : directives) {
             if (directive.startsWith("<")) {
                 if (!directive.matches("<(ca|cert|key|tls-auth|tls-crypt|tls-crypt-v2|auth-user-pass|extra-certs|crl-verify)>")) {
@@ -65,16 +69,105 @@ public final class OpenVpnEnginePolicy {
             if (option.startsWith("--")) option = option.substring(2);
             // Do not allow alternate option spelling/quoting to bypass the supported-option contract.
             if (!option.matches("[a-z][a-z0-9-]*")) throw unsupported("option spelling");
+            if (option.equals("ns-cert-type") && ++legacyCertTypes != 1) throw unsupported(option);
             if (option.equals("fragment")) {
                 if (++fragments != 1 || !arity(fields, 1, 2) || !number(fields.get(1), 68, 65535)
                         || (fields.size() == 3 && !fields.get(2).equals("mtu"))) {
                     throw new IOException("OpenVPN fragmentation requires one fragment size from 68 to 65535, optionally followed by mtu.");
                 }
-            } else if (!supported(option, fields)) {
+            } else if (!option.equals("keysize") && !supported(option, fields)) {
                 throw unsupported(option);
             }
         }
         return Engine.OPENVPN2;
+    }
+
+    /**
+     * Owned compatibility input for both engine validators. The saved profile stays intact.
+     * OpenVPN 2.6 removed keysize; fixed AES ciphers already encode their key length. Remove
+     * it only when every explicit data-cipher constraint proves the same AES key length.
+     * No-fragment/OpenVPN 3 profiles are returned unchanged in a separately owned array.
+     */
+    public static char[] normalizeLegacyKeysize(char[] contents) throws IOException {
+        if (contents == null || contents.length == 0 || contents.length > ProfileImport.MAX_BYTES)
+            throw unsupported("configuration size");
+        String text = new String(contents);
+        int removed = legacyKeysizeLine(text);
+        if (removed < 0) return contents.clone();
+        String[] lines = text.split("\\r?\\n", -1);
+        StringBuilder normalized = new StringBuilder(text.length());
+        for (int i = 0; i < lines.length; i++) {
+            if (i == removed) continue;
+            if (normalized.length() > 0) normalized.append('\n');
+            normalized.append(lines[i]);
+        }
+        return normalized.toString().toCharArray();
+    }
+
+    private static int legacyKeysizeLine(String text) throws IOException {
+        String[] lines = text.split("\\r?\\n", -1);
+        List<Integer> directiveLines = new ArrayList<>();
+        String inline = null;
+        boolean fragment = false, connection = false;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (inline != null) {
+                if (line.equalsIgnoreCase("</" + inline + ">")) inline = null;
+                continue;
+            }
+            if (line.isEmpty() || line.startsWith("#") || line.startsWith(";")) continue;
+            if (line.startsWith("<")) {
+                if (line.equals("<connection>") || line.equals("</connection>")) connection = true;
+                else if (line.endsWith(">") && !line.startsWith("</"))
+                    inline = line.substring(1, line.length() - 1).toLowerCase(Locale.ROOT);
+                continue;
+            }
+            directiveLines.add(i);
+            String first = line.split("\\s+", 2)[0];
+            if (first.equals("fragment") || first.equals("--fragment")) fragment = true;
+        }
+        if (!fragment) return -1;
+
+        int keysizeLine = -1;
+        String bits = null;
+        List<List<String>> constraints = new ArrayList<>();
+        boolean cipherSpelling = true;
+        for (int index : directiveLines) {
+            String line = lines[index].trim();
+            List<String> fields = arguments(line);
+            if (fields.isEmpty()) continue;
+            String option = fields.get(0);
+            if (option.startsWith("--")) option = option.substring(2);
+            boolean canonical = line.split("\\s+", 2)[0].equals(fields.get(0));
+            if (option.equals("keysize")) {
+                if (!canonical || keysizeLine >= 0 || !oneOf(fields, "128", "192", "256"))
+                    throw unsupported("keysize");
+                keysizeLine = index;
+                bits = fields.get(1);
+            } else if (option.equals("cipher") || option.equals("data-ciphers")
+                    || option.equals("ncp-ciphers") || option.equals("data-ciphers-fallback")) {
+                cipherSpelling &= canonical;
+                constraints.add(fields);
+            }
+        }
+        if (keysizeLine < 0) return -1;
+        // Connection-scoped overrides require their own effective-cipher model. Do not guess.
+        if (connection || !cipherSpelling) throw unsupported("keysize cipher constraints");
+        Set<String> seen = new HashSet<>();
+        boolean constrained = false;
+        for (List<String> fields : constraints) {
+            String option = fields.get(0);
+            if (option.startsWith("--")) option = option.substring(2);
+            String identity = option.equals("ncp-ciphers") ? "data-ciphers" : option;
+            if (!seen.add(identity) || !arity(fields, 1, 1)) throw unsupported("keysize cipher constraints");
+            boolean list = identity.equals("data-ciphers");
+            if (!identity.equals("data-ciphers-fallback")) constrained = true;
+            for (String cipher : (list ? fields.get(1).split(":", -1) : new String[] {fields.get(1)})) {
+                if (!cipher.matches("AES-" + bits + "-(CBC|GCM)")) throw unsupported("keysize cipher constraints");
+            }
+        }
+        if (!constrained) throw unsupported("keysize cipher constraints");
+        return keysizeLine;
     }
 
     private static boolean supported(String option, List<String> p) {
@@ -142,6 +235,9 @@ public final class OpenVpnEnginePolicy {
                 return true;
             case "remote-cert-tls":
                 return oneOf(p, "server");
+            case "ns-cert-type":
+                // The actual OpenSSL compatibility engine retains this purpose constraint.
+                return oneOf(p, "server");
             case "remote-cert-eku":
                 return arity(p, 1, 1) && !p.get(1).isEmpty();
             case "remote-cert-ku":
@@ -173,6 +269,12 @@ public final class OpenVpnEnginePolicy {
                 if (!arity(p, 0, 2)) return false;
                 for (int i = 1; i < p.size(); i++) if (!p.get(i).matches("def1|ipv6")) return false;
                 return true;
+            case "route-method":
+                // Windows route-installation preference; ignored natively on Android.
+                return oneOf(p, "exe", "ipapi", "adaptive");
+            case "route-delay":
+                return arity(p, 0, 2) && (p.size() == 1 || number(p.get(1), 0, 3600))
+                        && (p.size() < 3 || number(p.get(2), 0, 3600));
             case "setenv":
                 // OpenVPN's setenv opt/FORWARD_COMPATIBLE can hide unsupported options. Never allow them.
                 return arity(p, 2, 2) && p.get(1).equals("CLIENT_CERT") && p.get(2).matches("0|1");

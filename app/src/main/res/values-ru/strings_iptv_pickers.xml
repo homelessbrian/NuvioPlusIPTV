@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"Быстрые каналы"</string>
+    <string name="iptv_quick_channels_subtitle">"Ярлыки под панелью воспроизведения. Нажмите «Вниз» на панели, чтобы открыть их."</string>
+    <string name="iptv_quick_channels_show">"Показывать быстрые каналы"</string>
+    <string name="iptv_quick_channels_opens_on">"Открывается на"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"Список, который показывается первым"</string>
+    <string name="iptv_quick_channels_first_list">"Первый список"</string>
+    <string name="iptv_quick_channels_last_used">"Последний использованный"</string>
+    <string name="iptv_quick_channels_lists_hint">"Списки в ряду · OK включает или выключает список, стрелки его перемещают"</string>
+    <string name="iptv_quick_channels_recent">"Недавно просмотренные"</string>
+    <string name="iptv_quick_channels_favorites">"Избранное"</string>
+    <string name="iptv_quick_channels_built_in">"Встроенные"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · группа плейлиста"</string>
+    <string name="iptv_quick_channels_your_group">"Ваша группа"</string>
+    <string name="iptv_quick_channels_group_missing">"Группа не найдена"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"Сейчас её нет в ваших плейлистах"</string>
+    <string name="iptv_quick_channels_add_group">"Добавить группу плейлиста…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"Любая группа из любого плейлиста, включая ваши собственные группы"</string>
+    <string name="iptv_quick_channels_add_groups_title">"Добавить группы плейлиста"</string>
+    <string name="iptv_quick_channels_no_groups">"Групп пока нет. Сначала добавьте плейлист."</string>
+    <string name="iptv_quick_channels_add_groups_hint">"Каждая отмеченная группа станет отдельным списком в быстрых каналах."</string>
+    <string name="iptv_quick_channels_my_groups">"Мои группы"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="one">"%1$d канал"</item>
+        <item quantity="few">"%1$d канала"</item>
+        <item quantity="many">"%1$d каналов"</item>
+        <item quantity="other">"%1$d канала"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"Порядок провайдера"</string>
+    <string name="iptv_vod_sort_name_az">"А–Я"</string>
+    <string name="iptv_vod_sort_name_za">"Я–А"</string>
+    <string name="iptv_vod_sort_newest">"Сначала новые"</string>
+    <string name="iptv_vod_sort_oldest">"Сначала старые"</string>
+    <string name="iptv_vod_sort_recently_added">"Недавно добавленные"</string>
+    <string name="iptv_vod_sort_highest_rated">"С высоким рейтингом"</string>
+    <string name="iptv_vod_sort_shuffle">"Случайно"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"Порядок, который присылает провайдер"</string>
+    <string name="iptv_vod_sort_name_az_hint">"Сначала цифры и символы, затем от А до Я"</string>
+    <string name="iptv_vod_sort_name_za_hint">"От Я до А, затем цифры и символы"</string>
+    <string name="iptv_vod_sort_newest_hint">"По году выхода, сначала новые"</string>
+    <string name="iptv_vod_sort_oldest_hint">"По году выхода, сначала старые"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"То, что провайдер добавил недавно"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"По рейтингу провайдера, сначала лучшие"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"Новый случайный порядок при каждом выборе"</string>
+    <string name="iptv_vod_sort_default_hint">"Как в сортировке по умолчанию в настройках"</string>
+</resources>

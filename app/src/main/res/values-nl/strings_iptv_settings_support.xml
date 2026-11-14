@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Zoeken…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Test mislukt: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Playlist"</string>
+    <string name="iptv_settings_support_remote_title">"Knoppentest afstandsbediening"</string>
+    <string name="iptv_settings_support_remote_instructions">"Druk op een willekeurige knop. Nieuwste bovenaan; gekleurde regels zijn een andere knop binnen 250 ms na de vorige (bijvoorbeeld OK samen met Omhoog/Omlaag verstuurd). Druk 3 keer achter elkaar op Terug om te sluiten."</string>
+    <string name="iptv_settings_support_remote_waiting">"Wachten op een knop…"</string>
+    <string name="iptv_settings_support_remote_action_down">"DOWN"</string>
+    <string name="iptv_settings_support_remote_action_up">"UP"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"MULTI"</string>
+    <string name="iptv_settings_support_remote_repeat">"herhaling %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"lang ingedrukt"</string>
+    <string name="iptv_settings_support_remote_canceled">"geannuleerd"</string>
+    <string name="iptv_settings_support_remote_held">"%1$d ms vastgehouden"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Opstartrapport live tv"</string>
+    <string name="iptv_settings_support_report_subtitle">"Sinds de app is gestart. ▲ ▼ om te scrollen."</string>
+    <string name="iptv_settings_support_report_empty">"Nog niets: open eerst live tv."</string>
+    <string name="iptv_settings_support_report_send">"Het hele rapport versturen"</string>
+    <string name="iptv_settings_support_report_no_network">"Verbind deze tv met wifi om het rapport via je telefoon te versturen."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Verbind je telefoon met hetzelfde wifi-netwerk als deze tv.\n2. Scan deze code met de camera van je telefoon, of typ het adres hieronder.\n3. Tik op Kort rapport kopiëren (past in één Discord-bericht) en plak het in je bericht."</string>
+</resources>

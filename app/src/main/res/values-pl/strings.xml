@@ -309,6 +309,28 @@
     <string name="sub_outline_sub">Dodaj obrys wokół tekstu napisów dla lepszej widoczności</string>
     <string name="sub_outline_color">Kolor obrysu</string>
     <string name="sub_opacity">Krycie</string>
+    <string name="sub_appearance">Wygląd napisów</string>
+    <string name="sub_appearance_desc">Czcionka, kolory, tło i cień</string>
+    <string name="sub_appearance_hint">Dotyczy napisów tekstowych. Stylizowane napisy ASS i napisy graficzne zachowują oryginalny wygląd.</string>
+    <string name="sub_preview">Podgląd</string>
+    <string name="sub_preview_text">Każda historia zaczyna się od odrobiny ciekawości.</string>
+    <string name="sub_font">Czcionka</string>
+    <string name="sub_font_default">Domyślna</string>
+    <string name="sub_font_serif">Szeryfowa</string>
+    <string name="sub_font_mono">O stałej szerokości</string>
+    <string name="sub_font_import">Importuj z telefonu</string>
+    <string name="sub_font_import_desc">Dodaj czcionkę .ttf lub .otf do 10 MB. Zaimportowane czcionki zostają na tym TV.</string>
+    <string name="sub_font_import_qr">Zeskanuj telefonem, aby dodać czcionkę .ttf lub .otf</string>
+    <string name="sub_font_missing">Czcionka jest niedostępna na tym urządzeniu. Używana jest czcionka domyślna.</string>
+    <string name="sub_font_remove">Usuń %1$s</string>
+    <string name="sub_background">Tło</string>
+    <string name="sub_bg_opacity">Krycie tła</string>
+    <string name="sub_bg_roundness">Zaokrąglenie rogów</string>
+    <string name="sub_shadow">Cień</string>
+    <string name="sub_shadow_desc">Oddziel tekst od jasnych scen</string>
+    <string name="sub_shadow_opacity">Krycie cienia</string>
+    <string name="sub_shadow_size">Rozmiar cienia</string>
+    <string name="sub_reset_appearance">Resetuj wygląd</string>
     <string name="sub_advanced_section">Zaawansowane renderowanie napisów</string>
     <string name="sub_libass">Używaj libass dla napisów ASS/SSA</string>
     <string name="sub_libass_sub">Zaawansowane renderowanie ASS/SSA (style, pozycjonowanie, animacje)</string>
@@ -535,6 +557,13 @@
     <string name="web_custom_poster_none">Brak wzorca</string>
     <string name="web_custom_poster_loading">Ładowanie…</string>
     <string name="web_custom_poster_placeholders_info">Symbole: {id} przekazuje wszystkie ID treści. {imdb_id}, {tmdb_id}, {tvdb_id}, {kitsu_id} celują w jeden typ ID - jeśli niedostępny, oryginalny plakat zostaje. {imdb_id|tmdb_id|kitsu_id} deklaruje wspierane typy ID - pasujący zostanie użyty, lub oryginalny plakat zostaje. Dodaj ? aby symbol był opcjonalny, rozwiązując do pustego zamiast pomijania: {imdb_id?}. Inne symbole: {id_type}, {typed_id}, {type}, {shape}.</string>
+    <string name="web_subtitle_font_title">Czcionki napisów</string>
+    <string name="web_subtitle_font_subtitle">Wybierz plik .ttf lub .otf, aby używać go w napisach na TV.</string>
+    <string name="web_subtitle_font_choose">Wybierz plik czcionki</string>
+    <string name="web_subtitle_font_uploading">Przesyłanie…</string>
+    <string name="web_subtitle_font_added">Dodano do TV</string>
+    <string name="web_subtitle_font_error">Nie udało się zaimportować tej czcionki. Wybierz prawidłowy plik .ttf lub .otf mniejszy niż 10 MB.</string>
+    <string name="web_subtitle_font_connection_error">Błąd połączenia</string>
 
 
     <!-- MDBListSettingsScreen -->
@@ -1585,6 +1614,16 @@
     <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
     <string name="playback_auto_switch_internal_player_on_error">Automatyczne przełączanie silnika przy błędzie</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Jeśli uruchomienie strumienia się nie powiedzie, automatycznie przełącz między ExoPlayer a libmpv.</string>
+    <string name="playback_auto_switch_internal_player_blocked_by_fallback">Wyłącz przechodzenie do kolejnego pasującego źródła, aby tego użyć.</string>
+    <string name="autoplay_fallback_next_source">Przejdź do kolejnego pasującego źródła przy błędzie</string>
+    <string name="autoplay_fallback_next_source_sub">Jeśli automatycznie wybrane źródło zgłosi błąd lub nie uruchomi się na czas, po cichu spróbuj kolejnych pasujących źródeł.</string>
+    <string name="autoplay_fallback_max_sources">Źródła do sprawdzenia przy błędzie</string>
+    <string name="autoplay_fallback_max_sources_sub">Ile kolejnych pasujących źródeł sprawdzić, zanim pojawi się błąd.</string>
+    <string name="autoplay_fallback_startup_timeout">Czas na uruchomienie źródła</string>
+    <string name="autoplay_fallback_startup_timeout_sub">Jak długo czekać na uruchomienie źródła, zanim zostanie sprawdzone kolejne.</string>
+    <string name="autoplay_fallback_startup_timeout_value">%1$ds</string>
+    <string name="autoplay_fallback_next_source_blocked_by_engine_switch">Wyłącz automatyczne przełączanie silnika przy błędzie, aby tego użyć.</string>
+    <string name="player_error_source_startup_timeout">Źródło nie uruchomiło się w ciągu %1$d sekund.</string>
     <string name="playback_release_decoder_on_background">Zwalniaj dekoder w tle</string>
     <string name="playback_release_decoder_on_background_sub">Zwalnia dekoder wideo, gdy Nuvio przechodzi w tło. Włącz, jeśli po powrocie do aplikacji odtwarzanie kończy się błędem dekodera. Po powrocie, także po wygaszaczu ekranu, odtwarzacz ładuje się od nowa</string>
     <string name="playback_external_forward_subtitles">Przekazuj napisy do zewnętrznego odtwarzacza</string>
@@ -2303,6 +2342,14 @@
     <string name="layout_cw_sort_streaming_desc">Wydane elementy najpierw, nadchodzące na końcu</string>
     <string name="layout_cw_sort_split_upcoming">Oddzielny rząd Nadchodzące</string>
     <string name="layout_cw_sort_split_upcoming_desc">Przenieś niewydane odcinki do oddzielnego rzędu Nadchodzące</string>
+    <string name="layout_cw_click_action">Po wybraniu</string>
+    <string name="layout_cw_click_action_sub">Co otwiera się po wybraniu elementu Kontynuuj oglądanie</string>
+    <string name="layout_cw_click_stream">Otwórz strumień</string>
+    <string name="layout_cw_click_stream_desc">Wybierz źródło lub wznów odtwarzanie</string>
+    <string name="layout_cw_click_details">Otwórz szczegóły</string>
+    <string name="layout_cw_click_details_desc">Otwórz stronę szczegółów tytułu</string>
+    <string name="layout_cw_click_details_upcoming">Szczegóły tylko dla nadchodzących</string>
+    <string name="layout_cw_click_details_upcoming_desc">Szczegóły dla odcinków, które jeszcze nie wyszły, strumień dla pozostałych</string>
     <string name="layout_discover_location_action">Lokalizacja Odkrywaj</string>
     <string name="layout_discover_location_dialog_title">Lokalizacja Odkrywaj</string>
     <string name="layout_discover_location_in_search">Pokaż w Szukaj</string>
@@ -3467,9 +3514,10 @@
 
     <string name="layout_custom_poster_screen_tv_recommendations">Rekomendacje TV</string>
 
-    <string name="playback_chapters_label">Rozdziały</string>
-    <string name="playback_exo_chapters_title">Pokaż rozdziały (ExoPlayer)</string>
-    <string name="playback_exo_chapters_sub">Odczytuj rozdziały z plików MKV, aby oznaczać je na pasku postępu i przeskakiwać między nimi. Wymaga kilku dodatkowych zapytań po rozpoczęciu odtwarzania. mpv zawsze pokazuje rozdziały.</string>
+    <string name="playback_exo_chapters_title">Pokaż rozdziały</string>
+    <string name="playback_exo_chapters_sub">Odczytuj rozdziały z plików MKV, aby oznaczać je na pasku postępu i przeskakiwać między nimi.</string>
+    <string name="playback_chapter_title_title">Pokaż tytuł rozdziału</string>
+    <string name="playback_chapter_title_sub">Pokazuj nazwę bieżącego rozdziału nad paskiem postępu.</string>
     <string name="player_chapters">Rozdziały</string>
     <string name="player_chapters_title">Rozdziały (%1$d)</string>
     <string name="player_chapter_number">Rozdział %1$d</string>

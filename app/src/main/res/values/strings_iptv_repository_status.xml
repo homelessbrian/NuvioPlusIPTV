@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">Updating playlist \"%1$s\"…</string>
+    <string name="iptv_repository_status_reading_channels">Reading channels…</string>
+    <string name="iptv_repository_status_downloading_guide">Downloading guide \"%1$s\"…</string>
+    <string name="iptv_repository_status_downloading_guide_label">Downloading guide \"%1$s\"</string>
+    <string name="iptv_repository_status_matching_data">Matching guide data…</string>
+    <string name="iptv_repository_status_updating_guide">Updating guide…</string>
+    <string name="iptv_repository_status_adding_playlist">Adding channels from \"%1$s\"…</string>
+    <string name="iptv_repository_status_reading_channels_from">Reading channels from \"%1$s\"…</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">Reading channels from \"%1$s\" (%2$d of %3$d)…</string>
+    <string name="iptv_repository_status_guide_memory_skipped">Not enough memory for guide \"%1$s\" — skipped</string>
+    <string name="iptv_repository_status_reading_guide">Reading guide \"%1$s\"…</string>
+    <string name="iptv_repository_status_reading_guide_numbered">Reading guide \"%1$s\" (%2$d of %3$d)…</string>
+    <string name="iptv_repository_status_reading_guide_progress">Reading guide \"%1$s\"… %2$d%%</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">Reading guide \"%1$s\" (%2$d of %3$d)… %4$d%%</string>
+    <string name="iptv_repository_status_matching_guide">Matching guide \"%1$s\"…</string>
+    <string name="iptv_repository_status_matching_guide_numbered">Matching guide \"%1$s\" (%2$d of %3$d)…</string>
+    <string name="iptv_repository_status_downloading_playlist_label">Downloading playlist \"%1$s\"</string>
+    <string name="iptv_repository_status_download_progress">%1$s… %2$s</string>
+    <string name="iptv_repository_status_download_progress_total">%1$s… %2$s of %3$s</string>
+    <string name="iptv_repository_status_loading_channels">Loading channels from %1$s… %2$,d</string>
+    <string name="iptv_repository_status_size_gb">%1$.1f GB</string>
+    <string name="iptv_repository_status_size_mb">%1$.1f MB</string>
+    <string name="iptv_repository_status_size_kb">%1$d KB</string>
+    <string name="iptv_repository_status_unknown_host_short">Couldn\'t find the provider\'s server.</string>
+    <string name="iptv_repository_status_timeout_short">The provider took too long to answer.</string>
+    <string name="iptv_repository_status_generic_error">Something went wrong.</string>
+    <string name="iptv_repository_status_unknown_host_address">Couldn\'t find the provider\'s server (%1$s). Check the address, your internet, or try again later.</string>
+    <string name="iptv_repository_status_provider_timeout">The provider took too long to answer (timeout). It may be busy; try again later.</string>
+    <string name="iptv_repository_status_address">address</string>
+    <string name="iptv_repository_status_playlist_update_failed">Playlist \"%1$s\" couldn\'t update. %2$s</string>
+    <string name="iptv_repository_status_guide_update_failed">Guide \"%1$s\" couldn\'t update. %2$s</string>
+    <string name="iptv_repository_status_expired">\"%1$s\" has expired</string>
+    <string name="iptv_repository_status_expires_today">\"%1$s\" expires today</string>
+    <string name="iptv_repository_status_expires_tomorrow">\"%1$s\" expires tomorrow</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">Adding channels from %1$d new playlist…</item>
+        <item quantity="other">Adding channels from %1$d new playlists…</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">\"%1$s\" expires in %2$d day</item>
+        <item quantity="other">\"%1$s\" expires in %2$d days</item>
+    </plurals>
+</resources>

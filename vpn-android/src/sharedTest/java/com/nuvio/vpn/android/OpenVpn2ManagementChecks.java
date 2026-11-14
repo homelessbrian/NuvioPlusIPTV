@@ -114,7 +114,69 @@ public final class OpenVpn2ManagementChecks {
         try { OpenVpn2Config.prepare("<auth-user-pass>\none\ntwo\nthree\n</auth-user-pass>".toCharArray()); throw new AssertionError(); }
         catch (IOException expected) { checks++; }
         Arrays.fill(original, '\0'); Arrays.fill(preflight, '\0');
+        legacyKeysize();
         System.out.println("OpenVPN2 management: " + checks + " checks passed.");
+    }
+
+    private static void legacyKeysize() throws Exception {
+        String material = "<ca>\nkeysize 128\nns-cert-type client\nsynthetic-certificate\n</ca>\n";
+        String auth = "<auth-user-pass>\nkeysize 128\nsynthetic-password\n</auth-user-pass>\n";
+        String constraints = "cipher AES-256-CBC\ndata-ciphers AES-256-GCM:AES-256-CBC\n"
+                + "data-ciphers-fallback AES-256-CBC\n";
+        String platform = "route-method exe\nroute-delay 2\n";
+        String profile = "tls-client\npull\ndev tun\nproto udp\nremote vpn.example 1195\n"
+                + "fragment 1300\nkeysize 256\nauth SHA512\nverify-x509-name Synthetic name\n"
+                + "ns-cert-type server\nremote-cert-tls server\n" + platform + constraints + material + auth;
+        char[] original = profile.toCharArray(), before = original.clone();
+        char[] preflight = OpenVpn2Config.core3Preflight(original);
+        try {
+            String checked = new String(preflight);
+            check(!checked.contains("keysize 256") && !checked.contains("fragment 1300"));
+            check(checked.contains(constraints) && checked.contains(material) && checked.contains(auth));
+            check(!checked.contains("ns-cert-type server\n") && checked.contains("remote-cert-tls server\n")
+                    && checked.contains("verify-x509-name Synthetic name\n") && checked.contains(platform));
+            try (OpenVpn2Config input = OpenVpn2Config.prepare(original)) {
+                String text = new String(input.bytes, StandardCharsets.UTF_8);
+                check(!text.contains("keysize 256") && text.contains("fragment 1300\n"));
+                check(text.contains(constraints) && text.contains(material));
+                check(text.contains("verify-x509-name Synthetic name\n") && text.contains("remote-cert-tls server\n"));
+                check(text.contains("ns-cert-type server\n") && text.contains(platform));
+                check(!text.contains("synthetic-password") && text.contains("auth-user-pass\n"));
+                check(Arrays.equals(input.username, "keysize 128".toCharArray()) && !input.needsCredentials);
+                check(Arrays.equals(original, before));
+            }
+        } finally { Arrays.fill(original, '\0'); Arrays.fill(before, '\0'); Arrays.fill(preflight, '\0'); }
+        for (String invalid : new String[] {
+                "cipher AES-128-CBC\nkeysize 256\n", "cipher AES-256-CBC\nkeysize 256\nkeysize 256\n",
+                "cipher AES-256-CBC\n\"keysize\" 256\n", "keysize 256\n",
+                "cipher AES-256-CBC\nkeysize 256 extra\n"}) {
+            char[] source = ("fragment 1300\n" + invalid).toCharArray();
+            try {
+                try { OpenVpn2Config.core3Preflight(source); throw new AssertionError("Unsafe preflight normalization."); }
+                catch (IOException expected) { checks++; }
+                try { OpenVpn2Config.prepare(source); throw new AssertionError("Unsafe native normalization."); }
+                catch (IOException expected) { checks++; }
+            } finally { Arrays.fill(source, '\0'); }
+        }
+        for (String purpose : new String[] {"client", "", "server extra", "server\nns-cert-type server"}) {
+            char[] source = ("client\nremote vpn.example 1194\nfragment 1300\nns-cert-type " + purpose + "\n").toCharArray();
+            try {
+                try { OpenVpn2Config.core3Preflight(source); throw new AssertionError("Unsafe certificate preflight."); }
+                catch (IOException expected) { checks++; }
+                try { OpenVpn2Config.prepare(source); throw new AssertionError("Unsafe native certificate purpose."); }
+                catch (IOException expected) { checks++; }
+            } finally { Arrays.fill(source, '\0'); }
+        }
+        char[] core3 = "client\nremote vpn.example 1194\nns-cert-type server\nkeysize 256\ncipher AES-256-CBC\n".toCharArray();
+        char[] unchanged = OpenVpn2Config.core3Preflight(core3);
+        try { check(unchanged != core3 && Arrays.equals(unchanged, core3)); }
+        finally { Arrays.fill(core3, '\0'); Arrays.fill(unchanged, '\0'); }
+        // A sole fixed cipher is still promoted unchanged for OpenVPN 2.7 negotiation.
+        try (OpenVpn2Config input = OpenVpn2Config.prepare("fragment 1300\nkeysize 256\ncipher AES-256-CBC\n".toCharArray())) {
+            String text = new String(input.bytes, StandardCharsets.UTF_8);
+            check(!text.contains("keysize") && text.contains("data-ciphers AES-256-CBC\n")
+                    && text.contains("data-ciphers-fallback AES-256-CBC\n"));
+        }
     }
 
     private static void tunnel(OpenVpn2Management session) throws Exception {

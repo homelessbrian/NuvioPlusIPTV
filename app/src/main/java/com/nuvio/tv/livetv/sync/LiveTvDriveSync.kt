@@ -1,6 +1,9 @@
 package com.nuvio.tv.livetv.sync
 
 import android.content.Context
+import androidx.annotation.StringRes
+import com.nuvio.tv.R
+import com.nuvio.tv.core.util.withAppLocale
 import android.os.Build
 import android.util.Base64
 import android.util.Log
@@ -66,6 +69,8 @@ class LiveTvDriveSync @Inject constructor(
     private val prefs: LiveTvPreferences,
     private val repository: LiveTvRepository
 ) {
+    private fun text(@StringRes id: Int, vararg args: Any): String = context.withAppLocale().getString(id, *args)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val store = context.applicationContext.getSharedPreferences("livetv_drive_sync", Context.MODE_PRIVATE)
     private val mutex = Mutex()
@@ -172,7 +177,7 @@ class LiveTvDriveSync @Inject constructor(
                 codes = runCatching {
                     postForm("https://oauth2.googleapis.com/device/code", mapOf("client_id" to clientId, "scope" to scopes))
                 }.getOrElse {
-                    _state.value = _state.value.copy(busy = false, message = "Couldn't reach Google. Try again.")
+                    _state.value = _state.value.copy(busy = false, message = text(R.string.iptv_status_google_unreachable))
                     return@launch
                 }
                 mode = m
@@ -213,7 +218,7 @@ class LiveTvDriveSync @Inject constructor(
                     "authorization_pending" -> Unit
                     "slow_down" -> interval += 5
                     "access_denied" -> {
-                        _state.value = _state.value.copy(signIn = null, message = "Sign-in was declined.")
+                        _state.value = _state.value.copy(signIn = null, message = text(R.string.iptv_status_sign_in_declined))
                         return@launch
                     }
                     else -> {
@@ -222,7 +227,7 @@ class LiveTvDriveSync @Inject constructor(
                     }
                 }
             }
-            _state.value = _state.value.copy(signIn = null, message = "The code expired. Try again.")
+            _state.value = _state.value.copy(signIn = null, message = text(R.string.iptv_status_sign_in_code_expired))
         }
     }
 
@@ -235,7 +240,7 @@ class LiveTvDriveSync @Inject constructor(
     private suspend fun onSignedIn(token: JSONObject) {
         val refresh = token.optString("refresh_token")
         if (refresh.isBlank()) {
-            _state.value = _state.value.copy(signIn = null, message = "Google didn't return a sign-in. Try again.")
+            _state.value = _state.value.copy(signIn = null, message = text(R.string.iptv_status_google_no_sign_in))
             return
         }
         accessToken = token.optString("access_token")
@@ -258,7 +263,7 @@ class LiveTvDriveSync @Inject constructor(
         store.edit().remove(KEY_REFRESH).remove(KEY_EMAIL).remove(KEY_FILE_ID).remove(KEY_LAST_HASH).remove(KEY_MODE).apply()
         runCatching { baseFile().delete() }
         accessToken = null
-        _state.value = _state.value.copy(connected = false, email = null, message = "Disconnected. Your backup stays in your Google Drive.")
+        _state.value = _state.value.copy(connected = false, email = null, message = text(R.string.iptv_status_drive_disconnected))
         if (refresh != null) scope.launch {
             runCatching { postForm("https://oauth2.googleapis.com/revoke", mapOf("token" to refresh)) }
         }
@@ -279,7 +284,7 @@ class LiveTvDriveSync @Inject constructor(
     private suspend fun push(force: Boolean) = mutex.withLock {
         val token = token() ?: return@withLock
         emptyRefused = false
-        _state.value = _state.value.copy(busy = true, message = if (force) "Backing up…" else null)
+        _state.value = _state.value.copy(busy = true, message = if (force) text(R.string.iptv_status_backing_up) else null)
         val result = runCatching {
             var data = prefs.exportForSync()
             val removedHere = prefs.removedSourceIds()
@@ -349,9 +354,9 @@ class LiveTvDriveSync @Inject constructor(
             busy = false,
             lastSyncMs = store.getLong(KEY_LAST_SYNC, 0L),
             message = when {
-                result.isFailure -> "Backup failed: ${result.exceptionOrNull()?.message ?: "network error"}"
-                emptyRefused -> "Nothing backed up: add a playlist or guide first. Your saved copy in Google Drive was left as it was."
-                force -> "Backed up to Google Drive."
+                result.isFailure -> text(R.string.iptv_status_backup_failed, result.exceptionOrNull()?.message ?: text(R.string.iptv_status_network_error))
+                emptyRefused -> text(R.string.iptv_status_backup_empty)
+                force -> text(R.string.iptv_status_drive_backed_up)
                 else -> _state.value.message
             }
         )
@@ -363,7 +368,7 @@ class LiveTvDriveSync @Inject constructor(
      */
     private suspend fun pull(force: Boolean, onlyIfExists: Boolean = false): Boolean = mutex.withLock {
         val token = token() ?: return@withLock false
-        _state.value = _state.value.copy(busy = true, message = if (force && !onlyIfExists) "Restoring…" else null)
+        _state.value = _state.value.copy(busy = true, message = if (force && !onlyIfExists) text(R.string.iptv_status_restoring) else null)
         val result = runCatching {
             val fileId = fileId(token) ?: return@runCatching null
             val text = execute(
@@ -404,10 +409,10 @@ class LiveTvDriveSync @Inject constructor(
             busy = false,
             lastSyncMs = store.getLong(KEY_LAST_SYNC, 0L),
             message = when {
-                result.isFailure -> "Restore failed: ${result.exceptionOrNull()?.message ?: "network error"}"
-                result.getOrNull() == null && force && !onlyIfExists -> "No backup found in Google Drive yet."
-                applied && force -> "Restored from Google Drive."
-                applied -> "Updated from your other TV."
+                result.isFailure -> text(R.string.iptv_status_restore_failed, result.exceptionOrNull()?.message ?: text(R.string.iptv_status_network_error))
+                result.getOrNull() == null && force && !onlyIfExists -> text(R.string.iptv_status_drive_no_backup)
+                applied && force -> text(R.string.iptv_status_drive_restored)
+                applied -> text(R.string.iptv_status_updated_other_tv)
                 else -> _state.value.message
             }
         )
@@ -616,18 +621,18 @@ class LiveTvDriveSync @Inject constructor(
         }.getOrElse { e ->
             // The reason too (timeout, blocked, no route…), so a VPN or network problem shows.
             val why = when (e) {
-                is java.net.SocketTimeoutException -> "timed out"
-                is java.net.UnknownHostException -> "couldn't look up Google's address"
-                is javax.net.ssl.SSLException -> "secure connection refused"
-                is java.net.ConnectException -> "connection refused"
+                is java.net.SocketTimeoutException -> text(R.string.iptv_status_timed_out)
+                is java.net.UnknownHostException -> text(R.string.iptv_status_google_lookup_failed)
+                is javax.net.ssl.SSLException -> text(R.string.iptv_status_secure_connection_refused)
+                is java.net.ConnectException -> text(R.string.iptv_status_connection_refused)
                 else -> e.javaClass.simpleName
             }
-            _state.value = _state.value.copy(message = "Couldn't reach Google Drive ($why).")
+            _state.value = _state.value.copy(message = text(R.string.iptv_status_drive_unreachable, why))
             return null
         }
         if (res.optString("error") == "invalid_grant") {
             store.edit().remove(KEY_REFRESH).apply()
-            _state.value = _state.value.copy(connected = false, message = "Google Drive access was removed. Connect again to keep syncing.")
+            _state.value = _state.value.copy(connected = false, message = text(R.string.iptv_status_drive_access_removed))
             return null
         }
         val access = res.optString("access_token").ifBlank { return null }
@@ -676,17 +681,17 @@ class LiveTvDriveSync @Inject constructor(
     private val isAppDataMode: Boolean
         get() = store.getString(KEY_MODE, MODE_APPDATA) == MODE_APPDATA
 
-    /** Plain-English reason, plus Google's own wording so problems can be tracked down. */
+    /** Localized reason, plus Google's own wording so problems can be tracked down. */
     private fun googleError(json: JSONObject): String {
         val e = json.optString("error").ifBlank { json.optString("error_code") }
-        val detail = json.optString("error_description").takeIf { it.isNotBlank() }?.let { " Google says: $it" }.orEmpty()
+        val detail = json.optString("error_description").takeIf { it.isNotBlank() }?.let { text(R.string.iptv_status_google_detail, it) }.orEmpty()
         return when (e) {
-            "invalid_client" -> "Google doesn't recognize this build's sign-in client. Check that the client ID and secret are right, and that its type is \"TVs and Limited Input devices\".$detail"
-            "unauthorized_client" -> "This sign-in client isn't allowed to use TV sign-in. Create one of type \"TVs and Limited Input devices\".$detail"
-            "invalid_scope" -> "Google refused the Drive permission for this app.$detail"
-            "org_internal" -> "This app is limited to one organization. Set the audience to External in Google Cloud.$detail"
-            "rate_limit_exceeded" -> "Too many attempts. Wait a minute and try again."
-            else -> "Google sign-in failed ($e).$detail"
+            "invalid_client" -> text(R.string.iptv_status_google_invalid_client, detail)
+            "unauthorized_client" -> text(R.string.iptv_status_google_unauthorized_client, detail)
+            "invalid_scope" -> text(R.string.iptv_status_google_invalid_scope, detail)
+            "org_internal" -> text(R.string.iptv_status_google_org_internal, detail)
+            "rate_limit_exceeded" -> text(R.string.iptv_status_google_rate_limited)
+            else -> text(R.string.iptv_status_google_sign_in_failed, e, detail)
         }
     }
 

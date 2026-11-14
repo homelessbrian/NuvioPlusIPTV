@@ -13,6 +13,7 @@ import com.nuvio.tv.core.party.PartyStream
 import com.nuvio.tv.core.party.PartySync
 import com.nuvio.tv.core.party.isShareableStreamUrl
 import com.nuvio.tv.core.party.partyMediaKey
+import com.nuvio.tv.core.party.redactStalkerPartyMedia
 import com.nuvio.tv.ui.screens.party.messageRes
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -133,9 +134,13 @@ internal fun PlayerRuntimeController.currentPartyMedia(): PartyMedia = PartyMedi
         bingeGroup = currentStreamBingeGroup,
         name = _uiState.value.currentStreamName,
     ),
-)
+).let { media -> redactStalkerPartyMedia(media,
+    com.nuvio.tv.core.player.isStalkerPlaybackAddress(currentStreamUrl) || mediaSourceFactory.stalkerMediaPolicy != null) }
 
 internal fun PlayerRuntimeController.currentPartyStream(): PartyStream? {
+    // A remote party player cannot carry the playback-owned credential and routing policy.
+    if (com.nuvio.tv.core.player.isStalkerPlaybackAddress(currentStreamUrl) ||
+        mediaSourceFactory.stalkerMediaPolicy != null) return null
     if (isTorrentStream || _uiState.value.isServerStream) return null
     val url = currentStreamUrl
     if (!isShareableStreamUrl(url)) return null

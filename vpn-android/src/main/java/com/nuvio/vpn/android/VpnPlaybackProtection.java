@@ -124,7 +124,7 @@ public final class VpnPlaybackProtection {
         });
     }
 
-    static int activeUserProfile() { return activeUserProfile; }
+    public static int activeUserProfile() { return activeUserProfile; }
 
     /** Hosts publish the Nuvio profile before its players and settings start using it. */
     public static synchronized void setActiveUserProfile(int id) {
@@ -160,6 +160,23 @@ public final class VpnPlaybackProtection {
         return value;
     }
     public static long settingsRevision() { return settingsRevision.get(); }
+    /**
+     * Session-based portals need one network identity for their control and media requests.
+     * The returned value is an in-memory cache key, not evidence that a tunnel is connected;
+     * each request must still pass beforeRequest and use VpnHttpClient.
+     */
+    public static String requireUniformHttpRouting() throws IOException {
+        if (activeUserProfile <= 0)
+            throw new IOException("VPN user profile is not ready. Reopen the app before using a Stalker portal.");
+        VpnPreferences value = settings();
+        if (value.getMode() == ProtectionMode.HTTP_ONLY)
+            throw new IOException("Stalker portals require HTTP + HTTPS or Full app VPN protection. Change the VPN protection mode and retry.");
+        return value.getMode().name() + ":" + value.getSelectedProfileId() + ":" + settingsRevision.get();
+    }
+    /** A cold background host may restore its saved profile without overriding an active selection. */
+    public static synchronized void initializeActiveUserProfile(int id) {
+        if (activeUserProfile <= 0) setActiveUserProfile(id);
+    }
     public static AutoCloseable observeSettings(Runnable listener) {
         settingsListeners.add(listener);
         return () -> settingsListeners.remove(listener);
@@ -185,7 +202,7 @@ public final class VpnPlaybackProtection {
         beforeRequest(source, () -> Thread.currentThread().isInterrupted());
     }
 
-    static void beforeRequest(String source, java.util.function.BooleanSupplier cancelled) throws IOException {
+    public static void beforeRequest(String source, java.util.function.BooleanSupplier cancelled) throws IOException {
         Context app = application;
         if (app == null) throw new IOException("VPN settings are unavailable. Playback was not started.");
         if (Looper.myLooper() == Looper.getMainLooper()) throw new IOException("Playback network requests require a worker thread.");

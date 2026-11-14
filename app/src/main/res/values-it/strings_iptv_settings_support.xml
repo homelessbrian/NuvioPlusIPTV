@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Ricerca…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Prova non riuscita: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Playlist"</string>
+    <string name="iptv_settings_support_remote_title">"Test dei tasti del telecomando"</string>
+    <string name="iptv_settings_support_remote_instructions">"Premi un tasto qualsiasi. I più recenti in alto; le righe colorate sono un altro tasto entro 250 ms dal precedente (ad esempio OK inviato con Su/Giù). Premi Indietro 3 volte di fila per chiudere."</string>
+    <string name="iptv_settings_support_remote_waiting">"In attesa di un tasto…"</string>
+    <string name="iptv_settings_support_remote_action_down">"DOWN"</string>
+    <string name="iptv_settings_support_remote_action_up">"UP"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"MULTI"</string>
+    <string name="iptv_settings_support_remote_repeat">"ripetizione %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"pressione lunga"</string>
+    <string name="iptv_settings_support_remote_canceled">"annullato"</string>
+    <string name="iptv_settings_support_remote_held">"tenuto %1$d ms"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Rapporto di avvio della TV in diretta"</string>
+    <string name="iptv_settings_support_report_subtitle">"Dall’avvio dell’app. ▲ ▼ per scorrere."</string>
+    <string name="iptv_settings_support_report_empty">"Ancora niente: apri prima la TV in diretta."</string>
+    <string name="iptv_settings_support_report_send">"Invia l’intero rapporto"</string>
+    <string name="iptv_settings_support_report_no_network">"Collega questa TV al Wi-Fi per inviare il rapporto dal telefono."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Collega il telefono allo stesso Wi-Fi di questa TV.\n2. Scansiona questo codice con la fotocamera del telefono, o digita l’indirizzo qui sotto.\n3. Tocca Copia rapporto breve (sta in un messaggio Discord), poi incollalo nel tuo messaggio."</string>
+</resources>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"Playlist \"%1$s\" bijwerken…"</string>
+    <string name="iptv_repository_status_reading_channels">"Zenders lezen…"</string>
+    <string name="iptv_repository_status_downloading_guide">"Gids \"%1$s\" downloaden…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"Gids \"%1$s\" downloaden"</string>
+    <string name="iptv_repository_status_matching_data">"Gidsgegevens koppelen…"</string>
+    <string name="iptv_repository_status_updating_guide">"Gids bijwerken…"</string>
+    <string name="iptv_repository_status_adding_playlist">"Zenders uit \"%1$s\" toevoegen…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"Zenders uit \"%1$s\" lezen…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"Zenders uit \"%1$s\" lezen (%2$d van %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"Niet genoeg geheugen voor gids \"%1$s\" — overgeslagen"</string>
+    <string name="iptv_repository_status_reading_guide">"Gids \"%1$s\" lezen…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"Gids \"%1$s\" lezen (%2$d van %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"Gids \"%1$s\" lezen… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"Gids \"%1$s\" lezen (%2$d van %3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"Gids \"%1$s\" koppelen…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"Gids \"%1$s\" koppelen (%2$d van %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"Playlist \"%1$s\" downloaden"</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s van %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"Zenders laden uit %1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"De server van de provider is niet gevonden."</string>
+    <string name="iptv_repository_status_timeout_short">"De provider deed er te lang over om te antwoorden."</string>
+    <string name="iptv_repository_status_generic_error">"Er ging iets mis."</string>
+    <string name="iptv_repository_status_unknown_host_address">"De server van de provider (%1$s) is niet gevonden. Controleer het adres en je internet, of probeer het later opnieuw."</string>
+    <string name="iptv_repository_status_provider_timeout">"De provider deed er te lang over om te antwoorden (time-out). Mogelijk is het druk; probeer het later opnieuw."</string>
+    <string name="iptv_repository_status_address">"adres"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"Playlist \"%1$s\" kon niet worden bijgewerkt. %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"Gids \"%1$s\" kon niet worden bijgewerkt. %2$s"</string>
+    <string name="iptv_repository_status_expired">"\"%1$s\" is verlopen"</string>
+    <string name="iptv_repository_status_expires_today">"\"%1$s\" verloopt vandaag"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"\"%1$s\" verloopt morgen"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">"Zenders uit %1$d nieuwe playlist toevoegen…"</item>
+        <item quantity="other">"Zenders uit %1$d nieuwe playlists toevoegen…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">"\"%1$s\" verloopt over %2$d dag"</item>
+        <item quantity="other">"\"%1$s\" verloopt over %2$d dagen"</item>
+    </plurals>
+</resources>

@@ -26,6 +26,8 @@ internal class SportsFeeds {
         .callTimeout(40, TimeUnit.SECONDS)
         .followRedirects(true)
         .retryOnConnectionFailure(true)
+        // Our builds read the sports files through our own service (see ForkService).
+        .addInterceptor(com.nuvio.tv.livetv.data.ForkService.dataInterceptor)
         .build()
 
     private fun get(url: String): String {

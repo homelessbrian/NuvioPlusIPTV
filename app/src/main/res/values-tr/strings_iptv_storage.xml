@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"Bu cihaz"</string>
+    <string name="iptv_storage_usb_drive">"USB sürücü"</string>
+    <string name="iptv_storage_read_only">"Salt okunur. Bu kutu sürücüyü okuyabilir ama yazamaz (genellikle NTFS sürücü). exFAT olarak biçimlendirmek kayıt yapmanı sağlar."</string>
+    <string name="iptv_storage_unsupported_format">"Bu kutu sürücünün biçimini okuyamıyor. exFAT olarak biçimlendirmek genellikle sorunu çözer."</string>
+    <string name="iptv_storage_not_ready">"Henüz hazır değil. Biraz bekle ve bu listeyi tekrar aç."</string>
+    <string name="iptv_storage_no_app_folder">"Android uygulamaya sürücüde bir klasör vermedi. Sürücüyü çıkarıp tekrar tak ya da kutuyu yeniden başlat."</string>
+    <string name="iptv_storage_unusable_state">"Şu anda kullanılamıyor (%1$s)."</string>
+</resources>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"Sarma küçük resimleri"</string>
+    <string name="playback_section_seek_thumbnails_desc">"Sararken arama çubuğunun üstünde önizleme resimleri"</string>
+    <string name="iptv_thumbs_title">"Sarma küçük resimleri"</string>
+    <string name="iptv_thumbs_subtitle">"Sararken arama çubuğunun üstünde bir önizleme resmi gösterir. Resimler bu TV’de videonun kendisinden oluşturulur"</string>
+    <string name="iptv_thumbs_works_on">"Çalıştığı yerler: ana oynatıcıdaki filmler ve diziler (akış HLS bağlantıları dahil), kayıtların, spor tekrarları ve özetleri, catch-up ve Canlı TV’yi geri sarma (duraklatma arabelleği).\nCatch-up: resimler \"Catch-up’ta daha hızlı atlama\" ile kaydedilen kısımdan ya da akış (HLS) catch-up’ta doğrudan sağlayıcıdan gelir.\nÇalışmadığı yerler: torrentler, DASH bağlantıları veya korumalı yayınlar."</string>
+    <string name="iptv_thumbs_low_memory_note">"Bu cihazın belleği sınırlı. Küçük resimler takılmaya yol açabilir. Olursa kendiliğinden duraklar ve arama çubuğu bunu belirtir."</string>
+    <string name="iptv_thumbs_include_4k">"4K ve HDR dahil et"</string>
+    <string name="iptv_thumbs_include_4k_desc">"4K ve HDR videolar için de küçük resim oluşturur. Belleği bol cihazlarda açık, daha zayıflarda kapalı başlar, ama her yerde açıp deneyebilirsin. 4K küçük resimler zayıf cihazlarda takılabilir veya çalışmayabilir ve daha çok veri kullanır. HDR videolarının resimleri soluk görünebilir. Akış bağlantıları en küçük sürümlerini kullanır, bu yüzden onlar için nadiren fark eder"</string>
+    <string name="iptv_thumbs_when_to_make">"Küçük resimler ne zaman oluşturulsun"</string>
+    <string name="iptv_thumbs_when_seeking">"Yalnızca duraklatırken veya sararken"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"En hafif seçenek: video yalnızca oynarken hiçbir şey oluşturulmaz"</string>
+    <string name="iptv_thumbs_when_watching">"İzlerken"</string>
+    <string name="iptv_thumbs_when_watching_desc">"Video oynarken, yeterince önden yüklendiğinde arka planda da oluşturulur"</string>
+    <string name="iptv_thumbs_when_right_away">"Hemen"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"Videonun tamamı, baştan, açılır açılmaz. En çok veriyi kullanır"</string>
+    <string name="iptv_thumbs_storage_limit">"Depolama sınırı"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"Kayıtlı küçük resimler en fazla bu kadar yer kaplar; en uzun süre önce izlenen videolarınkiler önce silinir"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"Kayıtlı küçük resimleri temizle"</string>
+    <string name="iptv_thumbs_clear_desc">"Tüm kayıtlı küçük resimleri siler. Gerektiğinde yeniden oluşturulurlar"</string>
+    <string name="iptv_thumbs_last_paused">"Düşük bellek nedeniyle son duraklama: %1$s, %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"Küçük resimler oluşturuluyor…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"Küçük resimler duraklatıldı: bellek düşük"</string>
+    <string name="iptv_thumbs_msg_live">"Canlı TV’de küçük resim yok"</string>
+    <string name="iptv_thumbs_msg_dash">"DASH bağlantılarında küçük resim yok"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"Küçük resimler için \"Catch-up’ta daha hızlı atlama\"yı aç"</string>
+    <string name="iptv_thumbs_msg_protected">"Bu yayın korumalı: küçük resim yok"</string>
+    <string name="iptv_thumbs_msg_torrent">"Torrentlerde küçük resim yok"</string>
+    <string name="iptv_thumbs_msg_link_kind">"Bu tür bağlantıda küçük resim yok"</string>
+    <string name="iptv_thumbs_msg_unreadable">"Bu yayın küçük resimler için okunamadı"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"Bu yayının parçaları küçük resimler için çok büyük"</string>
+    <string name="iptv_thumbs_msg_stopped">"Bu videoda küçük resimler çalışmayı bıraktı"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"Sunucu küçük resim görüntüleri göndermedi"</string>
+    <string name="iptv_thumbs_msg_format">"Bu videonun biçimiyle bu cihazda küçük resim oluşturulamıyor"</string>
+    <string name="iptv_thumbs_msg_open_failed">"Bu video küçük resimler için açılamadı"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"Bu catch-up yayınında küçük resim yok"</string>
+</resources>

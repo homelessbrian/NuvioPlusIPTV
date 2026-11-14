@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Aranıyor…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Test başarısız: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Oynatma listesi"</string>
+    <string name="iptv_settings_support_remote_title">"Kumanda tuş testi"</string>
+    <string name="iptv_settings_support_remote_instructions">"Herhangi bir tuşa bas. En yeniler üstte; renkli satırlar, öncekinden 250 ms içinde gelen farklı bir tuştur (örneğin Yukarı/Aşağı ile birlikte gönderilen OK). Kapatmak için art arda 3 kez Geri’ye bas."</string>
+    <string name="iptv_settings_support_remote_waiting">"Bir tuş bekleniyor…"</string>
+    <string name="iptv_settings_support_remote_action_down">"DOWN"</string>
+    <string name="iptv_settings_support_remote_action_up">"UP"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"MULTI"</string>
+    <string name="iptv_settings_support_remote_repeat">"tekrar %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"uzun basma"</string>
+    <string name="iptv_settings_support_remote_canceled">"iptal edildi"</string>
+    <string name="iptv_settings_support_remote_held">"%1$d ms basılı tutuldu"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Canlı TV başlangıç raporu"</string>
+    <string name="iptv_settings_support_report_subtitle">"Uygulama başladığından beri. Kaydırmak için ▲ ▼."</string>
+    <string name="iptv_settings_support_report_empty">"Henüz bir şey yok: önce Canlı TV’yi aç."</string>
+    <string name="iptv_settings_support_report_send">"Raporun tamamını gönder"</string>
+    <string name="iptv_settings_support_report_no_network">"Raporu telefonundan göndermek için bu TV’yi Wi-Fi’a bağla."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Telefonunu bu TV ile aynı Wi-Fi ağına bağla.\n2. Bu kodu telefonunun kamerasıyla tara ya da aşağıdaki adresi yaz.\n3. Kısa raporu kopyala’ya dokun (tek bir Discord mesajına sığar), sonra mesajına yapıştır."</string>
+</resources>
