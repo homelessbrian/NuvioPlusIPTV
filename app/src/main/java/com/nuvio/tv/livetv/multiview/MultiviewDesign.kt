@@ -145,6 +145,7 @@ internal fun MultiviewPane(
     use24h: Boolean = false,
     errorHint: String? = null,
     emptyHint: String = "Press OK",
+    showChannelLabel: Boolean = true,
 ) {
     var focused by remember { mutableStateOf(false) }
     val ring = NuvioTheme.focusRing.brush()
@@ -245,7 +246,7 @@ internal fun MultiviewPane(
                 LiveText("SOUND", color = NuvioTheme.colors.OnSecondary, size = 9.sp, weight = FontWeight.Black)
             }
         }
-        if (pane.channelKey != null) {
+        if (showChannelLabel && pane.channelKey != null) {
             Row(
                 Modifier.align(Alignment.TopStart).padding(8.dp).clip(RoundedCornerShape(10.dp))
                     .background(LabelChip).padding(start = 5.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),

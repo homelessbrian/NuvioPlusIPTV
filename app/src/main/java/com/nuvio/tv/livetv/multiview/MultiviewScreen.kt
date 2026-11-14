@@ -356,6 +356,15 @@ fun MultiviewScreen(
             barShown = false
         }
     }
+    // Pane labels follow remote activity independently of control-button focus.
+    var channelLabelsShown by remember { mutableStateOf(true) }
+    LaunchedEffect(barTick, editorOpen, layoutOpen) {
+        channelLabelsShown = true
+        if (!editorOpen && !layoutOpen) {
+            delay(5_000L)
+            channelLabelsShown = false
+        }
+    }
     LaunchedEffect(state.focusedPane) { barTick++ }
     LaunchedEffect(editorOpen) { if (!editorOpen) returnGame = null }
     val barAlpha by animateFloatAsState(if (barShown) 1f else 0f, tween(450), label = "multiviewBar")
@@ -388,6 +397,7 @@ fun MultiviewScreen(
                     val nextUp = if (pane.error != null) nextStreams(pane.id)?.second else null
                     MultiviewPane(
                         pane = pane,
+                        showChannelLabel = channelLabelsShown,
                         audible = pane.id == state.focusedPane && state.hasAudioFocus,
                         logo = logo,
                         show = pane.channelKey?.let { paneShows[it] },
