@@ -836,7 +836,7 @@ private fun Hero(
         }
         LiveText(e.title.uppercase(), size = 28.sp, weight = FontWeight.ExtraBold, shadow = true, modifier = Modifier.width(560.dp))
         val line = if (plain) e.note.orEmpty() else when (e.kind) {
-            CalendarKind.GAME -> listOfNotNull(e.league, e.score).joinToString(" · ")
+            CalendarKind.GAME -> listOfNotNull(e.league, e.note, e.score).joinToString(" · ")
             CalendarKind.MOVIE -> e.note ?: if (CalendarTag.AT_HOME in e.tags) "Out to watch at home" else ""
             else -> listOfNotNull(
                 e.episodeCode,
