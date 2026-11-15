@@ -118,14 +118,17 @@ class WatchProgressSaveDispatchTest {
             withTimeout(5_000) { entered.await() }
             activeProfile.value = 1
             parent.cancel()
+            release.complete(Unit)
+            withTimeout(5_000) { saved.await() }
+            assertFalse(saved.isCancelled)
+            assertTrue(recent.transforms.none { it === mainThread })
+            assertTrue(preferences.getAllRawEntries(1).isEmpty())
+            assertEquals(setOf("new-item"), preferences.getAllRawEntries(2).keys)
         } finally {
             release.complete(Unit)
+            saved.cancelAndJoin()
+            parent.cancelAndJoin()
         }
-        withTimeout(5_000) { saved.await() }
-        assertFalse(saved.isCancelled)
-        assertTrue(recent.transforms.none { it === mainThread })
-        assertTrue(preferences.getAllRawEntries(1).isEmpty())
-        assertEquals(setOf("new-item"), preferences.getAllRawEntries(2).keys)
     }
 
     @Test fun `a later save cannot overtake an earlier save while its transform is suspended`() = runBlocking {
@@ -138,22 +141,27 @@ class WatchProgressSaveDispatchTest {
         recent.beforeTransform = {
             if (first) { first = false; entered.complete(Unit); release.await() }
         }
-        val scope = CoroutineScope(Dispatchers.Main + Job())
+        val scopeJob = Job()
+        val scope = CoroutineScope(Dispatchers.Main + scopeJob)
         val firstSave = scope.async { preferences.saveProgress(initial.copy(position = 90_000L)) }
-        withTimeout(5_000) { entered.await() }
-        val secondStarted = CompletableDeferred<Unit>()
-        val secondSave = scope.async {
-            secondStarted.complete(Unit)
-            preferences.saveProgress(initial.copy(position = 91_000L))
-        }
+        var secondSave: kotlinx.coroutines.Deferred<Unit>? = null
         try {
+            withTimeout(5_000) { entered.await() }
+            val secondStarted = CompletableDeferred<Unit>()
+            secondSave = scope.async {
+                secondStarted.complete(Unit)
+                preferences.saveProgress(initial.copy(position = 91_000L))
+            }
             withTimeout(5_000) { secondStarted.await() }
+            release.complete(Unit)
+            withTimeout(5_000) { firstSave.await(); secondSave.await() }
+            assertEquals(91_000L, preferences.getAllRawEntries().getValue("item").position)
         } finally {
             release.complete(Unit)
+            firstSave.cancelAndJoin()
+            secondSave?.cancelAndJoin()
+            scopeJob.cancelAndJoin()
         }
-        withTimeout(5_000) { firstSave.await(); secondSave.await() }
-        assertEquals(91_000L, preferences.getAllRawEntries().getValue("item").position)
-        scope.coroutineContext[Job]?.cancelAndJoin()
         Unit
     }
 
