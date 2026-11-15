@@ -136,4 +136,21 @@ class MultiviewUiPolicyTest {
             assertTrue("Search should stop at the next cancellation check", reads.get() in 301..320)
         }
     }
+
+    @Test
+    fun `overlays stay up on the bar or a picker and Back hides them before leaving`() {
+        assertTrue(multiviewOverlaysStay(barFocused = true, pickerOpen = false))
+        assertTrue(multiviewOverlaysStay(barFocused = false, pickerOpen = true))
+        assertTrue(!multiviewOverlaysStay(barFocused = false, pickerOpen = false))
+        assertEquals(MultiviewBack.CLOSE_PICKER, multiviewBackAction(pickerOpen = true, overlaysShown = true))
+        assertEquals(MultiviewBack.HIDE_OVERLAYS, multiviewBackAction(pickerOpen = false, overlaysShown = true))
+        assertEquals(MultiviewBack.LEAVE, multiviewBackAction(pickerOpen = false, overlaysShown = false))
+    }
+
+    @Test
+    fun `a loading or failed pane keeps its name`() {
+        assertTrue(multiviewPaneKeepsLabel(isBuffering = true, hasError = false))
+        assertTrue(multiviewPaneKeepsLabel(isBuffering = false, hasError = true))
+        assertTrue(!multiviewPaneKeepsLabel(isBuffering = false, hasError = false))
+    }
 }

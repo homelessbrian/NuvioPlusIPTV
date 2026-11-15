@@ -111,6 +111,24 @@ fun multiviewNextPane(layout: MultiviewLayout, fromPane: Int, direction: Multivi
     }
 }
 
+/** How long the top bar, pane names and pane edges stay up after the last button press. */
+const val MULTIVIEW_OVERLAY_MS = 5_000L
+
+/** The overlays never fade while the highlight is on the top bar or a picker is open. */
+fun multiviewOverlaysStay(barFocused: Boolean, pickerOpen: Boolean): Boolean = barFocused || pickerOpen
+
+/** A pane that is still loading or has failed keeps its name and edge, so it is never an unnamed black box. */
+fun multiviewPaneKeepsLabel(isBuffering: Boolean, hasError: Boolean): Boolean = isBuffering || hasError
+
+enum class MultiviewBack { CLOSE_PICKER, HIDE_OVERLAYS, LEAVE }
+
+/** Back closes the picker, then hides the overlays, and only leaves Multiview once they are hidden. */
+fun multiviewBackAction(pickerOpen: Boolean, overlaysShown: Boolean): MultiviewBack = when {
+    pickerOpen -> MultiviewBack.CLOSE_PICKER
+    overlaysShown -> MultiviewBack.HIDE_OVERLAYS
+    else -> MultiviewBack.LEAVE
+}
+
 /** Picker data deliberately has no stream URL, provider headers, or credentials. */
 data class MultiviewChannelOption(
     val key: String,

@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
@@ -345,36 +346,59 @@ fun MultiviewScreen(
         MultiviewLayoutMemory.save(context.applicationContext, layout)
         editedPane = editedPane.coerceIn(0, layout.paneCount - 1)
     }
-    // The control bar fades away when nothing is moving, and comes back when the highlight moves.
+    // The top bar, the pane names and the pane edges all show and fade together: one timer, restarted
+    // by the remote. Back hides them at once (overlaysDismissed) instead of waiting for the timer.
     var barTick by remember { mutableIntStateOf(0) }
     var barFocused by remember { mutableStateOf(false) }
-    var barShown by remember { mutableStateOf(true) }
-    LaunchedEffect(barTick, barFocused, editorOpen, layoutOpen) {
-        barShown = true
-        if (!barFocused && !editorOpen && !layoutOpen) {
-            delay(5_000L)
-            barShown = false
-        }
-    }
-    // Pane labels follow remote activity independently of control-button focus.
-    var channelLabelsShown by remember { mutableStateOf(true) }
-    LaunchedEffect(barTick, editorOpen, layoutOpen) {
-        channelLabelsShown = true
-        if (!editorOpen && !layoutOpen) {
-            delay(5_000L)
-            channelLabelsShown = false
+    var overlaysShown by remember { mutableStateOf(true) }
+    var overlaysDismissed by remember { mutableStateOf(false) }
+    val overlaysStay = multiviewOverlaysStay(barFocused, pickerOpen = editorOpen || layoutOpen)
+    LaunchedEffect(barTick, overlaysStay, overlaysDismissed) {
+        if (overlaysDismissed && !overlaysStay) {
+            overlaysShown = false
+        } else {
+            overlaysShown = true
+            if (!overlaysStay) {
+                delay(MULTIVIEW_OVERLAY_MS)
+                overlaysShown = false
+            }
         }
     }
     LaunchedEffect(state.focusedPane) { barTick++ }
+    // An arrow that only brought the overlays back: its repeats and release are swallowed too.
+    var wakeKey by remember { mutableStateOf<Key?>(null) }
     LaunchedEffect(editorOpen) { if (!editorOpen) returnGame = null }
-    val barAlpha by animateFloatAsState(if (barShown) 1f else 0f, tween(450), label = "multiviewBar")
+    val barAlpha by animateFloatAsState(if (overlaysShown) 1f else 0f, tween(450), label = "multiviewBar")
     BackHandler {
-        if (editorOpen) editorOpen = false else if (startOnSports && returnToSingle) single() else onBack()
+        when (multiviewBackAction(editorOpen, overlaysShown)) {
+            MultiviewBack.CLOSE_PICKER -> editorOpen = false
+            MultiviewBack.HIDE_OVERLAYS -> {
+                // Leave the bar first, so the highlight is never on a button that has faded away.
+                if (barFocused) paneFocus[state.focusedPane].requestFocus()
+                overlaysDismissed = true
+            }
+            MultiviewBack.LEAVE -> if (startOnSports && returnToSingle) single() else onBack()
+        }
     }
 
     Box(
         Modifier.fillMaxSize().background(NuvioTheme.colors.Background).multiviewBackdrop().onPreviewKeyEvent { event ->
-            if (event.type == KeyEventType.KeyDown) barTick++
+            val arrow = event.key == Key.DirectionLeft || event.key == Key.DirectionRight ||
+                event.key == Key.DirectionUp || event.key == Key.DirectionDown
+            // With the overlays hidden, the first arrow only brings them back: it must not also move
+            // the highlight (and the sound) to another pane.
+            val wakeOnly = arrow && event.type == KeyEventType.KeyDown && !overlaysShown
+            if (wakeOnly) wakeKey = event.key
+            // Back is left out: it hides the overlays or leaves, and must not bring them back first.
+            if (event.type == KeyEventType.KeyDown && event.key != Key.Back) {
+                overlaysDismissed = false
+                barTick++
+            }
+            if (event.key == wakeKey) {
+                val swallow = wakeOnly || event.type == KeyEventType.KeyUp || event.nativeKeyEvent.repeatCount > 0
+                if (event.type == KeyEventType.KeyUp) wakeKey = null
+                if (swallow) return@onPreviewKeyEvent true
+            }
             if (event.key == Key.Menu) {
                 if (event.type == KeyEventType.KeyDown) {
                     editedPane = state.focusedPane
@@ -397,7 +421,7 @@ fun MultiviewScreen(
                     val nextUp = if (pane.error != null) nextStreams(pane.id)?.second else null
                     MultiviewPane(
                         pane = pane,
-                        showChannelLabel = channelLabelsShown,
+                        overlaysShown = overlaysShown,
                         audible = pane.id == state.focusedPane && state.hasAudioFocus,
                         logo = logo,
                         show = pane.channelKey?.let { paneShows[it] },
