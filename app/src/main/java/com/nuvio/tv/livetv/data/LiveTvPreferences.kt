@@ -441,6 +441,9 @@ class LiveTvPreferences @Inject constructor(
      */
     suspend fun matchProfiles(sourceId: Int, targetId: Int) {
         if (sourceId == targetId) return
+        var remoteFrom = sourceId
+        var remoteTo = emptySet<Int>()
+        var remoteDrop = emptySet<Int>()
         store.edit { p ->
             val before = p.toPreferences()
             val g = groupsOf(before)
@@ -456,7 +459,10 @@ class LiveTvPreferences @Inject constructor(
             }
             followHomeRow(p, sourceId, merged)
             p[Keys.profileMatch] = encodeMatch(g.groups.filterNot { it == a || it == b } + listOf(merged))
+            remoteFrom = g.owner(sourceId); remoteTo = setOf(owner); remoteDrop = merged - owner
         }
+        // Remote Buttons (kept per TV, in the other file): the group shares the source's buttons too.
+        moveRemoteMaps(remoteFrom, remoteTo, remoteDrop)
     }
 
     /**
@@ -464,6 +470,8 @@ class LiveTvPreferences @Inject constructor(
      * (nothing is lost); a deleted profile doesn't. The rest of the group stays matched.
      */
     suspend fun stopMatching(id: Int, keepCopy: Boolean = true) {
+        var remoteFrom = id
+        var remoteTo = emptySet<Int>()
         store.edit { p ->
             val before = p.toPreferences()
             val g = groupsOf(before)
@@ -473,10 +481,15 @@ class LiveTvPreferences @Inject constructor(
             if (rest.isNotEmpty()) {
                 val newOwner = rest.min()
                 if (newOwner != owner) writeChoices(p, before, owner, newOwner)
+                if (newOwner != owner) remoteTo = remoteTo + newOwner
             }
             if (keepCopy && id != owner) writeChoices(p, before, owner, id)
+            if (keepCopy && id != owner) remoteTo = remoteTo + id
+            remoteFrom = owner
             p[Keys.profileMatch] = encodeMatch(g.groups.filterNot { it == group } + listOf(rest))
         }
+        // Remote Buttons: whoever leaves (or takes over the group) keeps a copy of the shared buttons.
+        moveRemoteMaps(remoteFrom, remoteTo, emptySet())
     }
 
     init {
@@ -1487,14 +1500,29 @@ class LiveTvPreferences @Inject constructor(
     // The user's own button choices: kept on this TV only (never synced), one set per profile.
     // The buttons this TV has received and any extra ones added are shared by its profiles.
 
-    private fun remoteMapKey(id: Int) = stringPreferencesKey(if (id <= 1) "remote_map" else "remote_map_p$id")
+    /** Profile [id]'s own button choices on this TV. */
+    private fun remoteOwnKey(id: Int) = stringPreferencesKey(if (id <= 1) "remote_map" else "remote_map_p$id")
+    /** Where profile [id] keeps its buttons: matched profiles share one set (under the group's lowest profile). */
+    private fun remoteMapKey(id: Int, g: MatchGroups = matchMemo) = remoteOwnKey(g.owner(id))
+
+    /** Copies profile [from]'s own buttons to each of [to], and removes the leftover sets of [drop]. */
+    private suspend fun moveRemoteMaps(from: Int, to: Set<Int>, drop: Set<Int>) {
+        if (to.isEmpty() && drop.isEmpty()) return
+        runCatching {
+            deviceStore.edit { d ->
+                val v = d[remoteOwnKey(from)]
+                to.filter { it != from }.forEach { id -> if (v != null) d[remoteOwnKey(id)] = v else d.remove(remoteOwnKey(id)) }
+                drop.filter { it !in to }.forEach { id -> d.remove(remoteOwnKey(id)) }
+            }
+        }
+    }
     private val remoteSeenKey = stringSetPreferencesKey("remote_seen")
     private val remoteLearnedKey = stringPreferencesKey("remote_learned")
 
     /** The active profile's button choices, the key codes seen on this TV, and the added buttons. */
     val remoteStored: Flow<Triple<String?, Set<String>, String?>> =
-        kotlinx.coroutines.flow.combine(deviceStore.data, profileManager.activeProfileId) { d, id ->
-            Triple(d[remoteMapKey(id)], d[remoteSeenKey] ?: emptySet(), d[remoteLearnedKey])
+        kotlinx.coroutines.flow.combine(deviceStore.data, profileManager.activeProfileId, profileMatchGroups) { d, id, groups ->
+            Triple(d[remoteMapKey(id, MatchGroups(groups))], d[remoteSeenKey] ?: emptySet(), d[remoteLearnedKey])
         }
 
     val remoteProfileId: Int get() = currentProfile
