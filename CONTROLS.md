@@ -89,4 +89,4 @@ How to get around Nuvio + IPTV with your TV remote. [Back to the README](README.
 | A button that isn't listed | **Add a Button**, then press it |
 | Undo | **Restore this button**, **Reset this screen**, or **Reset Every Screen** |
 
-Changes are kept on that TV for that profile (profiles kept matched share one set). Volume, Home, Power and the voice button belong to the TV and can't be changed. A button you haven't changed works exactly as described above.
+Changes are kept on that TV for that profile (profiles kept matched share one set). Turn on **Sync Buttons to My Other TVs** on each TV that should share them. Volume, Home, Power and the voice button belong to the TV and can't be changed. A button you haven't changed works exactly as described above.

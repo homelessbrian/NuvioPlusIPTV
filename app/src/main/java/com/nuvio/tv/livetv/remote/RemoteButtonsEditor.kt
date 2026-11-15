@@ -152,7 +152,7 @@ fun RemoteButtonsEditor(startScreen: String, onClose: () -> Unit) {
                 val profile = remember(state.map) { RemoteButtons.profiles().firstOrNull { it.first == RemoteButtons.profileId() }?.second }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Tag(if (state.pad) "Game controller" else state.device.ifEmpty { "Your remote" })
-                    Tag("On this TV")
+                    Tag(if (state.synced) "Synced to your TVs" else "On this TV")
                     profile?.let { Tag(it) }
                 }
             }
@@ -244,7 +244,7 @@ fun RemoteButtonsEditor(startScreen: String, onClose: () -> Unit) {
         if (confirmReset) {
             SettingsSingleChoiceDialog(
                 title = "Reset ${sc.title}?",
-                subtitle = "Its buttons go back to how they work out of the box. Other screens, profiles and TVs aren't touched.",
+                subtitle = "Its buttons go back to how they work out of the box" + (if (state.synced) ", on every TV that syncs its buttons." else ". Other screens, profiles and TVs aren't touched."),
                 options = listOf(
                     SettingsPickerOption(false, "Keep my buttons"),
                     SettingsPickerOption(true, "Reset ${state.changed(sc.id)} changed here")

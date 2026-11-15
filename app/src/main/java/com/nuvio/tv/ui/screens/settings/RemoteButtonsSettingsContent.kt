@@ -45,8 +45,8 @@ fun RemoteButtonsSettingsContent(initialFocusRequester: FocusRequester? = null) 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)) {
         SettingsDetailHeader(
             title = "Remote Buttons",
-            subtitle = if (state.changedTotal == 0) "Give your remote's buttons other jobs, screen by screen. Saved on this TV, for this profile"
-            else "${state.changedTotal} changed on this TV for this profile. Everything else works the way it always has"
+            subtitle = if (state.changedTotal == 0) "Give your remote's buttons other jobs, screen by screen. Saved for this profile, " + (if (state.synced) "and synced to your other TVs" else "on this TV")
+            else "${state.changedTotal} changed for this profile" + (if (state.synced) ", synced to your other TVs" else " on this TV") + ". Everything else works the way it always has"
         )
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -93,17 +93,23 @@ fun RemoteButtonsSettingsContent(initialFocusRequester: FocusRequester? = null) 
                 }
             }
             item(key = "reset") {
-                SettingsGroupCard(title = "Profiles and Reset") {
+                SettingsGroupCard(title = "Sync, Profiles and Reset") {
+                    SettingsToggleRow(
+                        "Sync Buttons to My Other TVs",
+                        "On: this TV uses one set of buttons shared by every TV where this is on (it travels with Setup Sync in Live TV settings). Off: this TV keeps its own",
+                        state.synced,
+                        { RemoteButtons.setSynced(!state.synced) }
+                    )
                     if (otherProfiles.isNotEmpty()) {
                         SettingsActionRow(
                             title = "Copy From Another Profile",
-                            subtitle = "Replaces this profile's buttons on this TV with another profile's",
+                            subtitle = "Replaces this profile's buttons with another profile's",
                             onClick = { dialog = "copy" }
                         )
                     }
                     SettingsActionRow(
                         title = "Reset Every Screen",
-                        subtitle = "All buttons back to how they work out of the box, for this profile on this TV",
+                        subtitle = "All buttons back to how they work out of the box, for this profile",
                         value = if (state.changedTotal > 0) "${state.changedTotal} changed" else null,
                         enabled = state.changedTotal > 0,
                         onClick = { dialog = "reset" }
@@ -118,7 +124,7 @@ fun RemoteButtonsSettingsContent(initialFocusRequester: FocusRequester? = null) 
         "learn" -> RemoteLearnDialog(onClose = { dialog = null })
         "copy" -> SettingsSingleChoiceDialog(
             title = "Copy From Another Profile",
-            subtitle = "This profile's own button changes on this TV are replaced.",
+            subtitle = "This profile's own button changes are replaced.",
             options = listOf(SettingsPickerOption(0, "Cancel")) + otherProfiles.map { SettingsPickerOption(it.first, it.second) },
             selectedValue = 0,
             onOptionSelected = { id ->
@@ -129,7 +135,7 @@ fun RemoteButtonsSettingsContent(initialFocusRequester: FocusRequester? = null) 
         )
         "reset" -> SettingsSingleChoiceDialog(
             title = "Reset Every Screen?",
-            subtitle = "All ${state.changedTotal} changes go back to standard. Other profiles and other TVs aren't touched.",
+            subtitle = "All ${state.changedTotal} changes go back to standard, for this profile" + (if (state.synced) " on every TV that syncs its buttons." else ". Other TVs aren't touched."),
             options = listOf(SettingsPickerOption(false, "Keep my buttons"), SettingsPickerOption(true, "Reset everything")),
             selectedValue = false,
             onOptionSelected = { yes ->

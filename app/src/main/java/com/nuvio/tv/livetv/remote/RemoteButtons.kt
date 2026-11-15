@@ -34,6 +34,8 @@ data class RemoteState(
     val learned: List<RemoteLearned> = emptyList(),
     /** The last button came from a game controller. */
     val pad: Boolean = false,
+    /** This TV uses the set of buttons that syncs to the account's other TVs. */
+    val synced: Boolean = false,
     val device: String = ""
 ) {
     fun changed(screen: String): Int = map[screen]?.values?.sumOf { it.size } ?: 0
@@ -67,6 +69,7 @@ object RemoteButtons {
         runCatching {
             val p = EntryPointAccessors.fromApplication(context.applicationContext, CalendarEntryPoint::class.java).liveTvPreferences()
             prefs = p
+            main.launch { p.remoteSyncOn.collect { on -> _state.value = _state.value.copy(synced = on) } }
             main.launch {
                 p.remoteStored.collect { (map, seen, learned) ->
                     val list = decodeLearned(learned)
@@ -209,6 +212,12 @@ object RemoteButtons {
             map = map + (screen to buttons)
         }
         commit(map)
+    }
+
+    /** This TV's own buttons, or the set that syncs to the account's other TVs. */
+    fun setSynced(on: Boolean) {
+        val p = prefs ?: return
+        io.launch { runCatching { p.setRemoteSync(on) } }
     }
 
     fun profileId(): Int = prefs?.remoteProfileId ?: 1
