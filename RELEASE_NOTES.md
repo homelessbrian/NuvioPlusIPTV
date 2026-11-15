@@ -13,7 +13,6 @@
 - **Add from your phone:** scan a QR code and type playlists, Xtream logins and guides on your phone
 - **The guide shows straight away every time you open the app.** Guide updates happen quietly in the background
 - Playlists load much faster, and the app uses less memory
-- **Back from the guide** returns to the channel you're watching in full screen, like TiviMate. Left still opens the groups and the menu
 - **Record options** in the player: until you stop it, until the show ends, or until a set time. Record and Record series are in overlay mode too (hold OK)
 - **Two-Line Channel Names** option for the guide, and the group name can show on the play bar
 - Search puts the best matches first, A to Z, with the best quality copy of each channel first

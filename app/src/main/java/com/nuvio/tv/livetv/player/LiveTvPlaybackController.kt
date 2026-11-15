@@ -2091,33 +2091,19 @@ class LiveTvPlaybackController @Inject constructor(
     /** Called with the playlist id when that provider's catch-up plays as HLS. */
     var onCatchupHlsWorks: ((String) -> Unit)? = null
 
-    /** Live channels whose HLS playlist couldn't be read: played as TS instead (until the app restarts). */
-    private val tsInstead: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
-    /** Live channels whose link looks like HLS but sends plain TS: read as TS (until the app restarts). */
-    private val plainTs: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
+    /** Live channels whose HLS playlist couldn't be read: played as TS instead (shared with Multiview). */
+    private val tsInstead: MutableSet<String> = LiveStreamFormats.tsInstead
+    /** Live channels whose link looks like HLS but sends plain TS: read as TS (shared with Multiview). */
+    private val plainTs: MutableSet<String> = LiveStreamFormats.plainTs
 
     /**
      * The TS version of an Xtream live link: ".../123.m3u8" -> ".../123.ts", and a link with no
      * ending at all (".../user/pass/123", which the server answers as HLS) -> ".../123.ts".
      * Null if it isn't one.
      */
-    private fun tsLinkFor(url: String): String? {
-        val base = url.substringBefore('?')
-        if (base.endsWith(".m3u8", ignoreCase = true) && XTREAM_HLS.containsMatchIn(base))
-            return base.dropLast(5) + ".ts" + url.substring(base.length)
-        if (XTREAM_BARE.containsMatchIn(base)) return base + ".ts" + url.substring(base.length)
-        return null
-    }
+    private fun tsLinkFor(url: String): String? = LiveStreamFormats.tsLinkFor(url)
 
-    private fun isMalformedManifest(error: PlaybackException): Boolean {
-        if (error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED) return true
-        var c: Throwable? = error
-        while (c != null) {
-            if (c is androidx.media3.common.ParserException && c.message?.contains("malformed", true) == true) return true
-            c = c.cause
-        }
-        return false
-    }
+    private fun isMalformedManifest(error: PlaybackException): Boolean = LiveStreamFormats.isMalformedManifest(error)
 
     // ---- start-up guard: a channel that made the app close while it was starting isn't
     // started by itself again next time (it used to close the app again, over and over).
@@ -2145,15 +2131,7 @@ class LiveTvPlaybackController @Inject constructor(
     @Volatile private var forcedMime: String? = null
     @Volatile private var formatGuess = 0
 
-    private fun isUnrecognizedFormat(error: PlaybackException): Boolean {
-        var c: Throwable? = error
-        while (c != null) {
-            if (c is androidx.media3.exoplayer.source.UnrecognizedInputFormatException) return true
-            if (c is androidx.media3.common.ParserException && c.message?.contains("ontainer", true) == true) return true
-            c = c.cause
-        }
-        return error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
-    }
+    private fun isUnrecognizedFormat(error: PlaybackException): Boolean = LiveStreamFormats.isUnrecognizedFormat(error)
 
     /** A link for the start-up report, with the username and password hidden. */
     private fun redact(url: String): String =
@@ -2311,11 +2289,7 @@ class LiveTvPlaybackController @Inject constructor(
         private const val WRONG_SHOW_SLACK_MS = 10 * 60_000L
         /** Two freezes within this long: the channel counts as failing (live games only). */
         private const val FREEZE_WINDOW_MS = 3 * 60_000L
-        private val FORMAT_GUESSES = listOf(MimeTypes.APPLICATION_M3U8, MimeTypes.APPLICATION_MPD)
-        /** Xtream live links: ".../live/user/pass/123.m3u8" or "host/user/pass/123.m3u8". */
-        private val XTREAM_HLS = Regex("""/(?:live/)?[^/]+/[^/]+/\d+\.m3u8$""", RegexOption.IGNORE_CASE)
-        /** An Xtream live link with no ending: ".../live/user/pass/123" or ".../user/pass/123". */
-        private val XTREAM_BARE = Regex("""/(?:live/)?[^/]+/[^/]+/\d+$""")
+        private val FORMAT_GUESSES = LiveStreamFormats.FORMAT_GUESSES
         /** No picture this long after the video moved to a new screen = stuck. */
         private const val FRAME_TIMEOUT_MS = 2_500L
         /** Still loading this long after the video moved to a new screen = stuck. */

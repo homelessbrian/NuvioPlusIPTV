@@ -3,6 +3,7 @@ package com.nuvio.tv.livetv.home
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import androidx.compose.ui.graphics.toArgb
 import android.net.Uri
 import androidx.navigation.NavController
 import androidx.tvprovider.media.tv.PreviewChannel
@@ -155,7 +156,9 @@ object LiveTvLauncherRows {
         fun team(side: com.nuvio.tv.livetv.sports.Side) = CardSpec.Team(
             name = side.team.name.ifBlank { side.team.fullName },
             abbr = side.team.abbr,
-            color = side.team.color?.let { (it or 0xFF000000L).toInt() },
+            // The same colour the app's own cards use for this team.
+            color = side.team.takeIf { it.color != null || it.altColor != null }
+                ?.let { com.nuvio.tv.livetv.sports.teamColor(it).copy(alpha = 1f).toArgb() },
             logo = side.team.logo
         )
         // No score, clock or lap: launchers refresh too rarely for those to stay right. Only what

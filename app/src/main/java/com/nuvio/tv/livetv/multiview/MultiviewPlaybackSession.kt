@@ -12,6 +12,7 @@ import androidx.annotation.MainThread
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
@@ -24,6 +25,7 @@ import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.player.LiveStreamFormats
 import com.nuvio.tv.livetv.stalker.StalkerGateway
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -215,6 +217,10 @@ private class AndroidMultiviewPanePlayer(
     /** When the stream last started playing; a stream that keeps going a while earns fresh tries. */
     private var playingSince = 0L
     private var reconnecting = false
+    /** The link and format this pane is trying (they change when the full-screen player's fallbacks apply). */
+    private var streamUrl: String? = null
+    private var streamMime: String? = null
+    private var formatGuess = 0
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             if (!released) onChanged()
@@ -234,8 +240,9 @@ private class AndroidMultiviewPanePlayer(
             // A failed pane must not retain an adaptive manifest refresh or provider connection.
             player.stop()
             player.clearMediaItems()
+            if (tryOtherFormat(error)) return
             if (MultiviewPlaybackErrors.isRetryable(error) && scheduleReconnect(error.errorCodeName)) return
-            fail(message)
+            fail(message, error.errorCodeName)
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -250,12 +257,48 @@ private class AndroidMultiviewPanePlayer(
         }
     }
 
-    private fun fail(message: String) {
+    /**
+     * The full-screen player's format fallbacks: a link that doesn't say what it is is tried as
+     * HLS, then DASH; an HLS playlist that can't be read moves to the provider's TS link, then is
+     * read as plain TS. True when another try was started.
+     */
+    private fun tryOtherFormat(error: PlaybackException): Boolean {
+        val ch = channel ?: return false
+        if (ch.stalkerRef != null) return false
+        val url = streamUrl ?: ch.url
+        if (LiveStreamFormats.isUnrecognizedFormat(error) && formatGuess < LiveStreamFormats.FORMAT_GUESSES.size) {
+            streamMime = LiveStreamFormats.FORMAT_GUESSES[formatGuess++]
+            LiveTvLoadReport.add("Multiview: ${ch.name} failed (${error.errorCodeName}); trying it as ${streamMime?.substringAfter('/')}")
+        } else if (LiveStreamFormats.isMalformedManifest(error) && ch.key !in LiveStreamFormats.tsInstead &&
+            LiveStreamFormats.tsLinkFor(url)?.takeIf { it != url } != null
+        ) {
+            LiveStreamFormats.tsInstead += ch.key
+            streamUrl = LiveStreamFormats.tsLinkFor(url)
+            streamMime = null
+            LiveTvLoadReport.add("Multiview: ${ch.name}: its HLS playlist couldn't be read (${error.errorCodeName}); playing it as TS instead")
+        } else if (LiveStreamFormats.isMalformedManifest(error) && ch.key !in LiveStreamFormats.plainTs) {
+            LiveStreamFormats.plainTs += ch.key
+            streamMime = MimeTypes.VIDEO_MP2T
+            LiveTvLoadReport.add("Multiview: ${ch.name}: still no readable HLS playlist (${error.errorCodeName}); reading the stream as plain TS")
+        } else return false
+        connect(ch)
+        player.playWhenReady = wantPlaying
+        onChanged()
+        return true
+    }
+
+    private fun fail(message: String, code: String? = null) {
         reconnectJob?.cancel()
         reconnectJob = null
         reconnecting = false
         // Out of tries on this channel: a backup copy (or another stream of the game) if there is one.
         channel?.let { if (switchToBackup(this, it)) return }
+        channel?.let { ch ->
+            LiveTvLoadReport.add(
+                "Multiview: ${ch.name} couldn't play" + (code?.let { " ($it)" } ?: "") + ": $message" +
+                    (if (ch.stalkerRef == null) " · ${LiveStreamFormats.redact(streamUrl ?: ch.url)}" else "")
+            )
+        }
         error = message
         player.volume = 0f
         player.playWhenReady = false
@@ -355,6 +398,10 @@ private class AndroidMultiviewPanePlayer(
         reconnectAttempt = 0
         playingSince = 0L
         reconnecting = false
+        // What the full-screen player already learned about this channel's link.
+        streamUrl = if (channel.key in LiveStreamFormats.tsInstead) LiveStreamFormats.tsLinkFor(channel.url) ?: channel.url else channel.url
+        streamMime = if (channel.key in LiveStreamFormats.plainTs) MimeTypes.VIDEO_MP2T else null
+        formatGuess = 0
         connect(channel)
     }
 
@@ -388,7 +435,7 @@ private class AndroidMultiviewPanePlayer(
                     }
                 }
             }
-        } else prepareResolved(channel)
+        } else prepareResolved(channel.copy(url = streamUrl ?: channel.url), mimeType = streamMime)
     }
 
     private fun prepareResolved(channel: LiveChannel, policy: com.nuvio.tv.livetv.stalker.StalkerMediaPolicy? = null, mimeType: String? = null) {
