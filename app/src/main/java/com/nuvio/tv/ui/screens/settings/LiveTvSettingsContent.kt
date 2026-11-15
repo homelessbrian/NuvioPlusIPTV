@@ -207,6 +207,7 @@ private sealed interface LiveDialog {
     data object HiddenChannels : LiveDialog
     data object HiddenGroups : LiveDialog
     data class PlaylistGuideShift(val source: PlaylistSource) : LiveDialog
+    data class PlaylistGuides(val playlistId: String) : LiveDialog
     data class PlaylistCatchupShift(val source: PlaylistSource) : LiveDialog
     data class EpgSourceShift(val source: EpgSource) : LiveDialog
     data object ClockMode : LiveDialog
@@ -1713,10 +1714,11 @@ internal fun LiveTvSettingsContent(
             fields = listOf(
                 FormField(context.getString(R.string.iptv_settings_name), context.getString(R.string.iptv_settings_my_provider)),
                 FormField(context.getString(R.string.iptv_settings_playlist_url), "http://…/playlist.m3u"),
+                FormField(context.getString(R.string.iptv_settings_guide_link_optional), "http://…/epg.xml.gz"),
                 FormField(context.getString(R.string.iptv_settings_user_agent_optional), context.getString(R.string.iptv_settings_leave_empty_for_default))
             ),
             onDismiss = close,
-            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addPlaylist(v[0], v[1], v[2]); close() }
+            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addPlaylist(v[0], v[1], v[3], epgUrl = v[2]); close() }
         )
         LiveDialog.AddXtream -> SourceFormDialog(
             title = context.getString(R.string.iptv_settings_add_xtream_codes_login_2),
@@ -1724,21 +1726,22 @@ internal fun LiveTvSettingsContent(
                 FormField(context.getString(R.string.iptv_settings_name), context.getString(R.string.iptv_settings_my_provider)),
                 FormField(context.getString(R.string.iptv_settings_server), "http://host:port"),
                 FormField(context.getString(R.string.iptv_settings_username), ""),
-                FormField(context.getString(R.string.iptv_settings_password), "")
+                FormField(context.getString(R.string.iptv_settings_password), ""),
+                FormField(context.getString(R.string.iptv_settings_guide_link_optional), "http://…/epg.xml.gz")
             ),
             onDismiss = close,
-            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addXtream(v[0], v[1], v[2], v[3]); close() },
+            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addXtream(v[0], v[1], v[2], v[3], epgUrl = v[4]); close() },
             toggleLive = context.getString(R.string.iptv_settings_include_tv_channels) to true,
             toggle2 = context.getString(R.string.iptv_settings_include_movies_series_on_demand) to true,
             onSaveAll = { v, _, vod, live ->
-                if (v[1].isNotBlank()) viewModel.addXtream(v[0], v[1], v[2], v[3], importVod = vod, importLive = live)
+                if (v[1].isNotBlank()) viewModel.addXtream(v[0], v[1], v[2], v[3], importVod = vod, importLive = live, epgUrl = v[4])
                 close()
             }
         )
         LiveDialog.AddStalker -> StalkerSourceDialog(
             onDismiss = close,
-            onSave = { name, config, guide, vod, live ->
-                viewModel.addStalker(name, config, vod, live, guide)
+            onSave = { name, config, guide, vod, live, epgUrl ->
+                viewModel.addStalker(name, config, vod, live, guide, epgUrl)
                 close()
             }
         )
@@ -1785,6 +1788,10 @@ internal fun LiveTvSettingsContent(
                 // server reports (or that the app worked out); pick one when that's wrong.
                 if (!d.source.isStalker) (context.getString(R.string.iptv_settings_catchup_zone_value, catchupZoneLabel(context, d.source))) to { dialog = LiveDialog.CatchupZone(d.source) } else null,
                 // Time shifts for this playlist: its built-in guide, and its catch-up.
+                // Which guides this playlist's channels get their listings from.
+                guidesValue(context, d.source, playlists, epgs, viewModel.playlistsWithOwnGuide(playlists))?.let {
+                    context.getString(R.string.iptv_settings_guides_value, it) to { dialog = LiveDialog.PlaylistGuides(d.source.id) }
+                },
                 (context.getString(R.string.iptv_settings_guide_shift_value, offsetLabel(context, d.source.guideShiftMinutes))).takeIf { d.source.liveEnabled }?.let {
                     it to { dialog = LiveDialog.PlaylistGuideShift(d.source) }
                 },
@@ -1813,7 +1820,7 @@ internal fun LiveTvSettingsContent(
         is LiveDialog.EditPlaylist -> {
             val src = d.source
             if (src.isStalker) {
-                StalkerSourceDialog(src, onDismiss = close, onSave = { name, config, guide, vod, live ->
+                StalkerSourceDialog(src, onDismiss = close, onSave = { name, config, guide, vod, live, _ ->
                     viewModel.savePlaylist(src.copy(name = name, sourceType = "stalker", stalkerConfig = config,
                         useEmbeddedEpg = guide, importVod = vod, importLive = live))
                     close()
@@ -2034,6 +2041,16 @@ internal fun LiveTvSettingsContent(
             onUnhideAll = { viewModel.unhideAllGroups(); close() },
             onDismiss = close
         )
+        is LiveDialog.PlaylistGuides -> {
+            val src = playlists.firstOrNull { it.id == d.playlistId }
+            if (src == null) LaunchedEffect(Unit) { close() } else PlaylistGuidesDialog(
+                source = src,
+                rows = guideRows(context, src, playlists, epgs, viewModel.playlistsWithOwnGuide(playlists)),
+                onOwnGuide = { on -> viewModel.savePlaylist(src.copy(useEmbeddedEpg = on)) },
+                onGuide = { key, on -> viewModel.setPlaylistGuide(src.id, key, on) },
+                onDismiss = close
+            )
+        }
         is LiveDialog.PlaylistGuideShift -> SettingsSingleChoiceDialog(
             title = context.getString(R.string.iptv_settings_guide_time_shift_1_s, d.source.name),
             subtitle = context.getString(R.string.iptv_settings_moves_this_playlist_s_built_in_guide_earlier),
@@ -2445,7 +2462,9 @@ private fun AddFromPhoneDialog(viewModel: LiveTvSettingsViewModel, onDismiss: ()
             R.string.iptv_settings_playlist,
             R.string.iptv_settings_playlist_1_s,
             R.string.iptv_settings_tv_guide_1_s,
-            R.string.iptv_settings_xtream_login_1_s
+            R.string.iptv_settings_xtream_login_1_s,
+            R.string.iptv_settings_stalker_portal_1_s,
+            R.string.iptv_settings_1_s_and_its_guide
         ).associateWith { context.getString(it) }
     }
     androidx.compose.runtime.DisposableEffect(phoneTexts, phoneLocale, logoBytes, accentArgb, viewModel) {
@@ -2459,8 +2478,18 @@ private fun AddFromPhoneDialog(viewModel: LiveTvSettingsViewModel, onDismiss: ()
             val line = when (e.kind) {
                 "xtream" -> {
                     val name = e.name.ifBlank { "Xtream" }
-                    viewModel.addXtream(name, e.server, e.username, e.password, importVod = e.includeVod, importLive = e.includeLive)
-                    receipt(R.string.iptv_settings_xtream_login_1_s, name)
+                    viewModel.addXtream(name, e.server, e.username, e.password, importVod = e.includeVod, importLive = e.includeLive, epgUrl = e.epgUrl)
+                    receipt(R.string.iptv_settings_xtream_login_1_s, name).let {
+                        if (e.epgUrl.isNotBlank()) receipt(R.string.iptv_settings_1_s_and_its_guide, it) else it
+                    }
+                }
+                "stalker" -> {
+                    val name = e.name.ifBlank { "Stalker portal" }
+                    val config = e.stalker ?: error("no portal")
+                    viewModel.addStalker(name, config, importVod = e.includeVod, importLive = e.includeLive, epgUrl = e.epgUrl)
+                    receipt(R.string.iptv_settings_stalker_portal_1_s, name).let {
+                        if (e.epgUrl.isNotBlank()) receipt(R.string.iptv_settings_1_s_and_its_guide, it) else it
+                    }
                 }
                 "epg" -> {
                     val name = e.name.ifBlank { "EPG" }
@@ -2469,8 +2498,8 @@ private fun AddFromPhoneDialog(viewModel: LiveTvSettingsViewModel, onDismiss: ()
                 }
                 else -> {
                     val name = e.name.ifBlank { receipt(R.string.iptv_settings_playlist) }
-                    viewModel.addPlaylist(name, e.url, e.userAgent)
-                    if (e.epgUrl.isNotBlank()) viewModel.addEpg(receipt(R.string.iptv_settings_1_s_guide, name), e.epgUrl)
+                    // The guide link goes with the playlist (switched on for it only), like the TV's own form.
+                    viewModel.addPlaylist(name, e.url, e.userAgent, epgUrl = e.epgUrl)
                     if (e.epgUrl.isNotBlank()) receipt(R.string.iptv_settings_added_playlist_guide, name) else receipt(R.string.iptv_settings_playlist_1_s, name)
                 }
             }
@@ -2543,21 +2572,116 @@ private fun AddFromPhoneDialog(viewModel: LiveTvSettingsViewModel, onDismiss: ()
     }
 }
 
+/** One switch in a playlist's Guides settings. [key]: null for the playlist's own built-in guide. */
+private data class GuideRow(val key: String?, val title: String, val subtitle: String?, val on: Boolean)
+
+/**
+ * A playlist's Guides switches: its own built-in guide, every guide added under EPG sources, and
+ * the other playlists' built-in guides. Everything is on until switched off.
+ */
+private fun guideRows(
+    context: Context,
+    source: PlaylistSource,
+    playlists: List<PlaylistSource>,
+    epgs: List<EpgSource>,
+    withOwnGuide: Set<String>
+): List<GuideRow> {
+    fun host(u: String) = runCatching { java.net.URI(u.trim()).host }.getOrNull()?.removePrefix("www.")
+    val rows = ArrayList<GuideRow>()
+    rows += GuideRow(null, context.getString(R.string.iptv_settings_guides_own), null, source.useEmbeddedEpg)
+    epgs.filter { it.enabled && it.url.isNotBlank() }.forEach { g ->
+        rows += GuideRow(g.id, g.name, host(g.url), g.id !in source.guidesOff)
+    }
+    playlists.filter { it.id != source.id && it.liveEnabled && it.useEmbeddedEpg && it.id in withOwnGuide }.forEach { o ->
+        val key = PlaylistSource.builtInGuideKey(o.id)
+        rows += GuideRow(key, context.getString(R.string.iptv_settings_1_s_guide, o.name), null, key !in source.guidesOff)
+    }
+    return rows
+}
+
+/** "All" or "2 of 3" for the playlist's Guides entry; null when it has no TV channels. */
+private fun guidesValue(
+    context: Context,
+    source: PlaylistSource,
+    playlists: List<PlaylistSource>,
+    epgs: List<EpgSource>,
+    withOwnGuide: Set<String>
+): String? {
+    if (!source.liveEnabled) return null
+    val rows = guideRows(context, source, playlists, epgs, withOwnGuide)
+    val on = rows.count { it.on }
+    return if (on == rows.size) context.getString(R.string.iptv_settings_guides_all)
+    else context.getString(R.string.iptv_settings_guides_count, on, rows.size)
+}
+
+@Composable
+private fun PlaylistGuidesDialog(
+    source: PlaylistSource,
+    rows: List<GuideRow>,
+    onOwnGuide: (Boolean) -> Unit,
+    onGuide: (String, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(80)
+        runCatching { first.requestFocus() }
+    }
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = context.getString(R.string.iptv_settings_guides),
+        subtitle = context.getString(R.string.iptv_settings_guides_description, source.name),
+        width = 560.dp
+    ) {
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 360.dp),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+        ) {
+            itemsIndexed(rows, key = { _, r -> r.key ?: "__own__" }) { i, r ->
+                SettingsToggleRow(
+                    title = r.title,
+                    subtitle = r.subtitle,
+                    checked = r.on,
+                    onToggle = { if (r.key == null) onOwnGuide(!r.on) else onGuide(r.key, !r.on) },
+                    modifier = if (i == 0) Modifier.focusRequester(first) else Modifier
+                )
+            }
+        }
+        if (rows.size <= 1) {
+            Text(
+                text = context.getString(R.string.iptv_settings_guides_none_added),
+                style = MaterialTheme.typography.bodySmall,
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        SettingsDialogActionRow {
+            SettingsDialogActionButton(text = context.getString(R.string.iptv_settings_done), onClick = onDismiss, primary = true)
+        }
+    }
+}
+
 /** Provider identity is explicit; no MAC/device identifiers are generated or guessed. */
 @Composable
 private fun StalkerSourceDialog(
     source: PlaylistSource? = null,
     onDismiss: () -> Unit,
-    onSave: (String, com.nuvio.stalker.StalkerConfig, Boolean, Boolean, Boolean) -> Unit
+    onSave: (String, com.nuvio.stalker.StalkerConfig, Boolean, Boolean, Boolean, String) -> Unit
 ) {
     val context = LocalContext.current
     val config = source?.stalkerConfig
+    // Adding: a guide link box after the MAC address (o = 1 moves the fields after it along).
+    val o = if (source == null) 1 else 0
     SourceFormDialog(
         title = if (source == null) context.getString(R.string.iptv_settings_add_stalker_ministra_portal_2) else context.getString(R.string.iptv_settings_edit_stalker_ministra_portal),
         fields = listOf(
             FormField(context.getString(R.string.iptv_settings_name), context.getString(R.string.iptv_settings_my_provider), source?.name.orEmpty()),
             FormField(context.getString(R.string.iptv_settings_portal_url), "https://…/stalker_portal/c/", config?.portalUrl.orEmpty()),
-            FormField(context.getString(R.string.iptv_settings_provider_issued_mac_address), "00:00:00:00:00:00", config?.mac.orEmpty()),
+            FormField(context.getString(R.string.iptv_settings_provider_issued_mac_address), "00:00:00:00:00:00", config?.mac.orEmpty())
+        ) + listOfNotNull(
+            FormField(context.getString(R.string.iptv_settings_guide_link_optional), "http://…/epg.xml.gz").takeIf { source == null }
+        ) + listOf(
             FormField(context.getString(R.string.iptv_settings_username_optional), "", config?.username.orEmpty()),
             FormField(context.getString(R.string.iptv_settings_password_optional), "", config?.password.orEmpty()),
             FormField(context.getString(R.string.iptv_settings_serial_number_optional), "", config?.serialNumber.orEmpty()),
@@ -2567,8 +2691,8 @@ private fun StalkerSourceDialog(
             FormField(context.getString(R.string.iptv_settings_provider_time_zone), "UTC", config?.timezone ?: "UTC"),
             FormField(context.getString(R.string.iptv_settings_language), "en", config?.language ?: "en")
         ),
-        advancedFrom = 3,
-        preserveWhitespaceAt = setOf(3, 4, 5, 6, 7, 8),
+        advancedFrom = 3 + o,
+        preserveWhitespaceAt = setOf(3, 4, 5, 6, 7, 8).map { it + o }.toSet(),
         validate = { values ->
             val address = runCatching { java.net.URI(values[1]) }.getOrNull()
             when {
@@ -2583,8 +2707,9 @@ private fun StalkerSourceDialog(
         onDismiss = onDismiss,
         onSave = { _, _ -> },
         onSaveAll = { values, guide, vod, live ->
-            onSave(values[0], com.nuvio.stalker.StalkerConfig(values[1], values[2], values[3], values[4], values[5],
-                values[6], values[7], values[8], values[9].ifBlank { "UTC" }, values[10].ifBlank { "en" }), guide, vod, live)
+            onSave(values[0], com.nuvio.stalker.StalkerConfig(values[1], values[2], values[3 + o], values[4 + o], values[5 + o],
+                values[6 + o], values[7 + o], values[8 + o], values[9 + o].ifBlank { "UTC" }, values[10 + o].ifBlank { "en" }), guide, vod, live,
+                if (o == 1) values[3] else "")
         }
     )
 }

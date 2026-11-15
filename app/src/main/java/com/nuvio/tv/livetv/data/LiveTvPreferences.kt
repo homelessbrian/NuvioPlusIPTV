@@ -1573,6 +1573,7 @@ class LiveTvPreferences @Inject constructor(
                     logoSource = o.optString("logoSource").ifBlank { "playlist" },
                     guideShiftMinutes = o.optInt("guideShiftMinutes", 0),
                     catchupShiftMinutes = o.optInt("catchupShiftMinutes", 0),
+                    guidesOff = o.optJSONArray("guidesOff")?.let { a -> (0 until a.length()).mapNotNullTo(HashSet()) { a.optString(it).ifBlank { null } } }.orEmpty(),
                     sourceType = o.optString("sourceType").ifBlank { o.optString("providerKind").ifBlank { if (o.optJSONObject("stalkerConfig") != null || o.optJSONObject("stalker") != null) "stalker" else "" } },
                     stalkerConfig = (o.optJSONObject("stalkerConfig") ?: o.optJSONObject("stalker"))?.let { value ->
                         runCatching { com.nuvio.stalker.StalkerConfig.fromJson(kotlinx.serialization.json.Json.parseToJsonElement(value.toString()) as kotlinx.serialization.json.JsonObject) }.getOrNull()
@@ -1605,6 +1606,7 @@ class LiveTvPreferences @Inject constructor(
                     .put("guideShiftMinutes", s.guideShiftMinutes)
                     .put("catchupShiftMinutes", s.catchupShiftMinutes)
                     .apply {
+                        if (s.guidesOff.isNotEmpty()) put("guidesOff", JSONArray(s.guidesOff.sorted()))
                         val type = if (s.isStalker) "stalker" else s.sourceType
                         if (type.isNotBlank()) put("sourceType", type)
                         s.stalkerConfig?.let { put("stalkerConfig", JSONObject(it.toJson().toString())) }

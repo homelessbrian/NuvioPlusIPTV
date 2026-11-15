@@ -2026,9 +2026,13 @@ private fun LiveTvGuideScreenBody(
             LaunchedEffect(fc?.key, gridFocused) {
                 if (gridFocused && fc != null && fc.key != ch.key) epgPickerFor = fc
             }
+            // Only the guides switched on for this channel's playlist (its Guides settings).
+            val chSources = remember(epgSources, ch.sourceId) {
+                epgSources.filter { it.playlistIds == null || ch.sourceId in it.playlistIds }
+            }
             EpgSidePanel(
                 channel = ch,
-                sources = epgSources,
+                sources = chSources,
                 current = user.epgOverrides[ch.key],
                 automatic = epgAutoMatches[ch.key],
                 loading = status.loading || epgListsLoading,

@@ -63,20 +63,26 @@ class LiveTvSettingsViewModel @Inject constructor(
         }
     }
 
-    fun addPlaylist(name: String, url: String, userAgent: String) =
-        viewModelScope.launch { repository.addPlaylist(name, url, userAgent) }
+    fun addPlaylist(name: String, url: String, userAgent: String, epgUrl: String = "") =
+        viewModelScope.launch { repository.addPlaylist(name, url, userAgent, epgUrl) }
 
-    fun addXtream(name: String, server: String, user: String, pass: String, importVod: Boolean = true, importLive: Boolean = true) =
+    fun addXtream(name: String, server: String, user: String, pass: String, importVod: Boolean = true, importLive: Boolean = true, epgUrl: String = "") =
         viewModelScope.launch {
-            repository.addXtream(name, server, user, pass, importVod, importLive)
+            repository.addXtream(name, server, user, pass, importVod, importLive, epgUrl)
             onDemand.refreshSoon()
         }
 
-    fun addStalker(name: String, config: com.nuvio.stalker.StalkerConfig, importVod: Boolean = true, importLive: Boolean = true, useEmbeddedEpg: Boolean = true) =
+    fun addStalker(name: String, config: com.nuvio.stalker.StalkerConfig, importVod: Boolean = true, importLive: Boolean = true, useEmbeddedEpg: Boolean = true, epgUrl: String = "") =
         viewModelScope.launch {
-            repository.addStalker(name, config, importVod, importLive, useEmbeddedEpg)
+            repository.addStalker(name, config, importVod, importLive, useEmbeddedEpg, epgUrl)
             onDemand.refreshSoon()
         }
+
+    /** A playlist's Guides switch for an added guide or another playlist's built-in guide. */
+    fun setPlaylistGuide(playlistId: String, guideKey: String, on: Boolean) =
+        viewModelScope.launch { repository.setPlaylistGuide(playlistId, guideKey, on) }
+
+    fun playlistsWithOwnGuide(playlists: List<PlaylistSource>): Set<String> = repository.playlistsWithOwnGuide(playlists)
 
     fun savePlaylist(source: PlaylistSource) = viewModelScope.launch {
         val before = playlists.value.firstOrNull { it.id == source.id }

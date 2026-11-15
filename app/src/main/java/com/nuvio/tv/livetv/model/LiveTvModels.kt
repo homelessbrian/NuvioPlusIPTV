@@ -68,6 +68,12 @@ data class PlaylistSource(
      * providers whose archive runs on a different clock than their guide.
      */
     val catchupShiftMinutes: Int = 0,
+    /**
+     * Guides switched off for this playlist in its Guides settings: an added guide's id, or
+     * [builtInGuideKey] for another playlist's built-in guide. Everything not listed is on, so
+     * new guides (and playlists saved before this existed) use every guide, like before.
+     */
+    val guidesOff: Set<String> = emptySet(),
     /** Explicit type survives a malformed portal configuration without treating it as M3U. */
     val sourceType: String = "",
     val stalkerConfig: StalkerConfig? = null
@@ -113,6 +119,9 @@ data class PlaylistSource(
     private fun enc(s: String) = java.net.URLEncoder.encode(s.trim(), "UTF-8")
 
     companion object {
+        /** How another playlist's built-in guide is named in [guidesOff]. */
+        fun builtInGuideKey(playlistId: String) = "playlist:$playlistId"
+
         /**
          * A typed or pasted link made safe: dashes that only look like "-" (the longer dashes a
          * phone keyboard or a chat app swaps in, the non-breaking hyphen) become a real hyphen,
@@ -652,7 +661,9 @@ data class EpgSourceChannels(
     val label: String,
     val channels: List<EpgChannelEntry>,
     /** Guide channel ids already feeding a playlist channel (matched or assigned). */
-    val usedIds: Set<String> = emptySet()
+    val usedIds: Set<String> = emptySet(),
+    /** The playlists this guide is switched on for (null = every playlist). */
+    val playlistIds: Set<String>? = null
 )
 
 data class EpgChannelEntry(
@@ -884,7 +895,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-15 20:40"
+    const val KIT_STAMP = "2026-11-15 21:30"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String
