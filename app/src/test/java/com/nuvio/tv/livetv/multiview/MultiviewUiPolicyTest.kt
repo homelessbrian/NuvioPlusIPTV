@@ -153,4 +153,16 @@ class MultiviewUiPolicyTest {
         assertTrue(multiviewPaneKeepsLabel(isBuffering = false, hasError = true))
         assertTrue(!multiviewPaneKeepsLabel(isBuffering = false, hasError = false))
     }
+
+    @Test
+    fun `Back from a full-screen pane returns to all panes and Left Right go round the filled panes`() {
+        assertEquals(MultiviewBack.CLOSE_PICKER, multiviewBackAction(pickerOpen = true, overlaysShown = true, fullScreen = true))
+        assertEquals(MultiviewBack.ALL_PANES, multiviewBackAction(pickerOpen = false, overlaysShown = true, fullScreen = true))
+        assertEquals(MultiviewBack.ALL_PANES, multiviewBackAction(pickerOpen = false, overlaysShown = false, fullScreen = true))
+        assertEquals(3, multiviewNextFullPane(listOf(0, 1, 3), 1, forward = true))
+        assertEquals(0, multiviewNextFullPane(listOf(0, 1, 3), 3, forward = true))
+        assertEquals(3, multiviewNextFullPane(listOf(0, 1, 3), 0, forward = false))
+        assertEquals(2, multiviewNextFullPane(listOf(2), 2, forward = true))
+        assertEquals(1, multiviewNextFullPane(emptyList(), 1, forward = true))
+    }
 }

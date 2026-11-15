@@ -120,13 +120,25 @@ fun multiviewOverlaysStay(barFocused: Boolean, pickerOpen: Boolean): Boolean = b
 /** A pane that is still loading or has failed keeps its name and edge, so it is never an unnamed black box. */
 fun multiviewPaneKeepsLabel(isBuffering: Boolean, hasError: Boolean): Boolean = isBuffering || hasError
 
-enum class MultiviewBack { CLOSE_PICKER, HIDE_OVERLAYS, LEAVE }
+enum class MultiviewBack { CLOSE_PICKER, ALL_PANES, HIDE_OVERLAYS, LEAVE }
 
-/** Back closes the picker, then hides the overlays, and only leaves Multiview once they are hidden. */
-fun multiviewBackAction(pickerOpen: Boolean, overlaysShown: Boolean): MultiviewBack = when {
+/**
+ * Back steps out one level at a time: the picker, then a full-screen pane back to all panes, then
+ * the overlays, and only leaves Multiview once they are hidden.
+ */
+fun multiviewBackAction(pickerOpen: Boolean, overlaysShown: Boolean, fullScreen: Boolean = false): MultiviewBack = when {
     pickerOpen -> MultiviewBack.CLOSE_PICKER
+    fullScreen -> MultiviewBack.ALL_PANES
     overlaysShown -> MultiviewBack.HIDE_OVERLAYS
     else -> MultiviewBack.LEAVE
+}
+
+/** Left/Right in full screen: the next pane that has something in it, going round; [from] if there is no other. */
+fun multiviewNextFullPane(filled: List<Int>, from: Int, forward: Boolean): Int {
+    if (filled.isEmpty()) return from
+    val at = filled.indexOf(from)
+    if (at < 0) return filled.first()
+    return filled[(at + (if (forward) 1 else -1) + filled.size) % filled.size]
 }
 
 /** Picker data deliberately has no stream URL, provider headers, or credentials. */

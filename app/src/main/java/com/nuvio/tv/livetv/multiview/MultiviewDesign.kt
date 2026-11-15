@@ -39,6 +39,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -139,6 +140,8 @@ internal fun MultiviewProgress(fraction: Float, modifier: Modifier = Modifier) {
  * when the stream failed, [emptyHint] what OK does on an empty pane. With [overlaysShown] off, the
  * name, the edge and the highlight fade away (with the top bar), leaving only a faint speaker on the
  * pane that has the sound; a pane that is loading or has failed keeps its name and edge.
+ * [fullScreen] is the pane filling the screen: square corners, no edge or highlight. [hint] is a
+ * line under the name on the highlighted pane; [hideVideo] puts a covered protected picture away.
  */
 @Composable
 internal fun MultiviewPane(
@@ -153,6 +156,9 @@ internal fun MultiviewPane(
     errorHint: String? = null,
     emptyHint: String = "Press OK",
     overlaysShown: Boolean = true,
+    fullScreen: Boolean = false,
+    hint: String? = null,
+    hideVideo: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     val ring = NuvioTheme.focusRing.brush()
@@ -164,11 +170,12 @@ internal fun MultiviewPane(
     val overlayGone by remember { derivedStateOf { overlay.value < 1f } }
     Box(
         modifier.onFocusChanged { focused = it.isFocused }
-            .graphicsLayer { val s = if (focused) 1f + 0.02f * overlay.value else 1f; scaleX = s; scaleY = s }
-            .clip(PaneShape)
+            .graphicsLayer { val s = if (focused && !fullScreen) 1f + 0.02f * overlay.value else 1f; scaleX = s; scaleY = s }
+            .clip(if (fullScreen) RectangleShape else PaneShape)
             .background(if (empty) Color.White.copy(alpha = 0.025f) else Color.Black)
             .drawWithContent {
                 drawContent()
+                if (fullScreen) return@drawWithContent
                 val w = (if (focused) 3.dp else 1.dp).toPx()
                 val topLeft = Offset(w / 2, w / 2)
                 val box = Size(size.width - w, size.height - w)
@@ -204,7 +211,11 @@ internal fun MultiviewPane(
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
-                    update = { if (it.player !== pane.player) it.player = pane.player },
+                    update = {
+                        if (it.player !== pane.player) it.player = pane.player
+                        it.videoSurfaceView?.visibility =
+                            if (hideVideo && pane.isProtected) android.view.View.INVISIBLE else android.view.View.VISIBLE
+                    },
                     onRelease = { it.player = null }
                 )
             }
@@ -256,7 +267,7 @@ internal fun MultiviewPane(
                 color = NuvioTheme.colors.TextSecondary, size = 9.sp, weight = FontWeight.SemiBold
             )
         }
-        if (audible && pane.channelKey != null && overlayGone) {
+        if (audible && pane.channelKey != null && overlayGone && !fullScreen) {
             // What is left when everything else has faded: which pane the sound is coming from.
             Box(
                 Modifier.align(Alignment.TopEnd).padding(9.dp).graphicsLayer { alpha = 1f - overlay.value }
@@ -289,6 +300,7 @@ internal fun MultiviewPane(
                 Column {
                     LiveText(pane.channelName ?: "Channel", size = 11.sp, weight = FontWeight.ExtraBold)
                     show?.let { LiveText(it.title, size = 9.sp, color = NuvioTheme.colors.TextSecondary) }
+                    if (focused && hint != null) LiveText(hint, size = 9.sp, color = NuvioTheme.colors.TextSecondary)
                 }
             }
         }
