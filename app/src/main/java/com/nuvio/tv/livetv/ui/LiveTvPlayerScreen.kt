@@ -482,6 +482,62 @@ fun LiveTvPlayerScreen(
             ?: hintProgram?.takeIf { !LiveTvRepository.isPlaceholderTitle(it.title) }?.icon
     }
 
+    // Remote Buttons (Settings → Remote Buttons): the jobs a button can be given here, each one
+    // the same function its usual button or menu line already calls.
+    val remoteKeys = com.nuvio.tv.livetv.remote.rememberRemoteKeys(
+        if (playback.catchupTitle != null || playingRecording) com.nuvio.tv.livetv.remote.RemoteCatalog.CATCHUP
+        else com.nuvio.tv.livetv.remote.RemoteCatalog.FULL
+    )
+    remoteKeys.run = run@{ id, ev ->
+        val inArchive = playback.catchupTitle != null
+        when (id) {
+            "live.options" -> openGear()
+            "live.info_bar" -> showBanner()
+            "live.panel" -> { if (current != null) { panelFull = true; controlFocus = PanelControl.PLAY }; showBanner() }
+            "live.pause" -> viewModel.playback.togglePause()
+            "live.audio" -> openGear("audio")
+            "live.subs_page" -> openGear("subs")
+            "live.subs_toggle" -> {
+                captionsOn = viewModel.playback.toggleCaptions()
+                toast = if (captionsOn) "Captions on" else if (viewModel.playback.subtitleTracks().isEmpty()) "No captions on this channel" else "Captions off"
+            }
+            "live.size" -> openGear("size")
+            "live.sleep" -> openGear("sleep")
+            "live.stream_info" -> openGear("info")
+            "live.guide" -> onBack()
+            "live.channel_list" -> { closeFull(); bannerVisible = false; listVisible = true }
+            "live.groups" -> { viewModel.requestGroupsOnReturn(); onBackToGroups() }
+            "live.next", "live.prev" -> {
+                val dir = if (id == "live.next") 1 else -1
+                if (settings.channelSurf && current != null && ev != null) browseStep(dir, androidx.compose.ui.input.key.KeyEvent(ev)) else zap(dir)
+            }
+            "live.previous_channel" -> {
+                val prev = viewModel.previousChannel()?.takeIf { it.key != playback.channelKey } ?: return@run false
+                browseKey = null
+                viewModel.preview(prev)
+                showBanner()
+            }
+            "live.backups" -> {
+                if (backups.isNotEmpty()) { closeFull(); bannerVisible = false; dialog = PlayerDialog.BACKUP_FLYOUT }
+                else toast = "No backup channels for this channel"
+            }
+            "live.record" -> { val ch = current ?: return@run false; if (inArchive) return@run false; toast = viewModel.toggleRecording(ch) }
+            "live.favorite" -> {
+                val ch = current ?: return@run false
+                toast = if (ch.key in user.favorites) "Removed from Favorites" else "Added to Favorites"
+                viewModel.toggleFavorite(ch)
+            }
+            "live.multiview_add" -> { val ch = current ?: return@run false; if (inArchive) return@run false; com.nuvio.tv.livetv.multiview.MultiviewQueue.addAndAnnounce(ch.key) }
+            "live.multiview_open" -> { if (!multiviewEligible) return@run false; openMultiview() }
+            "live.reload" -> viewModel.playback.retry()
+            "catchup.back" -> scrub(forward = false, repeat = ev?.repeatCount ?: 0)
+            "catchup.forward" -> scrub(forward = true, repeat = ev?.repeatCount ?: 0)
+            "catchup.live" -> { if (playingRecording) onBack() else current?.let { viewModel.backToLive(it) } ?: return@run false }
+            else -> return@run false
+        }
+        true
+    }
+
     BackHandler(enabled = listVisible) { listVisible = false }
 
     CompositionLocalProvider(LocalLiveSolidHighlight provides settings.solidHighlight) {
@@ -506,6 +562,8 @@ fun LiveTvPlayerScreen(
                     if (e.type == KeyEventType.KeyUp) swallowOkUp = false
                     return@onPreviewKeyEvent true
                 }
+                // Remote Buttons: a button the user changed does its new job (others carry on below).
+                if (remoteKeys.onKey(e.nativeKeyEvent, nav = false)) return@onPreviewKeyEvent true
                 val bk = browseKey
                 if (bk != null && controlFocus == null && e.type == KeyEventType.KeyDown) {
                     if (isOk && e.nativeKeyEvent.repeatCount == 0) {
@@ -714,6 +772,10 @@ fun LiveTvPlayerScreen(
                         else -> Unit
                     }
                 }
+                // Remote Buttons: OK, arrows and Back, only while nothing on the bar is highlighted.
+                if (remoteKeys.onKey(e.nativeKeyEvent, nav = true, enabled = controlFocus == null && recentFocus == null && !rowPills &&
+                        (browseKey == null || (!isOk && e.key != Key.Back)))
+                ) return@onPreviewKeyEvent true
                 if (isOk) {
                     if (e.type == KeyEventType.KeyDown) {
                         if (e.nativeKeyEvent.repeatCount == 0) {

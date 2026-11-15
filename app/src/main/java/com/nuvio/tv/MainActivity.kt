@@ -962,6 +962,11 @@ open class MainActivity : ComponentActivity() {
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val actualRoute = navBackStackEntry?.destination?.route
                     val currentRoute = optimisticRoute ?: actualRoute
+                    // Live TV fork: Remote Buttons needs to know the page showing, and how to open another.
+                    androidx.compose.runtime.SideEffect {
+                        com.nuvio.tv.livetv.remote.RemoteButtons.route = currentRoute
+                        com.nuvio.tv.livetv.remote.RemoteButtons.navigate = { target -> navigateToDrawerRoute(navController, currentRoute, target) }
+                    }
                     startupDestination = startupDestinationForRoute(actualRoute ?: startDestination)
 
                     LaunchedEffect(actualRoute) {
@@ -1600,6 +1605,11 @@ open class MainActivity : ComponentActivity() {
             }
             return true
         }
+        // Live TV fork: Remote Buttons (the user's own button choices; untouched buttons pass straight through).
+        com.nuvio.tv.livetv.remote.RemoteButtons.start(this)
+        if (com.nuvio.tv.livetv.remote.RemoteButtons.swallowed(event)) return true
+        com.nuvio.tv.livetv.remote.RemoteButtons.noteKey(event)
+        if (com.nuvio.tv.livetv.remote.RemoteButtons.rootKey(event)) return true
         return super.dispatchKeyEvent(event)
     }
 

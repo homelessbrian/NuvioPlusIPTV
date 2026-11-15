@@ -407,8 +407,20 @@ fun MultiviewScreen(
         }
     }
 
+    // Remote Buttons (Settings → Remote Buttons): the jobs a button can be given in Multiview.
+    val remoteKeys = com.nuvio.tv.livetv.remote.rememberRemoteKeys(com.nuvio.tv.livetv.remote.RemoteCatalog.MULTIVIEW)
+    remoteKeys.run = run@{ id, _ ->
+        when (id) {
+            "mv.edit" -> { editedPane = state.focusedPane; editorOpen = true }
+            "mv.fullscreen" -> showFullScreen(if (fullPane != null) null else state.focusedPane)
+            "mv.layout" -> layoutOpen = true
+            else -> return@run false
+        }
+        true
+    }
     Box(
         Modifier.fillMaxSize().background(NuvioTheme.colors.Background).multiviewBackdrop().onPreviewKeyEvent { event ->
+            if (!editorOpen && !layoutOpen && remoteKeys.onKey(event.nativeKeyEvent, nav = false)) return@onPreviewKeyEvent true
             val arrow = event.key == Key.DirectionLeft || event.key == Key.DirectionRight ||
                 event.key == Key.DirectionUp || event.key == Key.DirectionDown
             // With the overlays hidden, the first arrow only brings them back: it must not also move

@@ -1483,6 +1483,36 @@ class LiveTvPreferences @Inject constructor(
         deviceStore.edit { it[Keys.renamedChannelsChecked] = true }
     }
 
+    // ---------- Remote Buttons ----------
+    // The user's own button choices: kept on this TV only (never synced), one set per profile.
+    // The buttons this TV has received and any extra ones added are shared by its profiles.
+
+    private fun remoteMapKey(id: Int) = stringPreferencesKey(if (id <= 1) "remote_map" else "remote_map_p$id")
+    private val remoteSeenKey = stringSetPreferencesKey("remote_seen")
+    private val remoteLearnedKey = stringPreferencesKey("remote_learned")
+
+    /** The active profile's button choices, the key codes seen on this TV, and the added buttons. */
+    val remoteStored: Flow<Triple<String?, Set<String>, String?>> =
+        kotlinx.coroutines.flow.combine(deviceStore.data, profileManager.activeProfileId) { d, id ->
+            Triple(d[remoteMapKey(id)], d[remoteSeenKey] ?: emptySet(), d[remoteLearnedKey])
+        }
+
+    val remoteProfileId: Int get() = currentProfile
+    fun remoteProfiles(): List<Pair<Int, String>> = profileManager.profiles.value.map { it.id to it.name }
+    suspend fun remoteMapOf(profile: Int): String? = deviceStore.data.first()[remoteMapKey(profile)]
+
+    suspend fun setRemoteMap(json: String?, profile: Int = currentProfile) {
+        deviceStore.edit { if (json == null) it.remove(remoteMapKey(profile)) else it[remoteMapKey(profile)] = json }
+    }
+
+    suspend fun addRemoteSeen(codes: Set<String>) {
+        deviceStore.edit { it[remoteSeenKey] = (it[remoteSeenKey] ?: emptySet()) + codes }
+    }
+
+    suspend fun setRemoteLearned(json: String?) {
+        deviceStore.edit { if (json == null) it.remove(remoteLearnedKey) else it[remoteLearnedKey] = json }
+    }
+
     /** Every channel key something is saved for (see above). */
     suspend fun channelKeysInUse(): Set<String> {
         val out = HashSet<String>()

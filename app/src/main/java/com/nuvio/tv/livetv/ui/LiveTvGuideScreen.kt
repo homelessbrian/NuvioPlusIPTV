@@ -1030,6 +1030,38 @@ private fun LiveTvGuideScreenBody(
         }
         goFullscreen()
     }
+    // Remote Buttons (Settings → Remote Buttons): the jobs a button can be given in the guide,
+    // each one the same function its usual button already calls.
+    val remoteKeys = com.nuvio.tv.livetv.remote.rememberRemoteKeys(com.nuvio.tv.livetv.remote.RemoteCatalog.GUIDE)
+    remoteKeys.run = run@{ id, _ ->
+        when (id) {
+            "guide.channel_menu" -> { val ch = focusedChannel ?: return@run false; menuTarget = MenuTarget(ch, focusedBlock) }
+            "guide.fullscreen" -> {
+                if (playback.channelKey == null) return@run false
+                // The same as holding Back: remember the spot, and use the playing channel's group.
+                savedSpot = ui.selectedGroupId to focusedChannel?.key
+                scope.launch {
+                    viewModel.channelByKey(playback.channelKey)?.let { playing ->
+                        viewModel.groupToShow(playing)?.let { viewModel.selectGroup(it) }
+                    }
+                    goFullscreen()
+                }
+            }
+            "guide.search" -> { LiveTvSearchBridge.origin.value = LiveTvSearchBridge.GUIDE; onOpenNuvioSearch() }
+            "guide.previous_channel" -> { val ch = viewModel.previousChannel() ?: return@run false; playChannel(ch) }
+            "guide.page_up" -> moveRow(-8)
+            "guide.page_down" -> moveRow(8)
+            "guide.groups" -> focusGroups()
+            "guide.favorites" -> viewModel.selectGroup(ChannelGroup.FAVORITES)
+            "guide.now" -> resetToNow()
+            "guide.options" -> { runCatching { guideGearFocus.requestFocus() } }
+            "guide.multiview_add" -> { val ch = focusedChannel ?: return@run false; com.nuvio.tv.livetv.multiview.MultiviewQueue.addAndAnnounce(ch.key) }
+            "guide.favorite_toggle" -> { val ch = focusedChannel ?: return@run false; viewModel.toggleFavorite(ch) }
+            "guide.play" -> { val ch = focusedChannel ?: return@run false; viewModel.preview(ch); goFullscreen() }
+            else -> return@run false
+        }
+        true
+    }
     FrameMeter("Guide")
     androidx.compose.runtime.CompositionLocalProvider(
         LocalShowDetails provides { key, p -> viewModel.details(key, p) },
@@ -1064,7 +1096,9 @@ private fun LiveTvGuideScreenBody(
                 // Play/Pause on the remote: straight to full screen on what's playing. Works on
                 // every remote, including ones that can't report a held Back button.
                 if (e.type == KeyEventType.KeyDown && playingNow && e.nativeKeyEvent.repeatCount == 0 &&
-                    (e.key == Key.MediaPlayPause || e.key == Key.MediaPlay)
+                    (e.key == Key.MediaPlayPause || e.key == Key.MediaPlay) &&
+                    // Unless the user gave Play/Pause another job here (Remote Buttons).
+                    !(gridFocused && remoteKeys.overrides(e.nativeKeyEvent))
                 ) {
                     returnToPlaying()
                     return@onPreviewKeyEvent true
@@ -1485,6 +1519,10 @@ private fun LiveTvGuideScreenBody(
                                     }
                                     return@onPreviewKeyEvent true
                                 }
+                                // Remote Buttons: a button the user changed does its new job (others carry on below).
+                                if (!reorderActive && !visibilityMode && logoPickerFor == null && epgPickerFor == null &&
+                                    (remoteKeys.onKey(event.nativeKeyEvent, nav = false) || remoteKeys.onKey(event.nativeKeyEvent, nav = true))
+                                ) return@onPreviewKeyEvent true
                                 // Remember Up/Down presses: some remotes (clickable rings, e.g. on some
                                 // JVC Google TVs) also send OK with them, which would play the
                                 // highlighted channel while just scrolling.

@@ -665,6 +665,35 @@ fun PlayerScreen(
     // the video surface and its subtitles are never inside this layer.
     val playerControlsDim = Modifier.playerControlsBrightness(uiState.playerControlsBrightness)
 
+    // Live TV fork: Remote Buttons (Settings → Remote Buttons): the jobs a button can be given
+    // in this player, each one an event the player's own buttons already send.
+    val remoteKeys = com.nuvio.tv.livetv.remote.rememberRemoteKeys(com.nuvio.tv.livetv.remote.RemoteCatalog.PLAYER)
+    remoteKeys.run = run@{ id, _ ->
+        val event: PlayerEvent = when (id) {
+            "vod.play_pause" -> PlayerEvent.OnPlayPause
+            "vod.controls" -> PlayerEvent.OnToggleControls
+            "vod.seek_back" -> PlayerEvent.OnSeekBy(-10_000L)
+            "vod.seek_forward" -> PlayerEvent.OnSeekBy(10_000L)
+            "vod.chapter_next" -> if (uiState.chapters.isEmpty()) return@run false else PlayerEvent.OnSkipChapter(true)
+            "vod.chapter_prev" -> if (uiState.chapters.isEmpty()) return@run false else PlayerEvent.OnSkipChapter(false)
+            "vod.next_episode" -> PlayerEvent.OnPlayNextEpisode
+            "vod.skip_intro" -> PlayerEvent.OnSkipIntro
+            "vod.speed" -> PlayerEvent.OnShowSpeedDialog
+            "vod.subtitles" -> PlayerEvent.OnShowSubtitleOverlay
+            "vod.audio" -> PlayerEvent.OnShowAudioOverlay
+            "vod.subtitle_timing" -> PlayerEvent.OnShowSubtitleTimingDialog
+            "vod.episodes" -> PlayerEvent.OnShowEpisodesPanel
+            "vod.sources" -> PlayerEvent.OnShowSourcesPanel
+            "vod.chapters" -> if (uiState.chapters.isEmpty()) return@run false else PlayerEvent.OnShowChaptersPanel
+            "vod.more" -> PlayerEvent.OnShowMoreDialog
+            "vod.aspect" -> PlayerEvent.OnToggleAspectRatio
+            "vod.stream_info" -> PlayerEvent.OnShowStreamInfo
+            else -> return@run false
+        }
+        viewModel.onEvent(event)
+        true
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -849,6 +878,13 @@ fun PlayerScreen(
                         postPlayRecommendationState.isVisible ||
                         uiState.error != null
                 if (panelOrDialogOpen) return@onKeyEvent false
+
+                // Live TV fork: Remote Buttons (a button the user changed does its new job; others carry on below).
+                if (!uiState.showPauseOverlay && (
+                        remoteKeys.onKey(keyEvent.nativeKeyEvent, nav = false) ||
+                            remoteKeys.onKey(keyEvent.nativeKeyEvent, nav = true, enabled = !uiState.showControls)
+                        )
+                ) return@onKeyEvent true
 
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
                     when (keyEvent.nativeKeyEvent.keyCode) {
