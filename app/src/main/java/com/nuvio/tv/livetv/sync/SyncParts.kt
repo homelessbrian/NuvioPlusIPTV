@@ -124,7 +124,7 @@ internal class SyncParts(private val store: SharedPreferences) {
         )
 
         /** Always synced, whatever is switched off: the parental lock and the profile set-up marker. */
-        private val ALWAYS_KEYS = setOf("parental_pin", "lock_adult_content", "profile_seeded")
+        private val ALWAYS_KEYS = setOf("parental_pin", "lock_adult_content", "profile_seeded", "profile_match_groups")
 
         /** Which part a stored key belongs to, or null when it is always synced. Everything not named above is "Look and layout". */
         fun partOf(key: String): SyncPart? {
