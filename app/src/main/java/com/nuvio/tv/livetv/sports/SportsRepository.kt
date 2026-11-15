@@ -519,7 +519,7 @@ class SportsRepository @Inject constructor(
             // Nothing matched yet (or not for a while): do it now, don't wait for the next round.
             // (or one was put off while the app was away / video was playing, or the last one is
             // hours old).
-            if (_matches.value.isEmpty() || matchMissed || System.currentTimeMillis() - lastMatchAt > SAFETY_ROUND) matchKick.value++
+            if (_matches.value.isEmpty() || matchMissed || System.currentTimeMillis() - lastMatchAt > SAFETY_ROUND) kickMatch("Sports page opened")
         }
     }
 
@@ -528,7 +528,7 @@ class SportsRepository @Inject constructor(
         if (on) {
             kick.value++
             // Something changed while the app was away: find channels for it now.
-            if (matchMissed) matchKick.value++
+            if (matchMissed) kickMatch("app back in front")
         }
     }
 
@@ -1456,17 +1456,21 @@ class SportsRepository @Inject constructor(
     @OptIn(FlowPreview::class)
     private suspend fun matchLoop() {
         val trigger = combine(
-            // The games: only what changes the search (not scores or clocks). A number instead of
-            // a list of ~1000 strings each time the feed updates.
+            // The games: only what changes the search (not scores or clocks). Numbers instead of
+            // a list of ~1000 strings each time the feed updates: which games there are, and their
+            // details (start times, how many networks listed). The details move often while games
+            // are on (a network added, a time nudged), so on their own they only get a quick match.
             events.map { list ->
-                var h = 17L
+                var games = 17L
+                var details = 17L
                 var n = 0
                 for (e in list) {
                     if (e.source == EventSource.GUIDE) continue
-                    h = h * 31 + e.id.hashCode(); h = h * 31 + e.startMs; h = h * 31 + e.broadcasts.size
+                    games = games * 31 + e.id.hashCode()
+                    details = details * 31 + e.startMs; details = details * 31 + e.broadcasts.size
                     n++
                 }
-                n to h
+                GamesKey(n, games, details)
             }.distinctUntilChanged(),
             // Your channels (any added, removed or renamed in a playlist update).
             channelStore.displayChannels.map { list ->
@@ -1484,20 +1488,20 @@ class SportsRepository @Inject constructor(
             // Safety net: a round every few hours, in case something changed that we didn't hear about.
             while (true) {
                 delay(15 * MINUTE)
-                if (System.currentTimeMillis() - lastRun > SAFETY_ROUND) matchKick.value++
+                if (System.currentTimeMillis() - lastRun > SAFETY_ROUND) kickMatch("a few hours since the last search")
             }
         }
         scope.launch {
             // A new day: "yesterday to tomorrow" moves on, so other games come into range.
             while (true) {
                 delay((dayStart(1) + MINUTE - System.currentTimeMillis()).coerceAtLeast(MINUTE))
-                matchKick.value++
+                kickMatch("a new day")
             }
         }
         scope.launch {
             // A round put off because Live TV was busy updating: run it once the update is done.
             liveRepo.status.map { it.loading }.distinctUntilChanged().collect { loading ->
-                if (!loading && matchMissed) matchKick.value++
+                if (!loading && matchMissed) kickMatch("Live TV update done")
             }
         }
         // Last time's matches straight away (the games, the channels), so the page isn't empty
@@ -1516,7 +1520,12 @@ class SportsRepository @Inject constructor(
         }
         // Not before the saved games are read: a search with no games found nothing, then ran again.
         cacheLoaded.first { it }
-        combine(trigger, matchKick) { t, k -> t to k }.debounce { if (_matches.value.isEmpty()) 0L else 1_500L }.collect {
+        // What the last full search was run for, to tell a real change from games' details moving.
+        var lastFullKey: List<Any?>? = null
+        var lastFullKick = -1
+        var lastFullAt = 0L
+        var lastQuickAt = 0L
+        combine(trigger, matchKick) { t, k -> t to k }.debounce { if (_matches.value.isEmpty()) 0L else 1_500L }.collect { (key, kick) ->
             // Put off (not lost): it runs when the app is back in front / the update is done.
             if (!foreground.value && viewers.value == 0) { matchMissed = true; return@collect }
             if (!settings.value.showInSidebar && viewers.value == 0) { matchMissed = true; return@collect }
@@ -1526,7 +1535,8 @@ class SportsRepository @Inject constructor(
             // match against a guide that isn't fully there yet (so real channels get missed).
             if (!status.loadedOnce) { matchMissed = true; return@collect }
             if (status.loading && !status.quiet && _matches.value.isNotEmpty() && !pickPending) { matchMissed = true; return@collect }
-            pickPending = false
+            // Cleared when the full search starts (below), so a pick made while it waits still counts.
+            val picked = pickPending
             val firstSearch = _matches.value.isEmpty()
             // The first guide build can take minutes. Show simple matches for live games
             // as soon as the playlist is ready, then wait for the guide to finish.
@@ -1560,17 +1570,66 @@ class SportsRepository @Inject constructor(
             // Not while video is playing full screen (unless you're on the Sports page).
             awaitNotWatching()
             matchMissed = false
+            // Only the details of games already listed moved (a score update brought a network or
+            // a nudged start time): the quick match (no guide read), at most every 2 minutes. The
+            // next full search picks the details up. A full search for every such wiggle ran one
+            // after another all afternoon on busy sports days, keeping slower boxes busy.
+            val games = key.firstOrNull() as? GamesKey
+            val lastGames = lastFullKey?.firstOrNull() as? GamesKey
+            val sameAsLastFull = lastFullKey != null && kick == lastFullKick &&
+                key.drop(1) == lastFullKey?.drop(1) && games?.count == lastGames?.count && games?.games == lastGames?.games
+            if (!firstSearch && !picked && sameAsLastFull) {
+                if (System.currentTimeMillis() - lastQuickAt >= QUICK_MATCH_GAP) {
+                    lastQuickAt = System.currentTimeMillis()
+                    runCatching { runMatch(quickOnly = true) }.onFailure { Log.w(TAG, "Sports quick matching failed", it) }
+                }
+                return@collect
+            }
+            val why = when {
+                firstSearch -> "first search"
+                picked -> "a channel pick"
+                lastFullKey == null -> kickReason ?: "app start"
+                kick != lastFullKick -> kickReason ?: "asked again"
+                games?.count != lastGames?.count || games?.games != lastGames?.games -> "games added or removed"
+                key.getOrNull(1) != lastFullKey?.getOrNull(1) -> "your channels changed"
+                key.getOrNull(2) != lastFullKey?.getOrNull(2) -> "Sports settings changed"
+                key.getOrNull(3) != lastFullKey?.getOrNull(3) -> "follows changed"
+                else -> "new guide"
+            }
+            // A real change soon after the last full search: quick channels now, the full search
+            // once 10 minutes have passed since the last one (a channel pick doesn't wait).
+            val wait = MIN_FULL_MATCH_GAP - (System.currentTimeMillis() - lastFullAt)
+            if (!firstSearch && !picked && lastFullAt > 0L && wait > 0L) {
+                if (System.currentTimeMillis() - lastQuickAt >= QUICK_MATCH_GAP) {
+                    lastQuickAt = System.currentTimeMillis()
+                    runCatching { runMatch(quickOnly = true) }.onFailure { Log.w(TAG, "Sports quick matching failed", it) }
+                }
+                val until = System.currentTimeMillis() + wait
+                while (System.currentTimeMillis() < until && !pickPending) delay(1_000)
+                if (!foreground.value && viewers.value == 0) { matchMissed = true; return@collect }
+                awaitNotWatching()
+            }
+            lastFullKey = key
+            lastFullKick = kick
+            lastFullAt = System.currentTimeMillis()
+            lastQuickAt = lastFullAt
+            pickPending = false
             lastRun = System.currentTimeMillis()
             val t0 = System.currentTimeMillis()
             runCatching { com.nuvio.tv.livetv.data.BackgroundWork.heavy { runMatch() } }.onFailure { Log.w(TAG, "Sports matching failed", it) }
             lastMatchAt = System.currentTimeMillis()
             val took = lastMatchAt - t0
-            if (took > 2_000) LiveTvLoadReport.add("Sports matching took ${took / 1000.0} s (page open: ${viewers.value > 0})")
+            if (took > 2_000) LiveTvLoadReport.add("Sports matching took ${took / 1000.0} s (page open: ${viewers.value > 0}; for: $why)")
             runCatching { saveMatches() }
         }
     }
 
+    /** The games, for telling a new or removed game from details moving (see [matchLoop]). */
+    private data class GamesKey(val count: Int, val games: Long, val details: Long)
     private val matchKick = MutableStateFlow(0)
+    /** What asked for the next search (shown in the start-up report). */
+    @Volatile private var kickReason: String? = null
+    private fun kickMatch(reason: String) { kickReason = reason; matchKick.value++ }
     @Volatile private var lastMatchAt = 0L
     /** A round was put off (app in the background, Live TV updating): run it at the next chance. */
     @Volatile private var matchMissed = false
@@ -2266,7 +2325,7 @@ class SportsRepository @Inject constructor(
             _matches.value = _matches.value + (ev.id to (listOf(mine) + _matches.value[ev.id].orEmpty().filter { it.channel.key != channelKey }))
         }
         pickPending = true
-        matchKick.value++
+        kickMatch("a channel pick")
     }
 
     /** "Not this channel" for [ev] (and it stops being used for its network). */
@@ -2281,7 +2340,7 @@ class SportsRepository @Inject constructor(
     }.also {
         _matches.value[ev.id]?.let { l -> _matches.value = _matches.value + (ev.id to l.filter { it.channel.key != channelKey }) }
         pickPending = true
-        matchKick.value++
+        kickMatch("a channel pick")
     }
 
     /** Your channel links: forget one (games of it go back to finding their channel by themselves). */
@@ -2297,7 +2356,7 @@ class SportsRepository @Inject constructor(
             if (link.kind == ChannelLink.Kind.GAME) _matches.value = _matches.value + (link.key to l.filter { it.score < 150 })
         }
         pickPending = true
-        matchKick.value++
+        kickMatch("a channel pick")
     }
 
     /**
@@ -2402,6 +2461,10 @@ class SportsRepository @Inject constructor(
         private const val FIRST_ROUND_FALLBACK = 55_000L
         /** The safety-net round: this long after the last one. */
         private const val SAFETY_ROUND = 4 * HOUR
+        /** Full channel searches (they read the whole guide) at most this often, except a channel pick. */
+        private const val MIN_FULL_MATCH_GAP = 10 * MINUTE
+        /** Quick matches (names and networks only) for games' details moving, at most this often. */
+        private const val QUICK_MATCH_GAP = 2 * MINUTE
         private const val DAY = 24 * HOUR
         /** A single game's score alerts are dropped this long after it started. */
         private const val ALERT_GAME_KEEP = 12 * HOUR
