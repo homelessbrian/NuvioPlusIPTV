@@ -55,6 +55,8 @@ data class MultiviewPaneState(
     val error: String? = null,
     /** Reconnecting after a drop: the last picture stays up, with only a quiet mark if it takes a while. */
     val isReconnecting: Boolean = false,
+    /** A protected (DRM) channel: its picture can only be shown through the TV's video window. */
+    val isProtected: Boolean = false,
 )
 
 data class MultiviewState(
@@ -187,6 +189,7 @@ class MultiviewPlaybackSession(
                     isPlaying = playback.isPlaying,
                     error = playback.error,
                     isReconnecting = playback.isReconnecting,
+                    isProtected = channel?.drm != null,
                 )
             },
         )

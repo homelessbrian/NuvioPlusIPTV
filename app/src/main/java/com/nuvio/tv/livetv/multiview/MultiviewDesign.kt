@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import android.view.LayoutInflater
+import com.nuvio.tv.R
 import androidx.tv.material3.Icon
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.sports.SportsBadge
@@ -170,23 +172,30 @@ internal fun MultiviewPane(
             .clickable(onClick = onClick)
     ) {
         if (pane.player != null) {
-            AndroidView(
-                factory = { context ->
-                    PlayerView(context).apply {
-                        useController = false
-                        isFocusable = false
-                        isFocusableInTouchMode = false
-                        descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                        // A dropped stream reconnects behind its last picture instead of going black.
-                        setKeepContentOnPlayerReset(true)
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-                update = { if (it.player !== pane.player) it.player = pane.player },
-                onRelease = { it.player = null }
-            )
+            // Panes are drawn like the rest of the screen (a texture), not in the TV's video window:
+            // some TV boxes have only one or two video windows, so the other panes played sound
+            // over a black picture. Protected channels can only be shown in the video window.
+            // The kind is fixed when the view is made, so a change makes a new one.
+            androidx.compose.runtime.key(pane.isProtected) {
+                val layout = if (pane.isProtected) R.layout.live_tv_surface_player_view else R.layout.live_tv_texture_player_view
+                AndroidView(
+                    factory = { context ->
+                        (LayoutInflater.from(context).inflate(layout, null) as PlayerView).apply {
+                            useController = false
+                            isFocusable = false
+                            isFocusableInTouchMode = false
+                            descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                            // A dropped stream reconnects behind its last picture instead of going black.
+                            setKeepContentOnPlayerReset(true)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    update = { if (it.player !== pane.player) it.player = pane.player },
+                    onRelease = { it.player = null }
+                )
+            }
         }
         if (empty) {
             LiveText("P${pane.id + 1}", Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(5.dp))
