@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -260,31 +261,34 @@ class WatchProgressPreferences @Inject constructor(
     }
 
     /**
-     * Save or update watch progress
+     * Save or update watch progress.
      */
     suspend fun saveProgress(
         progress: WatchProgress,
         profileId: Int = profileManager.activeProfileId.value
     ) {
         storageMutex.withLock {
-            ensureStorageLocked(profileId)
-            val recent = readBucket(recentStore(profileId), profileId, true)
-            val key = createKey(progress)
-            if (key in recent) {
-                recentStore(profileId).edit { preferences ->
-                    val map = parseProgressMap(preferences[watchProgressEntriesKey] ?: "{}").toMutableMap()
-                    upsertProgressEntries(map, listOf(progress))
-                    preferences[watchProgressEntriesKey] = gson.toJson(map)
+            // DataStore edit transforms inherit the caller's context, even with an IO store scope.
+            withContext(Dispatchers.IO) {
+                ensureStorageLocked(profileId)
+                val recent = readBucket(recentStore(profileId), profileId, true)
+                val key = createKey(progress)
+                if (key in recent) {
+                    recentStore(profileId).edit { preferences ->
+                        val map = parseProgressMap(preferences[watchProgressEntriesKey] ?: "{}").toMutableMap()
+                        upsertProgressEntries(map, listOf(progress))
+                        preferences[watchProgressEntriesKey] = gson.toJson(map)
+                    }
+                } else {
+                    val archive = readBucket(archiveStore(profileId), profileId, false)
+                    val entries = mergeWatchProgressBuckets(recent, archive)
+                    upsertProgressEntries(entries, listOf(progress))
+                    writeBucketsLocked(
+                        profileId = profileId,
+                        current = WatchProgressBuckets(recent, archive),
+                        updated = splitWatchProgressEntries(entries)
+                    )
                 }
-            } else {
-                val archive = readBucket(archiveStore(profileId), profileId, false)
-                val entries = mergeWatchProgressBuckets(recent, archive)
-                upsertProgressEntries(entries, listOf(progress))
-                writeBucketsLocked(
-                    profileId = profileId,
-                    current = WatchProgressBuckets(recent, archive),
-                    updated = splitWatchProgressEntries(entries)
-                )
             }
         }
     }
