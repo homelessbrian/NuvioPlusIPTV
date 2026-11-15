@@ -200,7 +200,6 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Guide Size:** Compact, Standard, Large or Extra Large. It sets the size of overlay mode too.
 - **Opens straight away:** the guide is on screen as soon as Live TV opens, and updates happen quietly in the background.
 - **Fast browsing:** hold Left to step back through earlier shows at double speed.
-- **Back to the video:** while a channel plays, Back from the guide returns to it in full screen. Left still goes to the groups and the menu.
 - **Two-Line Channel Names** for long names.
 - **Group list:**
   - **Opening it:** it slides out with a tap of Left.
