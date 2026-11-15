@@ -110,7 +110,8 @@ object OnDemandStreams {
         if (!show) return emptyList()
         val repo = entry.onDemandRepository()
         repo.start()
-        if (!repo.hasContent.value) return emptyList()
+        // Looked up now if the start-up check hasn't got to it yet (it used to mean "none").
+        if (!repo.contentReady()) return emptyList()
         val base = videoId.substringBefore(':')
         val tmdbId = when {
             base.startsWith("tmdb", ignoreCase = true) -> videoId.substringAfter("tmdb:").substringBefore(':').takeIf { it.all(Char::isDigit) }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -125,9 +126,32 @@ class OnDemandRepository @Inject constructor(
         .callTimeout(40, TimeUnit.MINUTES)
         .build()
 
+    /**
+     * One title's details (a movie's file info, a series' episode list): small answers, so a
+     * provider that stalls is given up on in seconds instead of minutes (the catalog limits above
+     * left a stream list waiting up to two minutes per title).
+     */
+    private val infoHttp = http.newBuilder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(30, TimeUnit.SECONDS)
+        .build()
+
     private val _hasContent = MutableStateFlow(false)
     /** True when at least one provider's movies or series are imported (shows the menu item). */
     val hasContent: StateFlow<Boolean> = _hasContent.asStateFlow()
+
+    /**
+     * Whether any movies or series are imported, looked up right now when the start-up check
+     * hasn't run yet (it waits behind guide and playlist updates, and a stream list asked for
+     * before then used to show none of your provider's copies).
+     */
+    suspend fun contentReady(): Boolean {
+        if (_hasContent.value) return true
+        val has = withContext(Dispatchers.IO) { runCatching { db.hasAny() }.getOrDefault(false) }
+        if (has) _hasContent.value = true
+        return has
+    }
 
     private val _version = MutableStateFlow(0)
     /** Goes up after every import, so screens reload. */
@@ -680,7 +704,7 @@ class OnDemandRepository @Inject constructor(
         if (pl.isStalker) return@withContext stalkerInfo(item, pl).also { ensureCurrentStalker(pl); infoCache[cacheKey] = it }
         val api = pl.xtreamApiUrl()
         val action = if (item.kind == VodKind.MOVIE) "get_vod_info&vod_id=${item.id}" else "get_series_info&series_id=${item.id}"
-        val json = runCatching { JSONObject(getText("$api&action=$action", pl.userAgent)) }.getOrNull() ?: return@withContext null
+        val json = runCatching { JSONObject(getText("$api&action=$action", pl.userAgent, infoHttp)) }.getOrNull() ?: return@withContext null
         val info = json.optJSONObject("info") ?: JSONObject()
         val episodes = ArrayList<VodEpisode>()
         json.optJSONObject("episodes")?.let { byseason ->
@@ -779,7 +803,7 @@ class OnDemandRepository @Inject constructor(
             "series", "tv" -> VodKind.SERIES
             else -> return@withContext emptyList()
         }
-        if (!_hasContent.value) return@withContext emptyList()
+        if (!contentReady()) return@withContext emptyList()
         val candidates = LinkedHashMap<String, VodItem>()
         tmdbId?.let { id -> runCatching { db.byTmdb(kind, id) }.getOrDefault(emptyList()).forEach { candidates[it.uid] = it } }
         if (title.isNotBlank()) {
@@ -814,36 +838,53 @@ class OnDemandRepository @Inject constructor(
             val name = runCatching { db.categoryName(item.playlistId, item.kind, item.categoryId) }.getOrNull().orEmpty()
             !com.nuvio.tv.livetv.parental.ParentalControls.isLocked("vod:$uid", name, settings, user.lockedGroups)
         }
-        val out = ArrayList<OnDemandSource>()
         // Best copies first: by the quality in the name here (so a 4K copy isn't cut by the limit),
         // then by what the provider reports about each file below.
-        for (item in allowed.sortedByDescending { qualityRank(qualityOf(it.name).orEmpty()) }.take(6)) {
-            val pl = playlist(item.playlistId) ?: continue
-            val headers = if (pl.userAgent.isNotBlank()) mapOf("User-Agent" to pl.userAgent) else emptyMap()
-            if (kind == VodKind.MOVIE) {
-                val url = movieUrl(item) ?: continue
-                val tech = runCatching { info(item)?.tech }.getOrNull()
-                out += OnDemandSource(
-                    "${pl.name} · ${(item.ext ?: "mp4").uppercase()}", url, headers,
-                    title = item.name, year = item.year, providerName = pl.name, ext = item.ext ?: "mp4", tech = tech
-                )
-            } else if (season != null && episode != null) {
-                val episodes = info(item)?.episodes.orEmpty()
-                // Exact season and episode; if the provider lists the show as a single season
-                // (common for daily shows), match the episode number alone.
-                val ep = episodes.firstOrNull { it.season == season && it.episode == episode }
-                    ?: episodes.takeIf { list -> list.map { it.season }.distinct().size == 1 }
-                        ?.firstOrNull { it.episode == episode }
-                    ?: continue
-                out += OnDemandSource(
-                    "${pl.name} · S${season}E${episode} · ${ep.ext.uppercase()}", episodeUrl(ep) ?: continue, headers,
-                    title = item.name, year = item.year, providerName = pl.name, ext = ep.ext, tech = ep.tech,
-                    episodeTag = "S%02dE%02d".format(season, episode)
-                )
-            }
+        val picked = allowed.sortedByDescending { qualityRank(qualityOf(it.name).orEmpty()) }.take(6)
+        // All copies are asked about at the same time (they used to go one after another, so six
+        // slow answers added up to minutes). A Stalker portal's copies still go one at a time:
+        // a portal works through one session, and parallel requests can upset it.
+        val playlists = picked.map { it.playlistId }.distinct().associateWith { playlist(it) }
+        val out: List<OnDemandSource> = kotlinx.coroutines.coroutineScope {
+            picked.groupBy { it.playlistId }.map { (plId, items) ->
+                async {
+                    val pl = playlists[plId] ?: return@async emptyList<OnDemandSource>()
+                    if (pl.isStalker) items.mapNotNull { sourceOf(it, pl, kind, season, episode) }
+                    else items.map { item -> async { sourceOf(item, pl, kind, season, episode) } }.awaitAll().filterNotNull()
+                }
+            }.awaitAll().flatten()
         }
         // Highest quality first (4K, 1080p, 720p, SD); copies with no hint keep their order, last.
         out.sortedByDescending { sourceRank(it) }
+    }
+
+    /** One provider copy for the stream list, or null when it doesn't have that movie or episode. */
+    private suspend fun sourceOf(item: VodItem, pl: PlaylistSource, kind: VodKind, season: Int?, episode: Int?): OnDemandSource? {
+        val headers = if (pl.userAgent.isNotBlank()) mapOf("User-Agent" to pl.userAgent) else emptyMap()
+        if (kind == VodKind.MOVIE) {
+            val url = movieUrl(item) ?: return null
+            // The file info (4K, HDR, audio) is only a nice extra: the link never waits long for it.
+            // (asked in the background: a late answer is still kept for next time).
+            val details = scope.async { runCatching { info(item) }.getOrNull() }
+            val tech = kotlinx.coroutines.withTimeoutOrNull(MOVIE_INFO_WAIT_MS) { details.await() }?.tech
+            return OnDemandSource(
+                "${pl.name} · ${(item.ext ?: "mp4").uppercase()}", url, headers,
+                title = item.name, year = item.year, providerName = pl.name, ext = item.ext ?: "mp4", tech = tech
+            )
+        }
+        if (season == null || episode == null) return null
+        val episodes = runCatching { info(item)?.episodes }.getOrNull().orEmpty()
+        // Exact season and episode; if the provider lists the show as a single season
+        // (common for daily shows), match the episode number alone.
+        val ep = episodes.firstOrNull { it.season == season && it.episode == episode }
+            ?: episodes.takeIf { list -> list.map { it.season }.distinct().size == 1 }
+                ?.firstOrNull { it.episode == episode }
+            ?: return null
+        return OnDemandSource(
+            "${pl.name} · S${season}E${episode} · ${ep.ext.uppercase()}", episodeUrl(ep) ?: return null, headers,
+            title = item.name, year = item.year, providerName = pl.name, ext = ep.ext, tech = ep.tech,
+            episodeTag = "S%02dE%02d".format(season, episode)
+        )
     }
 
     /** 4 = 4K … 1 = SD, 0 = unknown: the file's own picture size when known, else its name. */
@@ -857,9 +898,9 @@ class OnDemandRepository @Inject constructor(
 
     // ------------------------------------------------------------------ helpers
 
-    private fun getText(url: String, userAgent: String): String {
+    private fun getText(url: String, userAgent: String, client: okhttp3.OkHttpClient = http): String {
         val request = Request.Builder().url(url).header("User-Agent", userAgent.ifBlank { LiveTvRepository.DEFAULT_UA }).build()
-        http.newCall(request).execute().use { r ->
+        client.newCall(request).execute().use { r ->
             if (!r.isSuccessful) error("HTTP ${r.code}")
             return r.body?.string() ?: error("Empty response")
         }
@@ -919,3 +960,5 @@ class OnDemandRepository @Inject constructor(
 
 /** How long On Demand waits after the app starts before its heavier checks. */
 private const val START_DELAY_MS = 20_000L
+/** How long a movie's link waits for its file info (4K, HDR, audio) before showing without it. */
+private const val MOVIE_INFO_WAIT_MS = 4_000L
