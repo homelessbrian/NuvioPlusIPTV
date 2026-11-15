@@ -40,7 +40,9 @@ class SportsAddonSource @Inject constructor(
         val live: List<ChannelMatch>,
         val vod: List<ChannelMatch>,
         /** Names of your installed addons that offer replays or highlights at all (empty: none do). */
-        val vodAddons: List<String> = emptyList()
+        val vodAddons: List<String> = emptyList(),
+        /** Nuvio Live Sports (replays of most games) isn't installed at all, not even switched off. */
+        val suggestNuvioSports: Boolean = false
     )
 
     /** One game as an addon lists it. */
@@ -62,11 +64,14 @@ class SportsAddonSource @Inject constructor(
     private val cache = ConcurrentHashMap<String, Cached>()
 
     suspend fun find(ev: SportsEvent): Found = coroutineScope {
-        val installed = runCatching { addons.getInstalledAddons().first().enabledAddons() }.getOrDefault(emptyList())
+        // null: couldn't read your add-ons (then nothing is recommended).
+        val all = runCatching { addons.getInstalledAddons().first() }.getOrNull()
+        val installed = all.orEmpty().enabledAddons()
         val parts = installed.map { a -> async { runCatching { forAddon(a, ev) }.getOrDefault(NO_RESULT) } }.map { it.await() }
         val vodAddons = installed.filter { a -> a.catalogs.any { isVodCatalog(it) && usableForVod(it) } }
             .map { it.displayName }.distinct()
-        Found(parts.flatMap { it.live }, parts.flatMap { it.vod }, vodAddons)
+        val suggest = all != null && all.none { isNuvioSports(it.id, it.baseUrl) }
+        Found(parts.flatMap { it.live }, parts.flatMap { it.vod }, vodAddons, suggestNuvioSports = suggest)
     }
 
     private suspend fun forAddon(a: Addon, ev: SportsEvent): Found {
@@ -357,6 +362,12 @@ class SportsAddonSource @Inject constructor(
 
     companion object {
         const val SOURCE_ID = "addon:sports"
+
+        /** Recommended when a finished game has no replays and you don't have it. */
+        const val NUVIO_SPORTS_NAME = "Nuvio Live Sports"
+        const val NUVIO_SPORTS_SITE = "nuviosports.xyz"
+        internal fun isNuvioSports(id: String, url: String): Boolean =
+            id.equals("community.nuvio.live-sports", true) || url.contains(NUVIO_SPORTS_SITE, true)
         private val NO_RESULT = Found(emptyList(), emptyList())
         /** Above a guess, below a channel you picked yourself. */
         const val ADDON_SCORE = 100
