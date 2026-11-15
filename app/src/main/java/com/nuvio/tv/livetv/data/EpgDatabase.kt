@@ -201,16 +201,17 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         toMs: Long,
         onlyChannel: String? = null,
         light: Boolean = false,
-        channels: Collection<String>? = null
+        channels: Collection<String>? = null,
+        checkpoint: (() -> Unit)? = null
     ): Map<String, List<EpgProgram>> {
         // A guide file swapped in while this was reading (channels moved to new guide channel
         // rows, the old listings being deleted): read again, so nothing comes back half there.
         repeat(2) {
             val at = changes
-            val got = rangeOnce(fromMs, toMs, onlyChannel, light, channels)
+            val got = rangeOnce(fromMs, toMs, onlyChannel, light, channels, checkpoint)
             if (changes == at) return got
         }
-        return rangeOnce(fromMs, toMs, onlyChannel, light, channels)
+        return rangeOnce(fromMs, toMs, onlyChannel, light, channels, checkpoint)
     }
 
     private fun rangeOnce(
@@ -218,8 +219,10 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         toMs: Long,
         onlyChannel: String?,
         light: Boolean,
-        channels: Collection<String>?
+        channels: Collection<String>?,
+        checkpoint: (() -> Unit)?
     ): Map<String, List<EpgProgram>> {
+        checkpoint?.invoke()
         val out = HashMap<String, List<EpgProgram>>()
         val providerIdentities = ProgrammeIdentityPool()
         val columns = if (light) "gid, start, stop, title, ep, icon, provider_id, provider_source" else "gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source"
@@ -229,15 +232,19 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             else -> allGroups()
         }
         for (group in wanted) {
+            checkpoint?.invoke()
             val sh = group.shiftMs
             val lists = HashMap<Long, ArrayList<EpgProgram>>()
             // Read by start time: shows starting in the window, plus ones that started up to
             // [MAX_SHOW_MS] earlier and are still on.
             val timeArgs = arrayOf((fromMs - sh - MAX_SHOW_MS).toString(), (toMs - sh).toString(), (fromMs - sh).toString())
             group.byGid.keys.chunked(GID_CHUNK).forEach { part ->
+                checkpoint?.invoke()
                 val sql = "SELECT $columns FROM listings WHERE gid IN (${part.joinToString(",")}) AND start >= ? AND start < ? AND stop > ?"
                 readableDatabase.rawQuery(sql, timeArgs).use { c ->
+                    var rows = 0
                     while (c.moveToNext()) {
+                        if (rows++ % 256 == 0) checkpoint?.invoke()
                         val p = if (light) EpgProgram(
                             startMs = c.getLong(1) + sh,
                             stopMs = c.getLong(2) + sh,
@@ -264,6 +271,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                 }
             }
             lists.forEach { (gid, list) ->
+                checkpoint?.invoke()
                 list.sortBy { it.startMs }
                 list.trimToSize()
                 group.byGid[gid]?.forEach { ch -> out[ch] = list }
