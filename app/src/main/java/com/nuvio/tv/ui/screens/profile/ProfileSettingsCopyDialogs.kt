@@ -152,7 +152,7 @@ internal fun CopyProfileSettingsDialog(
     isCopying: Boolean,
     errorMessage: String?,
     onDismiss: () -> Unit,
-    onCopy: (sourceProfileId: Int, copyProviderCredentials: Boolean) -> Unit
+    onCopy: (sourceProfileId: Int, copyProviderCredentials: Boolean, copyLiveTv: Boolean) -> Unit
 ) {
     val sourceProfiles = remember(profiles, targetProfile.id) {
         profiles.filterNot { it.id == targetProfile.id }
@@ -164,6 +164,7 @@ internal fun CopyProfileSettingsDialog(
         mutableStateOf(defaultSourceId)
     }
     var copyProviderCredentials by remember(targetProfile.id) { mutableStateOf(false) }
+    var copyLiveTv by remember(targetProfile.id) { mutableStateOf(true) }
     val focusRequester = remember(targetProfile.id) { FocusRequester() }
 
     LaunchedEffect(targetProfile.id) {
@@ -215,6 +216,21 @@ internal fun CopyProfileSettingsDialog(
             enabled = !isCopying,
             onClick = { copyProviderCredentials = !copyProviderCredentials }
         )
+        SourceProfileButton(
+            text = if (copyLiveTv) {
+                stringResource(R.string.profile_copy_settings_live_tv_on)
+            } else {
+                stringResource(R.string.profile_copy_settings_live_tv_off)
+            },
+            selected = copyLiveTv,
+            enabled = !isCopying,
+            onClick = { copyLiveTv = !copyLiveTv }
+        )
+        Text(
+            text = stringResource(R.string.profile_copy_settings_live_tv_details),
+            color = NuvioTheme.colors.TextTertiary,
+            style = MaterialTheme.typography.bodySmall
+        )
         Text(
             text = stringResource(R.string.profile_copy_settings_details),
             color = NuvioTheme.colors.TextTertiary,
@@ -248,7 +264,7 @@ internal fun CopyProfileSettingsDialog(
                 },
                 onClick = {
                     selectedSourceId?.let { sourceProfileId ->
-                        onCopy(sourceProfileId, copyProviderCredentials)
+                        onCopy(sourceProfileId, copyProviderCredentials, copyLiveTv)
                     }
                 },
                 enabled = selectedSourceId != null && !isCopying,

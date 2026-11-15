@@ -319,6 +319,50 @@ class LiveTvPreferences @Inject constructor(
         }
     }
 
+    /** What "Copy Settings" carries from one profile to another (history and reminders stay). */
+    private val copiedStringKeys: List<Preferences.Key<String>> = listOf(
+        Keys.favorites, Keys.groupOrder, Keys.customGroups, Keys.channelOrder, Keys.channelCopies,
+        Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine
+    )
+    private val copiedCalendarKeys: List<Preferences.Key<String>> = listOf(
+        Keys.calendarFollows, Keys.calendarHiddenShows
+    )
+
+    /**
+     * Profile [targetId] gets profile [sourceId]'s own Live TV choices, as that profile sees them:
+     * favorites, custom groups, group and channel order, hidden groups and channels, On Demand's
+     * order and hidden categories, Sports follows, Calendar follows and hidden shows, which side-menu
+     * pages are off and whether the Live TV home row shows. Watch history and reminders are kept.
+     * Playlists, guides and settings are already shared by every profile.
+     */
+    suspend fun copyProfileChoices(sourceId: Int, targetId: Int) {
+        if (sourceId == targetId) return
+        store.edit { p ->
+            val before = p.toPreferences()
+            val src = profileView(before, sourceId)
+            copiedStringKeys.forEach { k ->
+                val v = src[k]
+                if (v != null) p[my(k, targetId)] = v else p.remove(my(k, targetId))
+            }
+            personalSetKeys.forEach { k ->
+                val v = src[k]
+                if (v != null) p[my(k, targetId)] = v else p.remove(my(k, targetId))
+            }
+            copiedCalendarKeys.forEach { k ->
+                val v = mineOrShared(before, k, sourceId)
+                if (v.isNotEmpty()) p[my(k, targetId)] = v else p.remove(my(k, targetId))
+            }
+            val menu = withMyMenu(before, sourceId)[Keys.sideMenuHidden]
+            if (menu != null) p[my(Keys.sideMenuHidden, targetId)] = menu
+            else p.remove(my(Keys.sideMenuHidden, targetId))
+            val rowHidden = before[Keys.homeRowHiddenProfiles].orEmpty()
+            p[Keys.homeRowHiddenProfiles] =
+                if (sourceId.toString() in rowHidden) rowHidden + targetId.toString()
+                else rowHidden - targetId.toString()
+            if (targetId > 1) p[seededKey(targetId)] = true
+        }
+    }
+
     init {
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             runCatching { turnOnPlaylistGroupsOnce() }

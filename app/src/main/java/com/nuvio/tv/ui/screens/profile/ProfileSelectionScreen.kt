@@ -759,13 +759,14 @@ fun ProfileSelectionScreen(
                     settingsCopyError = null
                     settingsCopyTarget = null
                 },
-                onCopy = { sourceProfileId, copyProviderCredentials ->
+                onCopy = { sourceProfileId, copyProviderCredentials, copyLiveTv ->
                     settingsCopyError = null
                     val sourceName = profiles.firstOrNull { it.id == sourceProfileId }?.name.orEmpty()
                     viewModel.copyProfileSettings(
                         sourceProfileId = sourceProfileId,
                         targetProfileId = targetProfile.id,
-                        copyProviderCredentials = copyProviderCredentials
+                        copyProviderCredentials = copyProviderCredentials,
+                        copyLiveTv = copyLiveTv
                     ) { result ->
                         if (result.isSuccess) {
                             settingsCopyTarget = null

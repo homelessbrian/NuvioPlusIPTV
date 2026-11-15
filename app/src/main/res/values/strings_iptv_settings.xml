@@ -682,4 +682,7 @@
     <string name="iptv_settings_today">"today"</string>
     <string name="iptv_settings_yesterday">"yesterday"</string>
     <string name="iptv_settings_expiry_expired">"expired"</string>
+    <string name="profile_copy_settings_live_tv_on">"Live TV: Copy"</string>
+    <string name="profile_copy_settings_live_tv_off">"Live TV: Do Not Copy"</string>
+    <string name="profile_copy_settings_live_tv_details">"Live TV copies favorites, custom groups, group and channel order, hidden groups and channels, On Demand and Sports choices, Calendar shows and side-menu pages. Playlists, guides and Live TV settings are already shared by every profile."</string>
 </resources>
