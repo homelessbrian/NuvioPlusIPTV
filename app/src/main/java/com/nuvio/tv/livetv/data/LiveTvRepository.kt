@@ -205,7 +205,17 @@ class LiveTvRepository @Inject constructor(
     private suspend fun addGuideForNewPlaylist(playlistId: String, playlistName: String, epgUrl: String): String? {
         val url = PlaylistSource.tidyLink(epgUrl)
         if (url.isBlank()) return null
-        prefs.currentEpgSources().firstOrNull { it.url.trim() == url }?.let { existing ->
+        // The same link written a little differently (http/https, a trailing slash, letter case in
+        // the server name) is still the same guide: making a second copy switched it off for the
+        // playlists that were already getting their listings from it.
+        fun sameLink(u: String): String {
+            val t = PlaylistSource.tidyLink(u).trimEnd('/')
+            val rest = t.substringAfter("://", t)
+            val host = rest.substringBefore('/').lowercase()
+            return host + rest.removePrefix(rest.substringBefore('/'))
+        }
+        val key = sameLink(url)
+        prefs.currentEpgSources().firstOrNull { it.url.trim() == url || sameLink(it.url) == key }?.let { existing ->
             prefs.updatePlaylists { list -> list.map { if (it.id == playlistId) it.copy(guidesOff = it.guidesOff - existing.id) else it } }
             if (!existing.enabled) prefs.updateEpgSources { l -> l.map { if (it.id == existing.id) it.copy(enabled = true) else it } }
             return existing.id

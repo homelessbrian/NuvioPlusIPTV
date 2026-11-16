@@ -563,6 +563,10 @@ class LiveTvDriveSync @Inject constructor(
                     l.keys().forEach { f ->
                         if (l.opt(f)?.toString() != b.opt(f)?.toString()) m.put(f, l.get(f))
                     }
+                    // A setting cleared on this TV since the last sync. Some are only saved while
+                    // they're set (a playlist's switched-off guides: turning the last one back on
+                    // leaves nothing saved), so the other TV's old value kept coming back.
+                    b.keys().forEach { f -> if (!l.has(f)) m.remove(f) }
                     merged[id] = m
                 }
             }
