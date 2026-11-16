@@ -221,8 +221,13 @@ data class Standings(
 
         private fun parseEntries(entries: List<JSONObject>, kind: StandingsKind): List<StandingsRow> {
             val rows = entries.mapNotNull { e -> runCatching { parseEntry(e, kind) }.getOrNull() }
-            // In table order: the feed's own rank, else as it gives them (US divisions are in order).
-            val ranked = if (rows.all { it.pos > 0 }) rows.sortedBy { it.pos } else rows
+            // In table order: the feed's own rank; else the playoff seed (US divisions: ESPN's own
+            // order isn't reliable, e.g. NBA divisions come worst first); else as the feed gives them.
+            val ranked = when {
+                rows.all { it.pos > 0 } -> rows.sortedBy { it.pos }
+                rows.isNotEmpty() && rows.all { it.seed != null } -> rows.sortedBy { it.seed }
+                else -> rows
+            }
             val withPos = ranked.mapIndexed { i, r -> if (r.pos > 0) r else r.copy(pos = i + 1) }
             if (kind != StandingsKind.RACING || withPos.isEmpty()) return withPos
             // Racing: points behind the leader.

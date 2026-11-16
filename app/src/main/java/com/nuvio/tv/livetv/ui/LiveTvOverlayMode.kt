@@ -1166,9 +1166,12 @@ private fun BackupFlyoutContent(
                             }
                         }
                         val from = playlistNames[ch.sourceId] ?: ch.sourceName
+                        // The group always shows here (even when hidden on the play bar): it's what tells
+                        // same-named copies apart (UK, World, another language).
                         LiveText(
-                            listOfNotNull(from.takeIf { it.isNotBlank() }, ch.group.takeIf { it.isNotBlank() && BarPart.GROUP !in BarPart.hiddenOf(settings.barHidden) }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
-                            color = dim, size = osp(12f), maxLines = 1
+                            listOfNotNull(from.takeIf { it.isNotBlank() }, ch.group.takeIf { it.isNotBlank() }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
+                            color = dim, size = osp(12f), maxLines = 1,
+                            marquee = isFocused && i == restingIndex
                         )
                         LiveText(
                             p?.title ?: "No program information",
