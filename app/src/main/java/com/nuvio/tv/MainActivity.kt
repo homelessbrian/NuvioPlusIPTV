@@ -1207,9 +1207,12 @@ open class MainActivity : ComponentActivity() {
                     val recordingNow = allRecordings.any {
                         it.status == com.nuvio.tv.livetv.record.RecordingStatus.RECORDING
                     }
-                    val recordingsInSidebar = liveTvSettingsNow.recordingsInSidebar && liveTvInSidebar && (allRecordings.isNotEmpty() ||
-                        liveTvRecordingScheduler.schedules.collectAsState().value.isNotEmpty() ||
-                        liveTvRecordingScheduler.series.collectAsState().value.isNotEmpty())
+                    // Always read both lists: reading them only when the switches above are on made
+                    // the screen under the menu rebuild (Settings lost its place) when one changed.
+                    val hasSchedules = liveTvRecordingScheduler.schedules.collectAsState().value.isNotEmpty()
+                    val hasSeries = liveTvRecordingScheduler.series.collectAsState().value.isNotEmpty()
+                    val recordingsInSidebar = liveTvSettingsNow.recordingsInSidebar && liveTvInSidebar &&
+                        (allRecordings.isNotEmpty() || hasSchedules || hasSeries)
                     // Opened from the guide's ● button, Back goes back to the guide; from the menu it's a menu page.
                     val recordingsFromGuide = currentRoute == Screen.Recordings.route &&
                         navController.previousBackStackEntry?.destination?.route == Screen.LiveTv.route
