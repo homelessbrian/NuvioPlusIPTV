@@ -1,0 +1,53 @@
+{
+  "name": "nuvio-iptv-desktop",
+  "version": "0.1.0",
+  "description": "Nuvio + IPTV for Windows (early desktop preview)",
+  "main": "main.js",
+  "private": true,
+  "author": "Nuvio + IPTV contributors",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/**/*.test.js\"",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "build": {
+    "appId": "com.nuvio.iptv.desktop",
+    "productName": "Nuvio IPTV",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**",
+      "renderer/**",
+      "node_modules/hls.js/dist/hls.min.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "artifactName": "Nuvio-IPTV-Setup-${version}.${ext}"
+  },
+  "dependencies": {
+    "hls.js": "1.7.4",
+    "sax": "1.6.1"
+  },
+  "devDependencies": {
+    "electron": "45.3.3",
+    "electron-builder": "26.18.0"
+  }
+}
