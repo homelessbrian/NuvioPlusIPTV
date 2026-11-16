@@ -23,17 +23,21 @@ app.on('browser-window-created', (_e, win) => {
     setTimeout(async () => {
       try {
         const out = await win.webContents.executeJavaScript(`(async () => {
-          const rows = [...document.querySelectorAll('.row-ch')].map(r => r.innerText.split(String.fromCharCode(10)).join(' | '));
-          if (!document.querySelector('.row-ch')) return JSON.stringify({ norows: true, status: document.querySelector('.lt-status').textContent, html: document.body.innerText.slice(0,400) });
+          const wait = async (fn, ms) => { const end = Date.now() + ms; while (Date.now() < end) { if (fn()) return true; await new Promise(r => setTimeout(r, 100)); } return false; };
+          const nl = String.fromCharCode(10);
+          // Rows appear once the playlist has loaded; the first row shows its programme once the guide has.
+          await wait(() => { const r = document.querySelector('.row-ch'); return r && r.innerText.includes('Big Game'); }, 25000);
+          const rows = [...document.querySelectorAll('.row-ch')].map(r => r.innerText.split(nl).join(' | '));
+          if (!rows.length) return JSON.stringify({ norows: true, status: document.querySelector('.lt-status').textContent });
           document.querySelector('.row-ch').click();
-          await new Promise(r => setTimeout(r, 2500));
-          return JSON.stringify({ rows, groups: [...document.querySelectorAll('.lt-groups button')].map(b=>b.innerText.split(String.fromCharCode(10)).join(' ')),
+          await wait(() => document.querySelector('.schedule') && document.querySelector('.schedule').innerText.includes('Post Game'), 15000);
+          return JSON.stringify({ rows, groups: [...document.querySelectorAll('.lt-groups button')].map(b=>b.innerText.split(nl).join(' ')),
             title: document.querySelector('.now-info h2').textContent, schedule: document.querySelector('.schedule').innerText,
             status: document.querySelector('.lt-status').textContent, msg: document.querySelector('.player-msg').textContent });
         })()`);
         console.log('E2E ' + out);
         app.exit(0);
       } catch (e) { console.log('E2E-ERR ' + e.message); app.exit(2); }
-    }, 2500);
+    }, 500);
   });
 });

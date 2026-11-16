@@ -1,0 +1,14 @@
+{
+  "children": [
+    { "name": "Eastern Conference", "standings": { "seasonDisplayName": "2026-27", "entries": [
+      { "team": { "id": "2", "displayName": "Boston Celtics", "shortDisplayName": "Celtics", "abbreviation": "BOS", "logos": [{ "href": "https://x/bos.png" }] },
+        "stats": [ { "name": "wins", "displayValue": "10" }, { "name": "losses", "displayValue": "2" }, { "name": "winPercent", "displayValue": ".833" }, { "name": "gamesBehind", "displayValue": "-" }, { "name": "streak", "displayValue": "W4" }, { "name": "rank", "value": 1, "displayValue": "1" } ] },
+      { "team": { "id": "18", "displayName": "New York Knicks", "shortDisplayName": "Knicks", "abbreviation": "NYK" },
+        "stats": [ { "name": "wins", "displayValue": "8" }, { "name": "losses", "displayValue": "4" }, { "name": "winPercent", "displayValue": ".667" }, { "name": "gamesBehind", "displayValue": "2" }, { "name": "streak", "displayValue": "L1" }, { "name": "rank", "value": 2, "displayValue": "2" } ] }
+    ] } },
+    { "name": "Western Conference", "standings": { "entries": [
+      { "team": { "id": "25", "displayName": "Oklahoma City Thunder", "abbreviation": "OKC" },
+        "stats": [ { "name": "wins", "displayValue": "11" }, { "name": "losses", "displayValue": "1" }, { "name": "winPercent", "displayValue": ".917" }, { "name": "rank", "value": 1 } ] }
+    ] } }
+  ]
+}

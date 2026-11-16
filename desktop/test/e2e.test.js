@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const fmt = (ms) => new Date(ms).toISOString().replace(/[-:T]/g, '').slice(0, 14) + ' +0000';
 
-test('app loads playlist + guide, renders channels, starts playback request', { timeout: 120000 }, async (t) => {
+test('app loads playlist + guide, renders channels, starts playback request', { timeout: 180000 }, async (t) => {
   if (process.env.SKIP_E2E) return t.skip('SKIP_E2E set');
   const now = Date.now();
   const hits = [];

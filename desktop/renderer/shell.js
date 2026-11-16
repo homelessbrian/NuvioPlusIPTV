@@ -2,6 +2,7 @@
 // Tab shell. Features call NuvioUI.registerTab({ id, title, mount(root), onShow?(), onHide?() }).
 (() => {
   const tabs = [];
+  const ICONS = { livetv: '▶', guide: '▦', sports: '◉', ondemand: '❖', recordings: '●', settings: '⚙' };
   let active = null;
   const $ = (id) => document.getElementById(id);
 
@@ -24,7 +25,9 @@
     root.hidden = true;
     $('tab-content').append(root);
     const btn = document.createElement('button');
-    btn.className = 'tab-btn'; btn.textContent = def.title; btn.setAttribute('role', 'tab');
+    btn.className = 'tab-btn'; btn.setAttribute('role', 'tab');
+    const ico = document.createElement('span'); ico.className = 'tab-ico'; ico.textContent = ICONS[def.id] || '•';
+    const lab = document.createElement('span'); lab.textContent = def.title; btn.append(ico, lab);
     btn.onclick = () => select(def.id);
     $('tabs').append(btn);
     tabs.push({ ...def, root, btn, mounted: false });

@@ -1,0 +1,54 @@
+{
+  "leagues": [{ "logos": [ { "href": "https://a.espncdn.com/nfl-light.png", "rel": ["default"] }, { "href": "https://a.espncdn.com/nfl-dark.png", "rel": ["default", "dark"] } ] }],
+  "events": [
+    {
+      "id": "401", "date": "2026-11-15T18:00Z", "name": "Detroit Lions at Chicago Bears", "week": { "number": 11 },
+      "competitions": [{
+        "venue": { "fullName": "Soldier Field" },
+        "status": { "clock": 312, "displayClock": "5:12", "period": 3, "type": { "name": "STATUS_IN_PROGRESS", "state": "in", "shortDetail": "5:12 - 3rd Quarter", "detail": "5:12 - 3rd Quarter" } },
+        "competitors": [
+          { "homeAway": "home", "score": "17", "winner": false, "records": [{ "summary": "4-5" }], "linescores": [{ "value": 7 }, { "value": 3 }, { "value": 7 }],
+            "team": { "id": "3", "location": "Chicago", "name": "Bears", "shortDisplayName": "Bears", "displayName": "Chicago Bears", "abbreviation": "CHI", "color": "0b162a", "alternateColor": "c83803", "logo": "https://a.espncdn.com/chi.png" } },
+          { "homeAway": "away", "score": "24", "winner": false, "records": [{ "summary": "7-2" }],
+            "team": { "id": "8", "location": "Detroit", "name": "Lions", "shortDisplayName": "Lions", "displayName": "Detroit Lions", "abbreviation": "DET", "color": "0076b6", "logos": [ { "href": "https://a.espncdn.com/det-dark.png", "rel": ["full", "dark"] }, { "href": "https://a.espncdn.com/det.png", "rel": ["full", "default"] } ] } }
+        ],
+        "situation": { "downDistanceText": "2nd & 7 at CHI 38", "possession": "8" },
+        "broadcasts": [ { "market": "national", "names": ["FOX"] }, { "market": "home", "names": ["NFL+ App"] } ],
+        "geoBroadcasts": [ { "market": { "type": "National" }, "media": { "shortName": "NFL Network" } } ]
+      }]
+    },
+    {
+      "id": "402", "date": "2026-11-16T01:20Z", "name": "Kansas City Chiefs at Buffalo Bills",
+      "competitions": [{
+        "status": { "type": { "name": "STATUS_SCHEDULED", "state": "pre", "shortDetail": "11/15 - 8:20 PM EST" } },
+        "competitors": [
+          { "homeAway": "home", "score": "0", "team": { "id": "2", "location": "Buffalo", "name": "Bills", "shortDisplayName": "Bills", "displayName": "Buffalo Bills", "abbreviation": "BUF" } },
+          { "homeAway": "away", "score": "0", "team": { "id": "12", "location": "Kansas City", "name": "Chiefs", "shortDisplayName": "Chiefs", "displayName": "Kansas City Chiefs", "abbreviation": "KC" } }
+        ],
+        "broadcasts": [ { "market": "national", "names": ["NBC", "Peacock"] } ]
+      }]
+    },
+    {
+      "id": "403", "date": "2026-11-12T01:15Z", "name": "Bad Postponed Game",
+      "competitions": [{
+        "status": { "type": { "name": "STATUS_POSTPONED", "state": "pre", "description": "Postponed" } },
+        "competitors": [
+          { "homeAway": "home", "team": { "id": "5", "name": "Browns", "displayName": "Cleveland Browns", "abbreviation": "CLE" } },
+          { "homeAway": "away", "team": { "id": "6", "name": "Steelers", "displayName": "Pittsburgh Steelers", "abbreviation": "PIT" } }
+        ]
+      }]
+    },
+    { "id": "404", "date": "2026-11-12T01:15Z", "name": "No competitors", "competitions": [{ "competitors": [] }] },
+    { "name": "no id or date" },
+    {
+      "id": "405", "date": "2026-11-09T18:00Z", "name": "Final game",
+      "competitions": [{
+        "status": { "type": { "name": "STATUS_FINAL", "state": "post", "shortDetail": "Final" } },
+        "competitors": [
+          { "homeAway": "home", "score": "31", "winner": true, "team": { "id": "20", "name": "Jets", "displayName": "New York Jets", "abbreviation": "NYJ" } },
+          { "homeAway": "away", "score": "10", "winner": false, "team": { "id": "21", "name": "Giants", "displayName": "New York Giants", "abbreviation": "NYG" } }
+        ]
+      }]
+    }
+  ]
+}

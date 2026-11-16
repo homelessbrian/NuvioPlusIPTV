@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "id": "701", "date": "2026-11-15T16:30Z", "name": "Manchester United at Liverpool",
+      "competitions": [{
+        "venue": { "fullName": "Anfield" },
+        "status": { "clock": 3120, "displayClock": "52'", "period": 2, "type": { "name": "STATUS_SECOND_HALF", "state": "in", "shortDetail": "52'", "detail": "52'" } },
+        "competitors": [
+          { "homeAway": "home", "score": "2", "team": { "id": "364", "location": "Liverpool", "name": "Liverpool", "shortDisplayName": "Liverpool", "displayName": "Liverpool", "abbreviation": "LIV", "color": "c8102e" } },
+          { "homeAway": "away", "score": "1", "team": { "id": "360", "location": "Manchester", "name": "Manchester United", "shortDisplayName": "Man United", "displayName": "Manchester United", "abbreviation": "MAN" } }
+        ],
+        "geoBroadcasts": [ { "market": { "type": "National" }, "media": { "shortName": "Sky Sports Main Event" } }, { "market": { "type": "National" }, "media": { "shortName": "Peacock" } } ]
+      }]
+    }
+  ]
+}

@@ -1,1 +1,22 @@
 /* recordings tab styles */
+.rec { padding: 14px 18px; gap: 10px; overflow: hidden; }
+.rec-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rec-folder { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.rec-tab { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--dim); padding: 8px 12px; }
+.rec-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.rec-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.rec-empty { padding: 24px 4px; }
+.rec-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.rec-main { flex: 1; min-width: 0; }
+.rec-head { display: flex; align-items: center; gap: 8px; }
+.rec-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; margin-top: 2px; }
+.rec-acts { display: flex; gap: 6px; flex-shrink: 0; }
+.rec-badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--panel2); color: var(--dim); flex-shrink: 0; }
+.rec-badge.recording { background: #5b1f27; color: #ff9aa5; }
+.rec-badge.scheduled { background: #1f3a5b; color: #9ac4ff; }
+.rec-badge.completed { background: #1f4a2e; color: #8fe0a5; }
+.rec-badge.failed, .rec-badge.missed { background: #4a3a1f; color: #f0c98a; }
+.rec-rule { display: flex; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.rec-rule input { flex: 1; }

@@ -166,6 +166,8 @@
         st.sel = Number(row.dataset.index); play(st.filtered[st.sel]);
       });
       search.addEventListener('input', (e) => { st.query = e.target.value; applyFilter(); });
+      // Fullscreen channel up/down from the player overlay.
+      window.addEventListener('nuvio:channelstep', (e) => { if (st.filtered.length) step(e.detail && e.detail.delta === -1 ? -1 : 1); });
       window.addEventListener('keydown', (e) => {
         if (window.NuvioUI.activeId() !== 'livetv') return;
         const typing = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
@@ -179,9 +181,15 @@
         else if (e.key === ']') step(1); else if (e.key === '[') step(-1);
         else if (e.key.toLowerCase() === 's' && cur) toggle('favorites', cur);
         else if (e.key.toLowerCase() === 'h' && cur) toggle('hidden', cur);
+        else if (e.key.toLowerCase() === 'r' && cur && window.NuvioRecordings) window.NuvioRecordings.recordNow(cur);
       });
       setStatus('Loading…');
     },
-    onShow() { if (!st.loaded) load(); else renderRows(); },
+    async onShow() {
+      if (!st.loaded) { load(); return; }
+      // Favorites may have been changed from the Guide tab.
+      st.settings = await window.nuvio.invoke('settings:get');
+      renderGroups(); applyFilter();
+    },
   });
 })();

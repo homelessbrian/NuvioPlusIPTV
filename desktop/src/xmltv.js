@@ -17,7 +17,8 @@ function parseXmltvTime(s) {
   return ms;
 }
 
-function createXmltvParser({ fromMs, toMs, maxProgrammes = 400000 }) {
+// onProgramme/onChannel (optional) receive items as they are parsed instead of collecting them in memory.
+function createXmltvParser({ fromMs, toMs, maxProgrammes = 400000, onProgramme, onChannel }) {
   const parser = sax.parser(true, { trim: true });
   const programmes = new Map(); // channelId -> [{start, stop, title, desc}]
   const channelNames = new Map(); // channelId -> display name
@@ -48,8 +49,11 @@ function createXmltvParser({ fromMs, toMs, maxProgrammes = 400000 }) {
       else if (name === 'desc' && !cur.desc) cur.desc = text;
       else if (name === 'programme') {
         const ok = cur.channel && Number.isFinite(cur.start) && Number.isFinite(cur.stop) &&
-          cur.stop > fromMs && cur.start < toMs && count < maxProgrammes;
-        if (ok) {
+          cur.stop > fromMs && cur.start < toMs && (onProgramme || count < maxProgrammes);
+        if (ok && onProgramme) {
+          onProgramme({ channel: cur.channel, start: cur.start, stop: cur.stop, title: cur.title, desc: cur.desc });
+          count++;
+        } else if (ok) {
           if (!programmes.has(cur.channel)) programmes.set(cur.channel, []);
           programmes.get(cur.channel).push({ start: cur.start, stop: cur.stop, title: cur.title, desc: cur.desc });
           count++;
@@ -59,7 +63,7 @@ function createXmltvParser({ fromMs, toMs, maxProgrammes = 400000 }) {
     } else if (curChannel) {
       if (name === 'display-name' && !curChannel.name) curChannel.name = text;
       else if (name === 'channel') {
-        if (curChannel.id && curChannel.name) channelNames.set(curChannel.id, curChannel.name);
+        if (curChannel.id && curChannel.name) { if (onChannel) onChannel(curChannel.id, curChannel.name); else channelNames.set(curChannel.id, curChannel.name); }
         curChannel = null;
       }
     }
