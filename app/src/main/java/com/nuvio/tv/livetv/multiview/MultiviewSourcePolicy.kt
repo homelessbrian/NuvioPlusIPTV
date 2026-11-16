@@ -1,15 +1,17 @@
 package com.nuvio.tv.livetv.multiview
 
-import java.net.URI
-
 /** Only these schemes are guaranteed to traverse the existing VPN-protected HTTP transport. */
 internal object MultiviewSourcePolicy {
-    fun allows(url: String): Boolean = runCatching {
-        when (URI(url).scheme?.lowercase()) {
-            "http", "https" -> true
-            else -> false
-        }
-    }.getOrDefault(false)
+    /**
+     * Judged by how the link starts, like the full-screen player reads it. A strict address parser
+     * refused links with a space, "|", braces or a stray "%" in them (often from a username or
+     * password), so channels that play full screen wouldn't start in a pane.
+     */
+    fun allows(url: String): Boolean {
+        val link = url.trim()
+        val scheme = link.substringBefore("://", "").lowercase()
+        return (scheme == "http" || scheme == "https") && link.length > scheme.length + 3
+    }
 
     fun supportsDrmScheme(scheme: String): Boolean =
         scheme.trim().lowercase() in setOf("widevine", "playready", "clearkey")

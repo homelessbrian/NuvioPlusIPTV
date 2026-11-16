@@ -107,7 +107,28 @@ class MultiviewPlaybackSession(
         },
         onChanged = ::publishState,
         mayPlayChannel = mayPlayChannel,
+        onSetupFailed = ::reportSetupFailure,
     )
+
+    /**
+     * A pane that failed before its stream started used to show "Stream unavailable" with nothing
+     * in the report. Says what failed and where; only our own messages are written out, never a
+     * provider's, and the link is masked.
+     */
+    private fun reportSetupFailure(paneId: Int, channel: LiveChannel, failure: Exception) {
+        fun name(t: Throwable) = t.javaClass.simpleName.ifEmpty { t.javaClass.name }
+        val ours = failure is IllegalArgumentException || failure is IllegalStateException
+        val where = failure.stackTrace.take(3).joinToString(" < ") {
+            "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}"
+        }
+        val cause = failure.cause?.takeIf { it !== failure }?.let { ", caused by ${name(it)}" }.orEmpty()
+        LiveTvLoadReport.add(
+            "Multiview: ${channel.name} couldn't start in P${paneId + 1} (${name(failure)}" +
+                (if (ours) failure.message?.let { ": $it" }.orEmpty() else "") + cause + ")" +
+                (if (where.isNotEmpty()) " at $where" else "") +
+                (if (channel.stalkerRef == null) " · ${LiveStreamFormats.redact(channel.url)}" else "")
+        )
+    }
 
     // Closing this subscription matters: sessions are short lived, unlike the single player.
     private val vpnSubscription = VpnPlaybackProtection.observeSettings {
