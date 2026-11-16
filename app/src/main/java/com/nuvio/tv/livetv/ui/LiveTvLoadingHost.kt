@@ -79,14 +79,20 @@ fun LiveTvLoadingHost(navController: NavController) {
         fun updateWorkHold() {
             // Multiview releases its streams on pause, so automatic imports may proceed then.
             val activeMultiview = multiview && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-            com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying.value = route.startsWith("player/") || activeMultiview
+            com.nuvio.tv.livetv.data.BackgroundWork.updatePlaybackRoute(route, activeMultiview)
+            com.nuvio.tv.core.image.PlaybackImageCache.setOnDemandPlaying(route.startsWith("player/"))
         }
         val observer = LifecycleEventObserver { _, _ -> updateWorkHold() }
         lifecycleOwner.lifecycle.addObserver(observer)
         updateWorkHold()
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            if (multiview) com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying.value = false
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            com.nuvio.tv.livetv.data.BackgroundWork.updatePlaybackRoute("")
+            com.nuvio.tv.core.image.PlaybackImageCache.setOnDemandPlaying(false)
         }
     }
     // Nuvio's own player is opening (a movie, an episode, Watch On Demand): make sure the

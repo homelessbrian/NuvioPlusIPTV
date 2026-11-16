@@ -1107,13 +1107,30 @@ class LiveTvRepository @Inject constructor(
     private fun priorityKeys(): List<String> =
         runCatching { priorityFile.readLines().filter { it.isNotBlank() } }.getOrDefault(emptyList())
 
+    /** Optional browsing reads release their cursor if a movie starts, then retry on return. */
+    private suspend fun browsingRange(
+        fromMs: Long,
+        toMs: Long,
+        light: Boolean,
+        channels: Collection<String>? = null
+    ): Map<String, List<EpgProgram>>? = try {
+        BackgroundWork.browsingRead { checkpoint ->
+            guideDb.range(fromMs, toMs, light = light, channels = channels, checkpoint = checkpoint)
+        }
+    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        Log.w(TAG, "Couldn't read browsing listings", failure)
+        null
+    }
+
     /** Loads these channels' listings straight away if they aren't loaded yet (the group you open). */
     fun loadChannelsNow(keys: List<String>) {
         if (!guideInDb || keys.isEmpty()) return
         scope.launch(Dispatchers.IO) {
             val missing = keys.distinct().filter { it !in _programs.value }
             if (missing.isEmpty()) return@launch
-            val got = runCatching { guideDb.range(loadedFrom, loadedTo, light = true, channels = missing) }.getOrNull() ?: return@launch
+            val got = browsingRange(loadedFrom, loadedTo, light = true, channels = missing) ?: return@launch
             rangeMutex.withLock {
                 val cur = _programs.value
                 _programs.value = cur + got.filterKeys { it !in cur }
@@ -1130,7 +1147,7 @@ class LiveTvRepository @Inject constructor(
             if (!guideInDb) return@launch
             val missing = list.filter { it !in _programs.value }
             if (missing.isEmpty()) return@launch
-            val got = runCatching { guideDb.range(loadedFrom, loadedTo, light = true, channels = missing) }.getOrNull() ?: return@launch
+            val got = browsingRange(loadedFrom, loadedTo, light = true, channels = missing) ?: return@launch
             rangeMutex.withLock { _programs.value = _programs.value + got }
         }
     }
@@ -1219,11 +1236,11 @@ class LiveTvRepository @Inject constructor(
             }
             // Every channel's hours around now first (what the guide shows when it opens), so a
             // group you didn't have open last time isn't "No information" while the rest is read.
-            val near = runCatching { guideDb.range(from, to, light = true) }.getOrNull()
+            val near = browsingRange(from, to, light = true)
             if (near != null && !publish(near, from, to)) return@launch
             LIVE_REPORT.add("Listings around now ready for all channels: ${near?.size ?: 0} in ${System.currentTimeMillis() - t0} ms")
             val (fullFrom, fullTo) = defaultWindow()
-            val rest = runCatching { guideDb.range(fullFrom, fullTo, light = true) }.getOrNull()
+            val rest = browsingRange(fullFrom, fullTo, light = true)
             if (rest != null && !publish(rest, fullFrom, fullTo)) return@launch
             LIVE_REPORT.add("All channels' listings ready: ${_programs.value.size} channels in ${System.currentTimeMillis() - t0} ms")
             if (!checkGaps) return@launch
@@ -1311,7 +1328,7 @@ class LiveTvRepository @Inject constructor(
                 if (to > loadedTo) add(loadedTo to to)
             }
             val reads = parts.map { (f, t) ->
-                runCatching { guideDb.range(f, t, light = lightPrograms) }.getOrNull() ?: return@launch
+                browsingRange(f, t, light = lightPrograms) ?: return@launch
             }
             rangeMutex.withLock {
                 if (fromMs >= loadedFrom && toMs <= loadedTo) return@withLock
@@ -1411,7 +1428,7 @@ class LiveTvRepository @Inject constructor(
             // stops the rest.
             for (batch in todo.chunked(60)) {
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                val got = runCatching { guideDb.range(from, to, light = lightPrograms, channels = batch) }.getOrNull() ?: return@launch
+                val got = browsingRange(from, to, light = lightPrograms, channels = batch) ?: return@launch
                 rangeMutex.withLock {
                     val merged = HashMap(_programs.value)
                     batch.forEach { ch ->
