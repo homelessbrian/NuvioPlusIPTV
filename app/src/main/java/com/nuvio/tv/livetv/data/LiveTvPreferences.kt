@@ -441,9 +441,6 @@ class LiveTvPreferences @Inject constructor(
      */
     suspend fun matchProfiles(sourceId: Int, targetId: Int) {
         if (sourceId == targetId) return
-        var remoteFrom = sourceId
-        var remoteTo = emptySet<Int>()
-        var remoteDrop = emptySet<Int>()
         store.edit { p ->
             val before = p.toPreferences()
             val g = groupsOf(before)
@@ -459,10 +456,7 @@ class LiveTvPreferences @Inject constructor(
             }
             followHomeRow(p, sourceId, merged)
             p[Keys.profileMatch] = encodeMatch(g.groups.filterNot { it == a || it == b } + listOf(merged))
-            remoteFrom = g.owner(sourceId); remoteTo = setOf(owner); remoteDrop = merged - owner
         }
-        // Remote Buttons (kept per TV, in the other file): the group shares the source's buttons too.
-        moveRemoteMaps(remoteFrom, remoteTo, remoteDrop)
     }
 
     /**
@@ -470,8 +464,6 @@ class LiveTvPreferences @Inject constructor(
      * (nothing is lost); a deleted profile doesn't. The rest of the group stays matched.
      */
     suspend fun stopMatching(id: Int, keepCopy: Boolean = true) {
-        var remoteFrom = id
-        var remoteTo = emptySet<Int>()
         store.edit { p ->
             val before = p.toPreferences()
             val g = groupsOf(before)
@@ -481,15 +473,10 @@ class LiveTvPreferences @Inject constructor(
             if (rest.isNotEmpty()) {
                 val newOwner = rest.min()
                 if (newOwner != owner) writeChoices(p, before, owner, newOwner)
-                if (newOwner != owner) remoteTo = remoteTo + newOwner
             }
             if (keepCopy && id != owner) writeChoices(p, before, owner, id)
-            if (keepCopy && id != owner) remoteTo = remoteTo + id
-            remoteFrom = owner
             p[Keys.profileMatch] = encodeMatch(g.groups.filterNot { it == group } + listOf(rest))
         }
-        // Remote Buttons: whoever leaves (or takes over the group) keeps a copy of the shared buttons.
-        moveRemoteMaps(remoteFrom, remoteTo, emptySet())
     }
 
     init {
@@ -1513,92 +1500,6 @@ class LiveTvPreferences @Inject constructor(
 
     suspend fun setRenamedChannelsChecked() {
         deviceStore.edit { it[Keys.renamedChannelsChecked] = true }
-    }
-
-    // ---------- Remote Buttons ----------
-    // The user's own button choices, one set per profile: kept on this TV only, unless this TV
-    // has "Sync Buttons" on (then it uses the set that travels with the synced settings).
-    // The buttons this TV has received and any extra ones added are shared by its profiles.
-
-    /** Profile [id]'s own button choices on this TV. */
-    private fun remoteOwnKey(id: Int) = stringPreferencesKey(if (id <= 1) "remote_map" else "remote_map_p$id")
-    /** Profile [id]'s button choices in the set that follows the account to other TVs (kept with the synced settings). */
-    private fun remoteSharedKey(id: Int) = stringPreferencesKey(if (id <= 1) "remote_shared" else "remote_shared_p$id")
-    /** This TV uses the synced set instead of its own (each TV chooses for itself). */
-    private val remoteSyncedKey = booleanPreferencesKey("remote_use_synced")
-    @Volatile private var remoteSynced = false
-
-    /** Copies profile [from]'s buttons to each of [to], and removes the leftover sets of [drop] (in both sets). */
-    private suspend fun moveRemoteMaps(from: Int, to: Set<Int>, drop: Set<Int>) {
-        if (to.isEmpty() && drop.isEmpty()) return
-        fun move(d: MutablePreferences, key: (Int) -> Preferences.Key<String>) {
-            val v = d[key(from)]
-            to.filter { it != from }.forEach { id -> if (v != null) d[key(id)] = v else d.remove(key(id)) }
-            drop.filter { it !in to }.forEach { id -> d.remove(key(id)) }
-        }
-        runCatching { deviceStore.edit { move(it, ::remoteOwnKey) } }
-        runCatching { store.edit { move(it, ::remoteSharedKey) } }
-    }
-    private val remoteSeenKey = stringSetPreferencesKey("remote_seen")
-    private val remoteLearnedKey = stringPreferencesKey("remote_learned")
-
-    /**
-     * The active profile's button choices, the key codes seen on this TV, and the added buttons.
-     * Matched profiles share one set (under the group's lowest profile). The choices come from
-     * this TV's own set, or from the synced one when this TV has "Sync Buttons" on.
-     */
-    val remoteStored: Flow<Triple<String?, Set<String>, String?>> =
-        kotlinx.coroutines.flow.combine(deviceStore.data, store.data, profileManager.activeProfileId) { d, s, id ->
-            val synced = d[remoteSyncedKey] == true
-            remoteSynced = synced
-            val owner = groupsOf(s).owner(id)
-            Triple(if (synced) s[remoteSharedKey(owner)] else d[remoteOwnKey(owner)], d[remoteSeenKey] ?: emptySet(), d[remoteLearnedKey])
-        }.distinctUntilChanged()
-
-    /** Whether this TV uses the synced set of buttons. */
-    val remoteSyncOn: Flow<Boolean> = deviceStore.data.map { it[remoteSyncedKey] == true }.distinctUntilChanged()
-
-    val remoteProfileId: Int get() = currentProfile
-    fun remoteProfiles(): List<Pair<Int, String>> = profileManager.profiles.value.map { it.id to it.name }
-
-    suspend fun remoteMapOf(profile: Int): String? {
-        val owner = matchMemo.owner(profile)
-        return if (remoteSynced) store.data.first()[remoteSharedKey(owner)] else deviceStore.data.first()[remoteOwnKey(owner)]
-    }
-
-    suspend fun setRemoteMap(json: String?, profile: Int = currentProfile) {
-        val owner = matchMemo.owner(profile)
-        if (remoteSynced) store.edit { if (json == null) it.remove(remoteSharedKey(owner)) else it[remoteSharedKey(owner)] = json }
-        else deviceStore.edit { if (json == null) it.remove(remoteOwnKey(owner)) else it[remoteOwnKey(owner)] = json }
-    }
-
-    /**
-     * Turns "Sync Buttons" on or off for this TV. On: this TV uses the synced set (started from
-     * this TV's buttons if no TV has synced any yet). Off: this TV goes back to a set of its own,
-     * starting as a copy of the synced one, so nothing changes at the moment it's switched.
-     */
-    suspend fun setRemoteSync(on: Boolean) {
-        val d = deviceStore.data.first()
-        val s = store.data.first()
-        val ids = (listOf(1) + profileManager.profiles.value.map { it.id }).distinct()
-        if (on) {
-            if (s.asMap().keys.none { it.name.startsWith("remote_shared") }) {
-                store.edit { p -> ids.forEach { id -> d[remoteOwnKey(id)]?.let { p[remoteSharedKey(id)] = it } } }
-            }
-        } else {
-            deviceStore.edit { p ->
-                ids.forEach { id -> val v = s[remoteSharedKey(id)]; if (v != null) p[remoteOwnKey(id)] = v else p.remove(remoteOwnKey(id)) }
-            }
-        }
-        deviceStore.edit { it[remoteSyncedKey] = on }
-    }
-
-    suspend fun addRemoteSeen(codes: Set<String>) {
-        deviceStore.edit { it[remoteSeenKey] = (it[remoteSeenKey] ?: emptySet()) + codes }
-    }
-
-    suspend fun setRemoteLearned(json: String?) {
-        deviceStore.edit { if (json == null) it.remove(remoteLearnedKey) else it[remoteLearnedKey] = json }
     }
 
     /** Every channel key something is saved for (see above). */

@@ -296,15 +296,6 @@ fun SportsScreen(
         SportsLaunch.openedFromSports(events.firstOrNull { ev -> matches[ev.id]?.any { it.channel.key == key } == true }?.id)
         onOpenLive()
     }
-    // Remote Buttons (Settings → Remote Buttons): the jobs a button can be given on Sports.
-    val remoteKeys = com.nuvio.tv.livetv.remote.rememberRemoteKeys(com.nuvio.tv.livetv.remote.RemoteCatalog.SPORTS)
-    remoteKeys.run = run@{ id, _ ->
-        when (id) {
-            "sports.fullscreen" -> { if (!(videoOn && playingKey != null && playingNow)) return@run false; backToFullscreen() }
-            else -> return@run false
-        }
-        true
-    }
     com.nuvio.tv.livetv.ui.FrameMeter("Sports")
     Box(
         Modifier
@@ -312,10 +303,6 @@ fun SportsScreen(
             .guideBackdrop(backdrop)
             .onGloballyPositioned { root = it.boundsInRoot() }
             .onPreviewKeyEvent { e ->
-                // Remote Buttons: a button the user changed does its new job (only on the list of games).
-                if (openId == null && !picker && tableReq == null &&
-                    (remoteKeys.onKey(e.nativeKeyEvent, nav = false) || remoteKeys.onKey(e.nativeKeyEvent, nav = true))
-                ) return@onPreviewKeyEvent true
                 if (e.key != Key.Back) return@onPreviewKeyEvent false
                 val native = e.nativeKeyEvent
                 val canGo = videoOn && playingKey != null && playingNow

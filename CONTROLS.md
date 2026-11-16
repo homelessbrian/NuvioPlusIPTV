@@ -76,17 +76,3 @@ How to get around Nuvio + IPTV with your TV remote. [Back to the README](README.
 |---|---|
 | **OK** | Play (or resume) |
 | **Long-press OK** | Play from the beginning, stop recording, **Information**, delete |
-
-### Changing what buttons do
-**Settings → Remote Buttons** lets you give buttons other jobs, one screen at a time (the guide, full screen, catch-up & recordings, Multiview, Sports, the movie player, browsing, and shortcuts that work everywhere).
-
-| What | How |
-|---|---|
-| Pick a button | In the list, on the drawing of the remote, or just press it on your remote |
-| Press · Hold · Double press | Each can have its own job (where the button allows it) |
-| Back, OK and the arrows | Can be changed where nothing is highlighted, like full screen. Back only takes jobs that go somewhere |
-| Game controllers | Its spare buttons (X, Y, bumpers, triggers, Start, Select) can all be set; **Use the Suggested Controller Layout** fills them in one go |
-| A button that isn't listed | **Add a Button**, then press it |
-| Undo | **Restore this button**, **Reset this screen**, or **Reset Every Screen** |
-
-Changes are kept on that TV for that profile (profiles kept matched share one set). Turn on **Sync Buttons to My Other TVs** on each TV that should share them. Volume, Home, Power and the voice button belong to the TV and can't be changed. A button you haven't changed works exactly as described above.

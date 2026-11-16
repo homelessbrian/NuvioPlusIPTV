@@ -16,7 +16,6 @@ internal enum class SettingsCategory(val group: SettingsRailGroup) {
     APPEARANCE(SettingsRailGroup.LOOK),
     LAYOUT(SettingsRailGroup.LOOK),
     SIDE_MENU(SettingsRailGroup.LOOK), // Live TV fork
-    REMOTE_BUTTONS(SettingsRailGroup.LOOK), // Live TV fork
     CONTENT_DISCOVERY(SettingsRailGroup.WATCH),
     PLAYBACK(SettingsRailGroup.WATCH),
     LIVE_TV(SettingsRailGroup.EXTRAS), // Live TV fork
