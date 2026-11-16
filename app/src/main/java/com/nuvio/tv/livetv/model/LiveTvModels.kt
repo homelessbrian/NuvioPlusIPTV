@@ -76,7 +76,15 @@ data class PlaylistSource(
     val guidesOff: Set<String> = emptySet(),
     /** Explicit type survives a malformed portal configuration without treating it as M3U. */
     val sourceType: String = "",
-    val stalkerConfig: StalkerConfig? = null
+    val stalkerConfig: StalkerConfig? = null,
+    /**
+     * M3U links: the Xtream login found in the playlist's own channel links
+     * (".../live/user/pass/123.ts"), checked with the provider. For short links that don't show
+     * the login themselves. Blank when none was found.
+     */
+    val linkServer: String = "",
+    val linkUsername: String = "",
+    val linkPassword: String = ""
 ) {
     /** The user agent requests for this playlist go out with ("" = the app default). */
     val effectiveUserAgent: String get() = userAgent.ifBlank { fallbackUserAgent }
@@ -85,11 +93,18 @@ data class PlaylistSource(
     val hasCatalog: Boolean get() = isXtream || isStalker
 
     /**
-     * An M3U link that is really an Xtream login (".../get.php?username=a&password=b"): the
-     * server, username and password found inside it. Null for anything else.
+     * An M3U playlist that is really an Xtream login: the server, username and password, from
+     * the link itself (".../get.php?username=a&password=b") or else from its channel links
+     * ([linkServer]). Null for anything else.
      */
     val m3uLogin: Triple<String, String, String>? get() {
         if (isStalker || isXtream) return null
+        return loginInLink() ?: linkServer.takeIf { it.isNotBlank() && linkUsername.isNotBlank() }
+            ?.let { Triple(it, linkUsername, linkPassword) }
+    }
+
+    /** The login in the playlist link itself (".../get.php?username=a&password=b"), if any. */
+    fun loginInLink(): Triple<String, String, String>? {
         val link = tidyLink(url)
         val path = link.substringBefore('?').trimEnd('/')
         if (!path.endsWith("get.php", ignoreCase = true)) return null
@@ -925,7 +940,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-16 07:31"
+    const val KIT_STAMP = "2026-11-16 09:28"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

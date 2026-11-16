@@ -664,6 +664,10 @@ class LiveTvRepository @Inject constructor(
                 }
                 if (before == null && file.exists()) newlyAdded += pl.name
                 if (result.getOrNull() == true || (before == null && file.exists())) changed = true
+            } else if (!pl.hasCatalog && pl.m3uLogin == null && file.exists() && linkLoginChecked.add(pl.id)) {
+                // Playlists saved before logins were read from channel links: looked at once
+                // per start, so their movies and series don't wait for the next playlist update.
+                refreshM3uAccount(pl)
             }
         }
 
@@ -3579,26 +3583,73 @@ class LiveTvRepository @Inject constructor(
     }
 
     /**
-     * An M3U link from an Xtream provider (…/get.php?username=…&password=…): the same server's
-     * player_api.php has the account's expiry date and connections.
+     * An M3U playlist from an Xtream provider: the same server's player_api.php has the
+     * account's expiry date and connections, and its movies and series. The login comes from
+     * the link itself (…/get.php?username=…&password=…) or, for short links that hide it, from
+     * the playlist's channel links (…/live/user/pass/123.ts). A login found in the channel
+     * links is only kept once the provider accepts it.
      */
+    /** M3U playlists already looked at for a login in their channel links since the app started. */
+    private val linkLoginChecked: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
+
     private suspend fun refreshM3uAccount(pl: PlaylistSource) = withContext(Dispatchers.IO) {
-        val api = m3uAccountUrl(pl.url) ?: return@withContext
-        runCatching {
-            val ui = JSONObject(getText(api, pl.effectiveUserAgent.ifBlank { DEFAULT_UA })).optJSONObject("user_info")
-                ?: return@runCatching
-            accountOf(ui)?.let { saveAccount(pl, it) }
+        if (pl.hasCatalog) return@withContext
+        val ua = pl.effectiveUserAgent.ifBlank { DEFAULT_UA }
+        val inLink = pl.loginInLink()
+        val file = playlistFile(pl.id)
+        val login = inLink ?: (if (file.exists()) loginFromChannelLinks(file) else null)
+        if (login == null) {
+            // The channel links no longer carry a login (the playlist link was changed).
+            if (file.exists() && pl.linkServer.isNotBlank()) saveLinkLogin(pl, null)
+            return@withContext
         }
+        val (server, user, pass) = login
+        fun enc(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
+        val ui = runCatching {
+            JSONObject(getText("$server/player_api.php?username=${enc(user)}&password=${enc(pass)}", ua)).optJSONObject("user_info")
+        }.getOrNull() ?: return@withContext
+        if (ui.has("auth") && ui.optInt("auth", 1) == 0) return@withContext
+        if (pl.linkServer != server || pl.linkUsername != user || pl.linkPassword != pass) saveLinkLogin(pl, login)
+        accountOf(ui)?.let { saveAccount(pl, it) }
     }
 
-    private fun m3uAccountUrl(url: String): String? = runCatching {
-        val u = java.net.URI(url.trim())
-        if (u.path?.endsWith("get.php", ignoreCase = true) != true) return@runCatching null
-        val q = (u.rawQuery ?: return@runCatching null).split('&')
-            .associate { it.substringBefore('=').lowercase() to it.substringAfter('=', "") }
-        val user = q["username"]?.takeIf { it.isNotBlank() } ?: return@runCatching null
-        val pass = q["password"] ?: return@runCatching null
-        "${u.scheme}://${u.rawAuthority}/player_api.php?username=$user&password=$pass"
+    /**
+     * Saves (or clears) the login found for an M3U playlist. Found for the first time, its
+     * movies and series are switched on, like a new Xtream login (playlists saved before On
+     * Demand existed had them off, which meant nothing for an M3U link until now).
+     */
+    private suspend fun saveLinkLogin(pl: PlaylistSource, login: Triple<String, String, String>?) {
+        prefs.updatePlaylists { list ->
+            list.map {
+                if (it.id != pl.id) it
+                else if (login == null) it.copy(linkServer = "", linkUsername = "", linkPassword = "")
+                else it.copy(
+                    linkServer = login.first, linkUsername = login.second, linkPassword = login.third,
+                    importVod = if (it.linkServer.isBlank()) true else it.importVod
+                )
+            }
+        }
+        LIVE_REPORT.add(if (login == null) "Playlist \"${pl.name}\": no Xtream login in its links any more" else "Playlist \"${pl.name}\": Xtream login found, movies and series come from it")
+    }
+
+    /**
+     * The Xtream login in a playlist's channel links: the first ".../live/user/pass/123.ts"
+     * (or /movie/, /series/, or the short ".../user/pass/123") link. Reads only until it finds one.
+     */
+    private fun loginFromChannelLinks(file: File): Triple<String, String, String>? = runCatching {
+        openMaybeGzip(file).reader(Charsets.UTF_8).buffered(64 * 1024).useLines { lines ->
+            for (raw in lines) {
+                val line = raw.trim()
+                if (line.isEmpty() || line[0] == '#') continue
+                val m = XTREAM_CHANNEL_LINK.matchEntire(line) ?: continue
+                fun dec(v: String) = runCatching { java.net.URLDecoder.decode(v.replace("+", "%2B"), "UTF-8") }.getOrDefault(v)
+                val server = PlaylistSource.cleanXtreamServer(m.groupValues[1])
+                val user = dec(m.groupValues[2])
+                val pass = dec(m.groupValues[3])
+                if (server.isNotBlank() && user.isNotBlank() && pass.isNotBlank()) return@useLines Triple(server, user, pass)
+            }
+            null
+        }
     }.getOrNull()
 
     private fun getText(url: String, userAgent: String): String {
@@ -3711,6 +3762,12 @@ class LiveTvRepository @Inject constructor(
         private val VOD_EXT = Regex("""\.(mp4|mkv|avi|mov|wmv|m4v|webm|flv)(\?|$)""", RegexOption.IGNORE_CASE)
 
         /** A movie or episode in an M3U (by its link), not a live channel. */
+        /** An Xtream channel, movie or episode link, with the login in it. */
+        private val XTREAM_CHANNEL_LINK = Regex(
+            """^(https?://[^/\s?#]+)/(?:live/|movie/|series/)?([^/\s?#]+)/([^/\s?#]+)/\d+(?:\.[A-Za-z0-9]+)?(?:\?.*)?$""",
+            RegexOption.IGNORE_CASE
+        )
+
         fun isVodEntry(url: String): Boolean = VOD_PATH.containsMatchIn(url) || VOD_EXT.containsMatchIn(url)
 
         /** "Programming", "No information", "To Be Announced"… (no real show to show a poster for). */
