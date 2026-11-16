@@ -441,6 +441,11 @@ private fun LiveTvGuideScreenBody(
     var favoritesMode by remember { mutableStateOf(false) }
     var favoritesChannels by remember { mutableStateOf<List<LiveChannel>>(emptyList()) }
     var pendingFavorites by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Copy channels to a group (several at once): a group's channels, ✓ on the ones picked.
+    var copyPickMode by remember { mutableStateOf(false) }
+    var copyPickChannels by remember { mutableStateOf<List<LiveChannel>>(emptyList()) }
+    var copyPicked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var copyTargetPicker by remember { mutableStateOf(false) }
     // A channel to move the cursor to once it's in the list (after a group switch, etc).
     var highlightKey by remember { mutableStateOf<String?>(null) }
     val groupsListState = rememberLazyListState()
@@ -478,6 +483,7 @@ private fun LiveTvGuideScreenBody(
     val channels = when {
         visibilityMode -> visibilityChannels
         favoritesMode -> favoritesChannels
+        copyPickMode -> copyPickChannels
         reorderActive -> reorderList
         savedOrder != null -> savedOrder!!
         epgUnassignedOnly -> ui.channels.filter { programs[it.key].isNullOrEmpty() }
@@ -1466,6 +1472,28 @@ private fun LiveTvGuideScreenBody(
                                     }
                                     return@onPreviewKeyEvent true
                                 }
+                                if (copyPickMode) {
+                                    // OK: pick or unpick · Left: none · Right: all · Back: choose the group
+                                    val down = event.type == KeyEventType.KeyDown
+                                    when {
+                                        isOk && event.type == KeyEventType.KeyUp -> {
+                                            channels.getOrNull(row)?.let { ch ->
+                                                copyPicked = if (ch.key in copyPicked) copyPicked - ch.key else copyPicked + ch.key
+                                            }
+                                        }
+                                        !down -> Unit
+                                        event.key == Key.DirectionUp -> moveRow(-1)
+                                        event.key == Key.DirectionDown -> moveRow(1)
+                                        event.key == Key.PageUp || event.key == Key.ChannelUp -> moveRow(-8)
+                                        event.key == Key.PageDown || event.key == Key.ChannelDown -> moveRow(8)
+                                        event.key == Key.DirectionLeft -> copyPicked = emptySet()
+                                        event.key == Key.DirectionRight -> copyPicked = channels.map { it.key }.toSet()
+                                        event.key == Key.Back -> {
+                                            if (copyPicked.isEmpty()) copyPickMode = false else copyTargetPicker = true
+                                        }
+                                    }
+                                    return@onPreviewKeyEvent true
+                                }
                                 if (favoritesMode) {
                                     // OK: add or remove · Left: none · Right: all · Back: save and return
                                     val down = event.type == KeyEventType.KeyDown
@@ -1717,6 +1745,7 @@ private fun LiveTvGuideScreenBody(
                                             focusColumn = if (index == row && (gridFocused || epgPickerFor != null || logoPickerFor != null) && !nameFocus && !reorderActive) column else null,
                                             focusedBlock = if (index == row) focusedBlock else null,
                                             visible = if (visibilityMode) ch.key !in pendingHidden else null,
+                                            picked = if (copyPickMode) ch.key in copyPicked else null,
                                             onToggleVisibility = if (visibilityMode) ({
                                                 row = index
                                                 pendingHidden = if (ch.key in pendingHidden) pendingHidden - ch.key else pendingHidden + ch.key
@@ -1961,6 +1990,23 @@ private fun LiveTvGuideScreenBody(
                 LiveText("Back: save and finish", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
             }
         }
+        if (copyPickMode) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 36.dp, bottom = 24.dp)
+                    .glass(guideInfoGlass(settings.guideInfoBackground), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                LiveText("Copy channels to a group", size = 15.sp, weight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                LiveText("${copyPicked.size} of ${copyPickChannels.size} picked", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+                LiveText("OK: pick or unpick", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+                LiveText("Left: pick none", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+                LiveText("Right: pick all", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+                LiveText(if (copyPicked.isEmpty()) "Back: cancel" else "Back: choose the group", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+            }
+        }
         if (favoritesMode) {
             Column(
                 modifier = Modifier
@@ -2161,6 +2207,14 @@ private fun LiveTvGuideScreenBody(
                     scope.launch { delay(60); runCatching { gridFocus.requestFocus() } }
                 },
                 onCopy = { menuTarget = null; copyPickerFor = target.channel },
+                onCopyMany = {
+                    menuTarget = null
+                    copyPickChannels = channels
+                    copyPicked = setOf(target.channel.key)
+                    copyPickMode = true
+                    row = channels.indexOfFirst { it.key == target.channel.key }.coerceAtLeast(0)
+                    scope.launch { delay(60); runCatching { gridFocus.requestFocus() } }
+                },
                 isCopyHere = viewModel.isCopyIn(ui.selectedGroupId, target.channel),
                 onRemoveCopy = { viewModel.removeCopy(ui.selectedGroupId, target.channel); menuTarget = null },
                 onPickFavorites = {
@@ -2285,6 +2339,38 @@ private fun LiveTvGuideScreenBody(
                 }
             )
         }
+        if (copyTargetPicker) {
+            val picks = copyPickChannels.filter { it.key in copyPicked }
+            GroupPickerDialog(
+                channel = null,
+                groups = viewModel.bulkCopyTargets(),
+                title = "Copy ${picks.size} ${if (picks.size == 1) "channel" else "channels"} to…",
+                onDismiss = { copyTargetPicker = false },
+                onPick = { g ->
+                    val added = viewModel.copyChannelsToGroup(g.id, picks)
+                    copyTargetPicker = false
+                    copyPickMode = false
+                    com.nuvio.tv.livetv.record.LiveTvNotice.show(
+                        if (added == 0) "Already in ${g.title}" else "Copied $added ${if (added == 1) "channel" else "channels"} to ${g.title}"
+                    )
+                },
+                onNewGroup = {
+                    copyTargetPicker = false
+                    textPrompt = TextPrompt(
+                        title = "New group",
+                        initial = "",
+                        hint = "Group name",
+                        onConfirm = { name ->
+                            viewModel.createGroupWithChannels(name, picks)
+                            copyPickMode = false
+                            com.nuvio.tv.livetv.record.LiveTvNotice.show(
+                                "Copied ${picks.size} ${if (picks.size == 1) "channel" else "channels"} to ${name.trim().ifBlank { "My group" }}"
+                            )
+                        }
+                    )
+                }
+            )
+        }
         groupPickerFor?.let { ch ->
             GroupPickerDialog(
                 channel = ch,
@@ -2338,6 +2424,22 @@ private fun LiveTvGuideScreenBody(
                             favoritesChannels = list
                             pendingFavorites = user.favorites.toSet() intersect list.map { it.key }.toSet()
                             favoritesMode = true
+                            row = 0
+                            groupsOpen = false
+                            nameFocus = settings.browseByChannelName
+                            scope.launch { delay(80); listState.scrollToItem(0); runCatching { gridFocus.requestFocus() } }
+                        }
+                    })
+                    if (g.id != ChannelGroup.RECENT && g.id != ChannelGroup.SEARCH) add("Copy channels to group…" to {
+                        groupMenu = null
+                        val list = viewModel.channelsInGroup(g.id)
+                        if (list.isEmpty()) {
+                            com.nuvio.tv.livetv.record.LiveTvNotice.show("No channels in ${g.title}")
+                        } else {
+                            if (ui.selectedGroupId != g.id) viewModel.selectGroup(g.id)
+                            copyPickChannels = list
+                            copyPicked = emptySet()
+                            copyPickMode = true
                             row = 0
                             groupsOpen = false
                             nameFocus = settings.browseByChannelName
@@ -2726,6 +2828,8 @@ private fun GuideRow(
     focusedBlock: GuideBlock?,
     /** In Manage visibility: true = shown, false = hidden. Null otherwise. */
     visible: Boolean? = null,
+    /** In Copy channels to a group: true = picked, false = not. Null otherwise. */
+    picked: Boolean? = null,
     onToggleVisibility: (() -> Unit)? = null,
     /** Picked up to be moved with "Reorder channels". */
     moving: Boolean = false,
@@ -2857,6 +2961,16 @@ private fun GuideRow(
                     contentDescription = if (moving) "Moving" else "Can be moved",
                     tint = if (moving || nameFocused) cell.text else NuvioTheme.colors.TextSecondary,
                     modifier = Modifier.size(gdp(18f))
+                )
+            }
+            // Copy channels to a group: a tick on the channels picked.
+            if (picked == true) {
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Picked",
+                    tint = if (channelFocused || nameFocused) cell.text else NuvioTheme.colors.Secondary,
+                    modifier = Modifier.size(gdp(16f))
                 )
             }
             // Manage visibility: an eye for shown channels, a crossed-out eye for hidden ones.
@@ -3617,6 +3731,8 @@ private fun ChannelContextMenu(
     canReorder: Boolean,
     onReorder: () -> Unit,
     onCopy: () -> Unit,
+    /** Copy several channels of this group to another group at once. */
+    onCopyMany: () -> Unit,
     isCopyHere: Boolean,
     onRemoveCopy: () -> Unit,
     onManageVisibility: () -> Unit,
@@ -3694,6 +3810,7 @@ private fun ChannelContextMenu(
                 item { MenuItem("Remove from this group", onClick = { onRemoveFromGroup(customGroupId) }) }
             }
             item { MenuItem("Copy channel…", onClick = onCopy) }
+            item { MenuItem("Copy several channels…", onClick = onCopyMany) }
             if (isCopyHere) item { MenuItem("Remove copy from this group", onClick = onRemoveCopy) }
             item { MenuHeader("Edit channel") }
             item { MenuItem("Rename channel", onClick = onRename) }
@@ -4283,12 +4400,12 @@ private data class TextPrompt(
 
 @Composable
 internal fun GroupPickerDialog(
-    channel: LiveChannel,
+    channel: LiveChannel?,
     groups: List<ChannelGroup>,
     onDismiss: () -> Unit,
     onPick: (ChannelGroup) -> Unit,
     onNewGroup: () -> Unit,
-    title: String = "Add \"${channel.name}\" to…"
+    title: String = "Add \"${channel?.name.orEmpty()}\" to…"
 ) {
     val first = remember { FocusRequester() }
     LiveDialog(onDismiss = onDismiss, width = 460.dp) {

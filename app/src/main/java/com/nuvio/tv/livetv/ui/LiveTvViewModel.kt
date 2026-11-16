@@ -1362,6 +1362,33 @@ class LiveTvViewModel @Inject constructor(
         channel?.let { prefs.addToCustomGroup(id, it.key) }
     }
 
+    /** Groups that several channels can be copied to: yours and the playlist's, not the special ones. */
+    fun bulkCopyTargets(): List<ChannelGroup> = uiState.value.groups.filter { !it.special }
+
+    /**
+     * Copies all of [channels] into [groupId] (one of yours, or a playlist group) in one go.
+     * Channels already in that group are skipped. Returns how many were added.
+     */
+    fun copyChannelsToGroup(groupId: String, channels: List<LiveChannel>): Int {
+        val user = userState.value
+        val isCustom = groupId.startsWith(ChannelGroup.CUSTOM_PREFIX)
+        val already: Set<String> = if (isCustom) user.customGroups.firstOrNull { it.id == groupId }?.channelKeys.orEmpty().toSet()
+            else user.channelCopies[groupId].orEmpty().toSet()
+        val fresh = channels.filter { it.key !in already && (isCustom || it.groupId != groupId) }.distinctBy { it.key }
+        if (fresh.isEmpty()) return 0
+        viewModelScope.launch {
+            if (isCustom) prefs.addManyToCustomGroup(groupId, fresh.map { it.key })
+            else prefs.copyChannels(groupId, fresh.map { it.key })
+        }
+        return fresh.size
+    }
+
+    /** Makes a new group of your own holding all of [channels]. */
+    fun createGroupWithChannels(name: String, channels: List<LiveChannel>) = viewModelScope.launch {
+        val id = prefs.createCustomGroup(name)
+        prefs.addManyToCustomGroup(id, channels.map { it.key })
+    }
+
     fun addToGroup(groupId: String, channel: LiveChannel) = viewModelScope.launch { prefs.addToCustomGroup(groupId, channel.key) }
     fun removeFromGroup(groupId: String, channel: LiveChannel) = viewModelScope.launch { prefs.removeFromCustomGroup(groupId, channel.key) }
     fun moveInGroup(groupId: String, channel: LiveChannel, delta: Int) = viewModelScope.launch {
