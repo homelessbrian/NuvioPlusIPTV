@@ -40,10 +40,15 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true
     },
-    "artifactName": "Nuvio-IPTV-Setup-${version}.${ext}"
+    "artifactName": "Nuvio-IPTV-Setup-${version}.${ext}",
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ]
   },
   "dependencies": {
+    "ffmpeg-static": "5.3.0",
     "hls.js": "1.7.4",
+    "mpegts.js": "1.8.2",
     "sax": "1.6.1"
   },
   "devDependencies": {

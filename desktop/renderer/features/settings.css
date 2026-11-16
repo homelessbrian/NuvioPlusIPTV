@@ -1,0 +1,7 @@
+.set { overflow:auto; }
+.set-box { max-width:640px; padding:20px 28px 40px; }
+.set-field { display:block; margin:12px 0 0; }
+.set-field span { display:block; color:var(--dim); margin-bottom:4px; }
+.set-field input { width:100%; }
+.set-row { display:flex; align-items:center; gap:10px; margin-top:8px; }
+.set-box button.primary { margin-top:16px; }

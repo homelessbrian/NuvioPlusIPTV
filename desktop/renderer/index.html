@@ -5,37 +5,32 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src * data: blob:; media-src * blob: data:; connect-src *; worker-src blob:; object-src 'none'; base-uri 'none'; frame-src 'none'">
 <title>Nuvio IPTV</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="player.css">
+<link rel="stylesheet" href="features/livetv.css">
+<link rel="stylesheet" href="features/guide.css">
+<link rel="stylesheet" href="features/ondemand.css">
+<link rel="stylesheet" href="features/sports.css">
+<link rel="stylesheet" href="features/recordings.css">
+<link rel="stylesheet" href="features/settings.css">
 </head>
 <body>
-<div id="app">
-  <aside id="groups" aria-label="Groups"></aside>
-  <section id="list-pane">
-    <div id="toolbar">
-      <input id="search" type="search" placeholder="Search channels ( / )" autocomplete="off">
-      <button id="settings-btn" title="Playlist and guide settings">Settings</button>
-    </div>
-    <div id="status" role="status"></div>
-    <div id="list" tabindex="0" aria-label="Channels"><div id="list-spacer"><div id="list-rows"></div></div></div>
-  </section>
-  <section id="player-pane">
-    <div id="video-wrap"><video id="video" controls autoplay></video><div id="player-msg"></div></div>
-    <div id="now-info"><h2 id="now-title">Select a channel</h2><p id="now-sub"></p><p id="now-desc"></p></div>
-    <div id="schedule"></div>
-    <p id="hint">Keys: / search · ↑↓ browse · Enter play · [ ] previous/next channel · F fullscreen · M mute</p>
-  </section>
+<div id="shell">
+  <nav id="tabs" aria-label="Sections"></nav>
+  <main id="main">
+    <div id="tab-content"></div>
+    <aside id="player-dock"></aside>
+  </main>
 </div>
-<dialog id="settings-dialog">
-  <form method="dialog" id="settings-form">
-    <h2>Sources</h2>
-    <label>Playlist (M3U URL)<input id="pl-url" type="text" placeholder="https://… or choose a file"></label>
-    <div class="row"><button type="button" id="pl-file">Choose playlist file…</button><span id="pl-file-name"></span></div>
-    <label>Guide (XMLTV URL)<input id="epg-url" type="text" placeholder="https://… .xml or .xml.gz (optional)"></label>
-    <div class="row"><button type="button" id="epg-file">Choose guide file…</button><span id="epg-file-name"></span></div>
-    <p class="note">Sources are stored encrypted for your Windows account.</p>
-    <div class="row end"><button value="cancel" type="button" id="settings-cancel">Cancel</button><button value="save" id="settings-save">Save and load</button></div>
-  </form>
-</dialog>
+<div id="toasts" aria-live="polite"></div>
 <script src="../node_modules/hls.js/dist/hls.min.js"></script>
-<script src="app.js"></script>
+<script src="shell.js"></script>
+<script src="player.js"></script>
+<script src="features/livetv.js"></script>
+<script src="features/guide.js"></script>
+<script src="features/sports.js"></script>
+<script src="features/ondemand.js"></script>
+<script src="features/recordings.js"></script>
+<script src="features/settings.js"></script>
+<script src="boot.js"></script>
 </body>
 </html>

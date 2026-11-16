@@ -24,12 +24,12 @@ app.on('browser-window-created', (_e, win) => {
       try {
         const out = await win.webContents.executeJavaScript(`(async () => {
           const rows = [...document.querySelectorAll('.row-ch')].map(r => r.innerText.split(String.fromCharCode(10)).join(' | '));
-          if (!document.querySelector('.row-ch')) return JSON.stringify({ norows: true, status: document.getElementById('status').textContent, html: document.body.innerText.slice(0,400) });
+          if (!document.querySelector('.row-ch')) return JSON.stringify({ norows: true, status: document.querySelector('.lt-status').textContent, html: document.body.innerText.slice(0,400) });
           document.querySelector('.row-ch').click();
           await new Promise(r => setTimeout(r, 2500));
-          return JSON.stringify({ rows, groups: [...document.querySelectorAll('#groups button')].map(b=>b.innerText.split(String.fromCharCode(10)).join(' ')),
-            title: document.getElementById('now-title').textContent, schedule: document.getElementById('schedule').innerText,
-            status: document.getElementById('status').textContent, msg: document.getElementById('player-msg').textContent });
+          return JSON.stringify({ rows, groups: [...document.querySelectorAll('.lt-groups button')].map(b=>b.innerText.split(String.fromCharCode(10)).join(' ')),
+            title: document.querySelector('.now-info h2').textContent, schedule: document.querySelector('.schedule').innerText,
+            status: document.querySelector('.lt-status').textContent, msg: document.querySelector('.player-msg').textContent });
         })()`);
         console.log('E2E ' + out);
         app.exit(0);
