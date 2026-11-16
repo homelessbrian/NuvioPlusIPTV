@@ -3192,6 +3192,7 @@ class LiveTvRepository @Inject constructor(
         val groups = client.liveGroups().associate { it.id to it.name }
         val channels = client.liveChannels()
         val identity = com.nuvio.tv.livetv.stalker.StalkerGateway.identity(pl)
+        file.parentFile?.mkdirs()
         val tmp = File(file.parentFile, file.name + ".tmp")
         fun attr(value: String) = value.replace('"', '\'').replace('\n', ' ').replace('\r', ' ')
         try {
@@ -3223,6 +3224,8 @@ class LiveTvRepository @Inject constructor(
         val client = stalker.client(pl)
         val identity = com.nuvio.tv.livetv.stalker.StalkerGateway.identity(pl)
         val channels = _channels.value.filter { it.sourceId == pl.id && it.stalkerRef != null }
+        // A portal added as the first source: no guide has made the folder yet.
+        file.parentFile?.mkdirs()
         val tmp = File(file.parentFile, file.name + ".tmp")
         val time = java.text.SimpleDateFormat("yyyyMMddHHmmss Z", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
         val stampDate = java.util.Date(0L)
