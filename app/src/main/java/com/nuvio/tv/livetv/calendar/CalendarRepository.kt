@@ -371,7 +371,7 @@ class CalendarRepository @Inject constructor(
         val usedShows = HashSet<Int>()
         for (c in shows) {
             buildCheckpoint(force)
-            val tvmId = if (fetch) sources.tvmazeId(c.imdb, c.tmdb) else cachedTvmazeId(c)
+            val tvmId = tvmazeOf(c.id) ?: if (fetch) sources.tvmazeId(c.imdb, c.tmdb) else cachedTvmazeId(c)
             if (tvmId != null && !usedShows.add(tvmId)) { done++; continue }
             var data = tvmId?.let { sources.cachedShow(it) }
             if (fetch && tvmId != null && (force || data == null || stale(data))) {
@@ -763,13 +763,14 @@ class CalendarRepository @Inject constructor(
             val followed = follows.value.flatMap { listOfNotNull(it.id, it.imdbId) }.toSet()
             val skipTypes = if (s.calendarSkipNewsTalk) setOf("News", "Talk Show", "Sports", "Panel Show") else emptySet()
             val hidden = hiddenShows.value.map { it.id }.toSet()
-            val entries = list.filter { (show, _) -> show.type !in skipTypes && (show.imdb == null || show.imdb !in hidden) }
+            // Shows TVmaze has no IMDb id for (many news shows) are kept, under their TVmaze id.
+            val entries = list.filter { (show, _) -> show.type !in skipTypes && (show.imdb ?: tvmazeKey(show.id)) !in hidden }
                 .groupBy { it.first.id }
                 .mapNotNull { (_, eps) ->
                     val (show, e) = eps.first()
                     val lastNumber = eps.maxOf { it.second.number }
                     val local = CalendarAirTimes.local(e.airMs, show.zone, show.airTime, show.streaming)
-                    val id = show.imdb ?: return@mapNotNull null
+                    val id = show.imdb ?: tvmazeKey(show.id)
                     CalendarEntry(
                         key = "today|$id|${e.season}|${e.number}",
                         kind = CalendarKind.EPISODE,
@@ -902,7 +903,7 @@ class CalendarRepository @Inject constructor(
                 it.episode != null && episode in it.episode..(it.lastEpisode ?: it.episode)
         }?.let { return@runCatching rematchNow(it) }
         val imdb = contentId.takeIf { it.startsWith("tt") }
-        val tvmId = sources.tvmazeId(imdb, tmdbOf(contentId)) ?: return@runCatching null
+        val tvmId = tvmazeOf(contentId) ?: sources.tvmazeId(imdb, tmdbOf(contentId)) ?: return@runCatching null
         val data = sources.cachedShow(tvmId)?.takeIf { d -> d.episodes.any { it.season == season && it.number == episode } }
             ?: sources.fetchShow(tvmId) ?: return@runCatching null
         val ep = data.episodes.firstOrNull { it.season == season && it.number == episode } ?: return@runCatching null
@@ -1476,7 +1477,7 @@ class CalendarRepository @Inject constructor(
         val memoKey = imdb ?: id
         infoMemo[memoKey]?.let { (at, v) -> if (System.currentTimeMillis() - at < 10 * 60_000L) return v }
         val info = runCatching {
-            val tvmId = sources.tvmazeId(imdb, tmdbOf(id)) ?: return@runCatching null
+            val tvmId = tvmazeOf(id) ?: sources.tvmazeId(imdb, tmdbOf(id)) ?: return@runCatching null
             var data = sources.cachedShow(tvmId)
             if (data == null || stale(data)) data = sources.fetchShow(tvmId) ?: data
             data ?: return@runCatching null
@@ -1539,6 +1540,11 @@ class CalendarRepository @Inject constructor(
 
         fun isSeries(type: String) = type.equals("series", true) || type.equals("tv", true) || type.equals("show", true) ||
             type.equals("anime", true)
+
+        /** A show known only by its TVmaze id (no IMDb id): "tvmaze:123". It has no show page. */
+        fun tvmazeKey(id: Int): String = "tvmaze:$id"
+
+        fun tvmazeOf(id: String): Int? = if (id.startsWith("tvmaze:")) id.removePrefix("tvmaze:").toIntOrNull() else null
 
         fun tmdbOf(id: String): Int? = if (id.startsWith("tmdb:")) id.removePrefix("tmdb:").substringBefore(':').toIntOrNull() else null
 

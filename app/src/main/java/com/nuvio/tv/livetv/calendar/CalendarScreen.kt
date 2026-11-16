@@ -287,6 +287,7 @@ fun CalendarScreen(
     fun page(e: CalendarEntry) {
         if (e.kind == CalendarKind.GAME) { e.eventId?.let(onOpenGame); return }
         if (e.kind == CalendarKind.MOVIE && !e.contentId.startsWith("tt")) return
+        if (!hasPage(e)) return
         val today2 = e.key.startsWith("today|")
         onOpenDetail(e.contentId, e.type, e.addonBaseUrl, if (today2) null else e.season, if (today2) null else e.episode)
     }
@@ -295,7 +296,8 @@ fun CalendarScreen(
         if (e.kind == CalendarKind.GAME) { page(e); return }
         val inGuide = channels(e).any { it.stopMs > now || it.catchup }
         val tvFirst = settings.calendarOkAction != "PAGE"
-        if (inGuide && (tvFirst || (e.kind == CalendarKind.MOVIE && !e.contentId.startsWith("tt")))) liveCard = e else page(e)
+        // A show with no page (TVmaze only knows it, like many news shows): its Live TV options either way.
+        if (!hasPage(e) || (inGuide && (tvFirst || (e.kind == CalendarKind.MOVIE && !e.contentId.startsWith("tt"))))) liveCard = e else page(e)
     }
     /**
      * Watch live / record. Looks in the guide again first (a guide that finished loading since
@@ -573,7 +575,9 @@ fun CalendarScreen(
                             statusOf = { f -> followEntry(f).takeIf { !isPlainFollow(it) }?.let { e -> viewModel.status(e) } },
                             onFocus = { f -> heroKey = "follow|" + f.id },
                             onOpen = { f ->
-                                if (!f.isAiring) onOpenDetail(f.id, f.type, f.addonBaseUrl, null, null)
+                                // No page for a show TVmaze alone knows: its options instead.
+                                if (f.id.startsWith("tvmaze:")) followOptions = f
+                                else if (!f.isAiring) onOpenDetail(f.id, f.type, f.addonBaseUrl, null, null)
                                 else f.imdbId?.let { onOpenDetail(it, "movie", null, null, null) }
                             },
                             onOptions = { followOptions = it }
@@ -629,10 +633,10 @@ fun CalendarScreen(
                 title = e.title,
                 subtitle = entryLine(e, use24h),
                 status = viewModel.status(e),
-                actions = liveList(e, close) + MenuAction(
+                actions = liveList(e, close) + listOfNotNull(MenuAction(
                     if (e.kind == CalendarKind.MOVIE) "Open movie page" else "Show page",
                     if (e.kind == CalendarKind.EPISODE) "Episodes, and your sources to watch on demand" else null
-                ) { close(); page(e) },
+                ) { close(); page(e) }.takeIf { hasPage(e) }),
                 onDismiss = close
             )
         }
@@ -650,7 +654,7 @@ fun CalendarScreen(
                 if (e.kind == CalendarKind.EPISODE && e.videoId != null && whenOf(e) <= now) {
                     add(MenuAction("Find sources for this episode") { close(); onFindSources(e) })
                 }
-                if (e.contentId.startsWith("tt") || e.kind == CalendarKind.EPISODE) {
+                if ((e.contentId.startsWith("tt") || e.kind == CalendarKind.EPISODE) && hasPage(e)) {
                     add(MenuAction(
                         when {
                             e.kind == CalendarKind.MOVIE -> "Open movie page"
@@ -688,7 +692,7 @@ fun CalendarScreen(
                 kicker = null, title = f.name, subtitle = fe?.let { entryLine(it, use24h) }, status = fe?.let { viewModel.status(it) },
                 actions = buildList {
                     if (fe != null) addAll(liveList(fe, close))
-                    if (!f.isAiring || f.imdbId != null) add(MenuAction("Open ${if (f.type == "series") "show" else "movie"} page") {
+                    if ((!f.isAiring || f.imdbId != null) && !f.id.startsWith("tvmaze:")) add(MenuAction("Open ${if (f.type == "series") "show" else "movie"} page") {
                         close()
                         if (f.isAiring) onOpenDetail(f.imdbId!!, "movie", null, null, null) else onOpenDetail(f.id, f.type, f.addonBaseUrl, null, null)
                     })
@@ -2038,3 +2042,6 @@ private fun dayWord(day: LocalDate, today: LocalDate): String = when (ChronoUnit
     in 2L..6L -> day.format(DateTimeFormatter.ofPattern("EEEE"))
     else -> day.format(DateTimeFormatter.ofPattern("EEE MMM d"))
 }
+
+/** Whether it has a show or movie page to open (shows TVmaze alone knows, like many news shows, don't). */
+private fun hasPage(e: CalendarEntry): Boolean = !e.contentId.startsWith("tvmaze:")
