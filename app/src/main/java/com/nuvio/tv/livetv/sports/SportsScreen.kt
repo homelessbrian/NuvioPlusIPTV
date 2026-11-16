@@ -297,6 +297,12 @@ fun SportsScreen(
         onOpenLive()
     }
     com.nuvio.tv.livetv.ui.FrameMeter("Sports")
+    // A finished game's replays are looked for as soon as its card is highlighted.
+    DisposableEffect(viewModel) {
+        val warm: (SportsEvent) -> Unit = { viewModel.repo.warmGame(it) }
+        GameFocus.onGame = warm
+        onDispose { if (GameFocus.onGame === warm) GameFocus.onGame = null }
+    }
     Box(
         Modifier
             .fillMaxSize()

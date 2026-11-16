@@ -394,24 +394,88 @@ class SportsRepository @Inject constructor(
      */
     fun openGame(ev: SportsEvent) {
         addonJobs.remove(ev.id)?.cancel()
+        if (ev.state == GameState.POST) {
+            // Already being looked for since the card was highlighted: carry on with that.
+            synchronized(warmLock) {
+                val w = warmJob
+                if (warmId == ev.id && w != null && w.isActive) {
+                    warmJob = null
+                    warmId = null
+                    if (warmAsking) {
+                        addonJobs[ev.id] = w
+                        return
+                    }
+                    // Still waiting its moment: ask right away instead.
+                    w.cancel()
+                }
+            }
+            if (vodFresh(ev.id)) return
+        }
         addonJobs[ev.id] = scope.launch {
             var round = 0
             while (kotlinx.coroutines.currentCoroutineContext().isActive) {
-                val found = runCatching { addonSource.find(ev) }.getOrNull()
-                if (found != null) {
-                    _addonLive.update { it + (ev.id to found.live) }
-                    _addonVod.update { it + (ev.id to found.vod) }
-                    _vodAddons.update { it + (ev.id to found.vodAddons) }
-                    _suggestNuvioSports.value = found.suggestNuvioSports
-                } else if (ev.state == GameState.POST) {
-                    // Couldn't ask: show the "nothing found" text rather than "looking" forever.
-                    _addonVod.update { it + (ev.id to emptyList()) }
-                }
-                val got = found != null && (found.live.isNotEmpty() || found.vod.isNotEmpty())
+                val got = lookInAddons(ev)
                 if (ev.state == GameState.POST || got || ++round >= 20) break
                 delay(90_000L)
             }
         }
+    }
+
+    private val vodAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val warmLock = Any()
+    private var warmJob: kotlinx.coroutines.Job? = null
+    private var warmId: String? = null
+    @Volatile private var warmAsking = false
+
+    /** Replays found for this game a few minutes ago at most: no need to ask again. */
+    private fun vodFresh(eventId: String): Boolean =
+        _addonVod.value[eventId]?.isNotEmpty() == true &&
+            System.currentTimeMillis() - (vodAt[eventId] ?: 0L) < VOD_FRESH_MS
+
+    /**
+     * A finished game's card is highlighted: start looking for its replays now (after a moment, so
+     * moving across cards asks for nothing), so they're there when the game is opened. Only the
+     * card you're on is looked for.
+     */
+    fun warmGame(ev: SportsEvent) {
+        if (ev.state != GameState.POST) return
+        synchronized(warmLock) {
+            if (warmId == ev.id && warmJob?.isActive == true) return
+            if (addonJobs.containsKey(ev.id) || vodFresh(ev.id)) return
+            warmJob?.cancel()
+            warmId = ev.id
+            warmAsking = false
+            warmJob = scope.launch {
+                delay(WARM_DELAY_MS)
+                warmAsking = true
+                lookInAddons(ev)
+            }
+        }
+    }
+
+    /** One look through your sports addons for [ev], shown add-on by add-on as each answers; true when something was found. */
+    private suspend fun lookInAddons(ev: SportsEvent): Boolean {
+        fun show(found: SportsAddonSource.Found, done: Boolean) {
+            if (done || found.live.isNotEmpty()) _addonLive.update { it + (ev.id to found.live) }
+            if (done || found.vod.isNotEmpty()) _addonVod.update { it + (ev.id to found.vod) }
+            _vodAddons.update { it + (ev.id to found.vodAddons) }
+            _suggestNuvioSports.value = found.suggestNuvioSports
+        }
+        val found = try {
+            addonSource.find(ev) { show(it, false) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
+        if (found != null) {
+            show(found, true)
+            if (ev.state == GameState.POST) vodAt[ev.id] = System.currentTimeMillis()
+        } else if (ev.state == GameState.POST) {
+            // Couldn't ask: show the "nothing found" text rather than "looking" forever.
+            _addonVod.update { it + (ev.id to emptyList()) }
+        }
+        return found != null && (found.live.isNotEmpty() || found.vod.isNotEmpty())
     }
 
     /** The game page was closed: stop looking. */
@@ -2563,6 +2627,10 @@ class SportsRepository @Inject constructor(
 
     companion object {
         private const val TAG = "Sports"
+        /** A game card must keep the highlight this long before its replays are looked for. */
+        private const val WARM_DELAY_MS = 600L
+        /** Replays found this recently aren't asked for again when the game is opened. */
+        private const val VOD_FRESH_MS = 10 * 60_000L
         /** Racing series with a drivers' table on ESPN. */
         private val RACING_TABLES = setOf("racing/f1", "racing/nascar-premier", "racing/nascar-secondary", "racing/nascar-truck", "racing/irl")
         /** Club competitions with a table of their own (the league phase), shown with your team's league. */

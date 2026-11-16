@@ -292,7 +292,7 @@ internal fun MyTeamsRows(
                                             playing = playing(ev),
                                             modifier = Modifier
                                                 .focusRequester(requesterFor(key))
-                                                .onFocusChanged { if (it.isFocused) { lastOnRow[0] = ev.id; onFocusKey(key) } }
+                                                .onFocusChanged { if (it.isFocused) { lastOnRow[0] = ev.id; onFocusKey(key); GameFocus.onGame?.invoke(ev) } }
                                                 .steadyRowKeys(state, i, row.events.size) { j -> requesterFor(keyAt(j)) },
                                             onClick = { onOpen(ev) },
                                             onLongClick = { onQuickWatch(ev) }

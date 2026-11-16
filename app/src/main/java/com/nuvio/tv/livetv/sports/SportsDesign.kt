@@ -350,6 +350,11 @@ internal fun StatusColumn(ev: SportsEvent, playing: Boolean, now: Long, use24h: 
  * column on the right. Events without two teams (a race, a fight card, wrestling) get one band
  * with the sport's symbol and the event's name.
  */
+/** A game card got the highlight (the Sports page looks for a finished game's replays ahead of time). */
+internal object GameFocus {
+    @Volatile var onGame: ((SportsEvent) -> Unit)? = null
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun GameCard(
@@ -375,7 +380,7 @@ internal fun GameCard(
             .height(86.dp)
             // Big events (WrestleMania…): a gold border, same size as every other card.
             .sportsFrame(focused, premium, Color(0xFFFFCE54))
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { focused = it.isFocused; if (it.isFocused) GameFocus.onGame?.invoke(ev) }
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
