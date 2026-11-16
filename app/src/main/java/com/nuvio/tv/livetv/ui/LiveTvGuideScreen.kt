@@ -458,7 +458,6 @@ private fun LiveTvGuideScreenBody(
     var infoTarget by remember { mutableStateOf<MenuTarget?>(null) }
     var searchOpen by remember { mutableStateOf(false) }
     var textPrompt by remember { mutableStateOf<TextPrompt?>(null) }
-    var groupPickerFor by remember { mutableStateOf<LiveChannel?>(null) }
     var groupMenu by remember { mutableStateOf<ChannelGroup?>(null) }
     var epgPickerFor by remember { mutableStateOf<LiveChannel?>(null) }
     var logoPickerFor by remember { mutableStateOf<LiveChannel?>(null) }
@@ -2170,7 +2169,6 @@ private fun LiveTvGuideScreenBody(
                     row = (row + d).coerceIn(0, (channels.size - 1).coerceAtLeast(0))
                 },
                 onRemoveFromGroup = { gid -> viewModel.removeFromGroup(gid, target.channel); menuTarget = null },
-                onAddToGroup = { menuTarget = null; groupPickerFor = target.channel },
                 onRename = {
                     menuTarget = null
                     textPrompt = TextPrompt(
@@ -2371,29 +2369,12 @@ private fun LiveTvGuideScreenBody(
                 }
             )
         }
-        groupPickerFor?.let { ch ->
-            GroupPickerDialog(
-                channel = ch,
-                groups = ui.customGroups,
-                onDismiss = { groupPickerFor = null },
-                onPick = { g -> viewModel.addToGroup(g.id, ch); groupPickerFor = null },
-                onNewGroup = {
-                    groupPickerFor = null
-                    textPrompt = TextPrompt(
-                        title = "New group",
-                        initial = "",
-                        hint = "Group name",
-                        onConfirm = { name -> viewModel.createGroupWith(name, ch) }
-                    )
-                }
-            )
-        }
         groupMenu?.let { g ->
             val isCustom = g.id.startsWith(ChannelGroup.CUSTOM_PREFIX)
             ActionMenuDialog(
                 title = g.title,
                 actions = buildList {
-                    add("Rename group" to {
+                    add("Rename group…" to {
                         groupMenu = null
                         textPrompt = TextPrompt(
                             title = "Rename group",
@@ -2403,7 +2384,7 @@ private fun LiveTvGuideScreenBody(
                         )
                     })
                     if (viewModel.parentalEnabled()) {
-                        if (viewModel.isGroupLockSet(g.id)) add("Remove parental lock" to {
+                        if (viewModel.isGroupLockSet(g.id)) add("Remove parental lock…" to {
                             groupMenu = null
                             pinRemovesLock = true
                             pinWrong = false
@@ -2446,14 +2427,14 @@ private fun LiveTvGuideScreenBody(
                             scope.launch { delay(80); listState.scrollToItem(0); runCatching { gridFocus.requestFocus() } }
                         }
                     })
-                    add("Manage visibility" to {
+                    add("Manage visibility…" to {
                         groupMenu = null
                         val all = viewModel.groupsWithHidden()
                         groupVisibilityList = all
                         groupHiddenPending = user.hiddenGroups intersect all.map { it.id }.toSet()
                         scope.launch { delay(80); runCatching { groupsFocus.requestFocus() } }
                     })
-                    add("Reorder groups" to {
+                    add("Reorder groups…" to {
                         groupMenu = null
                         groupWorking = ui.groups.filter { !it.special }
                         groupReorderId = g.id
@@ -2464,7 +2445,7 @@ private fun LiveTvGuideScreenBody(
                     })
                     add("Move up" to { viewModel.moveGroup(g.id, -1) })
                     add("Move down" to { viewModel.moveGroup(g.id, 1) })
-                    add("New group" to {
+                    add("New group…" to {
                         groupMenu = null
                         textPrompt = TextPrompt(
                             title = "New group", initial = "", hint = "Group name",
@@ -3722,7 +3703,6 @@ private fun ChannelContextMenu(
     customGroupId: String?,
     onMoveInGroup: (String, Int) -> Unit,
     onRemoveFromGroup: (String) -> Unit,
-    onAddToGroup: () -> Unit,
     onRename: () -> Unit,
     onChangeEpg: () -> Unit,
     onChangeLogo: () -> Unit,
@@ -3803,29 +3783,28 @@ private fun ChannelContextMenu(
                 item { MenuItem("Move up in favorites", onClick = { onMoveFavorite(-1) }) }
                 item { MenuItem("Move down in favorites", onClick = { onMoveFavorite(1) }) }
             }
-            item { MenuItem("Add to group…", onClick = onAddToGroup) }
             if (customGroupId != null) {
                 item { MenuItem("Move up in this group", onClick = { onMoveInGroup(customGroupId, -1) }) }
                 item { MenuItem("Move down in this group", onClick = { onMoveInGroup(customGroupId, 1) }) }
                 item { MenuItem("Remove from this group", onClick = { onRemoveFromGroup(customGroupId) }) }
             }
-            item { MenuItem("Copy channel…", onClick = onCopy) }
-            item { MenuItem("Copy several channels…", onClick = onCopyMany) }
+            item { MenuItem("Copy to group…", onClick = onCopy) }
+            item { MenuItem("Copy several to group…", onClick = onCopyMany) }
             if (isCopyHere) item { MenuItem("Remove copy from this group", onClick = onRemoveCopy) }
             item { MenuHeader("Edit channel") }
-            item { MenuItem("Rename channel", onClick = onRename) }
-            item { MenuItem("Change channel number", onClick = onRenumber) }
-            item { MenuItem("Assign EPG", onClick = onChangeEpg) }
-            item { MenuItem("Change logo", onClick = onChangeLogo) }
+            item { MenuItem("Rename channel…", onClick = onRename) }
+            item { MenuItem("Change channel number…", onClick = onRenumber) }
+            item { MenuItem("Assign EPG…", onClick = onChangeEpg) }
+            item { MenuItem("Change logo…", onClick = onChangeLogo) }
             item { MenuHeader("Hide & arrange") }
             item { MenuItem("Hide channel", onClick = onHide) }
             item { MenuItem("Hide group \"${ch.group}\"", onClick = onHideGroup) }
-            item { MenuItem("Manage visibility", onClick = onManageVisibility) }
-            if (canReorder) item { MenuItem("Reorder channels", onClick = onReorder) }
+            item { MenuItem("Manage visibility…", onClick = onManageVisibility) }
+            if (canReorder) item { MenuItem("Reorder channels…", onClick = onReorder) }
             item { MenuHeader("Guide") }
             item { MenuItem("Update playlists & EPG", onClick = onRefresh) }
-            item { MenuItem("Guide display (info panel, preview…)", onClick = onGuideDisplay) }
-            item { MenuItem("Live TV settings", onClick = onSettings) }
+            item { MenuItem("Guide display (info panel, preview)…", onClick = onGuideDisplay) }
+            item { MenuItem("Live TV settings…", onClick = onSettings) }
         }
     }
     LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
