@@ -332,6 +332,27 @@ class StalkerGateway @Inject constructor(
             failure is IOException && failure.message == "VPN user profile is not ready. Reopen the app before using a Stalker portal." -> failure.message.orEmpty()
             else -> "The Stalker stream could not be opened. Check VPN protection and retry."
         }
+
+        /**
+         * What went wrong updating a Stalker portal (channels, guide, movies, series), safe to show
+         * and share. Other errors can carry file names made from the account, web addresses or
+         * server text, so only the portal's own fixed messages are passed through.
+         */
+        fun safeUpdateError(failure: Throwable): String = when (failure) {
+            is StalkerException -> failure.message.orEmpty()
+            is java.net.UnknownHostException, is java.net.ConnectException -> "The Stalker portal could not be reached."
+            is java.net.SocketTimeoutException -> "The Stalker portal took too long to answer. Try again later."
+            is java.io.FileNotFoundException -> "The portal's data couldn't be saved on this device. Try again."
+            is IOException -> if (failure.message in SAFE_IO_MESSAGES) failure.message.orEmpty()
+                else "The connection to the Stalker portal failed. Try again."
+            else -> "The Stalker portal couldn't be updated (${failure.javaClass.simpleName}). Try again."
+        }
+        private val SAFE_IO_MESSAGES = setOf(
+            "Stalker portals require HTTP + HTTPS or Full app VPN protection. Change the VPN protection mode and retry.",
+            ROUTE_MISMATCH_MESSAGE,
+            "VPN user profile is not ready. Reopen the app before using a Stalker portal.",
+            "Could not save the Stalker channel cache.",
+        )
         internal fun sameOrigin(origin: URI, target: URI): Boolean =
             target.scheme?.lowercase() in setOf("http", "https") &&
                 origin.scheme.equals(target.scheme, true) && origin.host.equals(target.host, true) &&

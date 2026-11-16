@@ -273,11 +273,11 @@ class OnDemandRepository @Inject constructor(
             lastProblem = null
             // Movies and series import separately, so a problem with one keeps the other.
             val movies = runCatching { importKind(pl, VodKind.MOVIE) }
-                .onFailure { Log.w(TAG, "Movies for ${pl.name} failed", it); lastProblem = text(R.string.iptv_status_import_movies_failed, pl.name, it.message ?: it.javaClass.simpleName) }
+                .onFailure { if (pl.isStalker) Log.w(TAG, "Movies for ${pl.name} failed: ${problemText(pl, it)}") else Log.w(TAG, "Movies for ${pl.name} failed", it); lastProblem = text(R.string.iptv_status_import_movies_failed, pl.name, problemText(pl, it)) }
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
             if (!force) com.nuvio.tv.livetv.data.BackgroundWork.awaitNoHeavy()
             val series = runCatching { importKind(pl, VodKind.SERIES) }
-                .onFailure { Log.w(TAG, "Series for ${pl.name} failed", it); lastProblem = text(R.string.iptv_status_import_series_failed, pl.name, it.message ?: it.javaClass.simpleName) }
+                .onFailure { if (pl.isStalker) Log.w(TAG, "Series for ${pl.name} failed: ${problemText(pl, it)}") else Log.w(TAG, "Series for ${pl.name} failed", it); lastProblem = text(R.string.iptv_status_import_series_failed, pl.name, problemText(pl, it)) }
             val ok = movies.isSuccess && series.isSuccess && lastProblem == null
             lastProblem?.let { problemByPlaylist[pl.id] = it } ?: problemByPlaylist.remove(pl.id)
             // Success: next import in a day. Failure: try again in an hour, not on every start.
@@ -634,9 +634,13 @@ class OnDemandRepository @Inject constructor(
     private fun reportStop(pl: PlaylistSource, kind: VodKind, saved: Int, e: Throwable) {
         lastProblem = text(
             if (kind == VodKind.MOVIE) R.string.iptv_status_import_movies_stopped else R.string.iptv_status_import_series_stopped,
-            pl.name, saved, e.message ?: e.javaClass.simpleName
+            pl.name, saved, problemText(pl, e)
         )
     }
+
+    /** A Stalker portal's errors never show account details (see StalkerGateway.safeUpdateError). */
+    private fun problemText(pl: PlaylistSource, e: Throwable): String =
+        if (pl.isStalker) com.nuvio.tv.livetv.stalker.StalkerGateway.safeUpdateError(e) else e.message ?: e.javaClass.simpleName
 
     /**
      * Streams one provider list straight into the database, a title at a time. If the provider
