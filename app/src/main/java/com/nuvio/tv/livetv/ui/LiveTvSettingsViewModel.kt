@@ -90,7 +90,7 @@ class LiveTvSettingsViewModel @Inject constructor(
         // Movies & series just switched on: import this provider now, whenever it was last
         // imported (switched off earlier, it had its titles removed but still counted as
         // "imported recently", so nothing came back for up to a day).
-        if (source.hasCatalog && source.importVod && source.enabled && (before?.importVod == false || before?.stalkerConfig != source.stalkerConfig)) onDemand.refreshNow(source.id)
+        if (source.hasVod && source.importVod && source.enabled && (before?.importVod == false || before?.stalkerConfig != source.stalkerConfig)) onDemand.refreshNow(source.id)
         else onDemand.refreshSoon()
     }
     /**
@@ -115,7 +115,7 @@ class LiveTvSettingsViewModel @Inject constructor(
         repository.setPlaylistEnabled(id, enabled)
         // Its movies and series go away with it, and come back (imported again) when re-enabled.
         val pl = playlists.value.firstOrNull { it.id == id }
-        if (enabled && pl != null && pl.hasCatalog && pl.importVod) onDemand.refreshNow(id) else onDemand.refreshSoon()
+        if (enabled && pl != null && pl.hasVod && pl.importVod) onDemand.refreshNow(id) else onDemand.refreshSoon()
     }
     fun movePlaylist(id: String, delta: Int) = viewModelScope.launch { repository.movePlaylist(id, delta) }
     fun setPlaylistGuideShift(id: String, minutes: Int) = viewModelScope.launch { repository.setPlaylistGuideShift(id, minutes) }

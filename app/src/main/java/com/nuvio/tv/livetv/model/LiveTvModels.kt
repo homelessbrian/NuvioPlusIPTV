@@ -84,6 +84,36 @@ data class PlaylistSource(
     val isXtream: Boolean get() = !isStalker && xtreamServer.isNotBlank()
     val hasCatalog: Boolean get() = isXtream || isStalker
 
+    /**
+     * An M3U link that is really an Xtream login (".../get.php?username=a&password=b"): the
+     * server, username and password found inside it. Null for anything else.
+     */
+    val m3uLogin: Triple<String, String, String>? get() {
+        if (isStalker || isXtream) return null
+        val link = tidyLink(url)
+        val path = link.substringBefore('?').trimEnd('/')
+        if (!path.endsWith("get.php", ignoreCase = true)) return null
+        val login = credentialsFromLink(link) ?: return null
+        val server = cleanXtreamServer(link)
+        return if (server.isNotBlank()) Triple(server, login.first, login.second) else null
+    }
+
+    /** Movies and series can be imported: an Xtream login, a Stalker portal, or an M3U link with a login in it. */
+    val hasVod: Boolean get() = hasCatalog || m3uLogin != null
+
+    /**
+     * This source set up so the Xtream helpers (movies and series, their links) work: an M3U
+     * link with a login in it gets that login filled in. Live channels still come from the
+     * M3U link; this copy is never saved.
+     */
+    fun withVodLogin(): PlaylistSource {
+        val login = m3uLogin ?: return this
+        return copy(
+            xtreamServer = login.first, xtreamUsername = login.second, xtreamPassword = login.third,
+            userAgent = effectiveUserAgent
+        )
+    }
+
     /** The time zone catch-up links are written in: the one picked in settings, else the server's. */
     val catchupZone: String get() = catchupTimezone.ifBlank { serverTimezone }
 
@@ -895,7 +925,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-16 01:10"
+    const val KIT_STAMP = "2026-11-16 07:31"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

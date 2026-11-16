@@ -210,7 +210,7 @@ class OnDemandRepository @Inject constructor(
             // Learn each provider's title tags (for catalogs imported before this existed).
             runCatching {
                 db.loadPrefixes()
-                prefs.playlists.first().filter { it.hasCatalog && it.importVod }.forEach { pl ->
+                prefs.playlists.first().filter { it.hasVod && it.importVod }.forEach { pl ->
                     if (!db.hasLearnedPrefixes(pl.id)) db.learnPrefixes(pl.id)
                 }
                 _version.value++
@@ -222,7 +222,7 @@ class OnDemandRepository @Inject constructor(
         // import it straight away. One that's gone is dropped the same way.
         scope.launch {
             prefs.playlists
-                .map { list -> list.filter { it.enabled && it.hasCatalog && it.importVod }.map { it.id to if (it.isStalker) it.stalkerConfig else null }.toSet() }
+                .map { list -> list.filter { it.enabled && it.hasVod && it.importVod }.map { it.id to if (it.isStalker) it.stalkerConfig else null }.toSet() }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect { refreshSoon() }
@@ -248,7 +248,7 @@ class OnDemandRepository @Inject constructor(
      * With [onlyId], only that provider is imported (the others are kept as they are).
      */
     suspend fun refresh(force: Boolean, onlyId: String? = null) = mutex.withLock {
-        val playlists = prefs.playlists.first().filter { it.enabled && it.hasCatalog && it.importVod }
+        val playlists = prefs.playlists.first().filter { it.enabled && it.hasVod && it.importVod }.map { it.withVodLogin() }
         if (force) infoCache.clear()
         val keep = playlists.map { it.id }.toSet()
         val dropped = runCatching { db.removeExcept(keep) }.getOrDefault(emptySet())
@@ -636,7 +636,7 @@ class OnDemandRepository @Inject constructor(
         }
     }
 
-    private suspend fun playlist(id: String): PlaylistSource? = prefs.playlists.first().firstOrNull { it.id == id }
+    private suspend fun playlist(id: String): PlaylistSource? = prefs.playlists.first().firstOrNull { it.id == id }?.withVodLogin()
 
     /**
      * Adult titles (by their own name or their category's name). These only ever play straight

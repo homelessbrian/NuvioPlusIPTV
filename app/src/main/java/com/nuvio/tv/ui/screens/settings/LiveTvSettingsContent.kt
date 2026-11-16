@@ -499,7 +499,7 @@ internal fun LiveTvSettingsContent(
                                 pl.hasCatalog && pl.enabled && !pl.importLive && pl.importVod -> context.getString(R.string.iptv_settings_movies_series_only_tv_channels_off)
                                 pl.hasCatalog && pl.enabled && !pl.importLive && !pl.importVod -> context.getString(R.string.iptv_settings_nothing_included_turn_on_tv_channels_or_movies)
                                 else -> sourceStatus(context, pl.enabled, pl.lastUpdatedMs, pl.lastError, context.resources.getQuantityString(R.plurals.iptv_settings_channel_count, pl.channelCount, pl.channelCount)) +
-                                    (if (pl.hasCatalog && pl.importVod && pl.enabled) context.getString(R.string.iptv_settings_movies_series) else "")
+                                    (if (pl.hasVod && pl.importVod && pl.enabled) context.getString(R.string.iptv_settings_movies_series) else "")
                             } + (account?.let { expiryLabel(context, it) }?.let { context.getString(R.string.iptv_settings_expires_1_s, it) } ?: ""),
                             value = when {
                                 !pl.enabled -> context.getString(R.string.playback_afr_off)
@@ -750,7 +750,7 @@ internal fun LiveTvSettingsContent(
                         onClick = { viewModel.onDemand.refreshNow() }
                     )
                     // One switch per Xtream login (logins added before On Demand start switched off).
-                    playlists.filter { it.hasCatalog }.forEach { pl ->
+                    playlists.filter { it.hasVod }.forEach { pl ->
                         SettingsToggleRow(
                             context.getString(R.string.iptv_settings_movies_series_from_1_s, pl.name),
                             if (pl.importVod) context.getString(R.string.iptv_settings_included) else context.getString(R.string.iptv_settings_not_included_switch_on_to_import_this_provider),
