@@ -1756,16 +1756,17 @@ internal fun LiveTvSettingsContent(
         )
         is LiveDialog.PlaylistActions -> ActionListDialog(
             title = d.source.name,
+            // The account, as the provider last reported it: a line under the name (it can wrap),
+            // not a button, since there's nothing to do with it.
+            subtitle = accounts[d.source.id]?.let { a ->
+                val parts = listOfNotNull(
+                    a.status.takeIf { it.isNotBlank() },
+                    expiryLabel(context, a)?.let { context.getString(R.string.iptv_settings_expires_1_s_2, it) } ?: context.getString(R.string.iptv_settings_no_expiry_date),
+                    a.maxConnections.takeIf { it > 0 }?.let { context.getString(R.string.iptv_settings_1_s_of_2_s_connections_in_use, a.activeConnections, it) }
+                )
+                context.getString(R.string.iptv_settings_account_details, parts.joinToString(" · "))
+            },
             actions = listOfNotNull(
-                // The account, as the provider last reported it (nothing to do: shows the details).
-                accounts[d.source.id]?.let { a ->
-                    val parts = listOfNotNull(
-                        a.status.takeIf { it.isNotBlank() },
-                        expiryLabel(context, a)?.let { context.getString(R.string.iptv_settings_expires_1_s_2, it) } ?: context.getString(R.string.iptv_settings_no_expiry_date),
-                        a.maxConnections.takeIf { it > 0 }?.let { context.getString(R.string.iptv_settings_1_s_of_2_s_connections_in_use, a.activeConnections, it) }
-                    )
-                    (context.getString(R.string.iptv_settings_account_details, parts.joinToString(" · "))) to { viewModel.updatePlaylistNow(d.source); close() }
-                },
                 context.getString(R.string.iptv_settings_edit) to { dialog = LiveDialog.EditPlaylist(d.source) },
                 context.getString(R.string.iptv_settings_update_now) to { viewModel.updatePlaylistNow(d.source); close() },
                 (if (d.source.enabled) context.getString(R.string.iptv_settings_disable) else context.getString(R.string.iptv_settings_enable)) to { viewModel.setPlaylistEnabled(d.source.id, !d.source.enabled); close() },
@@ -2838,14 +2839,16 @@ private fun SourceFormDialog(
 private fun ActionListDialog(
     title: String,
     actions: List<Pair<String, () -> Unit>>,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** A line of information under the title (wraps when it's long). */
+    subtitle: String? = null
 ) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(80)
         runCatching { first.requestFocus() }
     }
-    NuvioDialog(onDismiss = onDismiss, title = title, width = 460.dp) {
+    NuvioDialog(onDismiss = onDismiss, title = title, subtitle = subtitle, width = 460.dp) {
         // Scrollable: on a 1080p TV not every option fits, and the last ones were unreachable.
         LazyColumn(
             modifier = Modifier.heightIn(max = 380.dp),
