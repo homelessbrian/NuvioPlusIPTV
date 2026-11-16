@@ -369,8 +369,9 @@ private class AndroidMultiviewPanePlayer(
             .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+            // Offload is already off unless asked for. Don't switch it off here: that call only
+            // exists on Android 10 and up, and on older TVs it stopped every pane from starting.
             .build()
-            .apply { setOffloadMode(AudioSink.OFFLOAD_MODE_DISABLED) }
     }.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         .setEnableDecoderFallback(true)
 
