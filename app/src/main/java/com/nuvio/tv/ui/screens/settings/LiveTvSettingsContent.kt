@@ -74,6 +74,8 @@ import com.nuvio.tv.livetv.model.ChannelSort
 import com.nuvio.tv.livetv.model.EpgSource
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.PlaylistSource
+import com.nuvio.tv.livetv.model.completePlaylistAddress
+import com.nuvio.tv.livetv.model.playlistAddressPrefix
 import com.nuvio.tv.livetv.model.ZapMode
 import com.nuvio.tv.livetv.ui.LiveTvSettingsViewModel
 import com.nuvio.tv.livetv.ui.TextInputDialog
@@ -1713,7 +1715,7 @@ internal fun LiveTvSettingsContent(
             title = context.getString(R.string.iptv_settings_add_m3u_playlist_2),
             fields = listOf(
                 FormField(context.getString(R.string.iptv_settings_name), context.getString(R.string.iptv_settings_my_provider)),
-                FormField(context.getString(R.string.iptv_settings_playlist_url), "http://…/playlist.m3u"),
+                FormField(context.getString(R.string.iptv_settings_playlist_url), "…/playlist.m3u", defaultHttp = true),
                 FormField(context.getString(R.string.iptv_settings_guide_link_optional), "http://…/epg.xml.gz"),
                 FormField(context.getString(R.string.iptv_settings_user_agent_optional), context.getString(R.string.iptv_settings_leave_empty_for_default))
             ),
@@ -1724,7 +1726,7 @@ internal fun LiveTvSettingsContent(
             title = context.getString(R.string.iptv_settings_add_xtream_codes_login_2),
             fields = listOf(
                 FormField(context.getString(R.string.iptv_settings_name), context.getString(R.string.iptv_settings_my_provider)),
-                FormField(context.getString(R.string.iptv_settings_server), "http://host:port"),
+                FormField(context.getString(R.string.iptv_settings_server), "host:port", defaultHttp = true),
                 FormField(context.getString(R.string.iptv_settings_username), ""),
                 FormField(context.getString(R.string.iptv_settings_password), ""),
                 FormField(context.getString(R.string.iptv_settings_guide_link_optional), "http://…/epg.xml.gz")
@@ -1830,7 +1832,7 @@ internal fun LiveTvSettingsContent(
                     title = context.getString(R.string.iptv_settings_edit_xtream_login),
                     fields = listOf(
                         FormField(context.getString(R.string.iptv_settings_name), "", src.name),
-                        FormField(context.getString(R.string.iptv_settings_server), "", src.xtreamServer),
+                        FormField(context.getString(R.string.iptv_settings_server), "", src.xtreamServer, defaultHttp = true),
                         FormField(context.getString(R.string.iptv_settings_username), "", src.xtreamUsername),
                         FormField(context.getString(R.string.iptv_settings_password), "", src.xtreamPassword),
                         FormField(context.getString(R.string.iptv_settings_user_agent_optional), "", src.userAgent)
@@ -1858,7 +1860,7 @@ internal fun LiveTvSettingsContent(
                     title = context.getString(R.string.iptv_settings_edit_playlist),
                     fields = listOf(
                         FormField(context.getString(R.string.iptv_settings_name), "", src.name),
-                        FormField(context.getString(R.string.iptv_settings_playlist_url), "", src.url),
+                        FormField(context.getString(R.string.iptv_settings_playlist_url), "", src.url, defaultHttp = true),
                         FormField(context.getString(R.string.iptv_settings_user_agent_optional), "", src.userAgent)
                     ),
                     toggle = context.getString(R.string.iptv_settings_load_guide_linked_in_playlist) to src.useEmbeddedEpg,
@@ -2714,7 +2716,12 @@ private fun StalkerSourceDialog(
     )
 }
 
-private data class FormField(val label: String, val hint: String, val initial: String = "")
+private data class FormField(
+    val label: String,
+    val hint: String,
+    val initial: String = "",
+    val defaultHttp: Boolean = false
+)
 
 @Composable
 private fun SourceFormDialog(
@@ -2770,6 +2777,7 @@ private fun SourceFormDialog(
                     onValueChange = { values[i].value = it },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = field.hint,
+                    prefixText = if (field.defaultHttp) playlistAddressPrefix(values[i].value) else null,
                     focusRequester = if (i == 0) firstField else null
                 )
             }
@@ -2806,7 +2814,13 @@ private fun SourceFormDialog(
             SettingsDialogActionButton(
                 text = context.getString(R.string.action_save),
                 onClick = {
-                    val v = values.mapIndexed { i, value -> if (i in preserveWhitespaceAt) value.value else value.value.trim() }
+                    val v = values.mapIndexed { i, value ->
+                        when {
+                            fields[i].defaultHttp -> completePlaylistAddress(value.value)
+                            i in preserveWhitespaceAt -> value.value
+                            else -> value.value.trim()
+                        }
+                    }
                     formError = validate?.invoke(v)
                     if (formError == null) when {
                         onSaveAll != null -> onSaveAll(v, toggleValue, toggle2Value, toggleLiveValue)
