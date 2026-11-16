@@ -389,7 +389,7 @@ internal fun GearPanel(
                         LiveText("How dark the play bar is", size = 10.sp, color = gearText(focused, dim = true))
                     }
                     LiveText(
-                        when (background) { "darker" -> "Standard"; "solid" -> "Darkest"; else -> "Lightest" },
+                        when (background) { "darker" -> androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_settings_standard); "solid" -> androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_settings_darkest); else -> androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_settings_lightest) },
                         size = 13.sp, weight = FontWeight.Medium, color = gearText(focused)
                     )
                 }

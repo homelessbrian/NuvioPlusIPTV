@@ -848,13 +848,28 @@ private fun SchedulePreview(channel: LiveChannel, list: List<EpgProgram>, now: L
             val live = now >= p.startMs && now < p.stopMs
             val color = when {
                 live -> NuvioTheme.colors.Secondary
-                p.stopMs <= now -> NuvioTheme.colors.TextSecondary
+                // Past shows: a clearly darker grey, so they stand apart from what's coming up.
+                p.stopMs <= now -> NuvioTheme.colors.TextTertiary
                 else -> NuvioTheme.colors.TextPrimary
             }
+            // The show on now is bold with a LIVE tag, so it stays easy to spot whatever the highlight color.
+            val weight = if (live) FontWeight.Bold else FontWeight.Normal
             Row(modifier = Modifier.fillMaxWidth().height(orow(36f)).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                LiveText(formatClock(p.startMs, use24h), color = color, size = osp(14f), modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
+                LiveText(formatClock(p.startMs, use24h), color = color, size = osp(14f), weight = weight, modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
                 Spacer(Modifier.width(10.dp))
-                LiveText(p.title, color = color, size = osp(14f), modifier = Modifier.weight(1f))
+                LiveText(p.title, color = color, size = osp(14f), weight = weight, modifier = Modifier.weight(1f))
+                if (live) {
+                    Spacer(Modifier.width(6.dp))
+                    LiveText(
+                        "LIVE",
+                        modifier = Modifier
+                            .border(1.dp, color.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                        color = color,
+                        size = osp(10f),
+                        weight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -904,7 +919,7 @@ private fun SchedulePanel(
                         val colors = liveCellColors(
                             focused = isFocused && focused,
                             idle = if (isFocused) Color.White.copy(alpha = 0.08f) else Color.Transparent,
-                            idleText = if (past) NuvioTheme.colors.TextSecondary else NuvioTheme.colors.TextPrimary
+                            idleText = if (past) NuvioTheme.colors.TextTertiary else NuvioTheme.colors.TextPrimary
                         )
                         val shape = RoundedCornerShape(8.dp)
                         Row(
@@ -918,9 +933,9 @@ private fun SchedulePanel(
                                 .padding(horizontal = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            LiveText(formatClock(p.startMs, use24h), color = colors.text, size = osp(14f), modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
+                            LiveText(formatClock(p.startMs, use24h), color = colors.text, size = osp(14f), weight = if (live) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
                             Spacer(Modifier.width(10.dp))
-                            LiveText(p.title, color = colors.text, size = osp(14f), modifier = Modifier.weight(1f), marquee = isFocused)
+                            LiveText(p.title, color = colors.text, size = osp(14f), weight = if (live) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f), marquee = isFocused)
                             if (live && channel.key == playingKey) {
                                 val onSolid = isFocused && focused && LocalLiveSolidHighlight.current
                                 Icon(

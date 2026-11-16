@@ -204,10 +204,10 @@
     <string name="iptv_settings_smaller_info_panel_preview">"Kleinerer Infobereich &amp; Vorschau"</string>
     <string name="iptv_settings_shrinks_the_top_of_the_guide_to_about">"Verkleinert den oberen Bereich des Programmführers auf etwa zwei Drittel seiner Höhe, damit mehr Sender hineinpassen"</string>
     <string name="iptv_settings_guide_darkness">"Abdunklung des Programmführers"</string>
-    <string name="iptv_settings_how_dark_the_info_panel_at_the_top">"Wie dunkel der Infobereich oben und die Balken im Programmführer sind. „Am hellsten“ lässt mehr Hintergrund durchscheinen. „Am dunkelsten“ macht den Text am besten lesbar."</string>
+    <string name="iptv_settings_how_dark_the_info_panel_at_the_top">"Wie dunkel der Infobereich oben und die Balken im Programmführer sind. „Hell“ lässt mehr Hintergrund durchscheinen. „Dunkel“ macht den Text am besten lesbar."</string>
     <string name="iptv_settings_standard">"Standard"</string>
-    <string name="iptv_settings_darkest">"Am dunkelsten"</string>
-    <string name="iptv_settings_lightest">"Am hellsten"</string>
+    <string name="iptv_settings_darkest">"Dunkel"</string>
+    <string name="iptv_settings_lightest">"Hell"</string>
     <string name="iptv_settings_show_posters">"Poster anzeigen"</string>
     <string name="iptv_settings_posters_for_what_s_on_from_your_addons">"Poster für die laufende Sendung aus deinen Addons. Aus: nur das Senderlogo."</string>
     <string name="iptv_settings_show_playlist_name_in_info_panel">"Playlist-Namen im Infobereich anzeigen"</string>
@@ -300,7 +300,7 @@
     <string name="iptv_settings_1_list">"1 Liste"</string>
     <string name="iptv_settings_1_s_lists">"%1$s Listen"</string>
     <string name="iptv_settings_play_bar_background">"Hintergrund der Wiedergabeleiste"</string>
-    <string name="iptv_settings_how_dark_the_play_bar_is_standard_or">"Wie dunkel die Wiedergabeleiste ist. „Standard“ oder „Am dunkelsten“ machen den Text über hellen, unruhigen Bildern besser lesbar."</string>
+    <string name="iptv_settings_how_dark_the_play_bar_is_standard_or">"Wie dunkel die Wiedergabeleiste ist. „Standard“ oder „Dunkel“ machen den Text über hellen, unruhigen Bildern besser lesbar."</string>
     <string name="iptv_settings_info_bar_stays_for">"Infoleiste bleibt für"</string>
     <string name="iptv_settings_how_long_the_show_info_stays_on_screen">"Wie lange die Sendungsinfo nach einem Senderwechsel oder OK sichtbar bleibt"</string>
     <string name="iptv_settings_1_s_seconds">"%1$s Sekunden"</string>
