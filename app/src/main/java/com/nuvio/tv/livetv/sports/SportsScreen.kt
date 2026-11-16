@@ -674,7 +674,7 @@ private fun SportsHub(
     val dayBar: @Composable (Modifier) -> Unit = { dm ->
         val lv = leagueView?.let { SportsCatalog.league(it) }
         if (lv != null) {
-            LiveText("${lv.name} · the next 7 days", color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold, modifier = dm)
+            LiveText("${lv.name} · the next 7 days", color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold, modifier = dm.padding(start = 4.dp, top = SportsSpace.RowPad, bottom = SportsSpace.RowPad))
         } else {
             // A week back to a week ahead; opens on Yesterday and Today, and scrolls.
             val dayFmt = remember { SimpleDateFormat("EEE d", Locale.getDefault()) }
@@ -689,7 +689,7 @@ private fun SportsHub(
                 state = tabsState,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                contentPadding = PaddingValues(end = 12.dp)
+                contentPadding = PaddingValues(end = 12.dp, top = SportsSpace.RowPad, bottom = SportsSpace.RowPad)
             ) {
                 items((-SportsRepository.DAYS_BACK..SportsRepository.DAYS_AHEAD).toList(), key = { it }) { offset ->
                     val label = when (offset) {
@@ -706,11 +706,12 @@ private fun SportsHub(
     }
     val sportBar: @Composable () -> Unit = {
         if (effectiveChip == CHIP_ALL && leagueView == null && allSports.size > 1) {
+            Spacer(Modifier.height(SportsSpace.RowGap))
             LazyRow(
                 Modifier.fillMaxWidth().keepFocusWhileHeld(vertical = false),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)
             ) {
                 item(key = "sport_all") { FilterIcon("▦", "All", allSport == null, withLabel = true) { onAllSportPick(null); contentJump++ } }
                 items(allSports, key = { "sport_" + it.name }) { sp ->
@@ -720,7 +721,7 @@ private fun SportsHub(
         }
     }
     val filters: @Composable (Modifier) -> Unit = { m ->
-        LazyRow(m.keepFocusWhileHeld(vertical = false), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)) {
+        LazyRow(m.keepFocusWhileHeld(vertical = false), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)) {
             val upTo: Modifier = Modifier
             item(key = CHIP_MINE) { FilterIcon("★", "My Sports", effectiveChip == CHIP_MINE, Modifier.focusRequester(firstChip).then(upTo), withLabel = true) { pickChip(CHIP_MINE) } }
             // Everything on, day by day (live games first), with how many are on now.
@@ -874,20 +875,22 @@ private fun SportsHub(
     if (videoOn) {
         // The same top bar as every Sports page, then the list with the video window beside it.
         // Stops above the hint line at the bottom, so no game sits behind it.
-        Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 26.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = SportsSpace.Bottom)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
                 Spacer(Modifier.width(14.dp))
                 filters(Modifier.weight(1f))
             }
+            Spacer(Modifier.height(SportsSpace.RowGap))
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.width(LIST_WIDTH).fillMaxHeight()) {
                     dayBar(Modifier.fillMaxWidth())
                     sportBar()
+                    Spacer(Modifier.height(SportsSpace.RowGap))
                     list(Modifier.weight(1f))
                 }
                 Spacer(Modifier.width(18.dp))
-                Column(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp)) {
+                Column(Modifier.weight(1f).fillMaxHeight().padding(top = SportsSpace.RowPad)) {
                     videoSlot(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
                     Spacer(Modifier.height(10.dp))
                     NowPlayingPanel(events, matches, settings, now, use24h, playingKey, viewModel)
@@ -895,15 +898,16 @@ private fun SportsHub(
             }
         }
     } else {
-        Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = 26.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = SportsSpace.Bottom)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
                 Spacer(Modifier.width(14.dp))
                 filters(Modifier.weight(1f))
             }
+            Spacer(Modifier.height(SportsSpace.RowGap))
             dayBar(Modifier.fillMaxWidth())
             sportBar()
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(SportsSpace.RowGap))
             list(Modifier.weight(1f))
         }
     }
@@ -960,8 +964,8 @@ private fun GameList(
         // instead of jumping up to the day tabs.
         modifier = modifier.keepFocusWhileHeld(neverRight = true),
         // Room for the highlight's glow and bigger size at the edges.
-        contentPadding = PaddingValues(start = 8.dp, end = 10.dp, top = 2.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(start = 8.dp, end = 10.dp, top = SportsSpace.RowPad, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(SportsSpace.Card)
     ) {
         if (leaguesLine != null) item(key = "leagues_bar") {
             LeaguesBar(leaguesLine, if (leaguesBarReq != null) Modifier.focusRequester(leaguesBarReq) else Modifier, onClick = onChooseLeagues)
@@ -973,7 +977,7 @@ private fun GameList(
             )
         }
         if (loading) {
-            item(key = "ph_label") { SectionHeader("LIVE NOW", live = true) }
+            item(key = "ph_label") { SectionHeader("LIVE NOW", live = true, bottom = 0.dp) }
             items(3, key = { "ph_$it" }) { PlaceholderCard() }
             return@LazyColumn
         }
@@ -983,7 +987,7 @@ private fun GameList(
             list.chunked(columns).forEachIndexed { ri, row ->
                 val rowFirst = if (ri == 0) firstMod() else Modifier
                 item(key = prefix + row.first().id) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(SportsSpace.Card)) {
                         row.forEachIndexed { i, ev ->
                             GameCard(
                                 ev = ev,
@@ -1003,7 +1007,7 @@ private fun GameList(
             }
         }
         if (sections.live.isNotEmpty()) {
-            item(key = "live_label") { SectionHeader("LIVE NOW", live = true, count = sections.live.size) }
+            item(key = "live_label") { SectionHeader("LIVE NOW", live = true, count = sections.live.size, bottom = 0.dp) }
             cardRows("live_", sections.live)
         }
         if (sections.upcoming.isNotEmpty()) {
@@ -1012,11 +1016,11 @@ private fun GameList(
                 if (byDate) sections.upcoming.groupBy { dayWord(it.startMs, now) }.toList()
                 else listOf((if (day == 0) "COMING UP" else if (day > 0) "SCHEDULE" else "DIDN'T START") to sections.upcoming)
             groups.forEach { (label, groupList) ->
-            item(key = "up_label_$label") { SectionHeader(label.uppercase(), count = groupList.size) }
+            item(key = "up_label_$label") { SectionHeader(label.uppercase(), count = groupList.size, bottom = 0.dp) }
             groupList.chunked(columns).forEachIndexed { ri, row ->
                 val rowFirst = if (ri == 0) firstMod() else Modifier
                 item(key = "up_" + row.first().id) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(SportsSpace.Card)) {
                         row.forEachIndexed { i, ev ->
                             val ms = matches[ev.id].orEmpty()
                             UpcomingRow(
@@ -1038,11 +1042,11 @@ private fun GameList(
             }
         }
         if (sections.weekLong.isNotEmpty()) {
-            item(key = "week_label") { SectionHeader("THIS WEEK", count = sections.weekLong.size) }
+            item(key = "week_label") { SectionHeader("THIS WEEK", count = sections.weekLong.size, bottom = 0.dp) }
             cardRows("week_", sections.weekLong)
         }
         if (sections.finished.isNotEmpty()) {
-            item(key = "done_label") { SectionHeader(if (day < 0 || byDate) "RESULTS" else "FINISHED", count = sections.finished.size) }
+            item(key = "done_label") { SectionHeader(if (day < 0 || byDate) "RESULTS" else "FINISHED", count = sections.finished.size, bottom = 0.dp) }
             cardRows("done_", sections.finished)
         }
         val hasContent = sections.live.isNotEmpty() || sections.upcoming.isNotEmpty() || sections.finished.isNotEmpty() || sections.weekLong.isNotEmpty()
@@ -1064,7 +1068,8 @@ private fun LeaguesBar(line: String, modifier: Modifier = Modifier, onClick: () 
             .border(if (focused) NuvioTheme.focusRing.border(2.dp) else androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), SportsLook.SmallShape)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .height(SportsSpace.Control)
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         LiveText(line, color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
