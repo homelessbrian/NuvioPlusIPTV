@@ -84,7 +84,9 @@ data class PlaylistSource(
      */
     val linkServer: String = "",
     val linkUsername: String = "",
-    val linkPassword: String = ""
+    val linkPassword: String = "",
+    /** M3U links: the playlist also lists movies or episodes (found when it's read). */
+    val vodInPlaylist: Boolean = false
 ) {
     /** The user agent requests for this playlist go out with ("" = the app default). */
     val effectiveUserAgent: String get() = userAgent.ifBlank { fallbackUserAgent }
@@ -113,8 +115,11 @@ data class PlaylistSource(
         return if (server.isNotBlank()) Triple(server, login.first, login.second) else null
     }
 
-    /** Movies and series can be imported: an Xtream login, a Stalker portal, or an M3U link with a login in it. */
-    val hasVod: Boolean get() = hasCatalog || m3uLogin != null
+    /**
+     * Movies and series can be imported: an Xtream login, a Stalker portal, an M3U link with a
+     * login in it, or an M3U playlist that lists movies or episodes itself.
+     */
+    val hasVod: Boolean get() = hasCatalog || m3uLogin != null || vodInPlaylist
 
     /**
      * This source set up so the Xtream helpers (movies and series, their links) work: an M3U
@@ -940,7 +945,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-16 09:28"
+    const val KIT_STAMP = "2026-11-16 10:11"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

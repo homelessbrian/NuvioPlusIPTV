@@ -664,9 +664,9 @@ class LiveTvRepository @Inject constructor(
                 }
                 if (before == null && file.exists()) newlyAdded += pl.name
                 if (result.getOrNull() == true || (before == null && file.exists())) changed = true
-            } else if (!pl.hasCatalog && pl.m3uLogin == null && file.exists() && linkLoginChecked.add(pl.id)) {
-                // Playlists saved before logins were read from channel links: looked at once
-                // per start, so their movies and series don't wait for the next playlist update.
+            } else if (!pl.hasCatalog && pl.m3uLogin == null && !pl.vodInPlaylist && file.exists() && linkLoginChecked.add(pl.id)) {
+                // Playlists saved before movies, series and logins were read from their links:
+                // looked at once per start, so On Demand doesn't wait for the next playlist update.
                 refreshM3uAccount(pl)
             }
         }
@@ -3583,73 +3583,101 @@ class LiveTvRepository @Inject constructor(
     }
 
     /**
-     * An M3U playlist from an Xtream provider: the same server's player_api.php has the
-     * account's expiry date and connections, and its movies and series. The login comes from
-     * the link itself (…/get.php?username=…&password=…) or, for short links that hide it, from
-     * the playlist's channel links (…/live/user/pass/123.ts). A login found in the channel
-     * links is only kept once the provider accepts it.
+     * What an M3U playlist offers besides its channels. Its own movie and episode entries (read
+     * into On Demand straight from the playlist), and, for playlists from an Xtream provider, the
+     * account: the same server's player_api.php has the expiry date and connections, and fuller
+     * movie and series details. The login comes from the link itself (…/get.php?username=…) or,
+     * for short links that hide it, from the playlist's channel links (…/live/user/pass/123.ts);
+     * one found in the channel links is only kept once the provider accepts it.
      */
-    /** M3U playlists already looked at for a login in their channel links since the app started. */
+    /** M3U playlists already looked at for movies, series and a login since the app started. */
     private val linkLoginChecked: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
 
     private suspend fun refreshM3uAccount(pl: PlaylistSource) = withContext(Dispatchers.IO) {
         if (pl.hasCatalog) return@withContext
-        val ua = pl.effectiveUserAgent.ifBlank { DEFAULT_UA }
-        val inLink = pl.loginInLink()
         val file = playlistFile(pl.id)
-        val login = inLink ?: (if (file.exists()) loginFromChannelLinks(file) else null)
-        if (login == null) {
-            // The channel links no longer carry a login (the playlist link was changed).
-            if (file.exists() && pl.linkServer.isNotBlank()) saveLinkLogin(pl, null)
-            return@withContext
-        }
-        val (server, user, pass) = login
-        fun enc(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
-        val ui = runCatching {
-            JSONObject(getText("$server/player_api.php?username=${enc(user)}&password=${enc(pass)}", ua)).optJSONObject("user_info")
-        }.getOrNull() ?: return@withContext
-        if (ui.has("auth") && ui.optInt("auth", 1) == 0) return@withContext
-        if (pl.linkServer != server || pl.linkUsername != user || pl.linkPassword != pass) saveLinkLogin(pl, login)
-        accountOf(ui)?.let { saveAccount(pl, it) }
-    }
-
-    /**
-     * Saves (or clears) the login found for an M3U playlist. Found for the first time, its
-     * movies and series are switched on, like a new Xtream login (playlists saved before On
-     * Demand existed had them off, which meant nothing for an M3U link until now).
-     */
-    private suspend fun saveLinkLogin(pl: PlaylistSource, login: Triple<String, String, String>?) {
-        prefs.updatePlaylists { list ->
-            list.map {
-                if (it.id != pl.id) it
-                else if (login == null) it.copy(linkServer = "", linkUsername = "", linkPassword = "")
-                else it.copy(
-                    linkServer = login.first, linkUsername = login.second, linkPassword = login.third,
-                    importVod = if (it.linkServer.isBlank()) true else it.importVod
+        val scan = if (file.exists()) scanPlaylistLinks(file) else null
+        val hasVodEntries = scan?.second ?: pl.vodInPlaylist
+        val login = pl.loginInLink() ?: scan?.first
+        // The login kept for the channel links: the accepted one, the last accepted one when the
+        // provider can't be asked right now, or none when the links no longer carry one.
+        var kept: Triple<String, String, String>? =
+            if (scan != null && scan.first == null) null
+            else pl.linkServer.takeIf { it.isNotBlank() }?.let { Triple(it, pl.linkUsername, pl.linkPassword) }
+        if (login != null) {
+            val (server, user, pass) = login
+            fun enc(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
+            val ua = pl.effectiveUserAgent.ifBlank { DEFAULT_UA }
+            val checked = runCatching {
+                val ui = JSONObject(getText("$server/player_api.php?username=${enc(user)}&password=${enc(pass)}", ua)).optJSONObject("user_info")
+                    ?: error("the provider's answer had no account details")
+                if (ui.has("auth") && ui.optInt("auth", 1) == 0) error("the provider didn't accept the login")
+                ui
+            }
+            checked.onSuccess { ui ->
+                kept = login
+                accountOf(ui)?.let { saveAccount(pl, it) }
+            }.onFailure { e ->
+                LIVE_REPORT.add(
+                    "Playlist \"${pl.name}\": couldn't check the Xtream login with ${server.substringAfter("://")} (${e.message ?: e.javaClass.simpleName})" +
+                        if (hasVodEntries) "; movies and series come from the playlist itself" else ""
                 )
             }
         }
-        LIVE_REPORT.add(if (login == null) "Playlist \"${pl.name}\": no Xtream login in its links any more" else "Playlist \"${pl.name}\": Xtream login found, movies and series come from it")
+        val keptNow = kept
+        val loginChanged = (keptNow?.first ?: "") != pl.linkServer || (keptNow?.second ?: "") != pl.linkUsername || (keptNow?.third ?: "") != pl.linkPassword
+        if (!loginChanged && hasVodEntries == pl.vodInPlaylist) return@withContext
+        prefs.updatePlaylists { list ->
+            list.map {
+                if (it.id != pl.id) it
+                else {
+                    // Movies and series found for the first time: switched on, like a new Xtream
+                    // login (playlists saved before On Demand existed had them off, which meant
+                    // nothing for an M3U playlist until now).
+                    val hadVod = it.vodInPlaylist || it.linkServer.isNotBlank() || it.loginInLink() != null
+                    val hasVod = hasVodEntries || keptNow != null || it.loginInLink() != null
+                    it.copy(
+                        linkServer = keptNow?.first ?: "", linkUsername = keptNow?.second ?: "", linkPassword = keptNow?.third ?: "",
+                        vodInPlaylist = hasVodEntries,
+                        importVod = if (!hadVod && hasVod) true else it.importVod
+                    )
+                }
+            }
+        }
+        if (loginChanged) LIVE_REPORT.add(
+            if (keptNow == null) "Playlist \"${pl.name}\": no Xtream login in its links any more"
+            else "Playlist \"${pl.name}\": Xtream login found in its links and accepted"
+        )
+        if (hasVodEntries != pl.vodInPlaylist) LIVE_REPORT.add(
+            "Playlist \"${pl.name}\": " + if (hasVodEntries) "lists movies or episodes, added to On Demand" else "no longer lists movies or episodes"
+        )
     }
 
     /**
-     * The Xtream login in a playlist's channel links: the first ".../live/user/pass/123.ts"
-     * (or /movie/, /series/, or the short ".../user/pass/123") link. Reads only until it finds one.
+     * Reads a playlist's links for two things: the Xtream login in its channel links (the first
+     * ".../live/user/pass/123.ts", /movie/, /series/ or short ".../user/pass/123" link) and
+     * whether it lists movies or episodes. Stops as soon as it has both.
      */
-    private fun loginFromChannelLinks(file: File): Triple<String, String, String>? = runCatching {
+    private fun scanPlaylistLinks(file: File): Pair<Triple<String, String, String>?, Boolean>? = runCatching {
+        var login: Triple<String, String, String>? = null
+        var vod = false
         openMaybeGzip(file).reader(Charsets.UTF_8).buffered(64 * 1024).useLines { lines ->
             for (raw in lines) {
                 val line = raw.trim()
                 if (line.isEmpty() || line[0] == '#') continue
-                val m = XTREAM_CHANNEL_LINK.matchEntire(line) ?: continue
-                fun dec(v: String) = runCatching { java.net.URLDecoder.decode(v.replace("+", "%2B"), "UTF-8") }.getOrDefault(v)
-                val server = PlaylistSource.cleanXtreamServer(m.groupValues[1])
-                val user = dec(m.groupValues[2])
-                val pass = dec(m.groupValues[3])
-                if (server.isNotBlank() && user.isNotBlank() && pass.isNotBlank()) return@useLines Triple(server, user, pass)
+                val link = line.substringBefore('|')
+                if (!vod && isVodEntry(link)) vod = true
+                if (login == null) XTREAM_CHANNEL_LINK.matchEntire(link)?.let { m ->
+                    fun dec(v: String) = runCatching { java.net.URLDecoder.decode(v.replace("+", "%2B"), "UTF-8") }.getOrDefault(v)
+                    val server = PlaylistSource.cleanXtreamServer(m.groupValues[1])
+                    val user = dec(m.groupValues[2])
+                    val pass = dec(m.groupValues[3])
+                    if (server.isNotBlank() && user.isNotBlank() && pass.isNotBlank()) login = Triple(server, user, pass)
+                }
+                if (vod && login != null) break
             }
-            null
         }
+        login to vod
     }.getOrNull()
 
     private fun getText(url: String, userAgent: String): String {
