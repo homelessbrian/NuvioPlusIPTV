@@ -540,7 +540,7 @@ class LiveTvDriveSync @Inject constructor(
         val base = read(baseRaw)
         val local = read(localRaw)
         val remote = read(remoteRaw)
-        val result = org.json.JSONArray()
+        val merged = LinkedHashMap<String, JSONObject>()
         // The other TV's order, with its additions and edits.
         for ((id, r) in remote) {
             val l = local[id]
@@ -550,22 +550,33 @@ class LiveTvDriveSync @Inject constructor(
                 l == null && id in removedHere -> continue
                 // Missing here but never removed here (this TV didn't get it yet, or lost it):
                 // kept. Only a removal someone actually made takes a source off the other TVs.
-                l == null -> result.put(r)
-                b == null -> result.put(r) // On both TVs but new to the last sync: the other TV's.
+                l == null -> merged[id] = r
+                b == null -> merged[id] = r // On both TVs but new to the last sync: the other TV's.
                 else -> {
-                    val merged = JSONObject(r.toString())
+                    val m = JSONObject(r.toString())
                     l.keys().forEach { f ->
-                        if (l.opt(f)?.toString() != b.opt(f)?.toString()) merged.put(f, l.get(f))
+                        if (l.opt(f)?.toString() != b.opt(f)?.toString()) m.put(f, l.get(f))
                     }
-                    result.put(merged)
+                    merged[id] = m
                 }
             }
         }
         // Added on this TV since the last sync.
         for ((id, l) in local) {
-            if (id !in remote && id !in base) result.put(l)
+            if (id !in remote && id !in base) merged[id] = l
         }
-        return result.toString()
+        // Moved on this TV since the last sync: that order is kept (it used to be dropped, so a
+        // reorder came back undone and was never saved). Sources only the other TV has follow after.
+        val baseOrder = base.keys.filter { it in local }
+        val localOrder = local.keys.filter { it in base }
+        val out = org.json.JSONArray()
+        if (baseOrder != localOrder) {
+            local.keys.forEach { id -> merged.remove(id)?.let { out.put(it) } }
+            merged.values.forEach { out.put(it) }
+        } else {
+            merged.values.forEach { out.put(it) }
+        }
+        return out.toString()
     }
 
     private fun readSources(raw: String?): LinkedHashMap<String, JSONObject> {
