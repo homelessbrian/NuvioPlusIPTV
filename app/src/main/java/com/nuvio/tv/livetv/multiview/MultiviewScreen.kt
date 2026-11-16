@@ -57,6 +57,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -340,41 +341,91 @@ fun MultiviewScreen(
     LaunchedEffect(editorOpen, layoutOpen, state.layout) {
         if (!editorOpen && !layoutOpen) paneFocus[state.focusedPane].requestFocus()
     }
+    // One pane grown to fill the screen. The others keep playing (silently) underneath, so going
+    // back to all panes is instant. Never saved: it is a temporary zoom, not a layout.
+    var zoomedPane by remember { mutableStateOf<Int?>(null) }
+    val fullPane = zoomedPane?.takeIf { it < state.layout.paneCount }
+    fun paneHasVideo(id: Int) = state.panes.getOrNull(id)?.let { it.channelKey != null || it.error != null } == true
     fun applyLayout(layout: MultiviewLayout) {
+        zoomedPane = null
         session.setLayout(layout)
         MultiviewLayoutMemory.save(context.applicationContext, layout)
         editedPane = editedPane.coerceIn(0, layout.paneCount - 1)
     }
-    // The control bar fades away when nothing is moving, and comes back when the highlight moves.
+    // The top bar, the pane names and the pane edges all show and fade together: one timer, restarted
+    // by the remote. Back hides them at once (overlaysDismissed) instead of waiting for the timer.
     var barTick by remember { mutableIntStateOf(0) }
     var barFocused by remember { mutableStateOf(false) }
-    var barShown by remember { mutableStateOf(true) }
-    LaunchedEffect(barTick, barFocused, editorOpen, layoutOpen) {
-        barShown = true
-        if (!barFocused && !editorOpen && !layoutOpen) {
-            delay(5_000L)
-            barShown = false
-        }
-    }
-    // Pane labels follow remote activity independently of control-button focus.
-    var channelLabelsShown by remember { mutableStateOf(true) }
-    LaunchedEffect(barTick, editorOpen, layoutOpen) {
-        channelLabelsShown = true
-        if (!editorOpen && !layoutOpen) {
-            delay(5_000L)
-            channelLabelsShown = false
+    var overlaysShown by remember { mutableStateOf(true) }
+    var overlaysDismissed by remember { mutableStateOf(false) }
+    val overlaysStay = multiviewOverlaysStay(barFocused, pickerOpen = editorOpen || layoutOpen)
+    LaunchedEffect(barTick, overlaysStay, overlaysDismissed) {
+        if (overlaysDismissed && !overlaysStay) {
+            overlaysShown = false
+        } else {
+            overlaysShown = true
+            if (!overlaysStay) {
+                delay(MULTIVIEW_OVERLAY_MS)
+                overlaysShown = false
+            }
         }
     }
     LaunchedEffect(state.focusedPane) { barTick++ }
+    // An arrow that only brought the overlays back: its repeats and release are swallowed too.
+    var wakeKey by remember { mutableStateOf<Key?>(null) }
+    fun showFullScreen(pane: Int?) {
+        zoomedPane = pane
+        overlaysDismissed = false
+        barTick++
+        (pane ?: state.focusedPane).let { paneFocus[it.coerceIn(0, state.layout.paneCount - 1)].requestFocus() }
+    }
     LaunchedEffect(editorOpen) { if (!editorOpen) returnGame = null }
-    val barAlpha by animateFloatAsState(if (barShown) 1f else 0f, tween(450), label = "multiviewBar")
+    // The pane that has just become full screen can only take the highlight once the screen has updated.
+    LaunchedEffect(fullPane) { if (!editorOpen && !layoutOpen) fullPane?.let { paneFocus[it].requestFocus() } }
+    fun paneClick(paneId: Int) {
+        // A failed game stream tries the game's next stream; otherwise OK opens the picker.
+        // OK on the same video is also an explicit retry after audio-focus loss.
+        val failed = state.panes.getOrNull(paneId)?.error != null
+        if (!(failed && tryAnotherStream(paneId))) {
+            session.focusPane(paneId)
+            editedPane = paneId
+            editorOpen = true
+        }
+    }
+    val barAlpha by animateFloatAsState(if (overlaysShown) 1f else 0f, tween(450), label = "multiviewBar")
     BackHandler {
-        if (editorOpen) editorOpen = false else if (startOnSports && returnToSingle) single() else onBack()
+        when (multiviewBackAction(editorOpen, overlaysShown, fullScreen = fullPane != null)) {
+            MultiviewBack.CLOSE_PICKER -> editorOpen = false
+            MultiviewBack.ALL_PANES -> showFullScreen(null)
+            MultiviewBack.HIDE_OVERLAYS -> {
+                // Leave the bar first, so the highlight is never on a button that has faded away.
+                if (barFocused) paneFocus[state.focusedPane].requestFocus()
+                overlaysDismissed = true
+            }
+            MultiviewBack.LEAVE -> if (startOnSports && returnToSingle) single() else onBack()
+        }
     }
 
     Box(
         Modifier.fillMaxSize().background(NuvioTheme.colors.Background).multiviewBackdrop().onPreviewKeyEvent { event ->
-            if (event.type == KeyEventType.KeyDown) barTick++
+            val arrow = event.key == Key.DirectionLeft || event.key == Key.DirectionRight ||
+                event.key == Key.DirectionUp || event.key == Key.DirectionDown
+            // With the overlays hidden, the first arrow only brings them back: it must not also move
+            // the highlight (and the sound) to another pane.
+            // In full screen Left/Right flip to the next pane straight away: there is no highlight to lose.
+            val flips = fullPane != null && (event.key == Key.DirectionLeft || event.key == Key.DirectionRight)
+            val wakeOnly = arrow && !flips && event.type == KeyEventType.KeyDown && !overlaysShown
+            if (wakeOnly) wakeKey = event.key
+            // Back is left out: it hides the overlays or leaves, and must not bring them back first.
+            if (event.type == KeyEventType.KeyDown && event.key != Key.Back) {
+                overlaysDismissed = false
+                barTick++
+            }
+            if (event.key == wakeKey) {
+                val swallow = wakeOnly || event.type == KeyEventType.KeyUp || event.nativeKeyEvent.repeatCount > 0
+                if (event.type == KeyEventType.KeyUp) wakeKey = null
+                if (swallow) return@onPreviewKeyEvent true
+            }
             if (event.key == Key.Menu) {
                 if (event.type == KeyEventType.KeyDown) {
                     editedPane = state.focusedPane
@@ -384,20 +435,32 @@ fun MultiviewScreen(
             } else false
         }
     ) {
-        BoxWithConstraints(Modifier.fillMaxSize().padding(6.dp)) {
+        BoxWithConstraints(Modifier.fillMaxSize().padding(if (fullPane != null) 0.dp else 6.dp)) {
             val availableWidth = maxWidth
             val availableHeight = maxHeight
             val bounds = multiviewPaneBounds(state.layout)
             state.panes.forEach { pane ->
                 key(pane.id) {
-                    val rect = bounds.first { it.id == pane.id }
+                    val isFull = fullPane == pane.id
+                    val rect = if (isFull) MultiviewPaneBounds(pane.id, 0f, 0f, 1f, 1f) else bounds.first { it.id == pane.id }
+                    // Hold OK: full screen (and back). A short OK still does what it always did.
+                    var okDown by remember { mutableStateOf(false) }
+                    var okHeld by remember { mutableStateOf(false) }
                     val logo = remember(validChannels, pane.channelKey) {
                         pane.channelKey?.let { k -> validChannels.firstOrNull { it.key == k }?.logo }
                     }
                     val nextUp = if (pane.error != null) nextStreams(pane.id)?.second else null
                     MultiviewPane(
                         pane = pane,
-                        showChannelLabel = channelLabelsShown,
+                        overlaysShown = overlaysShown,
+                        fullScreen = isFull,
+                        // Two protected pictures cannot be stacked reliably, so the covered one is put away.
+                        hideVideo = fullPane != null && !isFull && state.panes.getOrNull(fullPane)?.isProtected == true,
+                        hint = when {
+                            isFull -> "Back: all panes"
+                            pane.channelKey != null || pane.error != null -> "Hold OK: full screen"
+                            else -> null
+                        },
                         audible = pane.id == state.focusedPane && state.hasAudioFocus,
                         logo = logo,
                         show = pane.channelKey?.let { paneShows[it] },
@@ -413,11 +476,43 @@ fun MultiviewScreen(
                         emptyHint = if (sportsMode) "OK to pick a game" else "OK to pick a channel",
                         modifier = Modifier.offset(availableWidth * rect.left, availableHeight * rect.top)
                             .width(availableWidth * (rect.right - rect.left))
-                            .height(availableHeight * (rect.bottom - rect.top)).padding(4.dp)
+                            .height(availableHeight * (rect.bottom - rect.top)).padding(if (isFull) 0.dp else 4.dp)
+                            .zIndex(if (isFull) 1f else 0f)
                             .focusRequester(paneFocus[pane.id])
-                            .focusProperties { canFocus = !editorOpen && !layoutOpen }
+                            .focusProperties { canFocus = !editorOpen && !layoutOpen && (fullPane == null || isFull) }
                             .onFocusChanged { if (it.isFocused && !editorOpen && !layoutOpen) session.focusPane(pane.id) }
                             .onPreviewKeyEvent { event ->
+                                if (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter) {
+                                    val native = event.nativeKeyEvent
+                                    if (event.type == KeyEventType.KeyDown) {
+                                        if (native.repeatCount == 0) { okDown = true; okHeld = false }
+                                        else if (okDown && !okHeld && (isFull || paneHasVideo(pane.id))) {
+                                            okHeld = true
+                                            showFullScreen(if (isFull) null else pane.id)
+                                        }
+                                        return@onPreviewKeyEvent true
+                                    }
+                                    if (event.type == KeyEventType.KeyUp) {
+                                        val click = okDown && !okHeld
+                                        okDown = false
+                                        okHeld = false
+                                        if (click) paneClick(pane.id)
+                                        return@onPreviewKeyEvent true
+                                    }
+                                }
+                                if (isFull && event.key in setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown)) {
+                                    if (event.type == KeyEventType.KeyDown) when (event.key) {
+                                        Key.DirectionUp -> editFocus.requestFocus()
+                                        Key.DirectionDown -> { editedPane = pane.id; editorOpen = true }
+                                        else -> {
+                                            val next = multiviewNextFullPane(
+                                                state.panes.filter { it.channelKey != null || it.error != null }.map { it.id },
+                                                pane.id, forward = event.key == Key.DirectionRight)
+                                            if (next != pane.id) showFullScreen(next)
+                                        }
+                                    }
+                                    return@onPreviewKeyEvent true
+                                }
                                 val direction = when (event.key) {
                                     Key.DirectionLeft -> MultiviewDirection.LEFT
                                     Key.DirectionRight -> MultiviewDirection.RIGHT
@@ -437,15 +532,7 @@ fun MultiviewScreen(
                                     true
                                 }
                             },
-                        onClick = {
-                            // A failed game stream tries the game's next stream; otherwise OK opens the picker.
-                            // OK on the same video is also an explicit retry after audio-focus loss.
-                            if (!(pane.error != null && tryAnotherStream(pane.id))) {
-                                session.focusPane(pane.id)
-                                editedPane = pane.id
-                                editorOpen = true
-                            }
-                        }
+                        onClick = { paneClick(pane.id) }
                     )
                 }
             }
@@ -474,6 +561,10 @@ fun MultiviewScreen(
             MultiviewChip("Streams", Modifier.focusRequester(editFocus)) {
                 editedPane = state.focusedPane
                 editorOpen = true
+            }
+            MultiviewChip(if (fullPane != null) "All panes" else "Full screen",
+                enabled = fullPane != null || paneHasVideo(state.focusedPane)) {
+                showFullScreen(if (fullPane != null) null else state.focusedPane)
             }
             MultiviewChip("Exit", onClick = onBack)
             MultiviewBarDivider()

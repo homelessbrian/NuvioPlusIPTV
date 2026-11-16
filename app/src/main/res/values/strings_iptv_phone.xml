@@ -8,6 +8,7 @@
     <string name="iptv_phone_what_to_add">What to add</string>
     <string name="iptv_phone_m3u_tab">M3U link</string>
     <string name="iptv_phone_xtream_tab" translatable="false">Xtream</string>
+    <string name="iptv_phone_stalker_tab" translatable="false">Stalker</string>
     <string name="iptv_phone_epg_tab">EPG only</string>
     <string name="iptv_phone_name_label">Name (optional)</string>
     <string name="iptv_phone_provider_placeholder">My provider</string>

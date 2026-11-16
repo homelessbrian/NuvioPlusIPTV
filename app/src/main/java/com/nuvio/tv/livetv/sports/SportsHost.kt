@@ -58,15 +58,16 @@ interface SportsEntryPoint {
 
 /** Opens Live TV full screen on whatever it's now playing (or about to replay). */
 fun openLiveTvFullscreen(navController: NavController) {
-    // Said before the guide comes up, so a guide with its preview window off doesn't stop the
-    // game on its way to full screen.
+    // The shared video view starts full screen on its first frame. Going through the player
+    // alias as well would open this destination twice and briefly expose the guide.
     com.nuvio.tv.livetv.ui.LiveTvFullscreen.request()
     navController.navigate(Screen.LiveTv.route) {
         popUpTo(navController.graph.startDestinationId) { saveState = true }
         launchSingleTop = true
-        restoreState = true
+        // A saved Live TV stack may end in Multiview; start only the single-player destination.
+        // Sports is still saved above and restored by the return callback.
+        restoreState = false
     }
-    navController.navigate(Screen.LiveTvPlayer.route) { launchSingleTop = true }
 }
 
 /**

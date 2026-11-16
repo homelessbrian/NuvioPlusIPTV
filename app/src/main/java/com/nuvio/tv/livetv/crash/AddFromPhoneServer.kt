@@ -12,7 +12,7 @@ import java.net.URLDecoder
 
 /**
  * "Add from your phone": a small page on the home network for adding an M3U playlist, an Xtream
- * login or a TV guide (EPG) from a phone instead of typing with the remote. Like
+ * login, a Stalker portal or a TV guide (EPG) from a phone instead of typing with the remote. Like
  * [PhoneInputServer]: only runs while the screen that asked for it is open, nothing leaves the
  * home network, and the address has a random code in it so only someone who sees the TV can use it.
  */
@@ -33,6 +33,7 @@ object AddFromPhoneServer {
         val whatToAdd: String,
         val m3uTab: String,
         val xtreamTab: String,
+        val stalkerTab: String,
         val epgTab: String,
         val nameLabel: String,
         val providerPlaceholder: String,
@@ -66,7 +67,21 @@ object AddFromPhoneServer {
         val credentialsMissing: String,
         val inclusionMissing: String,
         val epgMissing: String,
-        val kindMissing: String
+        val kindMissing: String,
+        val portalLabel: String,
+        val macLabel: String,
+        val usernameOptional: String,
+        val passwordOptional: String,
+        val advanced: String,
+        val advancedNote: String,
+        val serialLabel: String,
+        val deviceIdLabel: String,
+        val deviceId2Label: String,
+        val signatureLabel: String,
+        val timezoneLabel: String,
+        val languageLabel: String,
+        val portalInvalid: String,
+        val macInvalid: String
     ) {
         companion object {
             fun from(resources: Resources, tvName: String): Texts {
@@ -84,6 +99,7 @@ object AddFromPhoneServer {
                     whatToAdd = resources.getString(R.string.iptv_phone_what_to_add),
                     m3uTab = resources.getString(R.string.iptv_phone_m3u_tab),
                     xtreamTab = resources.getString(R.string.iptv_phone_xtream_tab),
+                    stalkerTab = resources.getString(R.string.iptv_phone_stalker_tab),
                     epgTab = resources.getString(R.string.iptv_phone_epg_tab),
                     nameLabel = resources.getString(R.string.iptv_phone_name_label),
                     providerPlaceholder = resources.getString(R.string.iptv_phone_provider_placeholder),
@@ -117,13 +133,30 @@ object AddFromPhoneServer {
                     credentialsMissing = resources.getString(R.string.iptv_phone_credentials_missing),
                     inclusionMissing = resources.getString(R.string.iptv_phone_inclusion_missing),
                     epgMissing = resources.getString(R.string.iptv_phone_epg_missing),
-                    kindMissing = resources.getString(R.string.iptv_phone_kind_missing)
+                    kindMissing = resources.getString(R.string.iptv_phone_kind_missing),
+                    portalLabel = resources.getString(R.string.iptv_settings_portal_url),
+                    macLabel = resources.getString(R.string.iptv_settings_provider_issued_mac_address),
+                    usernameOptional = resources.getString(R.string.iptv_settings_username_optional),
+                    passwordOptional = resources.getString(R.string.iptv_settings_password_optional),
+                    advanced = resources.getString(R.string.iptv_settings_advanced_provider_settings),
+                    advancedNote = resources.getString(R.string.iptv_settings_only_enter_values_supplied_by_your_provider),
+                    serialLabel = resources.getString(R.string.iptv_settings_serial_number_optional),
+                    deviceIdLabel = resources.getString(R.string.iptv_settings_device_id_optional),
+                    deviceId2Label = resources.getString(R.string.iptv_settings_device_id_2_optional),
+                    signatureLabel = resources.getString(R.string.iptv_settings_signature_optional),
+                    timezoneLabel = resources.getString(R.string.iptv_settings_provider_time_zone),
+                    languageLabel = resources.getString(R.string.iptv_settings_language),
+                    portalInvalid = resources.getString(R.string.iptv_settings_enter_the_full_http_or_https_portal_url),
+                    macInvalid = resources.getString(R.string.iptv_settings_enter_the_mac_address_supplied_by_your_provider)
                 )
             }
         }
     }
 
-    /** What the phone sent. [kind] is "m3u", "xtream" or "epg". */
+    /**
+     * What the phone sent. [kind] is "m3u", "xtream", "stalker" or "epg". [epgUrl]: the guide link
+     * typed in with a playlist, login or portal ("" = none). [stalker]: the portal ("stalker" only).
+     */
     data class Entry(
         val kind: String,
         val name: String,
@@ -134,7 +167,8 @@ object AddFromPhoneServer {
         val username: String,
         val password: String,
         val includeLive: Boolean,
-        val includeVod: Boolean
+        val includeVod: Boolean,
+        val stalker: com.nuvio.stalker.StalkerConfig? = null
     )
 
     class Handle(val url: String, private val socket: ServerSocket) {
@@ -285,11 +319,12 @@ object AddFromPhoneServer {
             server = server, username = user, password = pass,
             includeLive = f["live"] != "0", includeVod = f["vod"] != "0"
         )
+        val guideBad = epg.isNotEmpty() && !isWeb(epg)
         return when (kind) {
             "m3u" -> when {
                 url.isEmpty() -> null to texts.playlistMissing
                 !isWeb(url) -> null to texts.playlistScheme
-                epg.isNotEmpty() && !isWeb(epg) -> null to texts.epgScheme
+                guideBad -> null to texts.epgScheme
                 else -> entry to null
             }
             "xtream" -> when {
@@ -297,7 +332,25 @@ object AddFromPhoneServer {
                 !isWeb(server) && !server.contains('.') && !server.contains(':') -> null to texts.serverInvalid
                 (user.isEmpty() || pass.isEmpty()) && !server.contains("username=", true) -> null to texts.credentialsMissing
                 !entry.includeLive && !entry.includeVod -> null to texts.inclusionMissing
+                guideBad -> null to texts.epgScheme
                 else -> entry to null
+            }
+            // The same checks as the TV's own Stalker form.
+            "stalker" -> {
+                val portal = f["portal"].orEmpty()
+                val mac = f["mac"].orEmpty()
+                val address = runCatching { java.net.URI(portal) }.getOrNull()
+                when {
+                    address?.scheme?.lowercase() !in listOf("http", "https") || address?.host.isNullOrBlank() || address?.rawUserInfo != null -> null to texts.portalInvalid
+                    !Regex("^[0-9a-fA-F]{2}([:-][0-9a-fA-F]{2}){5}$").matches(mac) -> null to texts.macInvalid
+                    !entry.includeLive && !entry.includeVod -> null to texts.inclusionMissing
+                    guideBad -> null to texts.epgScheme
+                    else -> entry.copy(stalker = com.nuvio.stalker.StalkerConfig(
+                        portal, mac, f["suser"].orEmpty(), f["spass"].orEmpty(), f["serial"].orEmpty(),
+                        f["devid"].orEmpty(), f["devid2"].orEmpty(), f["sig"].orEmpty(),
+                        f["tz"].orEmpty().ifBlank { "UTC" }, f["lang"].orEmpty().ifBlank { "en" }
+                    )) to null
+                }
             }
             "epg" -> when {
                 url.isEmpty() -> null to texts.epgMissing
@@ -352,8 +405,8 @@ main{max-width:480px;margin:0 auto;padding:28px 20px 32px;display:flex;flex-dire
 .dot{width:8px;height:8px;border-radius:50%;background:#3DDC97}
 h1{margin:0 0 4px;font-size:24px}
 .sub{margin:0;font-size:14px;color:#A9A9B5;line-height:1.45}
-.tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;background:#17171D;border-radius:12px;padding:4px}
-.tabs button{height:44px;border:0;border-radius:9px;background:transparent;color:#A9A9B5;font-size:14px;font-weight:500;font-family:inherit}
+.tabs{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;background:#17171D;border-radius:12px;padding:4px}
+.tabs button{height:44px;border:0;border-radius:9px;background:transparent;color:#A9A9B5;font-size:13px;padding:0 4px;font-weight:500;font-family:inherit}
 .tabs button[aria-pressed=true]{background:#2A2A35;color:#fff;font-weight:600}
 form{display:flex;flex-direction:column;gap:16px}
 .field{display:flex;flex-direction:column;gap:6px}
@@ -363,6 +416,9 @@ input[type=text],input[type=url],input[type=password]{height:48px;background:#17
 input:focus{outline:none;border-color:var(--accent)}
 .check{display:flex;align-items:center;gap:10px;font-size:15px;color:#C9C9D3;min-height:44px}
 .check input{width:22px;height:22px;accent-color:var(--accent)}
+summary{font-size:14px;font-weight:600;color:#C9C9D3;min-height:44px;display:flex;align-items:center;cursor:pointer}
+details .hint{margin:0 0 12px;font-size:12px;color:#8E8E9B}
+details .field{margin-bottom:16px}
 .send{height:52px;border:0;border-radius:12px;background:var(--accent);color:#0B0B10;font-size:16px;font-weight:700;font-family:inherit;margin-top:4px}
 .send:disabled{opacity:.6}
 #msg{min-height:20px;font-size:15px;text-align:center;line-height:1.4}
@@ -378,18 +434,31 @@ input:focus{outline:none;border-color:var(--accent)}
 <div class="tabs" role="group" aria-label="${esc(texts.whatToAdd)}">
 <button type="button" data-kind="m3u" aria-pressed="true">${esc(texts.m3uTab)}</button>
 <button type="button" data-kind="xtream" aria-pressed="false">${esc(texts.xtreamTab)}</button>
+<button type="button" data-kind="stalker" aria-pressed="false">${esc(texts.stalkerTab)}</button>
 <button type="button" data-kind="epg" aria-pressed="false">${esc(texts.epgTab)}</button>
 </div>
 <form id="f" autocomplete="off">
 <div class="field"><label for="name">${esc(texts.nameLabel)}</label><input id="name" name="name" type="text" dir="auto" placeholder="${esc(texts.providerPlaceholder)}"></div>
 <div class="field" data-for="m3u"><label for="url">${esc(texts.playlistLabel)}</label><input id="url" name="url" type="url" dir="ltr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(texts.playlistPlaceholder)}"></div>
-<div class="field" data-for="m3u"><label for="epg">${esc(texts.epgOptionalLabel)}</label><input id="epg" name="epg" type="url" dir="ltr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(texts.epgPlaceholder)}"></div>
 <div class="field" data-for="m3u"><label for="ua">${esc(texts.userAgentLabel)}</label><input id="ua" name="ua" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(texts.userAgentPlaceholder)}"></div>
 <div class="field" data-for="xtream" hidden><label for="server">${esc(texts.serverLabel)}</label><input id="server" name="server" type="url" dir="ltr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(texts.serverPlaceholder)}"></div>
 <div class="field" data-for="xtream" hidden><label for="user">${esc(texts.usernameLabel)}</label><input id="user" name="user" type="text" dir="auto" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
 <div class="field" data-for="xtream" hidden><label for="pass">${esc(texts.passwordLabel)}</label><input id="pass" name="pass" type="password" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
-<label class="check" data-for="xtream" hidden><input id="live" type="checkbox" checked>${esc(texts.includeLive)}</label>
-<label class="check" data-for="xtream" hidden><input id="vod" type="checkbox" checked>${esc(texts.includeVod)}</label>
+<div class="field" data-for="stalker" hidden><label for="portal">${esc(texts.portalLabel)}</label><input id="portal" type="url" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://…/stalker_portal/c/" inputmode="url"></div>
+<div class="field" data-for="stalker" hidden><label for="mac">${esc(texts.macLabel)}</label><input id="mac" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="00:00:00:00:00:00"></div>
+<div class="field" data-for="stalker" hidden><label for="suser">${esc(texts.usernameOptional)}</label><input id="suser" type="text" dir="auto" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+<div class="field" data-for="stalker" hidden><label for="spass">${esc(texts.passwordOptional)}</label><input id="spass" type="password" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+<details data-for="stalker" hidden><summary>${esc(texts.advanced)}</summary><p class="hint">${esc(texts.advancedNote)}</p>
+<div class="field"><label for="serial">${esc(texts.serialLabel)}</label><input id="serial" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+<div class="field"><label for="devid">${esc(texts.deviceIdLabel)}</label><input id="devid" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+<div class="field"><label for="devid2">${esc(texts.deviceId2Label)}</label><input id="devid2" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+<div class="field"><label for="sig">${esc(texts.signatureLabel)}</label><input id="sig" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+<div class="field"><label for="tz">${esc(texts.timezoneLabel)}</label><input id="tz" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="UTC"></div>
+<div class="field"><label for="lang">${esc(texts.languageLabel)}</label><input id="lang" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="en"></div>
+</details>
+<label class="check" data-for="xtream stalker" hidden><input id="live" type="checkbox" checked>${esc(texts.includeLive)}</label>
+<label class="check" data-for="xtream stalker" hidden><input id="vod" type="checkbox" checked>${esc(texts.includeVod)}</label>
+<div class="field" data-for="m3u xtream stalker"><label for="epg">${esc(texts.epgOptionalLabel)}</label><input id="epg" name="epg" type="url" dir="ltr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(texts.epgPlaceholder)}"></div>
 <div class="field" data-for="epg" hidden><label for="eurl">${esc(texts.epgLabel)}</label><input id="eurl" type="url" dir="ltr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(texts.epgPlaceholder)}"></div>
 <button class="send" type="submit" id="send">${esc(texts.send)}</button>
 <div id="msg" role="status"></div>
@@ -401,7 +470,7 @@ var labels={provider:${quote(texts.providerPlaceholder)},guide:${quote(texts.gui
 var kind='m3u';
 var tabs=document.querySelectorAll('.tabs button');
 function show(k){kind=k;tabs.forEach(function(b){b.setAttribute('aria-pressed',b.dataset.kind===k)});
-document.querySelectorAll('[data-for]').forEach(function(e){e.hidden=e.dataset.for!==k});
+document.querySelectorAll('[data-for]').forEach(function(e){e.hidden=e.dataset.for.split(' ').indexOf(k)<0});
 document.getElementById('name').placeholder=k==='epg'?labels.guide:labels.provider;msg('', '')}
 tabs.forEach(function(b){b.onclick=function(){show(b.dataset.kind)}});
 function msg(t,c){var m=document.getElementById('msg');m.textContent=t;m.className=c}
@@ -410,7 +479,9 @@ document.getElementById('f').onsubmit=function(e){e.preventDefault();
 var p=new URLSearchParams();p.set('kind',kind);p.set('name',v('name'));
 if(kind==='m3u'){p.set('url',v('url'));p.set('epg',v('epg'));p.set('ua',v('ua'))}
 else if(kind==='xtream'){p.set('server',v('server'));p.set('user',v('user'));p.set('pass',document.getElementById('pass').value);
-p.set('live',document.getElementById('live').checked?'1':'0');p.set('vod',document.getElementById('vod').checked?'1':'0')}
+p.set('live',document.getElementById('live').checked?'1':'0');p.set('vod',document.getElementById('vod').checked?'1':'0');p.set('epg',v('epg'))}
+else if(kind==='stalker'){['portal','mac','suser','serial','devid','devid2','sig','tz','lang'].forEach(function(id){p.set(id,v(id))});p.set('spass',document.getElementById('spass').value);
+p.set('live',document.getElementById('live').checked?'1':'0');p.set('vod',document.getElementById('vod').checked?'1':'0');p.set('epg',v('epg'))}
 else{p.set('url',v('eurl'))}
 var b=document.getElementById('send');b.disabled=true;msg(labels.sending,'');
 fetch(location.pathname.replace(/\/$/,'')+'/add',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})

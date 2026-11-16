@@ -33,6 +33,9 @@ internal object SportsEventCodec {
                 e.standings.forEach { s -> put(JSONObject().put("p", s.pos).put("n", s.name).apply { s.detail?.let { put("d", it) } }) }
             })
             e.about?.let { o.put("ab", it) }
+            if (e.sessions.isNotEmpty()) o.put("ss", JSONArray().apply {
+                e.sessions.forEach { s -> put(JSONObject().put("n", s.label).put("t", s.startMs).put("m", s.minutes).apply { if (s.race) put("r", true) }) }
+            })
             arr.put(o)
         }
         return arr.toString()
@@ -71,7 +74,13 @@ internal object SportsEventCodec {
                         Standing(s.optString("p"), s.optString("n"), str(s, "d"))
                     }
                 }.orEmpty(),
-                about = str(o, "ab")
+                about = str(o, "ab"),
+                sessions = o.optJSONArray("ss")?.let { ss ->
+                    (0 until ss.length()).mapNotNull { j ->
+                        val s = ss.optJSONObject(j) ?: return@mapNotNull null
+                        EventSession(s.optString("n"), s.optLong("t"), s.optInt("m", 60), s.optBoolean("r", false))
+                    }
+                }.orEmpty()
             )
         }
         out

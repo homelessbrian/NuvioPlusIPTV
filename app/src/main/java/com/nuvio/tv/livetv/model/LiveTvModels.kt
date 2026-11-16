@@ -68,15 +68,71 @@ data class PlaylistSource(
      * providers whose archive runs on a different clock than their guide.
      */
     val catchupShiftMinutes: Int = 0,
+    /**
+     * Guides switched off for this playlist in its Guides settings: an added guide's id, or
+     * [builtInGuideKey] for another playlist's built-in guide. Everything not listed is on, so
+     * new guides (and playlists saved before this existed) use every guide, like before.
+     */
+    val guidesOff: Set<String> = emptySet(),
     /** Explicit type survives a malformed portal configuration without treating it as M3U. */
     val sourceType: String = "",
-    val stalkerConfig: StalkerConfig? = null
+    val stalkerConfig: StalkerConfig? = null,
+    /**
+     * M3U links: the Xtream login found in the playlist's own channel links
+     * (".../live/user/pass/123.ts"), checked with the provider. For short links that don't show
+     * the login themselves. Blank when none was found.
+     */
+    val linkServer: String = "",
+    val linkUsername: String = "",
+    val linkPassword: String = "",
+    /** M3U links: the playlist also lists movies or episodes (found when it's read). */
+    val vodInPlaylist: Boolean = false
 ) {
     /** The user agent requests for this playlist go out with ("" = the app default). */
     val effectiveUserAgent: String get() = userAgent.ifBlank { fallbackUserAgent }
     val isStalker: Boolean get() = sourceType == "stalker" || stalkerConfig != null
     val isXtream: Boolean get() = !isStalker && xtreamServer.isNotBlank()
     val hasCatalog: Boolean get() = isXtream || isStalker
+
+    /**
+     * An M3U playlist that is really an Xtream login: the server, username and password, from
+     * the link itself (".../get.php?username=a&password=b") or else from its channel links
+     * ([linkServer]). Null for anything else.
+     */
+    val m3uLogin: Triple<String, String, String>? get() {
+        if (isStalker || isXtream) return null
+        return loginInLink() ?: linkServer.takeIf { it.isNotBlank() && linkUsername.isNotBlank() }
+            ?.let { Triple(it, linkUsername, linkPassword) }
+    }
+
+    /** The login in the playlist link itself (".../get.php?username=a&password=b"), if any. */
+    fun loginInLink(): Triple<String, String, String>? {
+        val link = tidyLink(url)
+        val path = link.substringBefore('?').trimEnd('/')
+        if (!path.endsWith("get.php", ignoreCase = true)) return null
+        val login = credentialsFromLink(link) ?: return null
+        val server = cleanXtreamServer(link)
+        return if (server.isNotBlank()) Triple(server, login.first, login.second) else null
+    }
+
+    /**
+     * Movies and series can be imported: an Xtream login, a Stalker portal, an M3U link with a
+     * login in it, or an M3U playlist that lists movies or episodes itself.
+     */
+    val hasVod: Boolean get() = hasCatalog || m3uLogin != null || vodInPlaylist
+
+    /**
+     * This source set up so the Xtream helpers (movies and series, their links) work: an M3U
+     * link with a login in it gets that login filled in. Live channels still come from the
+     * M3U link; this copy is never saved.
+     */
+    fun withVodLogin(): PlaylistSource {
+        val login = m3uLogin ?: return this
+        return copy(
+            xtreamServer = login.first, xtreamUsername = login.second, xtreamPassword = login.third,
+            userAgent = effectiveUserAgent
+        )
+    }
 
     /** The time zone catch-up links are written in: the one picked in settings, else the server's. */
     val catchupZone: String get() = catchupTimezone.ifBlank { serverTimezone }
@@ -113,6 +169,9 @@ data class PlaylistSource(
     private fun enc(s: String) = java.net.URLEncoder.encode(s.trim(), "UTF-8")
 
     companion object {
+        /** How another playlist's built-in guide is named in [guidesOff]. */
+        fun builtInGuideKey(playlistId: String) = "playlist:$playlistId"
+
         /**
          * A typed or pasted link made safe: dashes that only look like "-" (the longer dashes a
          * phone keyboard or a chat app swaps in, the non-breaking hyphen) become a real hyphen,
@@ -652,7 +711,9 @@ data class EpgSourceChannels(
     val label: String,
     val channels: List<EpgChannelEntry>,
     /** Guide channel ids already feeding a playlist channel (matched or assigned). */
-    val usedIds: Set<String> = emptySet()
+    val usedIds: Set<String> = emptySet(),
+    /** The playlists this guide is switched on for (null = every playlist). */
+    val playlistIds: Set<String>? = null
 )
 
 data class EpgChannelEntry(
@@ -884,7 +945,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-14 23:35"
+    const val KIT_STAMP = "2026-11-16 16:40"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

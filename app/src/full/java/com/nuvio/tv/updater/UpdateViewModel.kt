@@ -9,12 +9,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
+import com.nuvio.tv.livetv.data.BackgroundWork
 import com.nuvio.tv.updater.model.AppUpdate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -86,6 +89,7 @@ class UpdateViewModel @Inject constructor(
 
         updateCheckJob?.cancel()
         updateCheckJob = viewModelScope.launch {
+            if (!force) BackgroundWork.awaitOnDemandIdle()
             val channel = _uiState.value.updateChannel
             _uiState.update {
                 it.copy(
@@ -99,6 +103,7 @@ class UpdateViewModel @Inject constructor(
 
             val dismissedTag = updatePreferences.ignoredTag.first()
             val result = updateRepository.getLatestUpdate(channel)
+            currentCoroutineContext().ensureActive()
             updatePreferences.setLastCheckAtMs(System.currentTimeMillis())
 
             result
@@ -110,7 +115,7 @@ class UpdateViewModel @Inject constructor(
                         if (installed.tag == update.tag) update else installed
                     }
                     if (remoteNewer && downloadedFile == null && update.tag != dismissedTag && !BuildConfig.IS_DEBUG_BUILD) {
-                        UpdateJobService.scheduleCheckNow(context)
+                        UpdateJobService.scheduleCheckNow(context, manual = force)
                     }
                     val shouldShow = UpdateBannerPolicy.shouldShow(
                         isRemoteNewer = remoteNewer,

@@ -112,14 +112,16 @@ object SportsLaunch {
     /** A replay from the start, for Live TV to start when it opens. */
     data class Catchup(val channelKey: String, val program: com.nuvio.tv.livetv.model.EpgProgram)
 
+    /** A network channel can return to Sports without having an associated game. */
+    private data class SportsReturn(val eventId: String?)
     /** Live TV was opened from the Sports page (Back goes back there), and on which game. */
-    @Volatile private var returnTo: String? = null
+    @Volatile private var returnTo: SportsReturn? = null
     @Volatile private var focusEvent: String? = null
     @Volatile private var returnSetAt = 0L
-    fun openedFromSports(eventId: String) { returnTo = eventId; focusEvent = eventId; returnSetAt = System.currentTimeMillis() }
+    fun openedFromSports(eventId: String? = null) { returnTo = SportsReturn(eventId); focusEvent = eventId; returnSetAt = System.currentTimeMillis() }
     fun takeReturnToSports(): Boolean = (returnTo != null).also { returnTo = null }
     val isWatchingFromSports: Boolean get() = returnTo != null
-    val watchingEventId: String? get() = returnTo
+    val watchingEventId: String? get() = returnTo?.eventId
     fun clearReturn() { returnTo = null; focusEvent = null }
     /** Live TV closed some other way: Back there no longer goes to Sports. */
     fun dropReturn() {
@@ -291,10 +293,16 @@ fun SportsScreen(
     var backStartedHere by remember { mutableStateOf(false) }
     fun backToFullscreen() {
         val key = playingKey ?: return
-        events.firstOrNull { ev -> matches[ev.id]?.any { it.channel.key == key } == true }?.let { SportsLaunch.openedFromSports(it.id) }
+        SportsLaunch.openedFromSports(events.firstOrNull { ev -> matches[ev.id]?.any { it.channel.key == key } == true }?.id)
         onOpenLive()
     }
     com.nuvio.tv.livetv.ui.FrameMeter("Sports")
+    // A finished game's replays are looked for as soon as its card is highlighted.
+    DisposableEffect(viewModel) {
+        val warm: (SportsEvent) -> Unit = { viewModel.repo.warmGame(it) }
+        GameFocus.onGame = warm
+        onDispose { if (GameFocus.onGame === warm) GameFocus.onGame = null }
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -424,7 +432,7 @@ fun SportsScreen(
                 onQuickWatch = ::quickWatch,
                 onPick = { picker = true },
                 onOpenMultiview = { onOpenMultiview(playingKey) },
-                onWatchChannel = { ch -> viewModel.watchChannel(ch); onOpenLive() }
+                onWatchChannel = { ch -> SportsLaunch.openedFromSports(); viewModel.watchChannel(ch); onOpenLive() }
             )
         }
         // The picture, on top of the page where its slot is (one view for every page, so it
@@ -1342,6 +1350,9 @@ private fun GamePage(
     val vodLooked = viewModel.repo.vodMatches.collectAsStateWithLifecycle().value[ev.id]
     val replays = vodLooked.orEmpty()
     val vodAddons = viewModel.repo.vodAddons.collectAsStateWithLifecycle().value[ev.id]
+    val suggestNuvioSports by viewModel.repo.suggestNuvioSports.collectAsStateWithLifecycle()
+    val nuvioSportsTip = if (suggestNuvioSports)
+        " Tip: ${SportsAddonSource.NUVIO_SPORTS_NAME} (${SportsAddonSource.NUVIO_SPORTS_SITE}) has replays of most games: add it in Add-ons." else ""
     // A finished game: once replays turn up, put the highlight on the first one (once per visit).
     val firstReplay = remember(ev.id) { FocusRequester() }
     var replayFocused by remember(ev.id) { mutableStateOf(false) }
@@ -1431,14 +1442,14 @@ private fun GamePage(
                 modifier = Modifier.padding(start = 6.dp, bottom = 4.dp))
             vodAddons != null && vodAddons.isEmpty() -> LiveText(
                 "Replays and highlights come from sports add-ons that offer them (HighFly Premium, StremVerse…). " +
-                    "None of your add-ons do yet: install one in Add-ons and they'll show here.",
-                color = SportsLook.Dim, size = 12.sp, maxLines = 3, modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
+                    "None of your add-ons do yet: install one in Add-ons and they'll show here." + nuvioSportsTip,
+                color = SportsLook.Dim, size = 12.sp, maxLines = 4, modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
             )
             else -> LiveText(
                 (vodAddons?.takeIf { it.isNotEmpty() }?.let { "No replay of this game in ${it.joinToString(", ")} yet. " }
                     ?: "No replay of this game in your sports add-ons yet. ") +
-                    "They're often added a few hours after the game ends.",
-                color = SportsLook.Dim, size = 12.sp, maxLines = 3, modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
+                    "They're often added a few hours after the game ends." + nuvioSportsTip,
+                color = SportsLook.Dim, size = 12.sp, maxLines = 4, modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
             )
         }
         Spacer(Modifier.height(6.dp))

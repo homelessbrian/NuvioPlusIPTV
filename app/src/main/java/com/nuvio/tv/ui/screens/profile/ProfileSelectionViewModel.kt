@@ -51,10 +51,15 @@ class ProfileSelectionViewModel @Inject constructor(
     private val profileBackgroundRepository: ProfileBackgroundRepository,
     memberAccessRepository: MemberAccessRepository,
     private val profileLockStateDataStore: ProfileLockStateDataStore,
-    private val themeDataStore: com.nuvio.tv.data.local.ThemeDataStore
+    private val themeDataStore: com.nuvio.tv.data.local.ThemeDataStore,
+    private val liveTvPreferences: com.nuvio.tv.livetv.data.LiveTvPreferences
 ) : ViewModel() {
     val activeProfileId: StateFlow<Int> = profileManager.activeProfileId
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
+
+    /** Groups of profiles kept matched (Live TV fork). */
+    val profileMatchGroups: StateFlow<List<Set<Int>>> = liveTvPreferences.profileMatchGroups
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
 
     val canAddProfile: Boolean
         get() = profileManager.canCreateProfile
@@ -188,6 +193,7 @@ class ProfileSelectionViewModel @Inject constructor(
         avatarId: String? = null,
         copyFromProfileId: Int? = null,
         copyProviderCredentials: Boolean = false,
+        keepMatched: Boolean = false,
         onComplete: (CreateProfileResult) -> Unit = {}
     ) {
         if (_isCreating.value) return
@@ -201,6 +207,9 @@ class ProfileSelectionViewModel @Inject constructor(
                 )
                 if (profile != null) {
                     profileSyncService.pushToRemote()
+                    copyFromProfileId?.let { sourceProfileId ->
+                        copyLiveTvChoices(sourceProfileId, profile.id, keepMatched)
+                    }
                     val copyResult = copyFromProfileId?.let { sourceProfileId ->
                         profileSettingsSyncService.copyProfileSetup(
                             sourceProfileId = sourceProfileId,
@@ -229,12 +238,15 @@ class ProfileSelectionViewModel @Inject constructor(
         sourceProfileId: Int,
         targetProfileId: Int,
         copyProviderCredentials: Boolean,
+        copyLiveTv: Boolean = true,
+        keepMatched: Boolean = false,
         onComplete: (Result<Unit>) -> Unit
     ) {
         if (_isCopyingSettings.value) return
         viewModelScope.launch {
             _isCopyingSettings.value = true
             val result = try {
+                if (copyLiveTv || keepMatched) copyLiveTvChoices(sourceProfileId, targetProfileId, keepMatched)
                 profileSettingsSyncService.copyProfileSetup(
                     sourceProfileId = sourceProfileId,
                     targetProfileId = targetProfileId,
@@ -244,6 +256,21 @@ class ProfileSelectionViewModel @Inject constructor(
                 _isCopyingSettings.value = false
             }
             onComplete(result)
+        }
+    }
+
+    /** Live TV's own per-profile choices are kept on this TV (and in Live TV's cloud copy). */
+    private suspend fun copyLiveTvChoices(sourceProfileId: Int, targetProfileId: Int, keepMatched: Boolean = false) {
+        try {
+            if (keepMatched) {
+                liveTvPreferences.matchProfiles(sourceProfileId, targetProfileId)
+            } else {
+                liveTvPreferences.copyProfileChoices(sourceProfileId, targetProfileId)
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.e("ProfileSelectionVM", "Failed to copy Live TV choices", error)
         }
     }
 
@@ -258,8 +285,17 @@ class ProfileSelectionViewModel @Inject constructor(
         }
     }
 
+    /** The profile stops matching; it keeps a copy of the current settings. */
+    fun stopMatching(id: Int) {
+        viewModelScope.launch {
+            runCatching { liveTvPreferences.stopMatching(id, keepCopy = true) }
+                .onFailure { Log.e("ProfileSelectionVM", "Failed to stop matching", it) }
+        }
+    }
+
     fun deleteProfile(id: Int) {
         viewModelScope.launch {
+            runCatching { liveTvPreferences.stopMatching(id, keepCopy = false) }
             profileManager.deleteProfile(id)
             profileSyncService.deleteProfileData(id)
             profileSyncService.pushToRemote()

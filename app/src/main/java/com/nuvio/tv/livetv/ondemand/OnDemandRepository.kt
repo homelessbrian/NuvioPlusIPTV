@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -125,9 +126,32 @@ class OnDemandRepository @Inject constructor(
         .callTimeout(40, TimeUnit.MINUTES)
         .build()
 
+    /**
+     * One title's details (a movie's file info, a series' episode list): small answers, so a
+     * provider that stalls is given up on in seconds instead of minutes (the catalog limits above
+     * left a stream list waiting up to two minutes per title).
+     */
+    private val infoHttp = http.newBuilder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(30, TimeUnit.SECONDS)
+        .build()
+
     private val _hasContent = MutableStateFlow(false)
     /** True when at least one provider's movies or series are imported (shows the menu item). */
     val hasContent: StateFlow<Boolean> = _hasContent.asStateFlow()
+
+    /**
+     * Whether any movies or series are imported, looked up right now when the start-up check
+     * hasn't run yet (it waits behind guide and playlist updates, and a stream list asked for
+     * before then used to show none of your provider's copies).
+     */
+    suspend fun contentReady(): Boolean {
+        if (_hasContent.value) return true
+        val has = withContext(Dispatchers.IO) { runCatching { db.hasAny() }.getOrDefault(false) }
+        if (has) _hasContent.value = true
+        return has
+    }
 
     private val _version = MutableStateFlow(0)
     /** Goes up after every import, so screens reload. */
@@ -186,7 +210,7 @@ class OnDemandRepository @Inject constructor(
             // Learn each provider's title tags (for catalogs imported before this existed).
             runCatching {
                 db.loadPrefixes()
-                prefs.playlists.first().filter { it.hasCatalog && it.importVod }.forEach { pl ->
+                prefs.playlists.first().filter { it.hasVod && it.importVod }.forEach { pl ->
                     if (!db.hasLearnedPrefixes(pl.id)) db.learnPrefixes(pl.id)
                 }
                 _version.value++
@@ -198,7 +222,7 @@ class OnDemandRepository @Inject constructor(
         // import it straight away. One that's gone is dropped the same way.
         scope.launch {
             prefs.playlists
-                .map { list -> list.filter { it.enabled && it.hasCatalog && it.importVod }.map { it.id to if (it.isStalker) it.stalkerConfig else null }.toSet() }
+                .map { list -> list.filter { it.enabled && it.hasVod && it.importVod }.map { it.id to if (it.isStalker) it.stalkerConfig else null }.toSet() }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect { refreshSoon() }
@@ -224,7 +248,7 @@ class OnDemandRepository @Inject constructor(
      * With [onlyId], only that provider is imported (the others are kept as they are).
      */
     suspend fun refresh(force: Boolean, onlyId: String? = null) = mutex.withLock {
-        val playlists = prefs.playlists.first().filter { it.enabled && it.hasCatalog && it.importVod }
+        val playlists = prefs.playlists.first().filter { it.enabled && it.hasVod && it.importVod }
         if (force) infoCache.clear()
         val keep = playlists.map { it.id }.toSet()
         val dropped = runCatching { db.removeExcept(keep) }.getOrDefault(emptySet())
@@ -334,11 +358,170 @@ class OnDemandRepository @Inject constructor(
 
     private suspend fun importKind(pl: PlaylistSource, kind: VodKind) {
         val t0 = System.currentTimeMillis()
-        try { if (pl.isStalker) importStalkerKind(pl, kind) else importKindInner(pl, kind) } finally {
+        try {
+            when {
+                pl.isStalker -> importStalkerKind(pl, kind)
+                pl.hasCatalog -> importKindInner(pl, kind)
+                else -> importM3uSource(pl, kind)
+            }
+        } finally {
             com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
                 "On Demand \"${pl.name}\": ${if (kind == VodKind.MOVIE) "movies" else "series"} imported in ${(System.currentTimeMillis() - t0) / 1000} s"
             )
         }
+    }
+
+    /**
+     * An M3U playlist's movies or series. With a login the provider accepts, they come from the
+     * provider like an Xtream login's (fuller details); otherwise, or when that doesn't work,
+     * from the playlist's own movie and episode entries.
+     */
+    private suspend fun importM3uSource(pl: PlaylistSource, kind: VodKind) {
+        if (pl.m3uLogin != null) {
+            val fromProvider = runCatching { importKindInner(pl.withVodLogin(), kind) }
+            val got = runCatching { db.count(pl.id, kind) }.getOrDefault(0)
+            if (fromProvider.isSuccess && got > 0) {
+                if (kind == VodKind.SERIES) runCatching { db.clearM3uEpisodes(pl.id) }
+                return
+            }
+            if (!pl.vodInPlaylist) fromProvider.getOrThrow()
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
+                "On Demand \"${pl.name}\": the provider gave no ${if (kind == VodKind.MOVIE) "movies" else "series"}" +
+                    (fromProvider.exceptionOrNull()?.let { " (${it.message ?: it.javaClass.simpleName})" } ?: "") +
+                    "; reading them from the playlist"
+            )
+        }
+        importFromPlaylist(pl, kind)
+    }
+
+    /** A movie or episode entry in an M3U playlist. */
+    private class M3uVodEntry(val name: String, val logo: String?, val group: String, val url: String)
+
+    /** The playlist as saved by Live TV (zipped or not). */
+    private fun playlistFile(pl: PlaylistSource) = java.io.File(java.io.File(context.filesDir, "livetv/playlists"), "${pl.id}.m3u")
+
+    /** The playlist's movie and episode entries, read one at a time (never all in memory). */
+    private fun m3uVodEntries(file: java.io.File): Sequence<M3uVodEntry> = sequence {
+        val raw = java.io.BufferedInputStream(file.inputStream(), 64 * 1024)
+        raw.mark(2)
+        val zipped = raw.read() == 0x1f && raw.read() == 0x8b
+        raw.reset()
+        val input = if (zipped) java.util.zip.GZIPInputStream(raw, 64 * 1024) else raw
+        input.reader(Charsets.UTF_8).buffered(64 * 1024).use { reader ->
+            var info: String? = null
+            var extGroup: String? = null
+            while (true) {
+                val line = reader.readLine()?.trim()?.removePrefix("\uFEFF") ?: break
+                when {
+                    line.isEmpty() -> {}
+                    line.startsWith("#EXTINF", ignoreCase = true) -> { info = line; extGroup = null }
+                    line.startsWith("#EXTGRP:", ignoreCase = true) -> extGroup = line.substringAfter(':').trim().ifEmpty { null }
+                    line.startsWith("#") -> {}
+                    else -> {
+                        val url = line.substringBefore('|')
+                        val inf = info
+                        info = null
+                        if (inf != null && com.nuvio.tv.livetv.data.LiveTvRepository.isVodEntry(url)) {
+                            val attrs = com.nuvio.tv.livetv.data.M3uParser.attributes(inf)
+                            val name = com.nuvio.tv.livetv.data.M3uParser.displayName(inf).ifBlank { attrs["tvg-name"].orEmpty() }.trim()
+                            if (name.isNotEmpty()) yield(
+                                M3uVodEntry(
+                                    name = name,
+                                    logo = attrs["tvg-logo"]?.trim()?.takeIf { it.startsWith("http", ignoreCase = true) },
+                                    group = (attrs["group-title"] ?: extGroup)?.trim()?.ifEmpty { null } ?: "Uncategorized",
+                                    url = url
+                                )
+                            )
+                        }
+                        extGroup = null
+                    }
+                }
+            }
+        }
+    }
+
+    /** An episode entry: its show, season and episode ("Show S01E02", "Show 1x02", or a /series/ link). */
+    private class EpisodeName(val show: String, val season: Int, val episode: Int?)
+
+    private fun episodeName(e: M3uVodEntry): EpisodeName? {
+        // Xtream-style links say which it is: /movie/ is always a movie (even with "S01E01" in
+        // its name); "1x02" only counts on a /series/ link ("10x10" is a film's name).
+        if (MOVIE_LINK.containsMatchIn(e.url)) return null
+        val seriesLink = SERIES_LINK.containsMatchIn(e.url)
+        val m = EPISODE_TAG.find(e.name) ?: if (seriesLink) EPISODE_X_TAG.find(e.name) else null
+        if (m != null) {
+            val show = e.name.substring(0, m.range.first).trim().trimEnd('-', '|', ':', '.', '_', '(', '[').trim()
+            return EpisodeName(show.ifEmpty { e.name }, m.groupValues[1].toIntOrNull() ?: 1, m.groupValues[2].toIntOrNull())
+        }
+        if (seriesLink) return EpisodeName(e.name, 1, null)
+        return null
+    }
+
+    /**
+     * Movies or series from the playlist's own entries: categories from their groups, posters
+     * from their logos, and episodes grouped into series and seasons by their names.
+     */
+    private fun importFromPlaylist(pl: PlaylistSource, kind: VodKind) {
+        val file = playlistFile(pl)
+        if (!file.exists()) error("the playlist hasn't been downloaded yet")
+        val what = if (kind == VodKind.MOVIE) "movies" else "series"
+        _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies else R.string.iptv_status_importing_series, pl.name), silent = quietImport)
+        var n = 0
+        fun progress() {
+            if (++n % 500 == 0) _status.value = OnDemandStatus(true, text(if (kind == VodKind.MOVIE) R.string.iptv_status_importing_movies_count else R.string.iptv_status_importing_series_count, pl.name, n), silent = quietImport)
+        }
+        if (kind == VodKind.MOVIE) {
+            // Categories first (the database writes them before the titles), then the titles.
+            val categories = LinkedHashSet<String>()
+            m3uVodEntries(file).forEach { if (episodeName(it) == null) categories += it.group }
+            val saved = db.replace(pl.id, kind, categories.map { it to it }, m3uVodEntries(file).filter { episodeName(it) == null }.map { e ->
+                progress()
+                VodItem(
+                    pl.id, kind, M3U_ID + e.url, e.name, e.logo, e.group,
+                    M3U_EXT.find(e.url)?.groupValues?.get(1)?.lowercase(), null,
+                    OnDemandDatabase.releaseYearInName(e.name), null, 0L
+                )
+            })
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add("On Demand \"${pl.name}\": ${"%,d".format(saved)} $what from the playlist, ${categories.size} categories")
+            return
+        }
+        // Series: the episodes are written while reading; each show is kept once (its first
+        // poster), then the shows are saved.
+        val shows = LinkedHashMap<String, VodItem>()
+        val categories = LinkedHashSet<String>()
+        val nextEpisode = HashMap<String, Int>()
+        val episodes = db.replaceM3uEpisodes(pl.id, m3uVodEntries(file).mapNotNull { e ->
+            val ep = episodeName(e) ?: return@mapNotNull null
+            val key = OnDemandDatabase.normalize(ep.show).ifEmpty { ep.show.lowercase() } + "|" + e.group
+            val id = M3U_ID + key
+            if (id !in shows) {
+                progress()
+                categories += e.group
+                shows[id] = VodItem(pl.id, kind, id, ep.show, e.logo, e.group, null, null, OnDemandDatabase.releaseYearInName(ep.show), null, 0L)
+            }
+            val seasonKey = "$id#${ep.season}"
+            val number = ep.episode ?: ((nextEpisode[seasonKey] ?: 0) + 1)
+            nextEpisode[seasonKey] = maxOf(nextEpisode[seasonKey] ?: 0, number)
+            M3uEpisodeRow(id, ep.season, number, e.name, e.url, e.logo)
+        })
+        val saved = db.replace(pl.id, kind, categories.map { it to it }, shows.values.asSequence())
+        com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
+            "On Demand \"${pl.name}\": ${"%,d".format(saved)} $what (${"%,d".format(episodes)} episodes) from the playlist, ${categories.size} categories"
+        )
+    }
+
+    /** A title read from an M3U playlist's own entries: its details are all in the playlist. */
+    private fun m3uInfo(item: VodItem, pl: PlaylistSource): VodInfo {
+        if (item.kind == VodKind.MOVIE) return VodInfo(plot = null, cover = item.icon, backdrop = null, genre = null, releaseDate = item.year?.toString(), durationText = null)
+        val episodes = runCatching { db.m3uEpisodes(pl.id, item.id) }.getOrDefault(emptyList()).map { r ->
+            VodEpisode(
+                season = r.season, episode = r.episode,
+                id = STREAM_ID.find(r.url)?.groupValues?.get(1) ?: r.url.hashCode().toUInt().toString(),
+                ext = M3U_EXT.find(r.url)?.groupValues?.get(1)?.lowercase() ?: "mp4",
+                title = r.title, plot = null, image = r.image, url = r.url, playlistId = pl.id
+            )
+        }
+        return VodInfo(plot = null, cover = item.icon, backdrop = null, genre = null, releaseDate = item.year?.toString(), durationText = null, episodes = episodes)
     }
 
     private suspend fun ensureCurrentStalker(source: PlaylistSource) {
@@ -612,7 +795,7 @@ class OnDemandRepository @Inject constructor(
         }
     }
 
-    private suspend fun playlist(id: String): PlaylistSource? = prefs.playlists.first().firstOrNull { it.id == id }
+    private suspend fun playlist(id: String): PlaylistSource? = prefs.playlists.first().firstOrNull { it.id == id }?.withVodLogin()
 
     /**
      * Adult titles (by their own name or their category's name). These only ever play straight
@@ -638,6 +821,7 @@ class OnDemandRepository @Inject constructor(
     suspend fun movieUrl(item: VodItem): String? {
         val pl = playlist(item.playlistId) ?: return null
         if (pl.isStalker) return item.stalkerRef?.let { com.nuvio.stalker.StalkerPlaybackLocator(pl.id, it).encode() }
+        if (item.id.startsWith(M3U_ID)) return item.id.removePrefix(M3U_ID)
         return "${pl.xtreamBase()}/movie/${enc(pl.xtreamUsername)}/${enc(pl.xtreamPassword)}/${item.id}.${item.ext ?: "mp4"}"
     }
 
@@ -678,9 +862,10 @@ class OnDemandRepository @Inject constructor(
         val cacheKey = if (pl.isStalker) "${item.uid}:${com.nuvio.tv.livetv.stalker.StalkerGateway.identity(pl)}" else item.uid
         infoCache[cacheKey]?.let { return@withContext it }
         if (pl.isStalker) return@withContext stalkerInfo(item, pl).also { ensureCurrentStalker(pl); infoCache[cacheKey] = it }
+        if (item.id.startsWith(M3U_ID)) return@withContext m3uInfo(item, pl).also { infoCache[cacheKey] = it }
         val api = pl.xtreamApiUrl()
         val action = if (item.kind == VodKind.MOVIE) "get_vod_info&vod_id=${item.id}" else "get_series_info&series_id=${item.id}"
-        val json = runCatching { JSONObject(getText("$api&action=$action", pl.userAgent)) }.getOrNull() ?: return@withContext null
+        val json = runCatching { JSONObject(getText("$api&action=$action", pl.userAgent, infoHttp)) }.getOrNull() ?: return@withContext null
         val info = json.optJSONObject("info") ?: JSONObject()
         val episodes = ArrayList<VodEpisode>()
         json.optJSONObject("episodes")?.let { byseason ->
@@ -779,7 +964,7 @@ class OnDemandRepository @Inject constructor(
             "series", "tv" -> VodKind.SERIES
             else -> return@withContext emptyList()
         }
-        if (!_hasContent.value) return@withContext emptyList()
+        if (!contentReady()) return@withContext emptyList()
         val candidates = LinkedHashMap<String, VodItem>()
         tmdbId?.let { id -> runCatching { db.byTmdb(kind, id) }.getOrDefault(emptyList()).forEach { candidates[it.uid] = it } }
         if (title.isNotBlank()) {
@@ -814,36 +999,53 @@ class OnDemandRepository @Inject constructor(
             val name = runCatching { db.categoryName(item.playlistId, item.kind, item.categoryId) }.getOrNull().orEmpty()
             !com.nuvio.tv.livetv.parental.ParentalControls.isLocked("vod:$uid", name, settings, user.lockedGroups)
         }
-        val out = ArrayList<OnDemandSource>()
         // Best copies first: by the quality in the name here (so a 4K copy isn't cut by the limit),
         // then by what the provider reports about each file below.
-        for (item in allowed.sortedByDescending { qualityRank(qualityOf(it.name).orEmpty()) }.take(6)) {
-            val pl = playlist(item.playlistId) ?: continue
-            val headers = if (pl.userAgent.isNotBlank()) mapOf("User-Agent" to pl.userAgent) else emptyMap()
-            if (kind == VodKind.MOVIE) {
-                val url = movieUrl(item) ?: continue
-                val tech = runCatching { info(item)?.tech }.getOrNull()
-                out += OnDemandSource(
-                    "${pl.name} · ${(item.ext ?: "mp4").uppercase()}", url, headers,
-                    title = item.name, year = item.year, providerName = pl.name, ext = item.ext ?: "mp4", tech = tech
-                )
-            } else if (season != null && episode != null) {
-                val episodes = info(item)?.episodes.orEmpty()
-                // Exact season and episode; if the provider lists the show as a single season
-                // (common for daily shows), match the episode number alone.
-                val ep = episodes.firstOrNull { it.season == season && it.episode == episode }
-                    ?: episodes.takeIf { list -> list.map { it.season }.distinct().size == 1 }
-                        ?.firstOrNull { it.episode == episode }
-                    ?: continue
-                out += OnDemandSource(
-                    "${pl.name} · S${season}E${episode} · ${ep.ext.uppercase()}", episodeUrl(ep) ?: continue, headers,
-                    title = item.name, year = item.year, providerName = pl.name, ext = ep.ext, tech = ep.tech,
-                    episodeTag = "S%02dE%02d".format(season, episode)
-                )
-            }
+        val picked = allowed.sortedByDescending { qualityRank(qualityOf(it.name).orEmpty()) }.take(6)
+        // All copies are asked about at the same time (they used to go one after another, so six
+        // slow answers added up to minutes). A Stalker portal's copies still go one at a time:
+        // a portal works through one session, and parallel requests can upset it.
+        val playlists = picked.map { it.playlistId }.distinct().associateWith { playlist(it) }
+        val out: List<OnDemandSource> = kotlinx.coroutines.coroutineScope {
+            picked.groupBy { it.playlistId }.map { (plId, items) ->
+                async {
+                    val pl = playlists[plId] ?: return@async emptyList<OnDemandSource>()
+                    if (pl.isStalker) items.mapNotNull { sourceOf(it, pl, kind, season, episode) }
+                    else items.map { item -> async { sourceOf(item, pl, kind, season, episode) } }.awaitAll().filterNotNull()
+                }
+            }.awaitAll().flatten()
         }
         // Highest quality first (4K, 1080p, 720p, SD); copies with no hint keep their order, last.
         out.sortedByDescending { sourceRank(it) }
+    }
+
+    /** One provider copy for the stream list, or null when it doesn't have that movie or episode. */
+    private suspend fun sourceOf(item: VodItem, pl: PlaylistSource, kind: VodKind, season: Int?, episode: Int?): OnDemandSource? {
+        val headers = if (pl.effectiveUserAgent.isNotBlank()) mapOf("User-Agent" to pl.effectiveUserAgent) else emptyMap()
+        if (kind == VodKind.MOVIE) {
+            val url = movieUrl(item) ?: return null
+            // The file info (4K, HDR, audio) is only a nice extra: the link never waits long for it.
+            // (asked in the background: a late answer is still kept for next time).
+            val details = scope.async { runCatching { info(item) }.getOrNull() }
+            val tech = kotlinx.coroutines.withTimeoutOrNull(MOVIE_INFO_WAIT_MS) { details.await() }?.tech
+            return OnDemandSource(
+                "${pl.name} · ${(item.ext ?: "mp4").uppercase()}", url, headers,
+                title = item.name, year = item.year, providerName = pl.name, ext = item.ext ?: "mp4", tech = tech
+            )
+        }
+        if (season == null || episode == null) return null
+        val episodes = runCatching { info(item)?.episodes }.getOrNull().orEmpty()
+        // Exact season and episode; if the provider lists the show as a single season
+        // (common for daily shows), match the episode number alone.
+        val ep = episodes.firstOrNull { it.season == season && it.episode == episode }
+            ?: episodes.takeIf { list -> list.map { it.season }.distinct().size == 1 }
+                ?.firstOrNull { it.episode == episode }
+            ?: return null
+        return OnDemandSource(
+            "${pl.name} · S${season}E${episode} · ${ep.ext.uppercase()}", episodeUrl(ep) ?: return null, headers,
+            title = item.name, year = item.year, providerName = pl.name, ext = ep.ext, tech = ep.tech,
+            episodeTag = "S%02dE%02d".format(season, episode)
+        )
     }
 
     /** 4 = 4K … 1 = SD, 0 = unknown: the file's own picture size when known, else its name. */
@@ -857,9 +1059,9 @@ class OnDemandRepository @Inject constructor(
 
     // ------------------------------------------------------------------ helpers
 
-    private fun getText(url: String, userAgent: String): String {
+    private fun getText(url: String, userAgent: String, client: okhttp3.OkHttpClient = http): String {
         val request = Request.Builder().url(url).header("User-Agent", userAgent.ifBlank { LiveTvRepository.DEFAULT_UA }).build()
-        http.newCall(request).execute().use { r ->
+        client.newCall(request).execute().use { r ->
             if (!r.isSuccessful) error("HTTP ${r.code}")
             return r.body?.string() ?: error("Empty response")
         }
@@ -911,6 +1113,16 @@ class OnDemandRepository @Inject constructor(
         s?.let { Regex("""(19|20)\d{2}""").find(it)?.value?.toIntOrNull() }
 
     companion object {
+        /** Titles read from an M3U playlist's own entries: the movie's link, or the show's key, follows. */
+        const val M3U_ID = "m3u:"
+        private val M3U_EXT = Regex("""\.([A-Za-z0-9]{2,4})(?:\?.*)?$""")
+        private val STREAM_ID = Regex("""/(\d+)\.[A-Za-z0-9]+(?:\?.*)?$""")
+        /** "S01E02", "S1 E2", "S01.E02". */
+        private val EPISODE_TAG = Regex("""\bS(\d{1,3})\s*[._-]?\s*E(\d{1,4})\b""", RegexOption.IGNORE_CASE)
+        /** "1x02". */
+        private val EPISODE_X_TAG = Regex("""\b(\d{1,2})x(\d{1,3})\b""", RegexOption.IGNORE_CASE)
+        private val SERIES_LINK = Regex("""/series/""", RegexOption.IGNORE_CASE)
+        private val MOVIE_LINK = Regex("""/movies?/""", RegexOption.IGNORE_CASE)
         private const val TAG = "OnDemand"
         /** Re-import each provider once a day. */
         private const val REFRESH_MS = 24L * 60 * 60 * 1000
@@ -919,3 +1131,5 @@ class OnDemandRepository @Inject constructor(
 
 /** How long On Demand waits after the app starts before its heavier checks. */
 private const val START_DELAY_MS = 20_000L
+/** How long a movie's link waits for its file info (4K, HDR, audio) before showing without it. */
+private const val MOVIE_INFO_WAIT_MS = 4_000L

@@ -20,6 +20,7 @@ interface LiveTvStartupEntryPoint {
     fun epgDatabase(): com.nuvio.tv.livetv.data.EpgDatabase
     fun channelStore(): com.nuvio.tv.livetv.data.LiveTvChannelStore
     fun liveTvRecorder(): com.nuvio.tv.livetv.record.LiveTvRecorder
+    fun profileMatchMirror(): com.nuvio.tv.livetv.profile.ProfileMatchMirror
 }
 
 /**
@@ -36,6 +37,8 @@ object LiveTvPreload {
         val entry = dagger.hilt.android.EntryPointAccessors.fromApplication(
             context.applicationContext, LiveTvStartupEntryPoint::class.java
         )
+        // Matched profiles keep Nuvio's own settings the same (whether or not Live TV is used).
+        runCatching { entry.profileMatchMirror().start() }
         // Reading the saved channel list and guide is quick and only uses storage, so it starts
         // almost straight away, as the app opens. Checking for updates (network, heavy) waits
         // until the app has settled.

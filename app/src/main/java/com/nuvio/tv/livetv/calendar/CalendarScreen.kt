@@ -836,7 +836,7 @@ private fun Hero(
         }
         LiveText(e.title.uppercase(), size = 28.sp, weight = FontWeight.ExtraBold, shadow = true, modifier = Modifier.width(560.dp))
         val line = if (plain) e.note.orEmpty() else when (e.kind) {
-            CalendarKind.GAME -> listOfNotNull(e.league, e.score).joinToString(" · ")
+            CalendarKind.GAME -> listOfNotNull(e.league, e.note, e.score).joinToString(" · ")
             CalendarKind.MOVIE -> e.note ?: if (CalendarTag.AT_HOME in e.tags) "Out to watch at home" else ""
             else -> listOfNotNull(
                 e.episodeCode,
@@ -1068,8 +1068,9 @@ private fun WideCard(
         if (!game) LiveText(
             when (e.kind) {
                 CalendarKind.GAME ->
-                    if (compactCaption) listOfNotNull(e.teams.takeIf { it.size == 2 }?.joinToString(" vs ") { it.abbr ?: it.name }, e.league).joinToString(" · ")
-                    else listOfNotNull(e.league, e.guide?.channelName ?: e.network).joinToString(" · ")
+                    // A race session or a tournament day ("Qualifying", "Day 2 of 4") says which, in place of the league.
+                    if (compactCaption) listOfNotNull(e.teams.takeIf { it.size == 2 }?.joinToString(" vs ") { it.abbr ?: it.name }, e.note ?: e.league).joinToString(" · ")
+                    else listOfNotNull(e.note ?: e.league, e.guide?.channelName ?: e.network).joinToString(" · ")
                 CalendarKind.MOVIE -> e.note ?: "Movie"
                 else -> listOfNotNull(e.episodeCode, seasonDrop(e), if (e.spoiler) null else e.episodeTitle).joinToString(" · ")
             },
@@ -1487,7 +1488,7 @@ private fun MiniCard(
         )
         LiveText(
             when (e.kind) {
-                CalendarKind.GAME -> e.league ?: ""
+                CalendarKind.GAME -> listOfNotNull(e.league, e.note).joinToString(" · ")
                 CalendarKind.MOVIE -> e.note ?: "Movie"
                 else -> listOfNotNull(e.episodeCode, e.guide?.channelName ?: e.network).joinToString(" · ")
             },

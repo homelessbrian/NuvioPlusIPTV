@@ -128,7 +128,12 @@ private fun NavGraphBuilder.forkPageComposable(
     content: @Composable (NavBackStackEntry) -> Unit
 ) {
     composable(route) { backStackEntry ->
-        val inset = com.nuvio.tv.LocalForkPageInset.current
+        val liveTvFullscreen = if (route == Screen.LiveTv.route) {
+            val active by com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.collectAsState()
+            active || com.nuvio.tv.livetv.ui.LiveTvFullscreen.pending
+        } else false
+        // Full screen must fill its first frame, without waiting for the sidebar inset animation.
+        val inset = if (liveTvFullscreen) 0.dp else com.nuvio.tv.LocalForkPageInset.current
         Box(modifier = Modifier.padding(start = inset)) {
             content(backStackEntry)
         }

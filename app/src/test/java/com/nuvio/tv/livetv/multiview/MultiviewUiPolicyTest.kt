@@ -136,4 +136,33 @@ class MultiviewUiPolicyTest {
             assertTrue("Search should stop at the next cancellation check", reads.get() in 301..320)
         }
     }
+
+    @Test
+    fun `overlays stay up on the bar or a picker and Back hides them before leaving`() {
+        assertTrue(multiviewOverlaysStay(barFocused = true, pickerOpen = false))
+        assertTrue(multiviewOverlaysStay(barFocused = false, pickerOpen = true))
+        assertTrue(!multiviewOverlaysStay(barFocused = false, pickerOpen = false))
+        assertEquals(MultiviewBack.CLOSE_PICKER, multiviewBackAction(pickerOpen = true, overlaysShown = true))
+        assertEquals(MultiviewBack.HIDE_OVERLAYS, multiviewBackAction(pickerOpen = false, overlaysShown = true))
+        assertEquals(MultiviewBack.LEAVE, multiviewBackAction(pickerOpen = false, overlaysShown = false))
+    }
+
+    @Test
+    fun `a loading or failed pane keeps its name`() {
+        assertTrue(multiviewPaneKeepsLabel(isBuffering = true, hasError = false))
+        assertTrue(multiviewPaneKeepsLabel(isBuffering = false, hasError = true))
+        assertTrue(!multiviewPaneKeepsLabel(isBuffering = false, hasError = false))
+    }
+
+    @Test
+    fun `Back from a full-screen pane returns to all panes and Left Right go round the filled panes`() {
+        assertEquals(MultiviewBack.CLOSE_PICKER, multiviewBackAction(pickerOpen = true, overlaysShown = true, fullScreen = true))
+        assertEquals(MultiviewBack.ALL_PANES, multiviewBackAction(pickerOpen = false, overlaysShown = true, fullScreen = true))
+        assertEquals(MultiviewBack.ALL_PANES, multiviewBackAction(pickerOpen = false, overlaysShown = false, fullScreen = true))
+        assertEquals(3, multiviewNextFullPane(listOf(0, 1, 3), 1, forward = true))
+        assertEquals(0, multiviewNextFullPane(listOf(0, 1, 3), 3, forward = true))
+        assertEquals(3, multiviewNextFullPane(listOf(0, 1, 3), 0, forward = false))
+        assertEquals(2, multiviewNextFullPane(listOf(2), 2, forward = true))
+        assertEquals(1, multiviewNextFullPane(emptyList(), 1, forward = true))
+    }
 }

@@ -8,6 +8,7 @@ import android.os.StrictMode
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import com.nuvio.tv.core.image.CustomPosterFallbackInterceptor
+import com.nuvio.tv.core.image.PlaybackImageCache
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.gif.GifDecoder
@@ -176,7 +177,7 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 } else {
                     builder.maxSizePercent(context, cachePercent)
                 }
-                builder.build()
+                builder.build().also(PlaybackImageCache::attach)
             }
             .diskCache {
                 DiskCache.Builder()

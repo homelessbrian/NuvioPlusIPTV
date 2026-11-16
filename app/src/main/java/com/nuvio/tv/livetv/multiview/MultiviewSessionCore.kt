@@ -53,6 +53,8 @@ internal class MultiviewSessionCore(
     private val createPlayer: (Int, Int, () -> Unit) -> MultiviewPanePlayer,
     private val onChanged: () -> Unit,
     private val mayPlayChannel: (LiveChannel) -> Boolean = { true },
+    /** A pane that couldn't even be set up: the reason goes to the report instead of being lost. */
+    private val onSetupFailed: (Int, LiveChannel, Exception) -> Unit = { _, _, _ -> },
 ) {
     var layout: MultiviewLayout = initialLayout
         private set
@@ -265,9 +267,10 @@ internal class MultiviewSessionCore(
             player.setPlaying(false)
             player.prepare(channel)
             setupErrors[paneId] = null
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
             releasePane(paneId)
             setupErrors[paneId] = "This TV couldn't start this stream. Try another channel."
+            runCatching { onSetupFailed(paneId, channel, failure) }
         }
     }
 

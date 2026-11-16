@@ -10,7 +10,9 @@ import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.livetv.model.LiveChannel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import java.net.URLEncoder
@@ -40,7 +42,9 @@ class SportsAddonSource @Inject constructor(
         val live: List<ChannelMatch>,
         val vod: List<ChannelMatch>,
         /** Names of your installed addons that offer replays or highlights at all (empty: none do). */
-        val vodAddons: List<String> = emptyList()
+        val vodAddons: List<String> = emptyList(),
+        /** Nuvio Live Sports (replays of most games) isn't installed at all, not even switched off. */
+        val suggestNuvioSports: Boolean = false
     )
 
     /** One game as an addon lists it. */
@@ -52,27 +56,56 @@ class SportsAddonSource @Inject constructor(
         /** [name] and description, as [SportsCatalog.norm] writes them. */
         val text: String,
         val nameNorm: String,
-        val timeMs: Long?
+        val timeMs: Long?,
+        /** [timeMs] is only the day (the addon wrote a date with no time), as noon UTC. */
+        val dayOnly: Boolean = false
     )
 
     private class Cached(val at: Long, val list: List<AddonGame>)
 
     private val cache = ConcurrentHashMap<String, Cached>()
 
-    suspend fun find(ev: SportsEvent): Found = coroutineScope {
-        val installed = runCatching { addons.getInstalledAddons().first().enabledAddons() }.getOrDefault(emptyList())
-        val parts = installed.map { a -> async { runCatching { forAddon(a, ev) }.getOrDefault(NO_RESULT) } }.map { it.await() }
+    /**
+     * Every add-on is asked at the same time. [onPart] gets what's found so far each time one of
+     * them answers with something, so a slow add-on doesn't hold the others back.
+     */
+    suspend fun find(ev: SportsEvent, onPart: ((Found) -> Unit)? = null): Found = coroutineScope {
+        // null: couldn't read your add-ons (then nothing is recommended).
+        val all = runCatching { addons.getInstalledAddons().first() }.getOrNull()
+        val installed = all.orEmpty().enabledAddons()
         val vodAddons = installed.filter { a -> a.catalogs.any { isVodCatalog(it) && usableForVod(it) } }
             .map { it.displayName }.distinct()
-        Found(parts.flatMap { it.live }, parts.flatMap { it.vod }, vodAddons)
+        val suggest = all != null && all.none { isNuvioSports(it.id, it.baseUrl) }
+        val parts = arrayOfNulls<Found>(installed.size)
+        val lock = Any()
+        fun soFar(): Found {
+            val done = parts.filterNotNull()
+            return Found(done.flatMap { it.live }, done.flatMap { it.vod }, vodAddons, suggestNuvioSports = suggest)
+        }
+        installed.mapIndexed { i, a ->
+            async {
+                val f = try {
+                    forAddon(a, ev)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    NO_RESULT
+                }
+                synchronized(lock) {
+                    parts[i] = f
+                    if (onPart != null && (f.live.isNotEmpty() || f.vod.isNotEmpty())) onPart(soFar())
+                }
+            }
+        }.awaitAll()
+        synchronized(lock) { soFar() }
     }
 
     private suspend fun forAddon(a: Addon, ev: SportsEvent): Found {
         val live = a.catalogs.filter { isLiveCatalog(it) }.let { strong ->
             if (strong.isNotEmpty()) strong
             else a.catalogs.filter { it.apiType.equals("sport", true) && !isVodCatalog(it) && !needsGenre(it) }
-        }
-        val vod = a.catalogs.filter { isVodCatalog(it) && usableForVod(it) }
+        }.let { forGame(it, ev, replay = false) }
+        val vod = forGame(a.catalogs.filter { isVodCatalog(it) && usableForVod(it) }, ev, replay = true)
         if (live.isEmpty() && vod.isEmpty()) return NO_RESULT
         return if (ev.state == GameState.POST) {
             Found(emptyList(), vodFor(a, vod, ev))
@@ -83,86 +116,156 @@ class SportsAddonSource @Inject constructor(
 
     // ------------------------------------------------------------------ live
 
-    private suspend fun liveFor(a: Addon, cats: List<CatalogDescriptor>, ev: SportsEvent): List<ChannelMatch> {
-        val hits = LinkedHashMap<String, AddonGame>()
-        for (c in cats.take(MAX_CATALOGS)) {
-            var found = gamesOf(a, c, emptyMap(), LIVE_TTL).filter { gameScore(ev, it, false) > 0 }
-            if (found.isEmpty() && supportsSearch(c)) {
-                for (q in searchWords(ev)) {
-                    found = gamesOf(a, c, mapOf("search" to q), LIVE_TTL).filter { gameScore(ev, it, false) > 0 }
-                    if (found.isNotEmpty()) break
-                }
-            }
-            found.forEach { hits.putIfAbsent(it.id, it) }
-            if (hits.size >= 3) break
+    private suspend fun liveFor(a: Addon, cats: List<CatalogDescriptor>, ev: SportsEvent): List<ChannelMatch> = coroutineScope {
+        val use = cats.take(MAX_CATALOGS)
+        // All of the add-on's lists at once; a search only when none of them has the game.
+        var found = use.map { c -> async { gamesOf(a, c, emptyMap(), LIVE_TTL).filter { gameScore(ev, it, false) > 0 } } }
+            .awaitAll().flatten()
+        if (found.isEmpty()) {
+            found = use.filter { supportsSearch(it) }
+                .map { c -> async { searched(a, c, emptyMap(), ev, false, LIVE_TTL) } }.awaitAll().flatten()
         }
+        val games = found.distinctBy { it.id }.take(3)
+        val streams = games.map { g -> async { g to streamsOf(g) } }.awaitAll()
         val out = ArrayList<ChannelMatch>()
-        for (g in hits.values.take(3)) {
-            val streams = streamsOf(g)
-            streams.forEachIndexed { i, s ->
+        for ((g, list) in streams) {
+            list.forEachIndexed { i, s ->
                 out += ChannelMatch(
                     channel = channelFor(g, s, i, s.label),
                     score = ADDON_SCORE,
                     how = "From ${a.displayName}",
                     program = null,
-                    quality = SportsMatcher.nameQuality(s.label),
+                    quality = SportsMatcher.nameQuality(s.info),
                     catchup = false
                 )
             }
         }
-        return out.take(MAX_STREAMS)
+        out.take(MAX_STREAMS)
+    }
+
+    /** The game looked for by name in one list (both teams' names asked for at once). */
+    private suspend fun searched(
+        a: Addon, c: CatalogDescriptor, extra: Map<String, String>, ev: SportsEvent, replay: Boolean, ttl: Long
+    ): List<AddonGame> = coroutineScope {
+        searchWords(ev).map { q -> async { gamesOf(a, c, extra + ("search" to q), ttl).filter { gameScore(ev, it, replay) > 0 } } }
+            .awaitAll().flatten().distinctBy { it.id }
     }
 
     // ------------------------------------------------------------------ replays and highlights
 
-    private suspend fun vodFor(a: Addon, cats: List<CatalogDescriptor>, ev: SportsEvent): List<ChannelMatch> {
+    /** One replay list, with what it must be asked with (a sport, for lists that need one). */
+    private class VodList(val c: CatalogDescriptor, val extra: Map<String, String>, val kind: VodKind)
+
+    private suspend fun vodFor(a: Addon, cats: List<CatalogDescriptor>, ev: SportsEvent): List<ChannelMatch> = coroutineScope {
         val sport = SportsCatalog.league(ev.leagueId)?.sport ?: Sport.OTHER
-        val hits = LinkedHashMap<String, Pair<AddonGame, String>>()
-        for (c in cats.take(MAX_CATALOGS)) {
+        val ttl = vodTtl(ev)
+        val lists = cats.mapNotNull { c ->
             val extra = LinkedHashMap<String, String>()
             val genre = c.extra.firstOrNull { it.name.equals("genre", true) }
             if (genre != null && genre.isRequired) {
-                extra["genre"] = pickGenre(genre.options.orEmpty(), sport) ?: continue
+                extra["genre"] = pickGenre(genre.options.orEmpty(), sport) ?: return@mapNotNull null
             }
-            val kind = if (isHighlightCatalog(c)) "Highlights" else "Replay"
-            var found = gamesOf(a, c, extra, VOD_TTL).filter { gameScore(ev, it, true) > 0 }
-            if (found.isEmpty() && supportsSearch(c)) {
-                for (q in searchWords(ev)) {
-                    found = gamesOf(a, c, extra + ("search" to q), VOD_TTL).filter { gameScore(ev, it, true) > 0 }
-                    if (found.isNotEmpty()) break
-                }
-            }
-            // A recaps list with no search (HighFly's "Sport Recaps"): look further back, page by page,
-            // until the list reaches games from before this one (newest come first).
-            if (found.isEmpty() && !supportsSearch(c)) {
-                var skip = 0
-                var page = gamesOf(a, c, extra, VOD_TTL)
-                repeat(MAX_VOD_PAGES) {
-                    if (found.isNotEmpty() || page.isEmpty() || olderThan(page, ev)) return@repeat
-                    skip += page.size
-                    page = gamesOf(a, c, extra + ("skip" to skip.toString()), VOD_TTL)
-                    found = page.filter { gameScore(ev, it, true) > 0 }
-                }
-            }
-            found.forEach { hits.putIfAbsent(it.id, it to kind) }
-            if (hits.size >= 6) break
+            VodList(c, extra, if (isHighlightCatalog(c)) VodKind.HIGHLIGHTS else VodKind.REPLAY)
         }
+        // Replay lists and highlight lists are looked through side by side.
+        val (highlightLists, replayLists) = lists.partition { it.kind == VodKind.HIGHLIGHTS }
+        val replays = async { lookIn(a, replayLists.take(MAX_CATALOGS), ev, ttl) }
+        val highlights = async { lookIn(a, highlightLists.take(2), ev, ttl) }
+        val hits = (replays.await() + highlights.await()).distinctBy { it.first.id }.take(6)
+        class Vod(val g: AddonGame, val s: AddonStream, val i: Int, val kind: VodKind, val res: Int?, val single: Boolean)
+        val all = ArrayList<Vod>()
+        // Every found game's videos are asked for at once.
+        val fetched = hits.map { (g, listKind) -> async { Triple(g, listKind, streamsOf(g)) } }.awaitAll()
+        for ((g, listKind, streams) in fetched) {
+            streams.forEachIndexed { i, st ->
+                all += Vod(g, st, i, vodKind(st.info, listKind), resolution(st.info), streams.size == 1)
+            }
+        }
+        // Full games first, then condensed, then highlights; best picture first; tiny copies (144p/240p) last.
+        all.sortWith(compareBy<Vod> { if (resRank(it.res) < 0) 1 else 0 }.thenBy { it.kind.ordinal }.thenByDescending { resRank(it.res) })
         val out = ArrayList<ChannelMatch>()
-        for ((g, kind) in hits.values.take(6)) {
-            val streams = streamsOf(g)
-            streams.forEachIndexed { i, s ->
-                val title = if (streams.size > 1) g.name + " · " + s.label else g.name
-                out += ChannelMatch(
-                    channel = channelFor(g, s, i, title),
-                    score = ADDON_SCORE,
-                    how = "$kind · ${a.displayName}",
-                    program = null,
-                    quality = SportsMatcher.nameQuality(s.label),
-                    catchup = false
-                )
+        for (v in all) {
+            val bits = listOfNotNull(v.kind.label, v.res?.let { if (it >= 2160) "4K" else "${it}p" })
+            val title = when {
+                v.single && v.kind == VodKind.REPLAY && v.res == null -> v.g.name
+                else -> v.g.name + " · " + bits.joinToString(" · ")
             }
+            out += ChannelMatch(
+                channel = channelFor(v.g, v.s, v.i, title),
+                score = ADDON_SCORE,
+                how = "${v.kind.label} · ${v.g.addon.displayName}",
+                program = null,
+                quality = SportsMatcher.nameQuality(v.s.info),
+                catchup = false
+            )
         }
-        return out
+        out
+    }
+
+    /**
+     * [ev] in these lists (best-fitting first). The two best are read first, at the same time: the
+     * league's own list and the one for its day nearly always have it, and then nothing else is
+     * asked. Only when they miss are the rest read, and only when those miss too is each list
+     * searched or paged back through.
+     */
+    private suspend fun lookIn(a: Addon, lists: List<VodList>, ev: SportsEvent, ttl: Long): List<Pair<AddonGame, VodKind>> = coroutineScope {
+        if (lists.isEmpty()) return@coroutineScope emptyList()
+        suspend fun read(part: List<VodList>, deep: Boolean): List<Pair<AddonGame, VodKind>> =
+            part.map { l ->
+                async {
+                    val games = if (deep) deepLook(a, l, ev, ttl) else gamesOf(a, l.c, l.extra, ttl).filter { gameScore(ev, it, true) > 0 }
+                    games.map { it to l.kind }
+                }
+            }.awaitAll().flatten()
+        read(lists.take(FIRST_LISTS), false)
+            .ifEmpty { read(lists.drop(FIRST_LISTS), false) }
+            .ifEmpty { read(lists, true) }
+    }
+
+    /** A list whose first page doesn't have the game: search it, or (no search) page back through it. */
+    private suspend fun deepLook(a: Addon, l: VodList, ev: SportsEvent, ttl: Long): List<AddonGame> {
+        if (supportsSearch(l.c)) return searched(a, l.c, l.extra, ev, true, ttl)
+        // A recaps list with no search (HighFly's "Sport Recaps"): look further back, page by page,
+        // until the list reaches games from before this one (newest come first).
+        var found = emptyList<AddonGame>()
+        var skip = 0
+        var page = gamesOf(a, l.c, l.extra, ttl)
+        repeat(MAX_VOD_PAGES) {
+            if (found.isNotEmpty() || page.isEmpty() || olderThan(page, ev)) return@repeat
+            skip += page.size
+            page = gamesOf(a, l.c, l.extra + ("skip" to skip.toString()), ttl)
+            found = page.filter { gameScore(ev, it, true) > 0 }
+        }
+        return found
+    }
+
+    /** How long a replay list is kept: lists for a game from days ago hardly change, so much longer. */
+    private fun vodTtl(ev: SportsEvent): Long =
+        if (ev.hasTime && System.currentTimeMillis() - ev.startMs > 36 * 3_600_000L) VOD_TTL_OLD else VOD_TTL
+
+    /** What a replay stream is, in the order they're listed. */
+    private enum class VodKind(val label: String) { FULL("Full game"), REPLAY("Replay"), CONDENSED("Condensed"), HIGHLIGHTS("Highlights") }
+
+    /** The stream's own words win ("Condensed Game" in a replays list); else the list it came from. */
+    private fun vodKind(info: String, listKind: VodKind): VodKind = when {
+        CONDENSED_WORD.containsMatchIn(info) -> VodKind.CONDENSED
+        HIGHLIGHT_WORD.containsMatchIn(info) && !FULL_GAME_WORD.containsMatchIn(info) -> VodKind.HIGHLIGHTS
+        FULL_GAME_WORD.containsMatchIn(info) && listKind != VodKind.HIGHLIGHTS -> VodKind.FULL
+        else -> listKind
+    }
+
+    /** "Quality: 720p" → 720; "4K"/"UHD" → 2160; none written → null. */
+    private fun resolution(info: String): Int? {
+        RES_P.find(info)?.let { return it.groupValues[1].toIntOrNull() }
+        if (RES_4K.containsMatchIn(info)) return 2160
+        return null
+    }
+
+    /** Sort weight: real sizes by height, unknown/"Auto" like 720p, anything under 360p after everything. */
+    private fun resRank(res: Int?): Int = when {
+        res == null -> 720
+        res < 360 -> -1000 + res
+        else -> res
     }
 
     /** Every dated game on this page is from well before [ev]: older pages won't have it either. */
@@ -170,6 +273,35 @@ class SportsAddonSource @Inject constructor(
         if (!ev.hasTime) return false
         val times = page.mapNotNull { it.timeMs }
         return times.isNotEmpty() && times.all { it < ev.startMs - 2 * 24 * 3_600_000L }
+    }
+
+    // ------------------------------------------------------------------ which lists to read
+
+    /**
+     * An addon's lists in the order worth reading for [ev], without the ones that can't hold it.
+     * Addons that split their lists by sport, league and day (Nuvio Live Sports has ~45 replay
+     * lists) would otherwise only ever be read for their first sport.
+     */
+    private fun forGame(cats: List<CatalogDescriptor>, ev: SportsEvent, replay: Boolean): List<CatalogDescriptor> {
+        if (cats.size <= 1) return cats
+        val league = SportsCatalog.league(ev.leagueId)
+        val sport = league?.sport ?: Sport.OTHER
+        val leagueWords = listOfNotNull(league?.name, league?.short).map { words(it) }.filter { it.isNotBlank() }.distinct()
+        val days = if (replay && ev.hasTime) daysAgo(ev.startMs) else null
+        return cats.mapIndexed { i, c -> Triple(c, catalogRank(c.id, c.name, sport, leagueWords, days), i) }
+            .filter { it.second >= 0 }
+            .sortedWith(compareByDescending<Triple<CatalogDescriptor, Int, Int>> { it.second }.thenBy { it.third })
+            .map { it.first }
+    }
+
+    private fun daysAgo(startMs: Long): Int {
+        fun day(ms: Long): Long {
+            val c = Calendar.getInstance()
+            c.timeInMillis = ms
+            c.set(Calendar.HOUR_OF_DAY, 12); c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
+            return c.timeInMillis / 86_400_000L
+        }
+        return (day(System.currentTimeMillis()) - day(startMs)).toInt().coerceAtLeast(0)
     }
 
     // ------------------------------------------------------------------ talking to the addon
@@ -232,6 +364,8 @@ class SportsAddonSource @Inject constructor(
                 val id = m.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 val name = m.name?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 val extraText = listOfNotNull(m.description, m.releaseInfo, m.released)
+                val fullTime = parseTime(extraText + name)
+                val day = if (fullTime == null) parseDay(extraText + name) else null
                 AddonGame(
                     addon = a,
                     type = m.type?.takeIf { it.isNotBlank() } ?: c.apiType,
@@ -239,7 +373,8 @@ class SportsAddonSource @Inject constructor(
                     name = name,
                     text = SportsCatalog.norm(name + " " + extraText.joinToString(" ")),
                     nameNorm = SportsCatalog.norm(name),
-                    timeMs = parseTime(extraText + name)
+                    timeMs = fullTime ?: day,
+                    dayOnly = day != null
                 )
             }
             else -> return emptyList()
@@ -249,7 +384,8 @@ class SportsAddonSource @Inject constructor(
         return list
     }
 
-    private data class AddonStream(val url: String, val label: String, val headers: Map<String, String>)
+    /** [info]: everything the addon wrote about the stream (quality and "Full Game" are often on a later line). */
+    private data class AddonStream(val url: String, val label: String, val headers: Map<String, String>, val info: String = label)
 
     private suspend fun streamsOf(g: AddonGame): List<AddonStream> {
         val (path, query) = base(g.addon)
@@ -257,10 +393,13 @@ class SportsAddonSource @Inject constructor(
         return when (val r = safeApiCall(context) { api.getStreams(url) }) {
             is NetworkResult.Success -> r.data.streams.orEmpty().mapNotNull { s ->
                 val link = s.url?.trim()?.takeIf { it.startsWith("http://") || it.startsWith("https://") } ?: return@mapNotNull null
+                val info = listOfNotNull(s.name, s.title, s.description).joinToString(" ")
+                // "Support Us" / donation entries in the stream list aren't the game.
+                if (NOT_A_STREAM.containsMatchIn(info)) return@mapNotNull null
                 val first = listOfNotNull(s.name, s.title ?: s.description?.lineSequence()?.firstOrNull())
                     .map { it.trim() }.filter { it.isNotEmpty() }
                     .joinToString(" · ").take(70)
-                AddonStream(link, first.ifBlank { g.addon.displayName }, s.behaviorHints?.proxyHeaders?.request.orEmpty())
+                AddonStream(link, first.ifBlank { g.addon.displayName }, s.behaviorHints?.proxyHeaders?.request.orEmpty(), info)
             }.distinctBy { it.url }.take(MAX_STREAMS)
             else -> emptyList()
         }
@@ -283,21 +422,110 @@ class SportsAddonSource @Inject constructor(
 
     companion object {
         const val SOURCE_ID = "addon:sports"
+
+        /** Recommended when a finished game has no replays and you don't have it. */
+        const val NUVIO_SPORTS_NAME = "Nuvio Live Sports"
+        const val NUVIO_SPORTS_SITE = "nuviosports.xyz"
+        internal fun isNuvioSports(id: String, url: String): Boolean =
+            id.equals("community.nuvio.live-sports", true) || url.contains(NUVIO_SPORTS_SITE, true)
         private val NO_RESULT = Found(emptyList(), emptyList())
         /** Above a guess, below a channel you picked yourself. */
         const val ADDON_SCORE = 100
 
         private const val LIVE_TTL = 90_000L
         private const val VOD_TTL = 10 * 60_000L
+        private const val VOD_TTL_OLD = 60 * 60_000L
+        /** Replay lists read before any others (see [lookIn]). */
+        private const val FIRST_LISTS = 2
         private const val MAX_CATALOGS = 6
         /** Extra pages read back through a recaps list that can't be searched. */
         private const val MAX_VOD_PAGES = 10
         private const val MAX_STREAMS = 12
 
+        private val NOT_A_STREAM = Regex("support us|donat|ko-fi|kofi|patreon|buy me a coffee", RegexOption.IGNORE_CASE)
+        private val HIGHLIGHT_WORD = Regex("highlight", RegexOption.IGNORE_CASE)
+        private val FULL_GAME_WORD = Regex("full (game|match|race|event|replay)", RegexOption.IGNORE_CASE)
+        private val CONDENSED_WORD = Regex("condensed", RegexOption.IGNORE_CASE)
+        private val RES_P = Regex("\\b(\\d{3,4})p\\b", RegexOption.IGNORE_CASE)
+        private val RES_4K = Regex("\\b(4k|uhd|2160)\\b", RegexOption.IGNORE_CASE)
+
         private val NOT_SPORTS_TYPES = setOf("movie", "series", "anime")
         private val VOD_WORDS = listOf("replay", "recap", "highlight", "catchup", "catch up", "catch-up")
         private val SKIP_WORDS = listOf("iptv", "channel", "24/7", "news", "vod", "music", "radio")
         private val LIVE_WORDS = listOf("live", "today", "event", "match", "game", "fixture", "upcoming", "tonight")
+
+        /** How fitting one list is (higher first); -1 = it can't have this game. */
+        internal fun catalogRank(id: String, name: String, sport: Sport, leagueWords: List<String>, days: Int?): Int {
+            val text = " " + words(id + " " + name) + " "
+            var rank = 0
+            if (sport != Sport.OTHER) {
+                val named = sportsNamed(text)
+                if (named.isNotEmpty()) {
+                    if (sport !in named) return -1
+                    rank += 4
+                }
+            }
+            if (leagueWords.any { text.contains(" $it ") }) rank += 8
+            else if (LEAGUE_HINTS.any { text.contains(" $it ") }) rank -= 3 // another league's own list: after the sport's "All" list
+            if (days != null) {
+                when {
+                    text.contains(" today ") -> if (days == 0) rank += 3 else return -1
+                    text.contains(" yesterday ") -> rank += when (days) { 1 -> 3; 0, 2 -> 0; else -> return -1 }
+                    text.contains(" week ") -> if (days <= 7) rank += 2 else return -1
+                    text.contains(" older ") || text.contains(" archive ") -> rank += if (days >= 2) 2 else 0
+                }
+            }
+            return rank
+        }
+
+        /** Sports a list's id/name names ("nba", "american football", "premier league"…). */
+        internal fun sportsNamed(text: String): Set<Sport> {
+            var t = text
+            val out = HashSet<Sport>()
+            // Longer names first, and taken out once found, so "american football" isn't also football.
+            for ((w, s) in SPORT_NAMES) {
+                if (t.contains(" $w ")) {
+                    out += s
+                    t = t.replace(" $w ", " ")
+                }
+            }
+            return out
+        }
+
+        /** Lower case, letters and digits only, single spaces ("📅 Today's Replays" → "today s replays"). */
+        internal fun words(s: String): String =
+            s.lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{Nd}]+"), " ").trim()
+
+        /** Words that tie a list to one sport. Longest first: "american football" before "football". */
+        private val SPORT_NAMES: List<Pair<String, Sport>> = listOf(
+            "american football" to Sport.AMERICAN_FOOTBALL, "college football" to Sport.AMERICAN_FOOTBALL,
+            "nfl" to Sport.AMERICAN_FOOTBALL, "ncaaf" to Sport.AMERICAN_FOOTBALL, "cfl" to Sport.AMERICAN_FOOTBALL,
+            "aussie rules" to Sport.AUSSIE_RULES, "afl" to Sport.AUSSIE_RULES,
+            "gaelic football" to Sport.GAELIC, "gaa" to Sport.GAELIC, "hurling" to Sport.GAELIC,
+            "rugby league" to Sport.RUGBY, "rugby union" to Sport.RUGBY, "rugby" to Sport.RUGBY, "nrl" to Sport.RUGBY,
+            "ice hockey" to Sport.HOCKEY, "hockey" to Sport.HOCKEY, "nhl" to Sport.HOCKEY,
+            "premier league" to Sport.FOOTBALL, "champions league" to Sport.FOOTBALL, "europa league" to Sport.FOOTBALL,
+            "la liga" to Sport.FOOTBALL, "serie a" to Sport.FOOTBALL, "bundesliga" to Sport.FOOTBALL, "ligue 1" to Sport.FOOTBALL,
+            "football" to Sport.FOOTBALL, "soccer" to Sport.FOOTBALL, "epl" to Sport.FOOTBALL, "ucl" to Sport.FOOTBALL,
+            "uefa" to Sport.FOOTBALL, "mls" to Sport.FOOTBALL,
+            "basketball" to Sport.BASKETBALL, "wnba" to Sport.BASKETBALL, "nba" to Sport.BASKETBALL, "euroleague" to Sport.BASKETBALL,
+            "baseball" to Sport.BASEBALL, "mlb" to Sport.BASEBALL,
+            "formula 1" to Sport.RACING, "motorsport" to Sport.RACING, "motorsports" to Sport.RACING, "racing" to Sport.RACING,
+            "f1" to Sport.RACING, "motogp" to Sport.RACING, "nascar" to Sport.RACING, "indycar" to Sport.RACING,
+            "tennis" to Sport.TENNIS, "atp" to Sport.TENNIS, "wta" to Sport.TENNIS,
+            "boxing" to Sport.FIGHTING, "mma" to Sport.FIGHTING, "ufc" to Sport.FIGHTING, "fighting" to Sport.FIGHTING,
+            "wrestling" to Sport.WRESTLING, "wwe" to Sport.WRESTLING, "aew" to Sport.WRESTLING,
+            "golf" to Sport.GOLF, "pga" to Sport.GOLF, "cricket" to Sport.CRICKET, "ipl" to Sport.CRICKET,
+            "darts" to Sport.DARTS, "snooker" to Sport.SNOOKER, "volleyball" to Sport.VOLLEYBALL,
+            "lacrosse" to Sport.LACROSSE, "netball" to Sport.NETBALL
+        )
+
+        /** League names that make a list one league's own (read after the sport's general lists unless it's this game's league). */
+        private val LEAGUE_HINTS = listOf(
+            "premier league", "champions league", "europa league", "la liga", "serie a", "bundesliga", "ligue 1",
+            "epl", "ucl", "uefa", "mls", "nfl", "ncaaf", "cfl", "nba", "wnba", "euroleague", "nhl", "mlb",
+            "formula 1", "f1", "motogp", "nascar", "indycar", "atp", "wta", "ufc", "wwe", "aew", "pga", "ipl", "nrl", "afl"
+        )
 
         private val GENRE_WORDS: Map<Sport, List<String>> = mapOf(
             Sport.FOOTBALL to listOf("football", "soccer"),
@@ -377,6 +605,33 @@ class SportsAddonSource @Inject constructor(
             return null
         }
 
+        /**
+         * A date with no time ("Replay (Nov 8, 2026)", "8 Nov 2026", "2026-11-08"), as noon UTC that
+         * day; null when there's none. Only used when [parseTime] finds no full time.
+         */
+        internal fun parseDay(texts: List<String>): Long? {
+            for (t in texts) {
+                for (m in MONTH_FIRST_DAY.findAll(t)) {
+                    val mo = MONTHS.indexOf(m.groupValues[1].lowercase(Locale.ROOT))
+                    val d = m.groupValues[2].toInt()
+                    if (mo >= 0 && d in 1..31) return utc(m.groupValues[3].toInt(), mo, d, 12, 0)
+                }
+                for (m in DAY_FIRST_DAY.findAll(t)) {
+                    val mo = MONTHS.indexOf(m.groupValues[2].lowercase(Locale.ROOT))
+                    val d = m.groupValues[1].toInt()
+                    if (mo >= 0 && d in 1..31) return utc(m.groupValues[3].toInt(), mo, d, 12, 0)
+                }
+                ISO_DAY.find(t)?.let { m ->
+                    return utc(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt(), 12, 0)
+                }
+            }
+            return null
+        }
+
+        private val MONTH_FIRST_DAY = Regex("\\b([A-Za-z]{3})[A-Za-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})\\b")
+        private val DAY_FIRST_DAY = Regex("\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+([A-Za-z]{3})[A-Za-z]*\\.?,?\\s+(\\d{4})\\b")
+        private val ISO_DAY = Regex("\\b(\\d{4})-(\\d{2})-(\\d{2})\\b")
+
         private fun teamNames(t: TeamInfo): List<String> =
             listOf(t.fullName, t.name).map { SportsCatalog.norm(it) }.filter { it.trim().length >= 4 }.distinct()
 
@@ -411,7 +666,9 @@ class SportsAddonSource @Inject constructor(
             }
             if (!teamsOk) return 0
             val t = g.timeMs
-            val window = (if (replay) 36L else 5L) * 3_600_000L
+            // A date with no time can be a day off from the game's UTC start (a US night game is
+            // the next day in UTC), so it gets a day either side.
+            val window = (if (g.dayOnly) 30L else if (replay) 36L else 5L) * 3_600_000L
             return when {
                 t != null && ev.hasTime -> if (kotlin.math.abs(t - ev.startMs) <= window) 100 else 0
                 // No time on one side: live games must be on around now; a replay must be recent.

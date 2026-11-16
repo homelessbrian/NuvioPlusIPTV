@@ -1,6 +1,8 @@
 package com.nuvio.tv.livetv.data
 
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -16,6 +18,44 @@ import kotlinx.coroutines.sync.withLock
 object BackgroundWork {
     /** Nuvio's player is open (set from the app's navigation). */
     val nuvioPlaying = MutableStateFlow(false)
+
+    /** A movie/episode is open in Nuvio's player. Multiview keeps its own browsing work. */
+    val onDemandPlaying = MutableStateFlow(false)
+
+    /** Keep both holds in step when navigation changes, without a false gap between episodes. */
+    fun updatePlaybackRoute(route: String, activeMultiview: Boolean = false) {
+        val onDemand = route.startsWith("player/")
+        onDemandPlaying.value = onDemand
+        nuvioPlaying.value = onDemand || activeMultiview
+    }
+
+    /** Optional browsing work waits without polling; recordings and playback work don't use it. */
+    suspend fun awaitOnDemandIdle() {
+        onDemandPlaying.first { !it }
+    }
+
+    private class BrowsingReadDeferred : RuntimeException(null, null, false, false)
+
+    /**
+     * An optional database read can discard its unfinished result when a movie starts. The
+     * checkpoint unwinds the cursor before waiting, so no database lock or partial guide is
+     * retained. The read starts again after playback; mandatory recording reads don't use it.
+     */
+    suspend fun <T> browsingRead(block: (checkpoint: () -> Unit) -> T): T {
+        val jobContext = currentCoroutineContext()
+        while (true) {
+            awaitOnDemandIdle()
+            jobContext.ensureActive()
+            try {
+                return block {
+                    jobContext.ensureActive()
+                    if (onDemandPlaying.value) throw BrowsingReadDeferred()
+                }
+            } catch (_: BrowsingReadDeferred) {
+                // Retry the whole read, never publish a partial result as complete.
+            }
+        }
+    }
 
     /**
      * Two low-priority threads for work nobody is waiting on: automatic playlist and guide

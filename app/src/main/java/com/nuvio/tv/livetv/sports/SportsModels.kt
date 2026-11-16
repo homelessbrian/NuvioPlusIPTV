@@ -112,6 +112,9 @@ enum class GameState { PRE, LIVE, POST, OFF }
 /** One line of a race result or leaderboard: "1", "Kyle Larson", "-12" (golf) or null. */
 data class Standing(val pos: String, val name: String, val detail: String?)
 
+/** One session of a race weekend ("Practice 1", "Qualifying", "Race"), with its own time. */
+data class EventSession(val label: String, val startMs: Long, val minutes: Int, val race: Boolean)
+
 enum class EventSource { ESPN, GUIDE, FIXTURES }
 
 data class SportsEvent(
@@ -146,7 +149,9 @@ data class SportsEvent(
     /** A race's finishing (or running) order, a golf leaderboard: position, name, detail. */
     val standings: List<Standing> = emptyList(),
     /** A few lines about the event (wrestling shows, from TheSportsDB). */
-    val about: String? = null
+    val about: String? = null,
+    /** A race weekend's sessions, in time order (the event itself is the next or live one). */
+    val sessions: List<EventSession> = emptyList()
 ) {
     val sides: List<Side> get() = listOfNotNull(away, home)
     val hasScore: Boolean get() = (state == GameState.LIVE || state == GameState.POST) && sides.size == 2 && sides.all { !it.score.isNullOrBlank() }

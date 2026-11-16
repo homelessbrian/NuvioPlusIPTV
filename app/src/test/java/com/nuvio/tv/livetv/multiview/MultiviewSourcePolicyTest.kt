@@ -17,11 +17,20 @@ class MultiviewSourcePolicyTest {
     }
 
     @Test
+    fun `links the full-screen player accepts are not refused for odd characters`() {
+        listOf(
+            "http://example.invalid/live/user name/p|ss{1}/5.ts",
+            "http://example.invalid/user/50%off/5.m3u8",
+            " https://example.invalid/channel.ts|User-Agent=fixture",
+        ).forEach { assertTrue(MultiviewSourcePolicy.allows(it)) }
+    }
+
+    @Test
     fun `socket and local schemes cannot bypass protected HTTP transport`() {
         listOf(
             "rtsp://example.invalid/channel", "rtsps://example.invalid/channel",
             "udp://example.invalid:1234", "file:///channel.ts", "content://channel",
-            "data:video/mp2t;base64,fixture", "channel.ts", "", "http://invalid host",
+            "data:video/mp2t;base64,fixture", "channel.ts", "", "http://", "rtsp://x/http://y",
         ).forEach { assertFalse(MultiviewSourcePolicy.allows(it)) }
     }
 

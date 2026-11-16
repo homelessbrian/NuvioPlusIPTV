@@ -511,9 +511,10 @@ private fun ChannelQuickMenu(channel: LiveChannel, viewModel: LiveTvViewModel, p
         )
         "group" -> GroupPickerDialog(
             channel = channel,
-            groups = viewModel.uiState.value.customGroups,
+            groups = viewModel.copyTargets(channel),
+            title = "Copy \"${channel.name}\" to…",
             onDismiss = onDismiss,
-            onPick = { g -> viewModel.addToGroup(g.id, channel); onDismiss() },
+            onPick = { g -> viewModel.copyToGroup(g.id, channel); onDismiss() },
             onNewGroup = { step = "newgroup" }
         )
         else -> {
@@ -533,9 +534,9 @@ private fun ChannelQuickMenu(channel: LiveChannel, viewModel: LiveTvViewModel, p
                         bell.toggle()
                         onDismiss()
                     }
-                    MenuItem("Add to group…") { step = "group" }
-                    MenuItem("Rename channel") { step = "rename" }
-                    MenuItem("Change channel number") { step = "number" }
+                    MenuItem("Copy to group…") { step = "group" }
+                    MenuItem("Rename channel…") { step = "rename" }
+                    MenuItem("Change channel number…") { step = "number" }
                     MenuItem("Hide channel") {
                         viewModel.hideChannel(channel)
                         onDismiss()

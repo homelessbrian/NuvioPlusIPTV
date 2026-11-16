@@ -1,6 +1,8 @@
 package com.nuvio.tv.livetv.multiview
 
 import kotlinx.coroutines.delay
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +39,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,6 +52,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import android.view.LayoutInflater
+import com.nuvio.tv.R
 import androidx.tv.material3.Icon
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.sports.SportsBadge
@@ -131,7 +137,11 @@ internal fun MultiviewProgress(fraction: Float, modifier: Modifier = Modifier) {
 
 /**
  * One video pane. [logo] and [show] fill its label (both optional); [errorHint] says what OK does
- * when the stream failed, [emptyHint] what OK does on an empty pane.
+ * when the stream failed, [emptyHint] what OK does on an empty pane. With [overlaysShown] off, the
+ * name, the edge and the highlight fade away (with the top bar), leaving only a faint speaker on the
+ * pane that has the sound; a pane that is loading or has failed keeps its name and edge.
+ * [fullScreen] is the pane filling the screen: square corners, no edge or highlight. [hint] is a
+ * line under the name on the highlighted pane; [hideVideo] puts a covered protected picture away.
  */
 @Composable
 internal fun MultiviewPane(
@@ -145,48 +155,70 @@ internal fun MultiviewPane(
     use24h: Boolean = false,
     errorHint: String? = null,
     emptyHint: String = "Press OK",
-    showChannelLabel: Boolean = true,
+    overlaysShown: Boolean = true,
+    fullScreen: Boolean = false,
+    hint: String? = null,
+    hideVideo: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     val ring = NuvioTheme.focusRing.brush()
     val empty = pane.channelKey == null && pane.error == null
+    val keepLabel = multiviewPaneKeepsLabel(pane.isBuffering, pane.error != null)
+    // Same fade as the top bar. Read in the draw phase, so fading does not rebuild the pane.
+    val overlay = animateFloatAsState(if (overlaysShown || keepLabel) 1f else 0f, tween(450), label = "multiviewPaneOverlay")
+    val overlayVisible by remember { derivedStateOf { overlay.value > 0f } }
+    val overlayGone by remember { derivedStateOf { overlay.value < 1f } }
     Box(
         modifier.onFocusChanged { focused = it.isFocused }
-            .graphicsLayer { val s = if (focused) 1.02f else 1f; scaleX = s; scaleY = s }
-            .clip(PaneShape)
+            .graphicsLayer { val s = if (focused && !fullScreen) 1f + 0.02f * overlay.value else 1f; scaleX = s; scaleY = s }
+            .clip(if (fullScreen) RectangleShape else PaneShape)
             .background(if (empty) Color.White.copy(alpha = 0.025f) else Color.Black)
             .drawWithContent {
                 drawContent()
+                if (fullScreen) return@drawWithContent
                 val w = (if (focused) 3.dp else 1.dp).toPx()
                 val topLeft = Offset(w / 2, w / 2)
                 val box = Size(size.width - w, size.height - w)
                 val corner = CornerRadius((12.dp.toPx() - w / 2).coerceAtLeast(0f))
+                val shown = overlay.value
                 when {
-                    focused -> drawRoundRect(brush = ring, topLeft = topLeft, size = box, cornerRadius = corner, style = Stroke(w))
+                    focused -> if (shown > 0f) drawRoundRect(brush = ring, topLeft = topLeft, size = box, cornerRadius = corner, alpha = shown, style = Stroke(w))
+                    // An empty pane is only its outline, so that stays.
                     empty -> drawRoundRect(Color.White.copy(alpha = 0.10f), topLeft = topLeft, size = box, cornerRadius = corner, style = Stroke(w))
-                    else -> drawRoundRect(SportsLook.Border, topLeft = topLeft, size = box, cornerRadius = corner, style = Stroke(w))
+                    else -> if (shown > 0f) drawRoundRect(SportsLook.Border, topLeft = topLeft, size = box, cornerRadius = corner, alpha = shown, style = Stroke(w))
                 }
             }
             .clickable(onClick = onClick)
     ) {
         if (pane.player != null) {
-            AndroidView(
-                factory = { context ->
-                    PlayerView(context).apply {
-                        useController = false
-                        isFocusable = false
-                        isFocusableInTouchMode = false
-                        descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                        // A dropped stream reconnects behind its last picture instead of going black.
-                        setKeepContentOnPlayerReset(true)
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-                update = { if (it.player !== pane.player) it.player = pane.player },
-                onRelease = { it.player = null }
-            )
+            // Panes are drawn like the rest of the screen (a texture), not in the TV's video window:
+            // some TV boxes have only one or two video windows, so the other panes played sound
+            // over a black picture. Protected channels can only be shown in the video window.
+            // The kind is fixed when the view is made, so a change makes a new one.
+            androidx.compose.runtime.key(pane.isProtected) {
+                val layout = if (pane.isProtected) R.layout.live_tv_surface_player_view else R.layout.live_tv_texture_player_view
+                AndroidView(
+                    factory = { context ->
+                        (LayoutInflater.from(context).inflate(layout, null) as PlayerView).apply {
+                            useController = false
+                            isFocusable = false
+                            isFocusableInTouchMode = false
+                            descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                            // A dropped stream reconnects behind its last picture instead of going black.
+                            setKeepContentOnPlayerReset(true)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    update = {
+                        if (it.player !== pane.player) it.player = pane.player
+                        it.videoSurfaceView?.visibility =
+                            if (hideVideo && pane.isProtected) android.view.View.INVISIBLE else android.view.View.VISIBLE
+                    },
+                    onRelease = { it.player = null }
+                )
+            }
         }
         if (empty) {
             LiveText("P${pane.id + 1}", Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(5.dp))
@@ -235,9 +267,19 @@ internal fun MultiviewPane(
                 color = NuvioTheme.colors.TextSecondary, size = 9.sp, weight = FontWeight.SemiBold
             )
         }
-        if (audible && pane.channelKey != null) {
+        if (audible && pane.channelKey != null && overlayGone && !fullScreen) {
+            // What is left when everything else has faded: which pane the sound is coming from.
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(9.dp).graphicsLayer { alpha = 1f - overlay.value }
+                    .size(18.dp).clip(RoundedCornerShape(9.dp)).background(Color.Black.copy(alpha = 0.30f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.VolumeUp, contentDescription = null, tint = Color.White.copy(alpha = 0.55f), modifier = Modifier.size(11.dp))
+            }
+        }
+        if (audible && pane.channelKey != null && overlayVisible) {
             Row(
-                Modifier.align(Alignment.TopEnd).padding(9.dp).clip(RoundedCornerShape(6.dp))
+                Modifier.align(Alignment.TopEnd).padding(9.dp).graphicsLayer { alpha = overlay.value }.clip(RoundedCornerShape(6.dp))
                     .background(NuvioTheme.colors.Secondary).padding(horizontal = 7.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -246,9 +288,9 @@ internal fun MultiviewPane(
                 LiveText("SOUND", color = NuvioTheme.colors.OnSecondary, size = 9.sp, weight = FontWeight.Black)
             }
         }
-        if (showChannelLabel && pane.channelKey != null) {
+        if (overlayVisible && pane.channelKey != null) {
             Row(
-                Modifier.align(Alignment.TopStart).padding(8.dp).clip(RoundedCornerShape(10.dp))
+                Modifier.align(Alignment.TopStart).padding(8.dp).graphicsLayer { alpha = overlay.value }.clip(RoundedCornerShape(10.dp))
                     .background(LabelChip).padding(start = 5.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -258,6 +300,7 @@ internal fun MultiviewPane(
                 Column {
                     LiveText(pane.channelName ?: "Channel", size = 11.sp, weight = FontWeight.ExtraBold)
                     show?.let { LiveText(it.title, size = 9.sp, color = NuvioTheme.colors.TextSecondary) }
+                    if (focused && hint != null) LiveText(hint, size = 9.sp, color = NuvioTheme.colors.TextSecondary)
                 }
             }
         }

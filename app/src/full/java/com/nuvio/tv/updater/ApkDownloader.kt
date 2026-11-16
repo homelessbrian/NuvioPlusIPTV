@@ -40,14 +40,22 @@ class ApkDownloader @Inject constructor(
                     FileOutputStream(destinationFile).use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         var downloaded = 0L
+                        // Progress is passed on a few times a second, not per chunk: redrawing the banner
+                        // thousands of times a download starved the app on slower boxes.
+                        var lastReportAt = 0L
                         while (true) {
                             val read = input.read(buffer)
                             if (read <= 0) break
                             output.write(buffer, 0, read)
                             digest.update(buffer, 0, read)
                             downloaded += read
-                            onProgress(downloaded, total)
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (now - lastReportAt >= 250L) {
+                                lastReportAt = now
+                                onProgress(downloaded, total)
+                            }
                         }
+                        onProgress(downloaded, total)
                         output.flush()
                     }
                 }

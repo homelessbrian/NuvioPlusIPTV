@@ -6,6 +6,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.WatchedItem
 import com.nuvio.tv.domain.repository.LibraryRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
+import com.nuvio.tv.livetv.data.BackgroundWork
 import com.nuvio.tv.livetv.data.EpgDatabase
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
@@ -15,11 +16,13 @@ import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.record.LiveTvRecordingScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -100,7 +103,12 @@ class CalendarRepository @Inject constructor(
     val airing: StateFlow<AiringToday> = _airing.asStateFlow()
 
     @Volatile private var started = false
-    private var refreshJob: Job? = null
+    // Recording/reminder plans need fresh episode dates even while a movie is playing.
+    // Guide matching and applyPlans also keep their own, unpaused workers below.
+    private val buildHeld = kotlinx.coroutines.flow.combine(BackgroundWork.onDemandPlaying, plans) { playing, activePlans ->
+        playing && activePlans.isEmpty()
+    }.stateIn(scope, SharingStarted.Eagerly, BackgroundWork.onDemandPlaying.value && plans.value.isEmpty())
+    private val buildWork: CalendarBuildWork = CalendarBuildWork(scope, buildHeld) { fetch, force -> build(fetch, force) }
 
     /** Started with the app: the first look happens once the app has settled. */
     @OptIn(FlowPreview::class)
@@ -186,8 +194,7 @@ class CalendarRepository @Inject constructor(
     /** Looks your shows up again ([force]: even ones looked up recently). */
     fun refresh(force: Boolean) {
         if (isOff) return
-        if (refreshJob?.isActive == true) return
-        refreshJob = scope.launch { build(fetch = true, force = force) }
+        buildWork.request(fetch = true, force = force)
     }
 
     // ------------------------------------------------------------------ bells and hiding
@@ -308,13 +315,30 @@ class CalendarRepository @Inject constructor(
     }
 
     /** Shows looked up recently are left alone unless [force]. */
-    private suspend fun build(fetch: Boolean, force: Boolean = false) = mutex.withLock {
-        runCatching { buildLocked(fetch, force) }.onFailure {
-            _state.value = _state.value.copy(loading = false, progress = null, problem = it.message)
+    private suspend fun build(fetch: Boolean, force: Boolean = false): Unit = mutex.withLock {
+        try {
+            buildLocked(fetch, force)
+        } catch (deferred: CalendarBuildDeferred) {
+            // Unwind the build and release its mutex before the queued pass waits for playback.
+            // Successful lookups are cached, so the next pass can reuse them.
+            _state.value = _state.value.copy(loading = false, progress = null)
+            buildWork.request(fetch = fetch, force = force)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            _state.value = _state.value.copy(loading = false, progress = null, problem = error.message)
         }
     }
 
+    private class CalendarBuildDeferred : Exception()
+
+    private suspend fun buildCheckpoint(force: Boolean) {
+        currentCoroutineContext().ensureActive()
+        if (!force && BackgroundWork.onDemandPlaying.value && plans.value.isEmpty()) throw CalendarBuildDeferred()
+    }
+
     private suspend fun buildLocked(fetch: Boolean, force: Boolean) {
+        buildCheckpoint(force)
         val s = settings.value
         if (isOff) {
             baseEntries = emptyList()
@@ -323,6 +347,7 @@ class CalendarRepository @Inject constructor(
             return
         }
         val all = candidates()
+        buildCheckpoint(force)
         // Bells first, then what you're watching, then your Library (newest first). A Library of
         // hundreds of titles doesn't mean hundreds of look-ups every time.
         val shows = all.filter { it.type == "series" }
@@ -345,6 +370,7 @@ class CalendarRepository @Inject constructor(
         // you're watching by another): each show is only taken once.
         val usedShows = HashSet<Int>()
         for (c in shows) {
+            buildCheckpoint(force)
             val tvmId = if (fetch) sources.tvmazeId(c.imdb, c.tmdb) else cachedTvmazeId(c)
             if (tvmId != null && !usedShows.add(tvmId)) { done++; continue }
             var data = tvmId?.let { sources.cachedShow(it) }
@@ -361,7 +387,10 @@ class CalendarRepository @Inject constructor(
         if (fetch) {
             val missing = entries.filter { it.kind == CalendarKind.EPISODE && it.background == null && it.contentId.startsWith("tt") }
                 .map { it.contentId }.distinct().filter { !sources.backdropLooked(it) }.take(150)
-            for (id in missing) runCatching { sources.showBackdrop(id) }
+            for (id in missing) {
+                buildCheckpoint(force)
+                try { sources.showBackdrop(id) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { }
+            }
             if (missing.isNotEmpty()) {
                 sources.saveBackdrops()
                 for (i in entries.indices) {
@@ -371,11 +400,15 @@ class CalendarRepository @Inject constructor(
             }
         }
         for (m in movies) {
-            val dates = runCatching { sources.movieDates(m.imdb, m.tmdb, s.calendarCountry.ifBlank { "US" }, cachedOnly = !fetch) }.getOrNull()
+            buildCheckpoint(force)
+            val dates = try {
+                sources.movieDates(m.imdb, m.tmdb, s.calendarCountry.ifBlank { "US" }, cachedOnly = !fetch)
+            } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
             done++
             if (dates == null) continue
             entries += moviesOf(m, dates, seen[m.id] ?: m.imdb?.let { seen[it] }, from, to)
         }
+        buildCheckpoint(force)
         sources.saveMovies()
         // Movies from your Live TV guide whose bell was rung: that airing, on that channel.
         val nowMs = System.currentTimeMillis()
@@ -404,6 +437,7 @@ class CalendarRepository @Inject constructor(
             if (same.size == 1) same[0] else same[0].copy(reasons = same.flatMap { it.reasons }.toSet())
         }
         val sorted = merged.sortedWith(compareBy<CalendarEntry> { it.day }.thenBy { it.airMs ?: Long.MAX_VALUE }.thenBy { it.title })
+        buildCheckpoint(force)
         baseEntries = byTime(withGuide(sorted, s))
         _state.value = CalendarState(
             entries = withGames(baseEntries),
@@ -437,7 +471,7 @@ class CalendarRepository @Inject constructor(
             val mine = ev.sides.firstOrNull { f.followsTeam(ev.leagueId, it.team.id) }
             if (mine == null && ev.leagueId !in eventLeagues) continue
             h = 31 * h + java.util.Objects.hash(
-                ev.id, ev.startMs, ev.endMs, ev.hasTime, ev.state, ev.status, ev.title, ev.broadcasts.firstOrNull(), mine?.team?.logo,
+                ev.id, ev.startMs, ev.endMs, ev.hasTime, ev.state, ev.status, ev.title, ev.broadcasts.firstOrNull(), mine?.team?.logo, ev.sessions,
                 ev.sides.map { listOf(it.team.name, it.team.logo, it.team.color, it.team.altColor, it.score) },
                 matches[ev.id]?.firstOrNull()?.channel?.let { listOf(it.key, it.name, it.logo) }
             )
@@ -478,11 +512,17 @@ class CalendarRepository @Inject constructor(
         val to = today.plusDays(120)
         val zone = ZoneId.systemDefault()
         val matches = sports.matches.value
-        return sports.known.value.mapNotNull { ev ->
+        return sports.known.value.flatMap { ev ->
             val mine = ev.sides.firstOrNull { f.followsTeam(ev.leagueId, it.team.id) }
-            if (mine == null && ev.leagueId !in eventLeagues) return@mapNotNull null
+            if (mine == null && ev.leagueId !in eventLeagues) return@flatMap emptyList()
             val day = Instant.ofEpochMilli(ev.startMs).atZone(zone).toLocalDate()
-            if (day.isBefore(from) || day.isAfter(to)) return@mapNotNull null
+            // A tournament that runs for days (golf, tennis): on every day it's on, so it's still
+            // there on its last day, not only on the day it started. (No time: Sports gives none.)
+            val lastDay = ev.endMs?.takeIf { !ev.hasTime }
+                ?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+                ?.takeIf { it.isAfter(day) && !it.isAfter(day.plusDays(30)) } ?: day
+            if (lastDay.isBefore(from) || day.isAfter(to)) return@flatMap emptyList()
+            val days = generateSequence(day) { it.plusDays(1) }.takeWhile { !it.isAfter(lastDay) }.toList()
             val league = com.nuvio.tv.livetv.sports.SportsCatalog.league(ev.leagueId)
             val sport = league?.sport
             val sides = if (sport != null) ev.ordered(sport) else ev.sides
@@ -498,34 +538,74 @@ class CalendarRepository @Inject constructor(
             }
             val end = com.nuvio.tv.livetv.sports.endEstimate(ev)
             val channel = matches[ev.id]?.firstOrNull()?.channel
-            CalendarEntry(
-                key = "game|${ev.id}",
-                kind = CalendarKind.GAME,
-                contentId = "game|${ev.id}",
-                type = "game",
-                title = title,
-                poster = mine?.team?.logo ?: com.nuvio.tv.livetv.sports.SportsFeeds.leagueLogos[ev.leagueId],
-                background = null,
-                airMs = ev.startMs.takeIf { ev.hasTime },
-                day = day,
-                network = ev.broadcasts.firstOrNull() ?: league?.short,
-                reasons = setOf(CalendarReason.TEAM),
-                runtimeMin = ((end - ev.startMs) / 60_000L).toInt().takeIf { it > 0 },
-                guide = channel?.let { CalendarGuideHit(it.key, it.name, it.logo, ev.startMs, end, title) },
-                eventId = ev.id,
-                league = league?.name,
-                score = score,
-                live = ev.state == com.nuvio.tv.livetv.sports.GameState.LIVE,
-                teams = if (sides.size == 2) sides.map { sd ->
-                    CalendarTeam(
-                        name = sd.team.name,
-                        abbr = sd.team.abbr.ifBlank { null },
-                        logo = sd.team.logo,
-                        color = readableColor(sd.team.color, sd.team.altColor),
-                        score = sd.score.takeIf { !ss.hideScores && ev.hasScore && ev.state != com.nuvio.tv.livetv.sports.GameState.PRE }
+            // A race weekend: each session (practice, qualifying, sprint, race) on its own day, at its own time.
+            if (ev.sessions.size > 1) {
+                val nowMs = System.currentTimeMillis()
+                return@flatMap ev.sessions.withIndex().mapNotNull { (i, s) ->
+                    val d = Instant.ofEpochMilli(s.startMs).atZone(zone).toLocalDate()
+                    if (d.isBefore(from) || d.isAfter(to)) return@mapNotNull null
+                    val sEnd = s.startMs + s.minutes * 60_000L
+                    val on = nowMs in s.startMs until sEnd
+                    CalendarEntry(
+                        key = if (i == 0) "game|${ev.id}" else "game|${ev.id}|s$i",
+                        kind = CalendarKind.GAME,
+                        contentId = "game|${ev.id}",
+                        type = "game",
+                        title = title,
+                        poster = com.nuvio.tv.livetv.sports.SportsFeeds.leagueLogos[ev.leagueId],
+                        background = null,
+                        airMs = s.startMs,
+                        day = d,
+                        note = s.label,
+                        network = ev.broadcasts.firstOrNull() ?: league?.short,
+                        reasons = setOf(CalendarReason.TEAM),
+                        runtimeMin = s.minutes,
+                        guide = channel?.let { CalendarGuideHit(it.key, it.name, it.logo, s.startMs, sEnd, title) },
+                        eventId = ev.id,
+                        league = league?.name,
+                        score = when {
+                            on -> "Live"
+                            s.race && ev.state == com.nuvio.tv.livetv.sports.GameState.POST -> "Final"
+                            else -> null
+                        },
+                        live = on
                     )
-                } else emptyList()
-            )
+                }
+            }
+            val multi = days.size > 1
+            days.filter { !it.isBefore(from) && !it.isAfter(to) }.map { d ->
+                // Each day of a tournament: "Day 2 of 4"; live / result only on today's (result also on its last day).
+                val now = !multi || d == today || (d == lastDay && ev.state == com.nuvio.tv.livetv.sports.GameState.POST)
+                CalendarEntry(
+                    key = if (d == day) "game|${ev.id}" else "game|${ev.id}|$d",
+                    kind = CalendarKind.GAME,
+                    contentId = "game|${ev.id}",
+                    type = "game",
+                    title = title,
+                    poster = mine?.team?.logo ?: com.nuvio.tv.livetv.sports.SportsFeeds.leagueLogos[ev.leagueId],
+                    background = null,
+                    airMs = ev.startMs.takeIf { ev.hasTime },
+                    day = d,
+                    note = if (multi) "Day ${days.indexOf(d) + 1} of ${days.size}" else null,
+                    network = ev.broadcasts.firstOrNull() ?: league?.short,
+                    reasons = setOf(CalendarReason.TEAM),
+                    runtimeMin = ((end - ev.startMs) / 60_000L).toInt().takeIf { it > 0 },
+                    guide = channel?.let { CalendarGuideHit(it.key, it.name, it.logo, ev.startMs, end, title) },
+                    eventId = ev.id,
+                    league = league?.name,
+                    score = score.takeIf { now },
+                    live = now && ev.state == com.nuvio.tv.livetv.sports.GameState.LIVE,
+                    teams = if (sides.size == 2) sides.map { sd ->
+                        CalendarTeam(
+                            name = sd.team.name,
+                            abbr = sd.team.abbr.ifBlank { null },
+                            logo = sd.team.logo,
+                            color = readableColor(sd.team.color, sd.team.altColor),
+                            score = sd.score.takeIf { !ss.hideScores && ev.hasScore && ev.state != com.nuvio.tv.livetv.sports.GameState.PRE }
+                        )
+                    } else emptyList()
+                )
+            }
         }
     }
 

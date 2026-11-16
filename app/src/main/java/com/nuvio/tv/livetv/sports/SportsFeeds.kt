@@ -1005,6 +1005,7 @@ internal class SportsFeeds {
                 espnId = espnId,
                 endMs = endOf(session),
                 note = note,
+                sessions = sessions.map { EventSession(it.label, it.start, it.minutes, it.race) },
                 standings = runCatching { if (state == GameState.PRE && sessions.none { it.state != "pre" }) emptyList() else standingsOf(ev) }
                     .getOrDefault(emptyList())
             )

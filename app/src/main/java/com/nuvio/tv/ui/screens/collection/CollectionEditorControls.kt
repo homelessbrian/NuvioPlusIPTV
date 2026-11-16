@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,10 +50,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
@@ -94,7 +97,9 @@ fun NuvioTextField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "",
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    /** Optional URL prefix outside the editable value; an empty string keeps the same input layout. */
+    prefixText: String? = null
 ) {
     var isEditing by remember { mutableStateOf(false) }
     val textFieldFocusRequester = remember { FocusRequester() }
@@ -152,18 +157,37 @@ fun NuvioTextField(
                 ),
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                     color = NuvioTheme.colors.TextPrimary,
-                                            textDirection = TextDirection.Content
+                    textDirection = if (prefixText == null) TextDirection.Content else TextDirection.Ltr
                 ),
                 cursorBrush = SolidColor(if (isEditing) NuvioTheme.colors.Primary else Color.Transparent),
                 decorationBox = { innerTextField ->
-                    if (value.isEmpty() && placeholder.isNotEmpty()) {
-                        Text(
-                            text = placeholder,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = NuvioTheme.colors.TextTertiary
-                        )
+                    if (prefixText == null) {
+                        if (value.isEmpty() && placeholder.isNotEmpty()) {
+                            Text(
+                                text = placeholder,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioTheme.colors.TextTertiary
+                            )
+                        }
+                        innerTextField()
+                    } else CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        // Keep the editable node in this same slot when a full URL is pasted.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (prefixText.isNotEmpty()) Text(
+                                text = prefixText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioTheme.colors.TextPrimary
+                            )
+                            Box(Modifier.weight(1f)) {
+                                if (value.isEmpty() && placeholder.isNotEmpty()) Text(
+                                    text = placeholder,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = NuvioTheme.colors.TextTertiary
+                                )
+                                innerTextField()
+                            }
+                        }
                     }
-                    innerTextField()
                 }
             )
         }
