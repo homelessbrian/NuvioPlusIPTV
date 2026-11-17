@@ -217,6 +217,10 @@ class MultiviewPlaybackSession(
     }
 }
 
+/** How many Multiview panes currently have a video decoder (for the report's decoder lines). */
+@OptIn(UnstableApi::class)
+private fun decodersOpen(): Int = MultiviewDecoderReport.openPlayers.count { it.videoDecoderCounters != null }
+
 @OptIn(UnstableApi::class)
 private class AndroidMultiviewPanePlayer(
     context: Context,
@@ -359,6 +363,32 @@ private class AndroidMultiviewPanePlayer(
         return true
     }
 
+    /** Channels whose decoder line is already in the report, so a reconnect doesn't repeat it. */
+    private val decoderReported = mutableSetOf<String>()
+
+    /**
+     * Which video decoder the box gave this pane and the picture's colour format, once per
+     * channel, so a pane whose picture looks wrong (e.g. tinted) can be told apart from one that's fine.
+     */
+    private val decoderReport = object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+        override fun onVideoDecoderInitialized(
+            eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+            decoderName: String,
+            initializedTimestampMs: Long,
+            initializationDurationMs: Long,
+        ) {
+            if (released) return
+            val ch = channel ?: return
+            val f = player.videoFormat
+            val key = "${ch.key}|$decoderName|${f?.sampleMimeType}|${f?.width}x${f?.height}|${f?.colorInfo}"
+            if (!decoderReported.add(key)) return
+            LiveTvLoadReport.add(
+                "Multiview: ${ch.name} video decoder $decoderName (${decodersOpen()} Multiview decoders open); " +
+                    MultiviewDecoderReport.describe(f)
+            )
+        }
+    }
+
     private val renderers = object : DefaultRenderersFactory(context) {
         override fun buildAudioSink(
             context: Context,
@@ -406,6 +436,8 @@ private class AndroidMultiviewPanePlayer(
                 )
                 .build()
             addListener(listener)
+            addAnalyticsListener(decoderReport)
+            MultiviewDecoderReport.openPlayers += this
         }
 
     override val playback: MultiviewPanePlayback
@@ -498,6 +530,8 @@ private class AndroidMultiviewPanePlayer(
     override fun release() {
         if (released) return
         released = true
+        player.removeAnalyticsListener(decoderReport)
+        MultiviewDecoderReport.openPlayers -= player
         generation++
         reconnectJob?.cancel()
         scope.cancel()
