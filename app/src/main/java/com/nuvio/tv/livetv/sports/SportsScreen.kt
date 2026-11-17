@@ -129,6 +129,10 @@ object SportsLaunch {
         if (System.currentTimeMillis() - returnSetAt > 5_000) returnTo = null
     }
     fun takeFocusEvent(): String? = focusEvent.also { focusEvent = null }
+    /** The replay or highlight last played from a game page: the highlight goes back on it. */
+    @Volatile private var lastReplay: String? = null
+    fun watchedReplay(channelKey: String) { lastReplay = channelKey }
+    fun takeLastReplay(): String? = lastReplay.also { lastReplay = null }
 
     @Volatile private var catchup: Catchup? = null
     fun catchup(c: Catchup) { catchup = c }
@@ -376,7 +380,7 @@ fun SportsScreen(
                 videoSlot = videoSlot,
                 viewModel = viewModel,
                 onChoose = { m -> choose(opened, m) },
-                onPlayReplay = { m -> viewModel.playReplay(m) { SportsLaunch.openedFromSports(opened.id); onOpenLive() } },
+                onPlayReplay = { m -> viewModel.playReplay(m) { SportsLaunch.openedFromSports(opened.id); SportsLaunch.watchedReplay(m.channel.key); onOpenLive() } },
                 onFromStart = { m -> fromStart(opened, m) },
                 onFix = { fixFor = opened },
                 onTable = { tableReq = TableRequest(opened.leagueId, opened.sides.map { it.team.id }.toSet()) },
@@ -1362,10 +1366,20 @@ private fun GamePage(
         " Tip: ${SportsAddonSource.NUVIO_SPORTS_NAME} (${SportsAddonSource.NUVIO_SPORTS_SITE}) has replays of most games: add it in Add-ons." else ""
     // A finished game: once replays turn up, put the highlight on the first one (once per visit).
     val firstReplay = remember(ev.id) { FocusRequester() }
+    // Back from watching one of them (or it finished): the highlight goes back on that one.
+    val backReplayKey = remember(ev.id) { SportsLaunch.takeLastReplay() }
+    val backReplay = remember(ev.id) { FocusRequester() }
+    val replayList = rememberLazyListState()
     var replayFocused by remember(ev.id) { mutableStateOf(false) }
     LaunchedEffect(ev.id, replays.isNotEmpty()) {
         if (ev.state == GameState.POST && replays.isNotEmpty() && !replayFocused) {
             delay(150)
+            val back = replays.indexOfFirst { it.channel.key == backReplayKey }
+            if (back > 0) {
+                runCatching { replayList.scrollToItem(back) }
+                delay(50)
+                if (runCatching { backReplay.requestFocus() }.isSuccess) { replayFocused = true; return@LaunchedEffect }
+            }
             if (runCatching { firstReplay.requestFocus() }.isSuccess) replayFocused = true
         }
     }
@@ -1437,11 +1451,16 @@ private fun GamePage(
         when {
             replays.isNotEmpty() -> LazyColumn(
                 Modifier.heightIn(max = 126.dp).keepFocusWhileHeld(horizontal = false),
+                state = replayList,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
             ) {
                 itemsIndexed(replays, key = { _, m -> m.channel.key }) { i, m ->
-                    ChannelLine(m.channel, m.how, modifier = if (i == 0) Modifier.focusRequester(firstReplay) else Modifier,
+                    ChannelLine(m.channel, m.how, modifier = when {
+                        i == 0 -> Modifier.focusRequester(firstReplay)
+                        m.channel.key == backReplayKey -> Modifier.focusRequester(backReplay)
+                        else -> Modifier
+                    },
                         onClick = { onPlayReplay(m) })
                 }
             }
