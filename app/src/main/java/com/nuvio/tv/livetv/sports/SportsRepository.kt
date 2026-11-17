@@ -477,7 +477,7 @@ class SportsRepository @Inject constructor(
         videoJobs[ev.id] = scope.launch {
             try {
                 val espn = runCatching { summaryFor(ev)?.videos }.getOrNull().orEmpty()
-                val found = videos.find(ev, espn).map(SportsVideos::match)
+                val found = videos.find(ev, espn).map { SportsVideos.match(it) }
                 _videos.update { it + (ev.id to found) }
                 videoAt[ev.id] = System.currentTimeMillis()
             } catch (e: kotlinx.coroutines.CancellationException) {
