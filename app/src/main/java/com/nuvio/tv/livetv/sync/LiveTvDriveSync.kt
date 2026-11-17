@@ -426,8 +426,11 @@ class LiveTvDriveSync @Inject constructor(
         appliedAtMs = System.currentTimeMillis()
         try {
             val before = prefs.exportForSync()
+            val playlistsBefore = prefs.currentPlaylists()
             val changed = prefs.importFromSync(data)
             val after = prefs.exportForSync()
+            com.nuvio.tv.livetv.model.PlaylistServerChanges.lines(playlistsBefore, prefs.currentPlaylists())
+                .forEach { com.nuvio.tv.livetv.model.LiveTvLoadReport.add(it) }
             // What really changed here. Nothing: no reload at all (it used to reload Live TV,
             // reading the guide again, on every sync, often twice at start-up).
             val keys = (before.keys().asSequence() + after.keys().asSequence()).toSet()

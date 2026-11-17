@@ -50,6 +50,42 @@ public final class VpnPlaybackProtection {
         if (sink == null) return;
         try { sink.accept("VPN: " + line); } catch (RuntimeException ignored) { }
     }
+    /**
+     * One line for the host's start-up report: whether VPN protection is on, which kind, and the
+     * chosen profile's name (never its contents). Reads from disk: call it off the main thread.
+     */
+    public static String reportLine() {
+        try {
+            VpnPreferences value = settings();
+            ProtectionMode mode = value.getMode();
+            if (mode == ProtectionMode.OFF) return "VPN: off";
+            String label;
+            switch (mode) {
+                case HTTP_ONLY: label = "HTTP only"; break;
+                case HTTP_HTTPS: label = "HTTP + HTTPS"; break;
+                default: label = "Full app"; break;
+            }
+            String id = value.getSelectedProfileId();
+            String profile;
+            if (id == null || id.isEmpty()) profile = "no profile chosen";
+            else {
+                profile = "profile missing";
+                Context app = application;
+                if (app != null) {
+                    for (AndroidProfileStore.Entry entry : new AndroidProfileStore(app).list()) {
+                        if (!entry.id.equals(id)) continue;
+                        profile = entry.readable ? "profile \"" + entry.name + "\"" + (entry.protocol != null ? " (" + entry.protocol.name() + ")" : "")
+                                : "profile can't be read";
+                        break;
+                    }
+                }
+            }
+            return "VPN: on (" + label + "), " + profile;
+        } catch (Exception | LinkageError failure) {
+            String message = failure.getMessage();
+            return "VPN: settings couldn't be read (" + (message == null ? failure.getClass().getSimpleName() : message) + ")";
+        }
+    }
     /** Keeps the real reason a preparation step failed (shown to the person, and written to the report). */
     private static IOException prepareFailure(Throwable failure, String generic) {
         String message = failure instanceof IOException ? failure.getMessage() : null;
