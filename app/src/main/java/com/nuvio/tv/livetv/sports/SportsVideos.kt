@@ -1,6 +1,7 @@
 package com.nuvio.tv.livetv.sports
 
 import com.nuvio.tv.core.build.AppFeaturePolicy
+import com.nuvio.tv.core.player.TrailerVideoPolicy
 import com.nuvio.tv.data.trailer.InAppYouTubeExtractor
 import com.nuvio.tv.livetv.data.ForkHttp
 import com.nuvio.tv.livetv.model.LiveChannel
@@ -239,7 +240,12 @@ internal class SportsVideos(
         val real = try {
             when {
                 url.startsWith(BRIGHTCOVE_SCHEME) -> brightcove(url.removePrefix(BRIGHTCOVE_SCHEME))
-                youTubeId(url) != null -> youTube.extractSingleUrl(url)
+                // The picture and the sound as two whole files, like trailers: skipping around
+                // works in them. YouTube's streamed (HLS) version got stuck loading after a skip.
+                youTubeId(url) != null -> youTube.extractPlaybackSource(url, TrailerVideoPolicy.MAX_TRAILER_HEIGHT_WITHOUT_4K)?.let { s ->
+                    s.audioUrl?.takeIf { it.isNotBlank() }?.let { rememberSound(s.videoUrl, it) }
+                    s.videoUrl
+                }
                 else -> url
             }
         } catch (e: CancellationException) {
@@ -292,6 +298,16 @@ internal class SportsVideos(
         private val FROM_ORDER = listOf("NHL", "MLB", "ESPN", "YouTube")
         private val STOP_WORDS = setOf("the", "and", "vs", "grand", "prix", "round", "final", "race", "fight", "night", "card", "main")
         private const val UA = "Mozilla/5.0 (Linux; Android 12; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+
+        /** Sound files for picked YouTube videos, by their picture file (links expire: kept in memory only). */
+        private val sounds = object : LinkedHashMap<String, String>(8, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 20
+        }
+
+        private fun rememberSound(videoUrl: String, audioUrl: String) = synchronized(sounds) { sounds[videoUrl] = audioUrl }
+
+        /** The separate sound file that goes with this picture file (a YouTube video), or null. */
+        fun soundFor(videoUrl: String): String? = synchronized(sounds) { sounds[videoUrl] }
 
         /** A picked video needs working out before it plays (see [playable]). */
         fun needsResolving(ch: LiveChannel): Boolean =

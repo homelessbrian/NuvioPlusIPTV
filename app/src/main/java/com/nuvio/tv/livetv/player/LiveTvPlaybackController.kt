@@ -1176,7 +1176,7 @@ class LiveTvPlaybackController @Inject constructor(
                 "; reloading · ${redact(currentUrl ?: ch.url)}"
         )
         val url = currentUrl ?: ch.url
-        val resumeAt = if (archive) pos else C_TIME_UNSET
+        val resumeAt = if (archive) pos else ownReplayResumeAt(p)
         if (activeStalkerRef != null) {
             restartStalker(resumeAt)
             return
@@ -2207,19 +2207,40 @@ class LiveTvPlaybackController @Inject constructor(
             }
             val url = currentUrl ?: return@launch
             val p = _player ?: return@launch
+            val resumeAt = ownReplayResumeAt(p)
             p.setMediaSource(buildMediaSource(url, ch.headers, isLive = _state.value.catchupTitle == null))
             p.prepare()
+            if (resumeAt > 0) p.seekTo(resumeAt)
             p.playWhenReady = true
         }
     }
 
-    private fun buildMediaSource(url: String, headers: Map<String, String>, isLive: Boolean): androidx.media3.exoplayer.source.MediaSource =
-        com.nuvio.tv.livetv.multiview.LiveTvMediaSourceBuilder(
+    private fun buildMediaSource(url: String, headers: Map<String, String>, isLive: Boolean): androidx.media3.exoplayer.source.MediaSource {
+        // A YouTube highlight from Sports: its picture and sound are two files, played together
+        // the way trailers are (read in pieces, as YouTube slows down whole-file downloads).
+        if (currentChannel?.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) {
+            com.nuvio.tv.livetv.sports.SportsVideos.soundFor(url)?.let { sound ->
+                val factory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(com.nuvio.tv.data.trailer.YoutubeChunkedDataSourceFactory())
+                return androidx.media3.exoplayer.source.MergingMediaSource(
+                    factory.createMediaSource(MediaItem.fromUri(url)),
+                    factory.createMediaSource(MediaItem.fromUri(sound))
+                )
+            }
+        }
+        return com.nuvio.tv.livetv.multiview.LiveTvMediaSourceBuilder(
             drm = currentChannel?.drm,
             forcedMime = forcedMime,
             bufferSize = bufferSize,
             stalkerPolicy = stalkerMediaPolicy,
         ).build(url, headers, isLive)
+    }
+
+    /**
+     * Where a replay with its own timeline (an addon replay, a highlight) had got to, so reloading
+     * it after a freeze or an error carries on there instead of starting over. Unset otherwise.
+     */
+    private fun ownReplayResumeAt(p: ExoPlayer): Long =
+        if (_ownTimeline.value && !p.isCurrentMediaItemDynamic) p.currentPosition.coerceAtLeast(0L) else C_TIME_UNSET
 
     /**
      * Lets go of the player (and its hold on the audio output) right away. Called when Nuvio's

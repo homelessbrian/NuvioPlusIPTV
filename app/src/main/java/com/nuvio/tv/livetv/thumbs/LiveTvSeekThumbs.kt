@@ -140,6 +140,10 @@ private fun update(
             when {
                 !url.startsWith("http://", true) && !url.startsWith("https://", true) ->
                     SeekThumbs.unsupported(owner, "No thumbnails for this kind of link")
+                // YouTube slows down whole-file reads, and reading it for thumbnails took the
+                // speed the video itself needed.
+                url.substringAfter("://").substringBefore('/').endsWith("googlevideo.com", true) ->
+                    SeekThumbs.unsupported(owner, "No thumbnails for YouTube videos")
                 isHlsLink(url) && seen.durationMs > 0L -> SeekThumbs.open(
                     context, owner,
                     SeekThumbs.Source.Hls(url, c.playingChannel?.headers.orEmpty(), "sports-hls|$file|${url.hashCode()}|${seen.durationMs / 1000}"),
