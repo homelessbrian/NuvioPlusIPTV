@@ -73,6 +73,7 @@ import com.nuvio.tv.livetv.ui.LiveTextField
 import com.nuvio.tv.livetv.ui.LocalLiveSolidHighlight
 import com.nuvio.tv.livetv.ui.liveCellColors
 import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.livetv.ui.LONG_PRESS_MS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -264,6 +265,7 @@ internal fun MultiviewChannelPicker(
     var optionsGame by remember { mutableStateOf<SportsWatchGame?>(null) }
     var optionIndex by remember { mutableIntStateOf(0) }
     val okHeld = remember { booleanArrayOf(false) }
+    val holdJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
 
     // What's on now, read only for the rows on screen (and a few below), once scrolling pauses.
     val shows = remember { mutableStateMapOf<String, EpgProgram>() }
@@ -511,13 +513,14 @@ internal fun MultiviewChannelPicker(
                                     event.key == Key.DirectionDown -> { if (optionIndex < 1) optionIndex++ }
                                     event.key == Key.DirectionUp -> { if (optionIndex > 0) optionIndex-- else upFromList() }
                                     event.key == Key.DirectionLeft -> optionsGame = null
-                                    ok -> optionsGame?.let { g -> if (optionIndex == 0) { optionsGame = null; openStreams(g) } else onGameInfo(g) }
+                                    // The OK that opened this menu may still be held: its repeats don't choose.
+                                    ok && event.nativeKeyEvent.repeatCount == 0 -> optionsGame?.let { g -> if (optionIndex == 0) { optionsGame = null; openStreams(g) } else onGameInfo(g) }
                                 }
                                 sportsMode && streamsGame != null -> if (down) when {
                                     event.key == Key.DirectionDown -> { if (streamIndex < streams.lastIndex) streamIndex++ }
                                     event.key == Key.DirectionUp -> { if (streamIndex > 0) streamIndex-- else upFromList() }
                                     event.key == Key.DirectionLeft -> streamsGame = null
-                                    ok -> streams.getOrNull(streamIndex)?.let { m ->
+                                    ok && event.nativeKeyEvent.repeatCount == 0 -> streams.getOrNull(streamIndex)?.let { m ->
                                         streamsGame?.let { g -> onStream(g, m.channel.key); onClose() }
                                     }
                                 }
@@ -525,15 +528,25 @@ internal fun MultiviewChannelPicker(
                                     val game = (items.getOrNull(gameAt.getOrNull(gameCursor) ?: -1) as? PanelItem.Game)?.game
                                     when {
                                         ok -> {
-                                            // Hold OK (the key repeats): more options for the game; a quick press plays it.
+                                            // Hold OK: more options for the game; a quick press plays it. Timed, not
+                                            // only by key repeats: some remotes (HDMI-CEC) send none while OK is held.
+                                            fun openOptions() {
+                                                okHeld[0] = false
+                                                holdJob[0]?.cancel()
+                                                game?.let { optionsGame = it; optionIndex = 0 }
+                                            }
                                             if (down) {
-                                                if (event.nativeKeyEvent.repeatCount == 0) okHeld[0] = true
-                                                else if (okHeld[0]) {
-                                                    okHeld[0] = false
-                                                    game?.let { optionsGame = it; optionIndex = 0 }
-                                                }
+                                                if (event.nativeKeyEvent.repeatCount == 0) {
+                                                    okHeld[0] = true
+                                                    holdJob[0]?.cancel()
+                                                    holdJob[0] = scope.launch {
+                                                        delay(LONG_PRESS_MS)
+                                                        if (okHeld[0]) openOptions()
+                                                    }
+                                                } else if (okHeld[0]) openOptions()
                                             } else if (okHeld[0]) {
                                                 okHeld[0] = false
+                                                holdJob[0]?.cancel()
                                                 game?.let(::playGame)
                                             }
                                         }
