@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -296,12 +297,15 @@ internal fun GearPanel(
                 }
             } else if (!customizing) {
                 // ---- the four everyday ones, as tiles
+                // Down from Record goes straight to the first button below (the panel puts the
+                // cursor on Record by itself, and from there the default Down search did nothing).
+                val belowRecord = remember { FocusRequester() }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     var firstSet = false
                     fun f(): Modifier = if (!firstSet) { firstSet = true; Modifier.focusRequester(first) } else Modifier
                     if (onRecord != null) GearTile(
                         Icons.Default.FiberManualRecord, if (recording) "Stop" else "Record", if (recording) "Recording" else null,
-                        Modifier.weight(1f).then(f()), iconTint = LIVE_RED,
+                        Modifier.weight(1f).then(f()).focusProperties { down = belowRecord }, iconTint = LIVE_RED,
                         // Recording: stops it. Otherwise: how long to record; held, until you stop it.
                         onClick = if (recording) onRecord else ({ page = "record" }),
                         onLongClick = if (recording) null else ({ onStartRecording(null) })
@@ -328,10 +332,12 @@ internal fun GearPanel(
                     add(Triple("Reload stream", null, onReload))
                     add(Triple("Hide channel", null, onHide))
                 }
-                items.chunked(2).forEach { pair ->
+                items.chunked(2).withIndex().forEach { (rowIndex, pair) ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        pair.forEach { (label, value, action) ->
-                            GearRow(Modifier.weight(1f), onClick = action) { focused ->
+                        pair.withIndex().forEach { (colIndex, entry) ->
+                            val (label, value, action) = entry
+                            val target = if (rowIndex == 0 && colIndex == 0) Modifier.focusRequester(belowRecord) else Modifier
+                            GearRow(Modifier.weight(1f).then(target), onClick = action) { focused ->
                                 LiveText(label, size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
                                 value?.let { LiveText(it, size = 12.sp, color = gearText(focused, dim = true)) }
                             }
