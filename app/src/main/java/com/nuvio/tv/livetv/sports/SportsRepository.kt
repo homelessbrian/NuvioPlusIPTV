@@ -59,10 +59,13 @@ class SportsRepository @Inject constructor(
     private val channelStore: LiveTvChannelStore,
     private val guideDb: EpgDatabase,
     private val playback: LiveTvPlaybackController,
-    private val addonSource: SportsAddonSource
+    private val addonSource: SportsAddonSource,
+    youTube: com.nuvio.tv.data.trailer.InAppYouTubeExtractor
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val feeds = SportsFeeds()
+    // Official highlights and condensed games (ESPN, NHL, MLB, YouTube via TheSportsDB).
+    private val videos = SportsVideos({ feeds.dataRaw(it) }, youTube)
     // In the app's cache (see SportsDiskCache); made again if "Clear cache" emptied it meanwhile.
     private val sportsDir = SportsDiskCache.directory(context.filesDir, context.cacheDir)
     private val dir: File get() = sportsDir.apply { mkdirs() }
@@ -394,6 +397,7 @@ class SportsRepository @Inject constructor(
      */
     fun openGame(ev: SportsEvent) {
         addonJobs.remove(ev.id)?.cancel()
+        if (ev.state == GameState.POST) lookForVideos(ev)
         if (ev.state == GameState.POST) {
             // Already being looked for since the card was highlighted: carry on with that.
             synchronized(warmLock) {
@@ -448,10 +452,47 @@ class SportsRepository @Inject constructor(
             warmJob = scope.launch {
                 delay(WARM_DELAY_MS)
                 warmAsking = true
+                lookForVideos(ev)
                 lookInAddons(ev)
             }
         }
     }
+
+    // ---- official videos (see SportsVideos)
+
+    private val _videos = MutableStateFlow<Map<String, List<ChannelMatch>>>(emptyMap())
+    /** Finished games: event id -> their official highlights, recaps and condensed games. */
+    val videoMatches: StateFlow<Map<String, List<ChannelMatch>>> = _videos.asStateFlow()
+    private val videoAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val videoJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    /** A finished game's official videos, looked for once (again after a while: they keep coming for a few hours). */
+    private fun lookForVideos(ev: SportsEvent) {
+        if (ev.state != GameState.POST) return
+        val at = videoAt[ev.id]
+        val have = _videos.value[ev.id]
+        val fresh = if (have.isNullOrEmpty()) VIDEO_EMPTY_FRESH_MS else VIDEO_FRESH_MS
+        if (at != null && System.currentTimeMillis() - at < fresh) return
+        if (videoJobs[ev.id]?.isActive == true) return
+        videoJobs[ev.id] = scope.launch {
+            try {
+                val espn = runCatching { summaryFor(ev)?.videos }.getOrNull().orEmpty()
+                val found = videos.find(ev, espn).map(SportsVideos::match)
+                _videos.update { it + (ev.id to found) }
+                videoAt[ev.id] = System.currentTimeMillis()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                _videos.update { if (it.containsKey(ev.id)) it else it + (ev.id to emptyList()) }
+            } finally {
+                videoJobs.remove(ev.id)
+            }
+        }
+    }
+
+    /** A picked video ready to play (NHL's and YouTube's links are worked out now); null: it can't be. */
+    suspend fun playableVideo(ch: LiveChannel): LiveChannel? =
+        if (SportsVideos.needsResolving(ch)) videos.playable(ch) else ch
 
     /** One look through your sports addons for [ev], shown add-on by add-on as each answers; true when something was found. */
     private suspend fun lookInAddons(ev: SportsEvent): Boolean {
@@ -2328,7 +2369,11 @@ class SportsRepository @Inject constructor(
     }
 
     /** A game's summary as last asked: when, the score then, its scoring plays and the rest. */
-    private class GameSummary(val at: Long, val sig: String, val plays: List<ScoringPlay>, val extras: GameExtras)
+    private class GameSummary(
+        val at: Long, val sig: String, val plays: List<ScoringPlay>, val extras: GameExtras,
+        /** The game's videos in ESPN's summary (highlights, big plays). */
+        val videos: List<SportsVideos.Video> = emptyList()
+    )
     // The 50 games last opened; older ones are asked again if opened later.
     private val summaryCache = object : LinkedHashMap<String, GameSummary>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, GameSummary>?) = size > SUMMARY_CACHE_SIZE
@@ -2369,7 +2414,8 @@ class SportsRepository @Inject constructor(
         }.getOrNull() ?: return@withContext cached
         val plays = if (ev.state == GameState.PRE) emptyList() else runCatching { SportsFeeds.parseSummary(root) }.getOrDefault(emptyList())
         val extras = runCatching { SportsExtras.parse(root, ev, league.sport) }.getOrDefault(GameExtras())
-        GameSummary(System.currentTimeMillis(), sig, plays, extras).also { synchronized(summaryCache) { summaryCache[ev.id] = it } }
+        val clips = if (tsdbId != null || ev.state == GameState.PRE) emptyList() else runCatching { SportsVideos.espn(root) }.getOrDefault(emptyList())
+        GameSummary(System.currentTimeMillis(), sig, plays, extras, clips).also { synchronized(summaryCache) { summaryCache[ev.id] = it } }
     }
 
     /** The game's scoring plays (touchdowns, goals…), when ESPN has them. */
@@ -2631,6 +2677,10 @@ class SportsRepository @Inject constructor(
         private const val WARM_DELAY_MS = 600L
         /** Replays found this recently aren't asked for again when the game is opened. */
         private const val VOD_FRESH_MS = 10 * 60_000L
+        /** Official videos found: asked again after half an hour (more get added for a few hours). */
+        private const val VIDEO_FRESH_MS = 30 * 60_000L
+        /** None found yet: asked again after five minutes. */
+        private const val VIDEO_EMPTY_FRESH_MS = 5 * 60_000L
         /** Racing series with a drivers' table on ESPN. */
         private val RACING_TABLES = setOf("racing/f1", "racing/nascar-premier", "racing/nascar-secondary", "racing/nascar-truck", "racing/irl")
         /** Club competitions with a table of their own (the league phase), shown with your team's league. */

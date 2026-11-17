@@ -97,6 +97,31 @@ class SportsViewModel @Inject constructor(
         playback.play(m.channel)
     }
 
+    private var videoJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * A replay or highlights video picked on a finished game: played full screen ([onReady] opens
+     * Live TV). NHL's and YouTube's videos are worked out first (a moment).
+     */
+    fun playReplay(m: ChannelMatch, onReady: () -> Unit) {
+        videoJob?.cancel()
+        if (!SportsVideos.needsResolving(m.channel)) {
+            watch(m)
+            onReady()
+            return
+        }
+        videoJob = viewModelScope.launch {
+            com.nuvio.tv.livetv.record.LiveTvNotice.show("Opening the video…")
+            val ch = runCatching { repo.playableVideo(m.channel) }.getOrNull()
+            if (ch == null) {
+                com.nuvio.tv.livetv.record.LiveTvNotice.show("That video can't be played right now. Try another one.")
+                return@launch
+            }
+            playback.play(ch)
+            onReady()
+        }
+    }
+
     // ---- the video window (the same player as Live TV's preview and full screen)
 
     /** The channel playing now (null: nothing), for the PLAYING tags and the window. */

@@ -376,7 +376,7 @@ fun SportsScreen(
                 videoSlot = videoSlot,
                 viewModel = viewModel,
                 onChoose = { m -> choose(opened, m) },
-                onPlayReplay = { m -> SportsLaunch.openedFromSports(opened.id); viewModel.watch(m); onOpenLive() },
+                onPlayReplay = { m -> viewModel.playReplay(m) { SportsLaunch.openedFromSports(opened.id); onOpenLive() } },
                 onFromStart = { m -> fromStart(opened, m) },
                 onFix = { fixFor = opened },
                 onTable = { tableReq = TableRequest(opened.leagueId, opened.sides.map { it.team.id }.toSet()) },
@@ -1353,7 +1353,9 @@ private fun GamePage(
         onDispose { viewModel.repo.closeGame(ev.id) }
     }
     val vodLooked = viewModel.repo.vodMatches.collectAsStateWithLifecycle().value[ev.id]
-    val replays = vodLooked.orEmpty()
+    // Official highlights and condensed games (ESPN, NHL, MLB, YouTube) go in the same list.
+    val official = viewModel.repo.videoMatches.collectAsStateWithLifecycle().value[ev.id]
+    val replays = remember(vodLooked, official) { SportsVideos.merge(vodLooked.orEmpty(), official.orEmpty()) }
     val vodAddons = viewModel.repo.vodAddons.collectAsStateWithLifecycle().value[ev.id]
     val suggestNuvioSports by viewModel.repo.suggestNuvioSports.collectAsStateWithLifecycle()
     val nuvioSportsTip = if (suggestNuvioSports)
@@ -1428,8 +1430,8 @@ private fun GamePage(
             onDismiss = { pickRegion = false }
         )
     }
-    // Finished games: replays and highlights come only from sports addons, so this list goes first
-    // and says where they come from when there are none.
+    // Finished games: replays from your sports addons and the leagues' own highlights, so this
+    // list goes first and says where they come from when there are none.
     val replaysBlock: @Composable () -> Unit = {
         SectionHeader("REPLAYS & HIGHLIGHTS")
         when {
@@ -1443,7 +1445,7 @@ private fun GamePage(
                         onClick = { onPlayReplay(m) })
                 }
             }
-            vodLooked == null -> LiveText("Looking in your sports add-ons…", color = SportsLook.Dim, size = 12.sp,
+            vodLooked == null || official == null -> LiveText("Looking for replays and highlights…", color = SportsLook.Dim, size = 12.sp,
                 modifier = Modifier.padding(start = 6.dp, bottom = 4.dp))
             vodAddons != null && vodAddons.isEmpty() -> LiveText(
                 "Replays and highlights come from sports add-ons that offer them (HighFly Premium, StremVerse…). " +

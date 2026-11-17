@@ -333,7 +333,9 @@ class LiveTvPlaybackController @Inject constructor(
     private fun updateOwnTimeline() {
         val p = _player
         val ch = currentChannel
-        _ownTimeline.value = p != null && ch?.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID &&
+        _ownTimeline.value = p != null &&
+            (ch?.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID ||
+                ch?.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) &&
             _state.value.catchupTitle == null && _shiftStartedAt.value == null && _recordingPlayback.value == null &&
             p.isCurrentMediaItemSeekable && p.duration != C.TIME_UNSET &&
             // Live: only with a real rewind window (a short one would run out while paused, so
