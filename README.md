@@ -8,12 +8,12 @@
 [![Downloads](https://img.shields.io/github/downloads/homelessbrian/NuvioPlusIPTV/total?style=for-the-badge)](https://github.com/homelessbrian/NuvioPlusIPTV/releases)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](LICENSE)
 [![Based on Nuvio](https://img.shields.io/badge/based%20on-NuvioMedia%2FNuvioTV-8A2BE2?style=for-the-badge)](https://github.com/NuvioMedia/NuvioTV)
-[![Discord](https://img.shields.io/badge/chat-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/NvK5JVvvm)
+[![Discord](https://img.shields.io/badge/chat-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/QjrhNt3pK5)
 [![Support on Ko-fi](https://img.shields.io/badge/support-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/homelessbrian)
 
 **Downloader code: 6532491**
 
-[What's new](#-new-in-this-update) · [Multiview](#-multiview) · [Sports hub](#-sports-hub) · [Calendar](#-calendar) · [VPN](#-built-in-vpn) · [Sync](#-your-setup-everywhere) · [Phone app](#-on-your-phone-too) · [Download](#-installation) · [Features](#-features) · [Setup](#-getting-started) · [Remote controls](CONTROLS.md) · [Report a bug](#-reporting-bugs-and-requesting-features) · [Discord](https://discord.gg/NvK5JVvvm) · [Support](#-support-the-project)
+[What's new](#-new-in-this-update) · [Multiview](#-multiview) · [Sports hub](#-sports-hub) · [Calendar](#-calendar) · [VPN](#-built-in-vpn) · [Sync](#-your-setup-everywhere) · [Phone app](#-on-your-phone-too) · [Download](#-installation) · [Features](#-features) · [Setup](#-getting-started) · [Remote controls](CONTROLS.md) · [Report a bug](#-reporting-bugs-and-requesting-features) · [Discord](https://discord.gg/QjrhNt3pK5) · [Support](#-support-the-project)
 
 > ### 🙌 Big thanks to [ghbarker](https://github.com/ghbarker)
 > The **built-in VPN**, **Multiview** and **Stalker / Ministra portals** are his work. He wrote them and contributed them to this project. Thank you!
@@ -24,15 +24,15 @@
 
 ## 🆕 New in this update
 
-- **🖥️ Multiview:** watch up to four channels or games at once, with a layout picker, live games from Sports, and the sound following the pane you pick. [More below](#-multiview).
-- **📡 Stalker / Ministra portals:** add them as a source for Live TV and On Demand, next to your M3U playlists and Xtream logins.
-- **📱 Add from your phone:** scan a QR code and type playlists, Xtream logins and guides on your phone instead of with the remote.
-- **⚡ The guide opens straight away,** every time. Guide updates happen quietly in the background, playlists load much faster, and the app uses less memory.
-- **🖼️ Seek thumbnails:** preview pictures above the seek bar in movies, shows, catch-up, recordings, sports replays and paused live TV.
-- **📣 Full-time alerts** with the final score, and **Score alerts** for any single game, straight from its game page.
-- **⏺️ Record options** in the player: until you stop it, until the show ends, or until a set time.
-- **🌍 Live TV in more languages:** German, French, Spanish, Portuguese, Italian, Dutch, Polish, Turkish and Russian.
-- **Built on Nuvio 1.2.0-beta.1,** with its subtitle fonts and styles, chapters, and fallback to the next source when one fails.
+- **🎬 Highlights and replays for finished games:** official highlights and condensed games (ESPN, NHL, MLB), YouTube highlights, and replays from your sports addons for every sport, labelled Full game, Condensed or Highlights. [More below](#-sports-hub).
+- **🖥️ Multiview:** hold OK on a pane to watch it full screen, and Back returns to all of them, still playing. Pane names fade away with the top bar.
+- **📺 A guide for each playlist:** paste a guide link when you add a playlist, and switch each playlist's guides on or off.
+- **🎞️ On Demand from M3U playlists:** movies and series straight from the playlist, with the expiry date when it comes from an Xtream provider.
+- **🌐 DNS setting:** Cloudflare or Google, for when channels say your provider's server can't be found.
+- **👥 Keep profiles matched:** copy settings from one profile to another, or keep profiles matched so a change on one applies to all.
+- **📋 Copy several channels to a group** at once, and **Hide Stray Entries** for the odd leftovers some providers put in their playlists.
+- **📅 Calendar:** race weekends show each session on its own day, and golf and tennis tournaments show on every day they're on.
+- **Built on Nuvio 1.2.0-beta.2,** with Stremio tracking addons and a subtitle outline width setting.
 
 ---
 
@@ -44,6 +44,8 @@ Watch several channels, or several games, side by side.
 - **Layouts with pictures:** 1 screen, 2 side by side, 2 stacked, three ways to show 3, and 4 (2 × 2, or one big + three). It opens in the layout you used last.
 - **Pick channels like overlay mode:** a see-through list of your groups and channels with what's on now, plus a **Sports** tab of live games. OK on a game plays it; hold OK for its other streams or its Sports page.
 - **The sound follows the pane you're on.**
+- **One pane full screen:** hold OK on a pane to make it full screen, and Back takes you to all your panes, still playing.
+- **Out of the way:** pane names, numbers and the highlight fade away with the top bar.
 - **Keeps itself going:** a pane that drops reconnects by itself, and one that won't play moves to a backup copy of the channel.
 
 ---
@@ -107,9 +109,14 @@ Sports in the side menu shows scores and schedules, and works out **which of you
 Have a sports addon installed in Nuvio, like **HighFly** or **StremVerse**? Sports now uses it too. There's nothing to set up.
 - **Found automatically:** open a game and the app looks for it in your sports addons. While the page is open and nothing has shown up yet, it keeps checking, since streams usually appear close to the start.
 - **Live streams in the channel list:** a game that's on shows the addons' streams in its channel list, after your own channels.
-- **Replays & Highlights:** a finished game gets its own list of replays, highlights and recaps from your addons.
+- **Replays & Highlights:** a finished game gets its own list of replays, highlights and recaps from your addons, for every sport, labelled **Full game**, **Condensed** or **Highlights**, best quality first.
+- **No replays yet?** If you don't have it, the game page suggests the **Nuvio Live Sports** addon, which has replays of most games.
+- **When it's over:** a replay or highlight that plays to the end takes you back to the game's page.
 - **Start times** are read correctly whatever time zone the addon uses.
 - **Recording and Fix Channel** work on your own playlist channels, not on an addon's streams.
+
+### 🎬 Official highlights
+- **Finished games** get official highlights and condensed games from ESPN, the NHL and MLB, plus YouTube highlights that play right in the app. They're in the same list as your addons' replays.
 
 ### Watching
 - **Watch on your channels:**
@@ -150,6 +157,7 @@ Have a sports addon installed in Nuvio, like **HighFly** or **StremVerse**? Spor
 - **Your Country:** sets which country's TV schedule Airing Today shows, and the movie release dates you see.
 - **Views:** List, Week or Month. Choose the one it opens on under **Settings → Calendar → Opens In**.
 - **Filters:** All, Shows, Movies, Sports and **On my TV**.
+- **Events over several days:** F1, NASCAR and IndyCar weekends show each session on its own day and time, and golf and tennis tournaments show on every day they're on ("Day 2 of 4").
 - **Airing today** (news and talk shows can be left out) and **Recently aired** (with **Unwatched only**).
 - **Following:** a poster wall of everything you follow, with an info bar. Hold OK for Watch live, Record and Remind, on games too.
 - **Follow a show:** ring the bell on its page, in Live TV or in Search. New episodes get a card in Continue Watching (with **Not today** to put it away until tomorrow), and Home's **Upcoming** row shows what's coming this week.
@@ -183,6 +191,8 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **A new TV in minutes:** sign in with the QR code and everything comes back by itself.
 - **Encrypted:** your saved setup, including your IPTV logins, is encrypted before it's stored. Nothing is written to Nuvio's own servers.
 - **In your control:** **Settings → Live TV → Setup Sync** has Sync Now, Restore Earlier Copy, Turn Off and Delete Saved Setup.
+- **Combined, not overwritten:** favorites, hidden channels and your own groups are combined between devices item by item, and your channel and guide order stays the way you set it.
+- **Profiles:** **Copy Settings** copies a profile's Live TV favorites, groups, channel order, hidden items, Sports and Calendar choices to another profile. **Keep Matched** keeps profiles the same, so a change on one applies to all (turn it off with **Stop Matching** in Profile Options).
 - **Coming from Google Drive sync?** **Import from Google Drive** moves your Drive backup over in one step. Drive sync keeps working too.
 
 ---
@@ -219,6 +229,7 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 
 ### 📡 Your sources, your way
 - **Multiple M3U playlists** and **multiple XMLTV guides,** merged into one guide.
+- **A guide for each playlist:** paste its guide link when you add a playlist (on your phone too), and switch each playlist's guides on or off under **Guides**.
 - **Stalker / Ministra portals** for Live TV and On Demand.
 - **Add from your phone:** scan the QR code in **Settings → Live TV** and fill in playlists, logins and guides on your phone.
 - **Xtream Codes logins:**
@@ -231,6 +242,9 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
   - **Follow-on playback:** carries straight on into the next show.
   - **Guide time shift** and **Catch-up time shift** (up to 24 hours) for providers that are off.
 - **Backup channels:** a button on the info bar lists the other copies of the channel you're watching, hidden ones included, so you can switch when one is having trouble. Copies match even when the name has a sound layout like 5.1.
+- **DNS:** System (your network's normal lookup), Cloudflare or Google, for when channels say your provider's server can't be found or your internet company blocks IPTV. On System, the app tries Cloudflare and Google by itself when it needs to. The VPN takes care of this while it's on.
+- **Update now** downloads your playlist again in full, and **deleting a playlist** clears everything it left behind.
+- **Hide Stray Entries:** leaves out odd leftovers some providers put in their playlists, like a single episode in its own group.
 - **Channel name editor** (like TiviMate): strip "USA:", "HD", "24/7" and similar from channel names. Prefixes followed by just a space ("USA ESPN") are removed too when a playlist uses them on lots of channels.
 
 ### ⏺️ Recordings
@@ -245,12 +259,12 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 
 ### 🗂️ Channel management
 - **Manage visibility** and **reorder** for channels *and* groups. Move several groups at once.
-- **Copy, rename and renumber** channels, **create your own groups,** and **number channels 1, 2, 3…** in each group.
+- **Copy, rename and renumber** channels (tick several to **copy them to a group** at once), **create your own groups,** and **number channels 1, 2, 3…** in each group.
 - **Channel numbers from your playlist** are used when it has them.
 - **Favorites** and **Recently watched,** with sorting that works everywhere. **Pick favorites** ticks many channels in a group at once.
 
 ### 🎞️ On Demand
-- **What it is:** movies and series from your Xtream providers, with **categories or genres**, **Recently added**, **Search** and **Sort by**.
+- **What it is:** movies and series from your Xtream providers, Stalker portals and M3U playlists, with **categories or genres**, **Recently added**, **Search** and **Sort by**.
 - **Your posters, not the provider's:** posters and details come from your own addons. Matched titles open on Nuvio's normal details page, with watched marks and the usual long-press menu.
 - **📡 On Demand** in Nuvio's stream list, with quality, codec and audio badges. Choose where its tab goes, and whether auto-play may pick it.
 - **Each title once:** duplicates are merged, and a picker lets you choose the version when there are several. Your provider's copies are listed best quality first, with quality tags.
@@ -318,7 +332,7 @@ Requires **Android 7.0 or newer** (Fire OS 6 or later). It installs **alongside*
 
 **On a phone or tablet?** Get **[Nuvio + IPTV Mobile](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile/releases)** instead.
 
-**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.2.0-beta.1).
+**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.2.0-beta.2).
 
 ---
 
@@ -326,7 +340,7 @@ Requires **Android 7.0 or newer** (Fire OS 6 or later). It installs **alongside*
 
 1. Open **Settings → Live TV**.
 2. Choose **Add M3U Playlist**, **Add Xtream Codes Login** or **Add Stalker / Ministra Portal** (or **Add from your phone** to type it there). For Xtream, pick **Include TV channels** and/or **Include movies & series**.
-3. Optionally **Add EPG Source** for an extra TV guide.
+3. Paste your provider's guide link when you add the playlist, or **Add EPG Source** for an extra TV guide.
 4. Open **Live TV**, **On Demand** or **Sports** from the side menu. The first load can take a minute on big providers; a small progress bubble shows what's happening.
 5. Optional, all in **Settings → Live TV**:
    - choose the page the app opens on (**Settings → Menu & Features → Open the App On**)
@@ -348,7 +362,7 @@ Every button for the guide, full screen, Sports, the Calendar, On Demand and Rec
 
 ## 🐞 Reporting bugs and requesting features
 
-Please search [existing issues](https://github.com/homelessbrian/NuvioPlusIPTV/issues) first. Questions and chat are welcome on **[Discord](https://discord.gg/NvK5JVvvm)**.
+Please search [existing issues](https://github.com/homelessbrian/NuvioPlusIPTV/issues) first. Questions and chat are welcome on **[Discord](https://discord.gg/QjrhNt3pK5)**.
 
 | | |
 |---|---|
@@ -377,7 +391,13 @@ No. It only plays what you add yourself: your own playlists, guides, Xtream logi
 <details>
 <summary><b>I don't see On Demand.</b></summary>
 
-Turn on movies & series for your Xtream login under **Settings → Live TV → On Demand**. On Demand appears in the side menu once the first import finishes.
+Turn on movies & series for your Xtream login under **Settings → Live TV → On Demand**. M3U playlists that include movies and series get On Demand too. On Demand appears in the side menu once the first import finishes.
+</details>
+
+<details>
+<summary><b>Channels say the server can't be found.</b></summary>
+
+Some internet companies block IPTV servers. Open **Settings → Live TV → DNS** and choose **Cloudflare** or **Google**.
 </details>
 
 <details>
