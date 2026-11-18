@@ -1377,15 +1377,8 @@ class LiveTvRepository @Inject constructor(
                 if (fromMs >= loadedFrom && toMs <= loadedTo) return@withLock
                 val merged = HashMap(_programs.value)
                 reads.forEach { got ->
-                    got.forEach { (ch, list) ->
-                        val cur = merged[ch]
-                        merged[ch] = if (cur.isNullOrEmpty()) list else {
-                            // Shows running across the edge come back in both reads: once each.
-                            val starts = cur.mapTo(HashSet()) { it.startMs }
-                            val extra = list.filter { it.startMs !in starts }
-                            if (extra.isEmpty()) cur else (cur + extra).sortedBy { it.startMs }
-                        }
-                    }
+                    // Shows running across the edge come back in both reads: once each.
+                    got.forEach { (ch, list) -> merged[ch] = addShows(merged[ch], list) }
                 }
                 _programs.value = merged
                 loadedFrom = minOf(from, loadedFrom)
@@ -1477,15 +1470,7 @@ class LiveTvRepository @Inject constructor(
                     batch.forEach { ch ->
                         val list = got[ch].orEmpty()
                         val cur = merged[ch]
-                        merged[ch] = when {
-                            list.isEmpty() -> cur ?: return@forEach
-                            cur.isNullOrEmpty() -> list
-                            else -> {
-                                val starts = cur.mapTo(HashSet()) { it.startMs }
-                                val extra = list.filter { it.startMs !in starts }
-                                if (extra.isEmpty()) cur else (cur + extra).sortedBy { it.startMs }
-                            }
-                        }
+                        merged[ch] = if (list.isEmpty()) cur ?: return@forEach else addShows(cur, list)
                     }
                     _programs.value = merged
                 }
@@ -1673,10 +1658,28 @@ class LiveTvRepository @Inject constructor(
                 guideDb.channelRange(channelKey, now - settings.epgPastHours.coerceAtLeast(1) * HOUR,
                     now + settings.epgFutureDays.coerceAtLeast(1) * 24 * HOUR)
             }.getOrNull() ?: return@launch
-            val cur = _programs.value
-            if ((cur[channelKey]?.size ?: 0) >= list.size) return@launch
-            _programs.value = cur + (channelKey to list)
+            if (list.isEmpty()) return@launch
+            // Added to what's loaded, the same way the guide adds what it reads (it used to
+            // replace the channel's list when it had more shows, or be dropped when it had fewer:
+            // either the provider's catch-up shows or the later days went missing).
+            rangeMutex.withLock {
+                val cur = _programs.value
+                val merged = addShows(cur[channelKey], list)
+                if (merged !== cur[channelKey]) _programs.value = cur + (channelKey to merged)
+            }
         }
+    }
+
+    /**
+     * [list] added to a channel's loaded listings [cur]: shows already there (by start time) are
+     * kept as they are, the rest go in, in start order. The one way every read adds listings,
+     * so the guide and overlay mode always have the same shows.
+     */
+    private fun addShows(cur: List<EpgProgram>?, list: List<EpgProgram>): List<EpgProgram> {
+        if (cur.isNullOrEmpty()) return list
+        val starts = cur.mapTo(HashSet()) { it.startMs }
+        val extra = list.filter { it.startMs !in starts }
+        return if (extra.isEmpty()) cur else (cur + extra).sortedBy { it.startMs }
     }
 
     /** Everything the matched guide depends on; a different value means the cache is stale. */
