@@ -43,6 +43,7 @@ Watch several channels, or several games, side by side.
 - **Up to four at once:** open it from the guide's top row or the **Multiview** button on the play bar, or choose **Add to Multiview** in a channel's menu.
 - **Layouts with pictures:** 1 screen, 2 side by side, 2 stacked, three ways to show 3, and 4 (2 × 2, or one big + three). It opens in the layout you used last.
 - **Pick channels like overlay mode:** a see-through list of your groups and channels with what's on now, plus a **Sports** tab of live games. OK on a game plays it; hold OK for its other streams or its Sports page.
+- **Filter the games:** chips over the Sports tab for My Sports, All Events, Live Now and each sport that's on.
 - **The sound follows the pane you're on.**
 - **One pane full screen:** hold OK on a pane to make it full screen, and Back takes you to all your panes, still playing.
 - **Out of the way:** pane names, numbers and the highlight fade away with the top bar.

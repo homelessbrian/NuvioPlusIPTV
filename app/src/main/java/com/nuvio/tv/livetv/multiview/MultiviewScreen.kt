@@ -119,6 +119,8 @@ fun MultiviewScreen(
     val sportsAllowed = sports?.allowedChannels?.collectAsStateWithLifecycle()?.value ?: emptyList()
     val games = sports?.games?.collectAsStateWithLifecycle()?.value ?: emptyList()
     val sportsRows = sports?.rows?.collectAsStateWithLifecycle()?.value ?: emptyList()
+    val sportsFilters = sports?.filters?.collectAsStateWithLifecycle()?.value ?: emptyList()
+    val sportsFilterKey = sports?.filterKey?.collectAsStateWithLifecycle()?.value
     // The first time Sports is used, its games take a while: "Loading games" until they arrive (or 30 s pass).
     val sportsBusy = sports?.busy?.collectAsStateWithLifecycle()?.value ?: false
     var sportsSawBusy by remember { mutableStateOf(false) }
@@ -616,6 +618,9 @@ fun MultiviewScreen(
                 sportsMode = on
             },
             rows = sportsRows,
+            filters = sportsFilters,
+            filterKey = sportsFilterKey,
+            onFilter = { key -> sports?.pickFilter(key) },
             loadingGames = loadingGames,
             selectedEventId = paneEvents[pane]
                 ?: games.firstOrNull { game -> game.channels.any { it.channel.key == state.panes.getOrNull(pane)?.channelKey } }?.event?.id,
