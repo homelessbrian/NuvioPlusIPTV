@@ -654,7 +654,7 @@ class LiveTvRepository @Inject constructor(
                         if (!unchanged) markChanged(file)
                         LIVE_REPORT.add(if (unchanged) "Playlist \"${pl.name}\": no changes" else "Playlist \"${pl.name}\": new content")
                         !unchanged
-                    } else downloadM3u(pl, file)
+                    } else downloadM3u(pl, file, full = forcePlaylists || pl.id in forceIds)
                 }
                 // M3U links from Xtream providers (get.php with a login): the account's details.
                 if (!pl.hasCatalog) refreshM3uAccount(pl)
@@ -3047,15 +3047,22 @@ class LiveTvRepository @Inject constructor(
      * worked is remembered for this playlist (and used for its channels and guide), and
      * checked again the same way whenever it stops working.
      */
-    private suspend fun downloadM3u(pl: PlaylistSource, file: File): Boolean {
+    private suspend fun downloadM3u(
+        pl: PlaylistSource,
+        file: File,
+        /** Update now / a newly added or edited playlist: ask for the whole file, not "only if
+         *  changed". A server or cache that wrongly answers "not changed" otherwise keeps an old
+         *  copy of the playlist (groups removed at the provider stay) however often it's updated. */
+        full: Boolean = false
+    ): Boolean {
         val label: (Context) -> String = { localized -> localized.getString(R.string.iptv_repository_status_downloading_playlist_label, pl.name) }
         val url = pl.resolvedUrl()
-        if (pl.userAgent.isNotBlank()) return download(url, file, pl.userAgent, progressLabel = label)
+        if (pl.userAgent.isNotBlank()) return download(url, file, pl.userAgent, progressLabel = label, full = full)
         val first = pl.fallbackUserAgent.ifBlank { DEFAULT_UA }
         val second = if (first == DEFAULT_UA) PLAYER_UA else DEFAULT_UA
         fun nameOf(ua: String) = if (ua == DEFAULT_UA) "the app's default user agent" else "a media-player user agent (VLC)"
         val firstProblem = try {
-            return download(url, file, first, progressLabel = label, checkPlaylist = true)
+            return download(url, file, first, progressLabel = label, full = full, checkPlaylist = true)
         } catch (e: NotAPlaylistException) {
             e.what
         }
