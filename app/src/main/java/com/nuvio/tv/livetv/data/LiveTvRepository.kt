@@ -1565,7 +1565,10 @@ class LiveTvRepository @Inject constructor(
                         // Keep what the guide file already has from about now on; the archive
                         // fills in the past.
                         val pastEnd = minOf(now, list.last().stopMs)
-                        val past = list.filter { it.startMs < pastEnd }
+                        // Only as far back as "Past guide kept", like the guide file's listings
+                        // (the provider's list went back its whole catch-up, whatever the setting).
+                        val keptFrom = now - settings.epgPastHours.coerceAtLeast(1) * HOUR
+                        val past = list.filter { it.startMs < pastEnd && it.stopMs > keptFrom }
                         val existing = _programs.value[ch.key].orEmpty()
                         // Beyond the end of the guide file's listings, the archive's later
                         // shows are used too (some guide files only cover a day ahead).
@@ -1621,6 +1624,9 @@ class LiveTvRepository @Inject constructor(
                     providerSourceIdentity = ref.sourceIdentity.takeIf { p.archiveProgramId != null })
             }
         }
+        // Only as far back as "Past guide kept", like the guide file's listings.
+        val keptFrom = System.currentTimeMillis() - prefs.currentSettings().epgPastHours.coerceAtLeast(1) * HOUR
+        imported.removeAll { it.stopMs <= keptFrom }
         if (imported.isEmpty()) return
         stalker.assertCurrent(pl)
         val from = imported.minOf { it.startMs }

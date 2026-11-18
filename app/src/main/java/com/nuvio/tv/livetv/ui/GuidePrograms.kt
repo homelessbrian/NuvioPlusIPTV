@@ -12,7 +12,7 @@ const val NO_GUIDE_TITLE = "No Program Guide Available"
  */
 internal fun prepareGuidePrograms(ch: LiveChannel, list: List<EpgProgram>, nowMs: Long, pastHours: Int): List<EpgProgram> {
     val cu = ch.catchup ?: return list
-    val from = maxOf(nowMs - cu.days.coerceAtMost(7) * 24L * HOUR_BLOCK_MS, nowMs - pastHours * HOUR_BLOCK_MS)
+    val from = maxOf(nowMs - cu.days.coerceAtMost(14) * 24L * HOUR_BLOCK_MS, nowMs - pastHours * HOUR_BLOCK_MS)
     val to = nowMs - Math.floorMod(nowMs, HOUR_BLOCK_MS) + HOUR_BLOCK_MS
     var t = from - Math.floorMod(from, HOUR_BLOCK_MS)
     if (list.isEmpty()) {

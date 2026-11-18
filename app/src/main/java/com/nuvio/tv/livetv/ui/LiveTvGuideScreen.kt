@@ -984,7 +984,7 @@ private fun LiveTvGuideScreenBody(
         val block = blockAt(focusedPrograms, from)
         val atNow = now >= block.startMs && now < block.stopMs
         val earliest = if (ch.catchup != null) {
-            floorSlot(now - (ch.catchup.days.coerceAtMost(7) * 24L * 60 * 60 * 1000).coerceAtMost(settings.epgPastHours * 60L * 60 * 1000))
+            floorSlot(now - (ch.catchup.days.coerceAtMost(14) * 24L * 60 * 60 * 1000).coerceAtMost(settings.epgPastHours * 60L * 60 * 1000))
         } else floorSlot(now)
         if (atNow && !held) {
             resetToNow()
