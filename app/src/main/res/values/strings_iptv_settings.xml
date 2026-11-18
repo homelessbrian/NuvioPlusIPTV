@@ -691,7 +691,6 @@
     <string name="profile_matched_with">"Matched with %1$s"</string>
     <string name="profile_stop_matching">"Stop Matching"</string>
     <string name="profile_stopped_matching">"%1$s is no longer matched. It keeps its current settings."</string>
-    <string name="iptv_settings_connection">"Connection"</string>
     <string name="iptv_settings_dns">"DNS"</string>
     <string name="iptv_settings_dns_subtitle">"How the app finds your provider\'s servers. Try Cloudflare or Google if channels say the server can\'t be found"</string>
     <string name="iptv_settings_dns_dialog_subtitle">"Not used while the VPN is on: the VPN handles it. Home server names (like nas.local) always work."</string>
