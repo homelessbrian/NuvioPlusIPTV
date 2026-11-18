@@ -5,7 +5,6 @@
 ### Sports
 - **Official highlights and condensed games** on finished games, for ESPN, NHL and MLB, plus YouTube highlights that play right in the app
 - **Replays from your sports addons for every sport,** not just football, labelled Full game, Condensed or Highlights, best quality first. They load faster and show as each addon answers
-- No replays for a game? If you don't have it, the game page suggests the **Nuvio Live Sports** addon
 - When a highlight or replay finishes, you go back to the game's page. Live games that drop still keep reconnecting
 - Team colours are the same everywhere, and games weeks ahead show the real colours
 
@@ -43,4 +42,3 @@
 - **Multiview:** holding OK in the channel list no longer sends a pane to full screen, and holding OK on a game in the Sports tab opens its options on every remote
 - The VPN can no longer end up on without a profile chosen, even after a sync
 - Sports division standings show in the right order (NBA divisions came out worst first)
-- Turning on Recordings in Menu & Features no longer blinks and jumps back
