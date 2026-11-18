@@ -700,4 +700,6 @@
     <string name="iptv_settings_dns_google">"Google (8.8.8.8)"</string>
     <string name="iptv_settings_dns_system_desc">"Your network\'s normal lookup. If it can\'t find a provider\'s server, the app tries Cloudflare and Google by itself."</string>
     <string name="iptv_settings_dns_service_desc">"Gets around internet companies that block IPTV servers. Goes around home ad blockers and family filters."</string>
+    <string name="iptv_settings_hide_stray_entries">"Hide Stray Entries"</string>
+    <string name="iptv_settings_hide_stray_entries_desc">"Leaves out odd leftovers some providers add to their playlists, like a show episode sitting in its own one-item group. Real channels are never hidden"</string>
 </resources>

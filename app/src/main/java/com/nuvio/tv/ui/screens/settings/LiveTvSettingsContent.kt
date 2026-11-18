@@ -625,6 +625,12 @@ internal fun LiveTvSettingsContent(
                         )
                     }
                     SubHeading(context.getString(R.string.iptv_settings_hidden_your_groups))
+                    SettingsToggleRow(
+                        context.getString(R.string.iptv_settings_hide_stray_entries),
+                        context.getString(R.string.iptv_settings_hide_stray_entries_desc),
+                        s.hideStrayEntries,
+                        { viewModel.toggleHideStrayEntries() }
+                    )
                     SettingsActionRow(context.getString(R.string.iptv_settings_hidden_channels), context.getString(R.string.iptv_settings_channels_you_hid_select_one_to_show_it), "${user.hiddenChannels.size}", leadingIcon = Icons.Default.VisibilityOff, onClick = { dialog = LiveDialog.HiddenChannels })
                     SettingsActionRow(context.getString(R.string.iptv_settings_hidden_groups), context.getString(R.string.iptv_settings_groups_you_hid_select_one_to_show_it), "${user.hiddenGroups.size}", leadingIcon = Icons.Default.VisibilityOff, onClick = { dialog = LiveDialog.HiddenGroups })
                     SettingsActionRow(context.getString(R.string.iptv_settings_my_groups), context.getString(R.string.iptv_settings_groups_you_created_select_one_to_delete_it), "${user.customGroups.size}", onClick = { dialog = LiveDialog.CustomGroups })

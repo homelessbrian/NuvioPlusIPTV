@@ -103,6 +103,7 @@ class LiveTvPreferences @Inject constructor(
         val clock24 = booleanPreferencesKey("clock_24h")
         val autoReconnect = booleanPreferencesKey("auto_reconnect")
         val autoBackupChannel = booleanPreferencesKey("auto_backup_channel")
+        val hideStrayEntries = booleanPreferencesKey("hide_stray_entries")
         val catchupCache = booleanPreferencesKey("catchup_cache")
         val channelSort = stringPreferencesKey("channel_sort")
         val solidHighlight = booleanPreferencesKey("solid_highlight")
@@ -589,6 +590,7 @@ class LiveTvPreferences @Inject constructor(
             use24HourClock = p[Keys.clock24] ?: d.use24HourClock,
             autoReconnect = p[Keys.autoReconnect] ?: d.autoReconnect,
             autoBackupChannel = p[Keys.autoBackupChannel] ?: d.autoBackupChannel,
+            hideStrayEntries = p[Keys.hideStrayEntries] ?: d.hideStrayEntries,
             catchupCache = p[Keys.catchupCache] ?: d.catchupCache,
             channelSort = p[Keys.channelSort]?.let { runCatching { ChannelSort.valueOf(it) }.getOrNull() } ?: d.channelSort,
             solidHighlight = p[Keys.solidHighlight] ?: d.solidHighlight,
@@ -922,6 +924,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.clock24] = s.use24HourClock
         p[Keys.autoReconnect] = s.autoReconnect
         p[Keys.autoBackupChannel] = s.autoBackupChannel
+        p[Keys.hideStrayEntries] = s.hideStrayEntries
         p[Keys.catchupCache] = s.catchupCache
         p[Keys.channelSort] = s.channelSort.name
         p[Keys.solidHighlight] = s.solidHighlight

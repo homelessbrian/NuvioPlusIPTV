@@ -415,6 +415,12 @@ data class LiveTvSettings(
     val autoReconnect: Boolean = true,
     /** A channel that won't play: switch to another channel by the same name (from another group or playlist). */
     val autoBackupChannel: Boolean = true,
+    /**
+     * Leaves out stray playlist entries: in a playlist whose links say what each entry is
+     * (/live/, /movie/, /series/), an entry with no such marker that's named like an episode
+     * ("S02 E02"). Those turned up as one-item Live TV groups.
+     */
+    val hideStrayEntries: Boolean = true,
     /** Catch-up replays saved to the device while they play, for instant skipping. */
     val catchupCache: Boolean = true,
     val channelSort: ChannelSort = ChannelSort.PLAYLIST,
