@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       notes:
-        description: "What changed (shown in the update prompt)"
+        description: "What changed (leave empty to use RELEASE_NOTES.md)"
         required: false
         type: string
 
@@ -51,6 +51,32 @@ jobs:
           echo "Nuvio base $BASE -> fork release $VERSION (build $N)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "number=$N" >> "$GITHUB_OUTPUT"
+
+      # The release text: what's typed in the "What changed" box, or else RELEASE_NOTES.md from main
+      # (its first line becomes "# Nuvio + IPTV <version>"). Stops before building if the file
+      # hasn't changed since the last release, so old notes are never published again.
+      - name: Release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TYPED: ${{ inputs.notes }}
+        run: |
+          mkdir -p out
+          if [ -n "$(printf '%s' "$TYPED" | tr -d '[:space:]')" ]; then
+            printf 'Nuvio + IPTV update %s.\n\n%s\n' "$VERSION" "$TYPED" > out/release-notes.md
+            echo "Using the notes typed in the box."
+          else
+            if [ ! -s RELEASE_NOTES.md ]; then echo "RELEASE_NOTES.md is missing or empty, and no notes were typed." >&2; exit 1; fi
+            LAST_TAG=$(gh release list -R "$GITHUB_REPOSITORY" --limit 50 --json tagName -q '.[].tagName' | grep -vx downloader | head -1 || true)
+            if [ -n "$LAST_TAG" ] && git rev-parse -q --verify "refs/tags/$LAST_TAG" >/dev/null \
+                && git diff --quiet "$LAST_TAG" HEAD -- RELEASE_NOTES.md; then
+              echo "RELEASE_NOTES.md hasn't changed since $LAST_TAG. Update it on main, or type the notes in the box." >&2
+              exit 1
+            fi
+            { echo "# Nuvio + IPTV $VERSION"; sed '1{/^# /d}' RELEASE_NOTES.md; } > out/release-notes.md
+            echo "Using RELEASE_NOTES.md."
+          fi
+          cat out/release-notes.md
 
       - uses: actions/setup-go@v5
         with:
@@ -167,10 +193,7 @@ jobs:
           files: |
             out/*.apk
             out/openvpn2-corresponding-source.tar.gz
-          body: |
-            Nuvio + IPTV update ${{ steps.version.outputs.version }}.
-
-            ${{ inputs.notes }}
+          body_path: out/release-notes.md
 
       # One link that always gives the newest APK (for a Downloader code):
       # https://github.com/<you>/<repo>/releases/download/downloader/NuvioPlusIPTV.apk
