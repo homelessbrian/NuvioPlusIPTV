@@ -184,10 +184,16 @@ public final class VpnProfilesActivity extends Activity {
             setBusy(true);
             worker.execute(() -> {
                 try {
-                    settings.saveMode(mode);
+                    boolean kept = settings.saveMode(mode);
                     VpnConnectionService.settingsChanged(this, true);
-                    event("scope_intent_saved: " + mode.name());
-                    showResult(() -> { savedMode = mode; setBusy(false); status.setText(R.string.vpn_scope_saved); });
+                    event(kept ? "scope_intent_saved: " + mode.name() : "scope_needs_profile: " + mode.name());
+                    ProtectionMode saved = kept ? mode : ProtectionMode.OFF;
+                    showResult(() -> {
+                        savedMode = saved;
+                        if (!kept) scope.check(offId);
+                        setBusy(false);
+                        status.setText(kept ? R.string.vpn_scope_saved : R.string.vpn_scope_needs_profile);
+                    });
                 } catch (Exception e) {
                     event("scope_save_failed: " + e.getClass().getSimpleName());
                     showResult(() -> {

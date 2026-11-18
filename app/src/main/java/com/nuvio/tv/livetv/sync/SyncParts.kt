@@ -113,7 +113,7 @@ internal class SyncParts(private val store: SharedPreferences) {
             "playlist_refresh_hours", "epg_refresh_hours", "epg_future_days", "epg_past_hours", "epg_offset_minutes",
             "record_pre_minutes", "record_post_minutes", "recording_space_rule", "record_series_keep", "reminder_lead_minutes",
             "catchup_prefer_hls", "catchup_cache", "catchup_shift_minutes", "timeshift_enabled", "timeshift_minutes",
-            "auto_reconnect", "auto_backup_channel", "captions_by_default",
+            "auto_reconnect", "auto_backup_channel", "hide_stray_entries", "captions_by_default",
             "channel_sort", "group_sort", "vod_default_sort", "vod_sorts", "vod_merge_duplicates",
             "calendar_hide_spoilers", "calendar_hide_watched", "calendar_skip_news_talk", "calendar_sports", "calendar_new_episode_cards",
             "guide_search_catalog", "guide_search_live", "guide_search_ondemand",

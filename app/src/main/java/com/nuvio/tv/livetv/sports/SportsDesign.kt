@@ -96,6 +96,26 @@ internal object SportsLook {
     val ScoreStyle = TextStyle(fontFeatureSettings = "tnum", fontWeight = FontWeight.Black)
 }
 
+/**
+ * One set of gaps for every Sports page, so the rows at the top and the lists under them are
+ * spaced the same way everywhere. Each row of buttons at the top keeps [RowPad] above and below
+ * itself, so [RowGap] between two of them shows as an even 12dp.
+ */
+internal object SportsSpace {
+    /** The height of the buttons and tabs in the rows at the top of a page. */
+    val Control = 32.dp
+    /** Above and below a row of buttons at the top (room for the highlight). */
+    val RowPad = 2.dp
+    /** Between two rows at the top of a page (12dp once each row's [RowPad] is added). */
+    val RowGap = 8.dp
+    /** Between cards, across and down. */
+    val Card = 10.dp
+    /** Above a section's heading in a list ("LIVE NOW", "COMING UP"): 20dp with the card gap. */
+    val SectionTop = 10.dp
+    /** Kept clear above the hint line at the bottom of a page. */
+    val Bottom = 30.dp
+}
+
 /** A team colour made dark enough for white text on top of it. */
 internal fun bandColor(c: Color): Color = lerp(c, SportsLook.Ink, if (c.luminance() > 0.5f) 0.5f else if (c.luminance() > 0.25f) 0.25f else 0.08f)
 
@@ -598,9 +618,10 @@ internal fun DayTab(text: String, selected: Boolean, modifier: Modifier = Modifi
     var focused by remember { mutableStateOf(false) }
     val accent = NuvioTheme.colors.Secondary
     val shape = RoundedCornerShape(50)
-    LiveText(
-        text,
-        modifier = modifier
+    // The same height as the buttons in the top bar, so the rows line up evenly.
+    Box(
+        modifier
+            .height(SportsSpace.Control)
             .clip(shape)
             .background(if (selected) accent.copy(alpha = 0.14f) else Color.Transparent)
             .border(
@@ -610,10 +631,15 @@ internal fun DayTab(text: String, selected: Boolean, modifier: Modifier = Modifi
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 5.dp),
-        color = if (selected) Color.White else SportsLook.Dim,
-        size = 12.sp, weight = FontWeight.Bold
-    )
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        LiveText(
+            text,
+            color = if (selected) Color.White else SportsLook.Dim,
+            size = 12.sp, weight = FontWeight.Bold
+        )
+    }
 }
 
 /**
@@ -626,8 +652,8 @@ internal fun FilterIcon(icon: String, label: String, selected: Boolean, modifier
     val shape = RoundedCornerShape(50)
     Row(
         modifier
-            .height(32.dp)
-            .widthIn(min = 32.dp)
+            .height(SportsSpace.Control)
+            .widthIn(min = SportsSpace.Control)
             .clip(shape)
             .background(
                 when {
@@ -653,8 +679,15 @@ internal fun FilterIcon(icon: String, label: String, selected: Boolean, modifier
 
 /** A section's heading: "● LIVE NOW", "COMING UP", with the count on the right. */
 @Composable
-internal fun SectionHeader(title: String, live: Boolean = false, count: Int? = null, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+internal fun SectionHeader(
+    title: String,
+    live: Boolean = false,
+    count: Int? = null,
+    modifier: Modifier = Modifier,
+    /** In a list that already spaces its items: 0, so the heading sits one card gap above its cards. */
+    bottom: Dp = 6.dp
+) {
+    Row(modifier.fillMaxWidth().padding(top = SportsSpace.SectionTop, bottom = bottom), verticalAlignment = Alignment.CenterVertically) {
         if (live) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(SportsLook.Live))
             Spacer(Modifier.width(7.dp))

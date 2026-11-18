@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import com.nuvio.tv.livetv.ui.drawThemeGlow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,7 +38,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -77,17 +77,12 @@ internal val MultiviewPanelShape = RoundedCornerShape(22.dp)
 private val LabelChip = Color(0xB80D0D0F)
 internal val MultiviewNeutralTag = Color.White.copy(alpha = 0.14f)
 
-/** The Guide's soft glow at the top of the screen (the theme's raised colour fading into its background). */
+/** The same soft glow in the theme colour as the top of the Guide and Sports. */
 @Composable
 internal fun Modifier.multiviewBackdrop(): Modifier {
-    val glow = NuvioTheme.colors.BackgroundElevated
-    return this.drawBehind {
-        drawRect(Brush.radialGradient(
-            colors = listOf(glow, glow.copy(alpha = 0f)),
-            center = Offset(size.width / 2f, 0f),
-            radius = size.width * 0.75f
-        ))
-    }
+    val accent = NuvioTheme.colors.Secondary
+    val top = NuvioTheme.colors.BackgroundElevated
+    return this.drawBehind { drawThemeGlow(accent, top, size.width, 220.dp.toPx()) }
 }
 
 /** The floating glass card the pickers and the top bar sit in: as dark as the play bar ("Bar darkness"). */

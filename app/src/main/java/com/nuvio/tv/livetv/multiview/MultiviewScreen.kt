@@ -76,6 +76,7 @@ import com.nuvio.tv.livetv.sports.SportsWatchLaunch
 import com.nuvio.tv.livetv.sports.SportsWatchViewModel
 import com.nuvio.tv.livetv.sports.sportsFrame
 import com.nuvio.tv.livetv.ui.ChannelLogo
+import com.nuvio.tv.livetv.ui.guideBackdrop
 import com.nuvio.tv.livetv.ui.KeepScreenAwake
 import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.livetv.ui.LiveTextField
@@ -187,6 +188,7 @@ fun MultiviewScreen(
     val paneFocus = remember { List(4) { FocusRequester() } }
     val editFocus = remember { FocusRequester() }
     val panelBackground by viewModel.panelBackground.collectAsStateWithLifecycle()
+    val backdrop by viewModel.backdrop.collectAsStateWithLifecycle()
     val use24h by viewModel.use24HourClock.collectAsStateWithLifecycle()
     // A minute clock for the panes' "on now" and progress (read from the stored guide, four channels at most).
     val clock by produceState(System.currentTimeMillis()) {
@@ -380,6 +382,13 @@ fun MultiviewScreen(
         (pane ?: state.focusedPane).let { paneFocus[it.coerceIn(0, state.layout.paneCount - 1)].requestFocus() }
     }
     LaunchedEffect(editorOpen) { if (!editorOpen) returnGame = null }
+    // A picker that closed on OK (a channel picked while OK is held): the rest of that press would reach
+    // the pane underneath and count as "Hold OK: full screen". It is swallowed until OK is let go; a
+    // pause in the key repeats means OK was already let go elsewhere, so a new press goes through.
+    val okLeftover = remember { longArrayOf(-1L) }
+    LaunchedEffect(editorOpen, layoutOpen) {
+        if (!editorOpen && !layoutOpen) okLeftover[0] = android.os.SystemClock.uptimeMillis()
+    }
     // The pane that has just become full screen can only take the highlight once the screen has updated.
     LaunchedEffect(fullPane) { if (!editorOpen && !layoutOpen) fullPane?.let { paneFocus[it].requestFocus() } }
     fun paneClick(paneId: Int) {
@@ -407,7 +416,17 @@ fun MultiviewScreen(
     }
 
     Box(
-        Modifier.fillMaxSize().background(NuvioTheme.colors.Background).multiviewBackdrop().onPreviewKeyEvent { event ->
+        Modifier.fillMaxSize().guideBackdrop(backdrop).multiviewBackdrop().onPreviewKeyEvent { event ->
+            if (okLeftover[0] >= 0 && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                val native = event.nativeKeyEvent
+                val newPress = event.type == KeyEventType.KeyDown && native.repeatCount == 0 &&
+                    native.eventTime - okLeftover[0] > OK_LEFTOVER_GAP_MS
+                if (newPress) okLeftover[0] = -1L
+                else {
+                    okLeftover[0] = if (event.type == KeyEventType.KeyUp) -1L else native.eventTime
+                    return@onPreviewKeyEvent true
+                }
+            }
             val arrow = event.key == Key.DirectionLeft || event.key == Key.DirectionRight ||
                 event.key == Key.DirectionUp || event.key == Key.DirectionDown
             // With the overlays hidden, the first arrow only brings them back: it must not also move
@@ -678,3 +697,6 @@ internal object MultiviewReturn {
         return s?.takeIf { it.sports == sports && it.profile == profile }
     }
 }
+
+/** Key repeats come about every 50 ms; a longer pause after a picker closed means OK was let go. */
+private const val OK_LEFTOVER_GAP_MS = 300L

@@ -155,7 +155,7 @@ internal fun GuideGearPanel(
                             LiveText("Guide darkness", size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused))
                         }
                         LiveText(
-                            when (settings.guideInfoBackground) { "darker" -> "Standard"; "solid" -> "Darkest"; else -> "Lightest" },
+                            when (settings.guideInfoBackground) { "darker" -> androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_settings_standard); "solid" -> androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_settings_darkest); else -> androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_settings_lightest) },
                             size = 12.sp, color = gearText(focused, dim = true)
                         )
                     }

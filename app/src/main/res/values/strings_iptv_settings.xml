@@ -204,10 +204,10 @@
     <string name="iptv_settings_smaller_info_panel_preview">"Smaller Info Panel &amp; Preview"</string>
     <string name="iptv_settings_shrinks_the_top_of_the_guide_to_about">"Shrinks the top of the guide to about two-thirds of its height, so more channels fit"</string>
     <string name="iptv_settings_guide_darkness">"Guide Darkness"</string>
-    <string name="iptv_settings_how_dark_the_info_panel_at_the_top">"How dark the info panel at the top and the bars in the guide are. Lightest lets more of the background show through. Darkest makes the text easiest to read."</string>
+    <string name="iptv_settings_how_dark_the_info_panel_at_the_top">"How dark the info panel at the top and the bars in the guide are. Light lets more of the background show through. Dark makes the text easiest to read."</string>
     <string name="iptv_settings_standard">"Standard"</string>
-    <string name="iptv_settings_darkest">"Darkest"</string>
-    <string name="iptv_settings_lightest">"Lightest"</string>
+    <string name="iptv_settings_darkest">"Dark"</string>
+    <string name="iptv_settings_lightest">"Light"</string>
     <string name="iptv_settings_show_posters">"Show Posters"</string>
     <string name="iptv_settings_posters_for_what_s_on_from_your_addons">"Posters for what\'s on, from your addons. Off: just the channel logo."</string>
     <string name="iptv_settings_show_playlist_name_in_info_panel">"Show Playlist Name in Info Panel"</string>
@@ -300,7 +300,7 @@
     <string name="iptv_settings_1_list">"1 list"</string>
     <string name="iptv_settings_1_s_lists">"%1$s lists"</string>
     <string name="iptv_settings_play_bar_background">"Play Bar Background"</string>
-    <string name="iptv_settings_how_dark_the_play_bar_is_standard_or">"How dark the play bar is. Standard or Darkest makes the text easier to read over bright, busy pictures."</string>
+    <string name="iptv_settings_how_dark_the_play_bar_is_standard_or">"How dark the play bar is. Standard or Dark makes the text easier to read over bright, busy pictures."</string>
     <string name="iptv_settings_info_bar_stays_for">"Info Bar Stays For"</string>
     <string name="iptv_settings_how_long_the_show_info_stays_on_screen">"How long the show info stays on screen after changing channel or pressing OK"</string>
     <string name="iptv_settings_1_s_seconds">"%1$s seconds"</string>
@@ -691,4 +691,14 @@
     <string name="profile_matched_with">"Matched with %1$s"</string>
     <string name="profile_stop_matching">"Stop Matching"</string>
     <string name="profile_stopped_matching">"%1$s is no longer matched. It keeps its current settings."</string>
+    <string name="iptv_settings_dns">"DNS"</string>
+    <string name="iptv_settings_dns_subtitle">"How the app finds your provider\'s servers. Try Cloudflare or Google if channels say the server can\'t be found"</string>
+    <string name="iptv_settings_dns_dialog_subtitle">"Not used while the VPN is on: the VPN handles it. Home server names (like nas.local) always work."</string>
+    <string name="iptv_settings_dns_system">"System"</string>
+    <string name="iptv_settings_dns_cloudflare">"Cloudflare (1.1.1.1)"</string>
+    <string name="iptv_settings_dns_google">"Google (8.8.8.8)"</string>
+    <string name="iptv_settings_dns_system_desc">"Your network\'s normal lookup. If it can\'t find a provider\'s server, the app tries Cloudflare and Google by itself."</string>
+    <string name="iptv_settings_dns_service_desc">"Gets around internet companies that block IPTV servers. Goes around home ad blockers and family filters."</string>
+    <string name="iptv_settings_hide_stray_entries">"Hide Stray Entries"</string>
+    <string name="iptv_settings_hide_stray_entries_desc">"Leaves out odd leftovers some providers add to their playlists, like a show episode sitting in its own one-item group. Real channels are never hidden"</string>
 </resources>

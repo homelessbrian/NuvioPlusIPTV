@@ -58,6 +58,7 @@
     <string name="vpn_scope_app">Full app</string>
     <string name="vpn_scope_saved">VPN scope saved.</string>
     <string name="vpn_scope_failed">Could not save VPN scope.</string>
+    <string name="vpn_scope_needs_profile">Choose a VPN profile first. The VPN stays off until one is chosen.</string>
     <string name="vpn_turn_off">Turn off</string>
     <string name="vpn_connected_http">Connected · HTTP streams only</string>
     <string name="vpn_active_http_detail">HTTP playback uses the VPN. HTTPS and other app traffic keep their normal connection.</string>

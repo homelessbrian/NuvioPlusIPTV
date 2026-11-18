@@ -92,6 +92,10 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
         // Live TV fork: VPN progress lines go into the start-up report.
         com.nuvio.vpn.android.VpnPlaybackProtection.diagnostics =
             java.util.function.Consumer { line -> com.nuvio.tv.livetv.model.LiveTvLoadReport.add(line) }
+        // ...and whether it's on and which profile (at start and whenever it changes).
+        com.nuvio.tv.livetv.data.VpnReportLines.start()
+        // The DNS setting (Live TV settings), before any Live TV or player request.
+        com.nuvio.tv.livetv.data.ForkDns.init(this)
         androidTvChannelSyncService.start()
         serverUserStateProjection.start()
         // Load locale synchronously so it's available before Activity.attachBaseContext.

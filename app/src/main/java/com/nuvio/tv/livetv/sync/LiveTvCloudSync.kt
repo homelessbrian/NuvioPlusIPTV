@@ -96,7 +96,7 @@ class LiveTvCloudSync @Inject constructor(
     private val parts = SyncParts(store)
     private val mutex = Mutex()
     private val http = ForkHttp.builder()
-        .dns(com.nuvio.tv.core.network.IPv4FirstDns())
+        .dns(com.nuvio.tv.core.network.IPv4FirstDns(com.nuvio.tv.livetv.data.ForkDns.app))
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(false)

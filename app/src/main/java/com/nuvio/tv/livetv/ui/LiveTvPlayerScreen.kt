@@ -118,6 +118,8 @@ fun LiveTvPlayerScreen(
     val view = LocalView.current
 
     if (!embedded) PauseLiveTvInBackground(viewModel.playback)
+    // A replay or highlight from Sports that played to its end: back where it was opened.
+    LaunchedEffect(Unit) { viewModel.playback.videoFinished.collect { onBack() } }
     // Seek thumbnails for recordings and sports addon replays (off unless turned on in Settings).
     com.nuvio.tv.livetv.thumbs.LiveTvSeekThumbsHook(viewModel)
 
@@ -1488,7 +1490,6 @@ fun LiveTvPlayerScreen(
         PlayerDialog.BACKUPS -> if (backups.isEmpty()) dialog = PlayerDialog.NONE else if (backupMenuFor == null) BackupChannelsDialog(
             anchor = backupsAnchor,
             channels = backups,
-            showGroup = BarPart.GROUP !in BarPart.hiddenOf(settings.barHidden),
             playingKey = playback.channelKey,
             startKey = backupMenuLastKey,
             onLongPress = { ch -> backupMenuFor = ch; backupMenuLastKey = ch.key },

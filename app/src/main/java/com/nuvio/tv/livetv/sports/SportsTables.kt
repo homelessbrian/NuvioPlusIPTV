@@ -184,7 +184,7 @@ internal fun TablesPage(
                     .focusRestorer { leagueId?.let { leagueReq(it) } ?: FocusRequester.Default }
                     .keepFocusWhileHeld(vertical = false),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)
             ) {
                 items(shown, key = { it.id }) { l ->
                     LeagueButton(l, selected = l.id == leagueId, modifier = Modifier.focusRequester(leagueReq(l.id))) { picked = l.id }
@@ -224,9 +224,9 @@ internal fun TablesPage(
     // beside it.
     Box(Modifier.fillMaxSize()) {
         if (videoOn) {
-            Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 26.dp)) {
+            Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = SportsSpace.Bottom)) {
                 header()
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(SportsSpace.RowGap))
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     content(Modifier.width(470.dp).fillMaxHeight())
                     Spacer(Modifier.width(18.dp))
@@ -244,9 +244,9 @@ internal fun TablesPage(
                 }
             }
         } else {
-            Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = 26.dp)) {
+            Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = SportsSpace.Bottom)) {
                 header()
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(SportsSpace.RowGap))
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     content(Modifier.weight(1f).fillMaxHeight())
                     if (table != null && !settings.hideScores) {
@@ -272,7 +272,7 @@ private fun LeagueButton(league: League, selected: Boolean, modifier: Modifier =
     val shape = RoundedCornerShape(50)
     Row(
         modifier
-            .height(34.dp)
+            .height(SportsSpace.Control)
             .clip(shape)
             .background(if (selected) accent.copy(alpha = 0.14f) else SportsLook.Card)
             .border(if (focused) NuvioTheme.focusRing.border(1.5.dp) else androidx.compose.foundation.BorderStroke(1.5.dp, if (selected) accent else SportsLook.Border), shape)
@@ -333,9 +333,9 @@ private fun TableView(
     Column(modifier) {
         if (table.hasDivisions) {
             LazyRow(
-                Modifier.fillMaxWidth().padding(top = 6.dp).keepFocusWhileHeld(vertical = false),
+                Modifier.fillMaxWidth().padding(top = SportsSpace.RowGap).keepFocusWhileHeld(vertical = false),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp)
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)
             ) {
                 items(StandingsView.entries.toList(), key = { "v" + it.name }) { v ->
                     DayTab(

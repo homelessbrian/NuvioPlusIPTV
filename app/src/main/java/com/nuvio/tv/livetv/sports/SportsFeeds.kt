@@ -133,6 +133,9 @@ internal class SportsFeeds {
 
     fun tsdbGameRaw(tsdbEventId: String): String = get(DATA_URL + "sportsdb/games/$tsdbEventId.json")
 
+    /** Any of our own data files by its full address (see [DATA_URL]). */
+    fun dataRaw(url: String): String = get(url)
+
     // ------------------------------------------------------------------ the shared ESPN schedule cache
 
     /**

@@ -55,6 +55,7 @@ class StalkerMediaPolicy internal constructor(
         val baseline = OkHttpClient.Builder()
             .followRedirects(true).followSslRedirects(true)
             .connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
+            .dns(com.nuvio.tv.livetv.data.ForkDns.provider)
             .addNetworkInterceptor { chain ->
                 observe(chain.call())
                 val request = chain.request()

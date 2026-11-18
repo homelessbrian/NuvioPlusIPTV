@@ -330,10 +330,35 @@ class LiveTvPlaybackController @Inject constructor(
         return OwnTimeline(p.currentPosition.coerceIn(0L, d), d, p.isCurrentMediaItemDynamic)
     }
 
+    /** The stream playing now has shown itself as live at some point (a live game, not a replay). */
+    @Volatile private var sawLive = false
+
+    private val _videoFinished = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** A replay or highlight from Sports played to its end (full screen goes back where it was opened). */
+    val videoFinished: kotlinx.coroutines.flow.SharedFlow<Unit> = _videoFinished
+
+    /**
+     * True when what just ended is a sports addon replay or an official highlight that played
+     * through: a fixed length, and never live. A live game that drops (even one whose provider
+     * closes its list) keeps retrying as before.
+     */
+    private fun clipFinished(): Boolean {
+        val p = _player ?: return false
+        val ch = currentChannel ?: return false
+        if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
+            ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) return false
+        if (sawLive || p.isCurrentMediaItemDynamic) return false
+        val d = p.duration
+        return d != C.TIME_UNSET && d > 0
+    }
+
     private fun updateOwnTimeline() {
         val p = _player
         val ch = currentChannel
-        _ownTimeline.value = p != null && ch?.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID &&
+        if (p != null && p.isCurrentMediaItemDynamic) sawLive = true
+        _ownTimeline.value = p != null &&
+            (ch?.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID ||
+                ch?.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) &&
             _state.value.catchupTitle == null && _shiftStartedAt.value == null && _recordingPlayback.value == null &&
             p.isCurrentMediaItemSeekable && p.duration != C.TIME_UNSET &&
             // Live: only with a real rewind window (a short one would run out while paused, so
@@ -787,6 +812,7 @@ class LiveTvPlaybackController @Inject constructor(
         wallCheckedFor = null
         if (previousChannelKey != channel.key) {
             neverStartedCount = 0
+            sawLive = false
             audioHandled = false
             audioPrefPending = true
             captionsHandled = false
@@ -1061,6 +1087,7 @@ class LiveTvPlaybackController @Inject constructor(
         LiveWatching.sourceId = null
         currentUrl = null
         _ownTimeline.value = false
+        sawLive = false
         _state.value = LivePlaybackState()
     }
 
@@ -1174,7 +1201,7 @@ class LiveTvPlaybackController @Inject constructor(
                 "; reloading · ${redact(currentUrl ?: ch.url)}"
         )
         val url = currentUrl ?: ch.url
-        val resumeAt = if (archive) pos else C_TIME_UNSET
+        val resumeAt = if (archive) pos else ownReplayResumeAt(p)
         if (activeStalkerRef != null) {
             restartStalker(resumeAt)
             return
@@ -1876,6 +1903,13 @@ class LiveTvPlaybackController @Inject constructor(
                 return
             }
             if (playbackState == Player.STATE_ENDED && _state.value.catchupTitle == null) {
+                // A replay or highlight from Sports that played to its end: done, not a dropout.
+                if (clipFinished()) {
+                    com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Video ${currentChannel?.name} finished")
+                    _videoFinished.tryEmit(Unit)
+                    stop()
+                    return
+                }
                 // A live stream should never end; treat it as a dropped connection.
                 scheduleReconnect("Stream ended")
             }
@@ -2205,19 +2239,40 @@ class LiveTvPlaybackController @Inject constructor(
             }
             val url = currentUrl ?: return@launch
             val p = _player ?: return@launch
+            val resumeAt = ownReplayResumeAt(p)
             p.setMediaSource(buildMediaSource(url, ch.headers, isLive = _state.value.catchupTitle == null))
             p.prepare()
+            if (resumeAt > 0) p.seekTo(resumeAt)
             p.playWhenReady = true
         }
     }
 
-    private fun buildMediaSource(url: String, headers: Map<String, String>, isLive: Boolean): androidx.media3.exoplayer.source.MediaSource =
-        com.nuvio.tv.livetv.multiview.LiveTvMediaSourceBuilder(
+    private fun buildMediaSource(url: String, headers: Map<String, String>, isLive: Boolean): androidx.media3.exoplayer.source.MediaSource {
+        // A YouTube highlight from Sports: its picture and sound are two files, played together
+        // the way trailers are (read in pieces, as YouTube slows down whole-file downloads).
+        if (currentChannel?.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) {
+            com.nuvio.tv.livetv.sports.SportsVideos.soundFor(url)?.let { sound ->
+                val factory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(com.nuvio.tv.data.trailer.YoutubeChunkedDataSourceFactory())
+                return androidx.media3.exoplayer.source.MergingMediaSource(
+                    factory.createMediaSource(MediaItem.fromUri(url)),
+                    factory.createMediaSource(MediaItem.fromUri(sound))
+                )
+            }
+        }
+        return com.nuvio.tv.livetv.multiview.LiveTvMediaSourceBuilder(
             drm = currentChannel?.drm,
             forcedMime = forcedMime,
             bufferSize = bufferSize,
             stalkerPolicy = stalkerMediaPolicy,
         ).build(url, headers, isLive)
+    }
+
+    /**
+     * Where a replay with its own timeline (an addon replay, a highlight) had got to, so reloading
+     * it after a freeze or an error carries on there instead of starting over. Unset otherwise.
+     */
+    private fun ownReplayResumeAt(p: ExoPlayer): Long =
+        if (_ownTimeline.value && !p.isCurrentMediaItemDynamic) p.currentPosition.coerceAtLeast(0L) else C_TIME_UNSET
 
     /**
      * Lets go of the player (and its hold on the audio output) right away. Called when Nuvio's

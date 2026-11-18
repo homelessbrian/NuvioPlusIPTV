@@ -195,9 +195,10 @@ internal fun MyTeamsRows(
     }
 
     // Stops above the hint line at the bottom, so it never sits over a row.
-    Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = 24.dp)) {
+    Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = SportsSpace.Bottom)) {
         header()
-        Spacer(Modifier.height(10.dp))
+        // 12dp under the top bar, the same as every Sports page (the bar keeps 2dp of its own).
+        Spacer(Modifier.height(SportsSpace.RowGap + SportsSpace.RowPad))
         Row(Modifier.fillMaxWidth().height(168.dp)) {
             if (loading) {
                 Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
@@ -277,7 +278,7 @@ internal fun MyTeamsRows(
                                             idx?.let { requesterFor(keyAt(it)) } ?: FocusRequester.Default
                                         }
                                         .focusGroup(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(SportsSpace.Card),
                                     contentPadding = PaddingValues(start = 6.dp, end = 640.dp, top = 3.dp, bottom = 6.dp)
                                 ) {
                                     itemsIndexed(row.events, key = { _, ev -> ev.id }) { i, ev ->

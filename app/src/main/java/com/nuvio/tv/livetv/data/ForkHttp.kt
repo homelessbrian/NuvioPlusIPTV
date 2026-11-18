@@ -23,6 +23,8 @@ internal object ForkHttp {
     val base: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectionPool(ConnectionPool(IDLE_CONNECTIONS, KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
+            // The DNS setting (Live TV settings); provider clients swap in [ForkDns.provider].
+            .dns(ForkDns.app)
             .build()
     }
 

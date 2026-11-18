@@ -55,6 +55,14 @@ class LiveTvSettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.updateSettings(transform) }
     }
 
+    /** "Hide Stray Entries": the channel list is made again once the switch is saved. */
+    fun toggleHideStrayEntries() {
+        viewModelScope.launch {
+            prefs.updateSettings { it.copy(hideStrayEntries = !it.hideStrayEntries) }
+            repository.rebuildChannelList()
+        }
+    }
+
     /** Settings that change which programs are kept need the guide re-read. */
     fun updateAndReloadEpg(transform: (LiveTvSettings) -> LiveTvSettings) {
         viewModelScope.launch {

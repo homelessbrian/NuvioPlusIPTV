@@ -75,7 +75,7 @@ import java.util.Locale
 /** True = focused items are filled with the accent color; false = tinted fill with an accent outline. */
 internal val LocalLiveSolidHighlight = staticCompositionLocalOf { false }
 
-/** "Guide darkness" setting ("standard" = Lightest, "darker" = Standard, "solid" = Darkest): the guide bars follow it. */
+/** "Guide darkness" setting ("standard" = Light, "darker" = Standard, "solid" = Dark): the guide bars follow it. */
 internal val LocalGuideDarkness = staticCompositionLocalOf { "darker" }
 
 private val TEXT_OVER_PICTURE = androidx.compose.ui.graphics.Shadow(

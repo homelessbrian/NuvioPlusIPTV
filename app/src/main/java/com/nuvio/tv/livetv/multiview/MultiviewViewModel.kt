@@ -57,6 +57,11 @@ class MultiviewViewModel @Inject constructor(
         channelStore.displayChannels, preferences.userState, preferences.settings,
     ).flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    /** The guide's chosen backdrop (Settings → Live TV), so Multiview matches the Guide and Sports. */
+    val backdrop: StateFlow<String> = preferences.settings.map { it.guideBackdrop }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "auto")
+
     /** The play bar's darkness ("Bar darkness"), which every panel over the video follows. */
     val panelBackground: StateFlow<String> = preferences.settings.map { it.panelBackground }
         .stateIn(viewModelScope, SharingStarted.Eagerly, "darker")
