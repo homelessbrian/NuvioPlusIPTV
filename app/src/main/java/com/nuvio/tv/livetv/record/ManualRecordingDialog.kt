@@ -45,12 +45,14 @@ import java.util.Locale
 /**
  * "Schedule a Recording": a channel, a day, a start time and a length, for channels with no
  * listings (PPV events, a game that isn't in the guide). ◀ ▶ change the highlighted value.
+ * Repeat records the same time every week on the days picked ([onSchedule]'s days, as
+ * Calendar.SUNDAY..SATURDAY; empty: just once).
  */
 @Composable
 internal fun ManualRecordingDialog(
     channel: LiveChannel,
     use24h: Boolean,
-    onSchedule: (title: String, startMs: Long, stopMs: Long) -> Unit,
+    onSchedule: (title: String, startMs: Long, stopMs: Long, days: Set<Int>) -> Unit,
     onDismiss: () -> Unit
 ) {
     val now = remember { System.currentTimeMillis() }
@@ -76,6 +78,21 @@ internal fun ManualRecordingDialog(
     var customName by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<String?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
+    // Repeat: one of the presets, or days picked one by one (Custom).
+    var repeat by remember { mutableIntStateOf(0) }
+    var customDays by remember { mutableStateOf(setOf<Int>()) }
+    var pickingDays by remember { mutableStateOf(false) }
+    fun repeatDays(): Set<Int> = when (REPEATS[repeat]) {
+        "Every day" -> (1..7).toSet()
+        "Weekdays" -> setOf(2, 3, 4, 5, 6)
+        "Weekends" -> setOf(1, 7)
+        "Custom" -> customDays
+        else -> emptySet()
+    }
+    fun repeatLabel(): String = when (REPEATS[repeat]) {
+        "Custom" -> if (customDays.isEmpty()) "Pick days" else RepeatRule.daysLabel(customDays)
+        else -> REPEATS[repeat]
+    }
 
     fun startMs(): Long = Calendar.getInstance().apply {
         timeInMillis = now
@@ -97,7 +114,8 @@ internal fun ManualRecordingDialog(
         m % 60 == 0 -> "${m / 60} h"
         else -> "${m / 60} h ${m % 60} min"
     }
-    val defaultName = "${channel.name} — ${SimpleDateFormat("EEE", Locale.getDefault()).format(Date(startMs()))} ${timeFmt.format(Date(startMs()))}"
+    val defaultName = if (repeat == 0) "${channel.name} — ${SimpleDateFormat("EEE", Locale.getDefault()).format(Date(startMs()))} ${timeFmt.format(Date(startMs()))}"
+        else "${channel.name} — ${timeFmt.format(Date(startMs()))}"
     val name = customName?.takeIf { it.isNotBlank() } ?: defaultName
 
     val first = remember { FocusRequester() }
@@ -108,6 +126,15 @@ internal fun ManualRecordingDialog(
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ValueRow("Channel", "${channel.number}  ${channel.name}", onChange = null, onClick = {})
             ValueRow(
+                "Repeat", repeatLabel(),
+                onChange = { d -> repeat = Math.floorMod(repeat + d, REPEATS.size); problem = null },
+                onClick = {
+                    if (REPEATS[repeat] == "Custom") pickingDays = true
+                    else { repeat = (repeat + 1) % REPEATS.size; problem = null }
+                }
+            )
+            // Repeating: it starts on the next day picked, so there's no day to choose.
+            if (repeat == 0) ValueRow(
                 "Day", dayLabel(dayOffset),
                 modifier = Modifier.focusRequester(first),
                 onChange = { d -> dayOffset = (dayOffset + d).coerceIn(0, 7); problem = null },
@@ -127,8 +154,9 @@ internal fun ManualRecordingDialog(
         }
         Spacer(Modifier.height(6.dp))
         LiveText(
-            "Ends at ${timeFmt.format(Date(startMs() + lengthMin * 60_000L))}. Your Start Early and Keep Recording After times are added.",
-            color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 2
+            "Ends at ${timeFmt.format(Date(startMs() + lengthMin * 60_000L))}. Your Start Early and Keep Recording After times are added." +
+                if (repeat != 0) " Records every week on these days until you stop it in Recordings." else "",
+            color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 3
         )
         problem?.let {
             Spacer(Modifier.height(4.dp))
@@ -137,16 +165,32 @@ internal fun ManualRecordingDialog(
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             LiveFocusRow(onClick = {
-                val start = startMs()
-                val stop = start + lengthMin * 60_000L
-                if (stop <= System.currentTimeMillis()) {
-                    problem = "That time has already passed. Pick a later day or time."
-                } else onSchedule(name, start, stop)
+                val days = repeatDays()
+                if (repeat != 0) {
+                    if (days.isEmpty()) problem = "Pick at least one day to repeat on."
+                    else {
+                        // The first airing: today's time if it's still to come, else the next day picked.
+                        val start = nextAiring(System.currentTimeMillis(), minuteOfDay, days)
+                        onSchedule(name, start, start + lengthMin * 60_000L, days)
+                    }
+                } else {
+                    val start = startMs()
+                    val stop = start + lengthMin * 60_000L
+                    if (stop <= System.currentTimeMillis()) {
+                        problem = "That time has already passed. Pick a later day or time."
+                    } else onSchedule(name, start, stop, emptySet())
+                }
             }) { f -> LiveText("Schedule", color = focusedTextColor(f)) }
             LiveFocusRow(onClick = onDismiss) { f -> LiveText("Cancel", color = focusedTextColor(f)) }
         }
     }
     LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
+
+    if (pickingDays) RepeatDaysPicker(
+        selected = customDays,
+        onToggle = { d -> customDays = if (d in customDays) customDays - d else customDays + d; problem = null },
+        onDone = { pickingDays = false }
+    )
 
     when (editing) {
         "time" -> TextInputDialog(
@@ -170,6 +214,46 @@ internal fun ManualRecordingDialog(
             onConfirm = { text -> customName = text.trim().ifBlank { null }; editing = null }
         )
     }
+}
+
+private val REPEATS = listOf("Never", "Every day", "Weekdays", "Weekends", "Custom")
+
+/** The next start at [minuteOfDay] on one of [days], from [now] on. */
+private fun nextAiring(now: Long, minuteOfDay: Int, days: Set<Int>): Long {
+    for (ahead in 0..7) {
+        val c = Calendar.getInstance().apply {
+            timeInMillis = now
+            add(Calendar.DAY_OF_YEAR, ahead)
+            set(Calendar.HOUR_OF_DAY, minuteOfDay / 60); set(Calendar.MINUTE, minuteOfDay % 60)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        if (c.get(Calendar.DAY_OF_WEEK) in days && c.timeInMillis > now) return c.timeInMillis
+    }
+    return now
+}
+
+/** Picking the days a recording repeats on: OK ticks a day. */
+@Composable
+private fun RepeatDaysPicker(selected: Set<Int>, onToggle: (Int) -> Unit, onDone: () -> Unit) {
+    val first = remember { FocusRequester() }
+    val names = remember { java.text.DateFormatSymbols.getInstance().weekdays }
+    LiveDialog(onDismiss = onDone, width = 420.dp) {
+        LiveText("Repeat on", size = 20.sp, weight = FontWeight.Bold)
+        LiveText("OK ticks a day", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Monday first, Sunday last.
+            listOf(2, 3, 4, 5, 6, 7, 1).forEachIndexed { i, d ->
+                MenuItem(
+                    (if (d in selected) "✓  " else "     ") + names[d],
+                    if (i == 0) Modifier.focusRequester(first) else Modifier
+                ) { onToggle(d) }
+            }
+            Spacer(Modifier.height(6.dp))
+            MenuItem("Done", onClick = onDone)
+        }
+    }
+    LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
 }
 
 /** "8:30 PM", "8.30pm", "20:30", "2030", "8pm" → minutes after midnight. */

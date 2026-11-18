@@ -81,6 +81,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import com.nuvio.tv.livetv.ui.leftJumpsToTop
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -227,6 +228,11 @@ fun SportsScreen(
     // The card last highlighted (not page state: moving the highlight mustn't redraw the page).
     val rowFocus = remember { arrayOfNulls<String>(1) }
     var rowsReturning by remember { mutableStateOf(false) }
+    // Left from the page's left edge: up to the top bar's first button (see leftJumpsToTop).
+    val sportsFirstChip = remember { FocusRequester() }
+    var topBarFocused by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
 
     // ---- the video window: the shared player, shown where the page puts its slot
     val videoOn = settings.videoWindow && hasChannels
@@ -399,7 +405,22 @@ fun SportsScreen(
                     }
                 }
             )
-            else -> SportsHub(
+            else -> Box(
+                Modifier.fillMaxSize().leftJumpsToTop(
+                    atTop = { topBarFocused },
+                    toTop = {
+                        // Back up to the top bar (its first button, so one more Left opens Nuvio's menu).
+                        scope.launch {
+                            runCatching { listState.scrollToItem(0) }
+                            runCatching { rowsState.scrollToItem(0) }
+                            repeat(2) { androidx.compose.runtime.withFrameNanos { } }
+                            if (runCatching { sportsFirstChip.requestFocus() }.isFailure) openSidebar()
+                        }
+                    }
+                )
+            ) { SportsHub(
+                firstChip = sportsFirstChip,
+                onTopBarFocus = { topBarFocused = it },
                 events = events,
                 known = known,
                 rowsState = rowsState,
@@ -437,7 +458,7 @@ fun SportsScreen(
                 onPick = { picker = true },
                 onOpenMultiview = { onOpenMultiview(playingKey) },
                 onWatchChannel = { ch -> SportsLaunch.openedFromSports(); viewModel.watchChannel(ch); onOpenLive() }
-            )
+            ) }
         }
         // The picture, on top of the page where its slot is (one view for every page, so it
         // never restarts), then the rounded corners and the "nothing playing" note over it.
@@ -519,6 +540,9 @@ private fun SportsHub(
     onRowFocus: (String) -> Unit,
     rowsReturning: Boolean,
     onRowsReturned: () -> Unit,
+    /** The top bar's first button (Left from the page's left edge comes up to it). */
+    firstChip: FocusRequester,
+    onTopBarFocus: (Boolean) -> Unit,
     matches: Map<String, List<ChannelMatch>>,
     follows: SportsFollows,
     settings: SportsSettings,
@@ -628,7 +652,6 @@ private fun SportsHub(
     }
 
     val firstContent = remember { FocusRequester() }
-    val firstChip = remember { FocusRequester() }
     var focusedOnce by remember { mutableStateOf(false) }
     val hasContent = sections.live.isNotEmpty() || sections.upcoming.isNotEmpty() || sections.finished.isNotEmpty() || sections.weekLong.isNotEmpty()
     LaunchedEffect(hasContent, day, effectiveChip, pageReady) {
@@ -725,7 +748,7 @@ private fun SportsHub(
         }
     }
     val filters: @Composable (Modifier) -> Unit = { m ->
-        LazyRow(m.keepFocusWhileHeld(vertical = false), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)) {
+        LazyRow(m.keepFocusWhileHeld(vertical = false).onFocusChanged { onTopBarFocus(it.hasFocus) }, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)) {
             val upTo: Modifier = Modifier
             item(key = CHIP_MINE) { FilterIcon("★", "My Sports", effectiveChip == CHIP_MINE, Modifier.focusRequester(firstChip).then(upTo), withLabel = true) { pickChip(CHIP_MINE) } }
             // Everything on, day by day (live games first), with how many are on now.

@@ -214,7 +214,7 @@ data class Standings(
                 }.distinctBy { it.key }.take(7)
                 if (own.size >= 2) filled = own
             }
-            return Standings(league.id, season, kind, filled, groups, "ESPN", now)
+            return withQualifying(Standings(league.id, season, kind, filled, groups, "ESPN", now))
         }
 
         private fun c(key: String, label: String) = StandingsColumn(key, label)
@@ -328,6 +328,56 @@ data class Standings(
             val columns = listOf(c("gamesPlayed", "P"), c("wins", "W"), c("ties", "D"), c("losses", "L"), c("pointDifferential", "GD"), c("points", "PTS"))
                 .filter { col -> sorted.any { !it.values[col.key].isNullOrBlank() } }
             return Standings(league.id, root.str("season"), StandingsKind.TABLE, columns, listOf(StandingsGroup(league.name, null, sorted)), "TheSportsDB", now)
+        }
+
+        // ------------------------------------------------------------------ AFCON qualifying
+
+        private const val AFCON_QUAL = "soccer/caf.nations_qual"
+        /** AFCON 2027's hosts: in the finals whatever happens. Update when the next finals' qualifiers start. */
+        private val AFCON_HOSTS = setOf("kenya", "tanzania", "uganda")
+        private val ZONE_QUALIFIED = StandingsZone("Qualified for the finals", 0xFF2E9E5B)
+        private val ZONE_HOSTS = StandingsZone("Qualified as hosts", 0xFFD4A017)
+        private val ZONE_IN_PLACE = StandingsZone("In a qualifying place", 0xFF5FA8E6)
+        private val ZONE_OUT = StandingsZone("Can't qualify", 0xFF6B7280)
+
+        /**
+         * AFCON qualifying groups: who has made it, who is only in a qualifying place for now, and
+         * who can no longer get there. The top two go through, except in a group with a host,
+         * where the host is in anyway and only the best of the others goes through. "Made it"
+         * means no team below can still reach (or tie) their points; level on points is never
+         * counted as safe, since the tiebreaks can go either way. Other leagues are left as they are.
+         */
+        fun withQualifying(s: Standings): Standings {
+            if (s.leagueId != AFCON_QUAL || s.kind != StandingsKind.TABLE) return s
+            return s.copy(groups = s.groups.map { g -> g.copy(rows = afconGroup(g.rows)) })
+        }
+
+        private fun afconGroup(rows: List<StandingsRow>): List<StandingsRow> {
+            if (rows.size < 2) return rows
+            fun isHost(r: StandingsRow) = r.name.trim().lowercase() in AFCON_HOSTS || r.shortName.trim().lowercase() in AFCON_HOSTS
+            val places = if (rows.any { isHost(it) }) 1 else 2
+            // Everyone plays everyone home and away.
+            val games = 2 * (rows.size - 1)
+            fun pts(r: StandingsRow) = r.values["points"]?.trim()?.toIntOrNull() ?: 0
+            fun left(r: StandingsRow) = (games - (r.values["gamesPlayed"]?.trim()?.toIntOrNull() ?: 0)).coerceAtLeast(0)
+            fun most(r: StandingsRow) = pts(r) + 3 * left(r)
+            val rest = rows.filterNot { isHost(it) }.sortedBy { it.pos }
+            val finished = rest.all { left(it) == 0 }
+            return rows.map { r ->
+                val zone = if (isHost(r)) ZONE_HOSTS else {
+                    val others = rest.filter { it.id != r.id }
+                    val inPlace = rest.indexOfFirst { it.id == r.id } in 0 until places
+                    val made = if (finished) inPlace else others.count { most(it) >= pts(r) } < places
+                    val out = if (finished) !inPlace else others.count { pts(it) > most(r) } >= places
+                    when {
+                        made -> ZONE_QUALIFIED
+                        out -> ZONE_OUT
+                        inPlace -> ZONE_IN_PLACE
+                        else -> null
+                    }
+                }
+                r.copy(zone = zone, clincher = null, clincherText = null)
+            }
         }
 
         // ------------------------------------------------------------------ form and place changes

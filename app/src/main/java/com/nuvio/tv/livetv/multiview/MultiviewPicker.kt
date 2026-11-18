@@ -630,6 +630,10 @@ internal fun MultiviewChannelPicker(
                                         !down -> Unit
                                         event.key == Key.DirectionDown -> { if (gameCursor < gameAt.lastIndex) gameCursor++ }
                                         event.key == Key.DirectionUp -> { if (gameCursor > 0) gameCursor-- else upFromList() }
+                                        // Left: back to the top of the list, then up to the tabs.
+                                        event.key == Key.DirectionLeft -> if (event.nativeKeyEvent.repeatCount == 0) {
+                                            if (gameCursor > 0) gameCursor = 0 else upFromList()
+                                        }
                                     }
                                 }
                                 !down -> Unit
@@ -644,11 +648,18 @@ internal fun MultiviewChannelPicker(
                                         event.key == Key.DirectionDown -> { if (index < tree.lastIndex) index++ }
                                         event.key == Key.DirectionUp -> { if (index > 0) index-- else upFromList() }
                                         // Left folds a playlist or group shut; on a channel it goes back to its group.
-                                        event.key == Key.DirectionLeft -> when (item) {
-                                            is TreeItem.Head -> if (!item.collapsed) toggleList(item)
-                                            is TreeItem.Group -> if (item.isOpen) toggleGroup(item)
-                                            is TreeItem.Channel -> tree.indexOfLast { it is TreeItem.Group && it.isOpen }.takeIf { it >= 0 }?.let { index = it }
-                                            null -> Unit
+                                        // With nothing to fold: back to the top of the list, then up to the tabs.
+                                        event.key == Key.DirectionLeft -> {
+                                            val folded = when (item) {
+                                                is TreeItem.Head -> if (!item.collapsed) { toggleList(item); true } else false
+                                                is TreeItem.Group -> if (item.isOpen) { toggleGroup(item); true } else false
+                                                is TreeItem.Channel -> tree.subList(0, index.coerceIn(0, tree.size)).indexOfLast { it is TreeItem.Group && it.isOpen }
+                                                    .takeIf { it >= 0 }?.let { index = it; true } ?: false
+                                                null -> false
+                                            }
+                                            if (!folded && event.nativeKeyEvent.repeatCount == 0) {
+                                                if (index > 0) index = 0 else upFromList()
+                                            }
                                         }
                                         event.key == Key.DirectionRight -> when (item) {
                                             is TreeItem.Head -> if (item.collapsed) toggleList(item)
