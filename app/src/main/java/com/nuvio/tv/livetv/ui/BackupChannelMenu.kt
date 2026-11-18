@@ -85,8 +85,8 @@ internal fun BackupChannelMenu(
         "manual" -> com.nuvio.tv.livetv.record.ManualRecordingDialog(
             channel = channel,
             use24h = settings.use24HourClock,
-            onSchedule = { title, start, stop ->
-                LiveTvNotice.show(viewModel.scheduler.addManual(channel, title, start, stop))
+            onSchedule = { title, start, stop, days ->
+                LiveTvNotice.show(viewModel.scheduler.addManual(channel, title, start, stop, days))
                 onDismiss()
             },
             onDismiss = onDismiss
@@ -145,6 +145,12 @@ internal fun BackupChannelMenu(
                     if (program != null && seriesLabel != null) item {
                         MenuItem(seriesLabel) {
                             LiveTvNotice.show(viewModel.toggleSeries(channel, program))
+                            onDismiss()
+                        }
+                    }
+                    if (program != null && seriesLabel == "Record series") item {
+                        MenuItem("Record new episodes only") {
+                            LiveTvNotice.show(viewModel.toggleSeries(channel, program, newOnly = true))
                             onDismiss()
                         }
                     }

@@ -302,8 +302,8 @@ private fun LiveTvGuideScreenBody(
         else viewModel.toggleScheduled(ch, p)
         com.nuvio.tv.livetv.record.LiveTvNotice.show(msg)
     }
-    fun doSeries(ch: LiveChannel, p: EpgProgram) {
-        com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.toggleSeries(ch, p))
+    fun doSeries(ch: LiveChannel, p: EpgProgram, newOnly: Boolean = false) {
+        com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.toggleSeries(ch, p, newOnly))
     }
     val programs by viewModel.programs.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
@@ -2084,9 +2084,9 @@ private fun LiveTvGuideScreenBody(
             com.nuvio.tv.livetv.record.ManualRecordingDialog(
                 channel = ch,
                 use24h = settings.use24HourClock,
-                onSchedule = { title, start, stop ->
+                onSchedule = { title, start, stop, days ->
                     manualRecordingFor = null
-                    com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.scheduler.addManual(ch, title, start, stop))
+                    com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.scheduler.addManual(ch, title, start, stop, days))
                     scope.launch { delay(60); runCatching { gridFocus.requestFocus() } }
                 },
                 onDismiss = {
@@ -2104,6 +2104,7 @@ private fun LiveTvGuideScreenBody(
                 onRecord = { p -> menuTarget = null; doRecord(target.channel, p) },
                 seriesLabel = seriesLabel(target.channel, target.block?.program),
                 onSeries = { p -> menuTarget = null; doSeries(target.channel, p) },
+                onSeriesNew = { p -> menuTarget = null; doSeries(target.channel, p, newOnly = true) },
                 onScheduleRecording = { menuTarget = null; manualRecordingFor = target.channel },
                 canRestart = viewModel.canWatchFromStart(target.channel),
                 restartLabel = viewModel.restartLabel(target.channel),
@@ -3282,6 +3283,7 @@ private fun GroupColumn(
             if (src !in collapsed) listed.filter { it.sourceId == src }.forEach { add(it.id) }
         }
     }
+    val hasSearch = searchFocusRequester != null && groups.any { it.id == ChannelGroup.SEARCH }
     // One focus requester per row, so the row number below can put the highlight on any row.
     val rowRequesters = remember { HashMap<String, FocusRequester>() }
     fun requesterFor(key: String): FocusRequester = rowRequesters.getOrPut(key) { FocusRequester() }
@@ -3381,6 +3383,22 @@ private fun GroupColumn(
                     stepGroup(e)
                 } else false
             }
+            // Left from a group further down: back up to Search at the top (one more Left opens
+            // Nuvio's menu, as before).
+            .leftJumpsToTop(
+                atTop = { searchFocused || (!hasSearch && focusedKey == rowKeys.firstOrNull()) },
+                toTop = {
+                    stepScope.launch {
+                        runCatching { listState.scrollToItem(0) }
+                        androidx.compose.runtime.withFrameNanos { }
+                        val toSearch = hasSearch && runCatching { searchFocusRequester!!.requestFocus() }.isSuccess
+                        if (!toSearch) rowKeys.firstOrNull()?.let { k ->
+                            focusedKey = k
+                            runCatching { requesterFor(k).requestFocus() }
+                        }
+                    }
+                }
+            )
     ) {
         // Search sits above the groups (it opens Nuvio's search), in the row beside the timeline.
         groups.firstOrNull { it.id == ChannelGroup.SEARCH }?.let { searchGroup ->
@@ -3692,6 +3710,8 @@ private fun ChannelContextMenu(
     /** "Record series" / "Stop recording series", or null. */
     seriesLabel: String? = null,
     onSeries: (EpgProgram) -> Unit = {},
+    /** "Record new episodes only" (offered next to "Record series"). */
+    onSeriesNew: (EpgProgram) -> Unit = {},
     /** The show on now can be restarted (catch-up channel). */
     canRestart: Boolean = false,
     restartLabel: String = "Watch from the beginning",
@@ -3737,6 +3757,7 @@ private fun ChannelContextMenu(
             item { MenuHeader("Record") }
             if (program != null && recordLabel != null) item { MenuItem(recordLabel, onClick = { onRecord(program) }) }
             if (program != null && seriesLabel != null) item { MenuItem(seriesLabel, onClick = { onSeries(program) }) }
+            if (program != null && seriesLabel == "Record series") item { MenuItem("Record new episodes only", onClick = { onSeriesNew(program) }) }
             item { MenuItem("Schedule a recording…", onClick = onScheduleRecording) }
             item { MenuHeader("Favorites & groups") }
             item { MenuItem(if (isFavorite) "Remove from favorites" else "Add to favorites", onClick = onToggleFavorite) }

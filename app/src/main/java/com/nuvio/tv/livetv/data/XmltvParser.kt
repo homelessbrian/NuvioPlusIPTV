@@ -182,6 +182,7 @@ object XmltvParser {
         var icon: String? = null
         var date: String? = null
         var people: ArrayList<String>? = null
+        var newTag = false
         val depth = parser.depth
         var event = parser.next()
         while (!(event == XmlPullParser.END_TAG && parser.depth == depth)) {
@@ -203,6 +204,8 @@ object XmltvParser {
                     "icon" -> { icon = parser.getAttributeValue(null, "src"); skip(parser) }
                     "date" -> { val t = readText(parser); if (date == null) date = t }
                     "credits" -> readCredits(parser, people ?: ArrayList<String>().also { people = it })
+                    // The guide's own "new episode" tag: shown as NEW and used by "new episodes only".
+                    "new" -> { newTag = true; skip(parser) }
                     else -> skip(parser)
                 }
             }
@@ -224,7 +227,9 @@ object XmltvParser {
             // Repeated words (titles, categories, icon links) are stored once instead of once per
             // show, and very long descriptions are cut: a big guide held several hundred thousand
             // listings in memory, which is what made huge playlists freeze.
-            title = title?.trim().orEmpty().ifBlank { "No information" }.let { if (it.length <= 80) it.intern() else it },
+            title = title?.trim().orEmpty().ifBlank { "No information" }
+                .let { if (newTag && !NEW_IN_TITLE.containsMatchIn(it)) "$it (New)" else it }
+                .let { if (it.length <= 80) it.intern() else it },
             description = fullDesc?.let { if (it.length > 800) it.take(800).trimEnd() + "…" else it },
             category = category?.trim()?.intern(),
             episode = episode?.intern(),
@@ -235,6 +240,9 @@ object XmltvParser {
             providerSourceIdentity = providerSourceIdentity
         )
     }
+
+    /** A title that already says it's new (see titleMarks). */
+    private val NEW_IN_TITLE = Regex("""^\s*new\s*[:\-–|]|[(\[]\s*new\s*[)\]]|ᴺᴱᵂ""", RegexOption.IGNORE_CASE)
 
     private val yearInParens = Regex("""\((19\d{2}|20\d{2})\)""")
 

@@ -387,7 +387,8 @@ private fun OverlayModeContent(
                         // OK on a playlist heading: fold or unfold it (the highlight stays on it).
                         isOk && headingAt != null -> headingAt?.let { viewModel.togglePlaylistCollapsed(it) }
                         e.key == Key.DirectionRight || isOk || e.key == Key.Back -> { applyPendingGroup(); headingAt = null; level = OverlayLevel.CHANNELS }
-                        e.key == Key.DirectionLeft -> Unit
+                        // Left: straight back to the top of the group list.
+                        e.key == Key.DirectionLeft -> if (e.nativeKeyEvent.repeatCount == 0) moveGroup(-groupRows.size)
                     }
                     OverlayLevel.SCHEDULE -> when {
                         e.key == Key.DirectionUp -> moveShow(-1)
@@ -566,6 +567,11 @@ private fun OverlayModeContent(
                 }
                 if (seriesLabel != null) MenuItem(seriesLabel, if (recordLabel == null) Modifier.focusRequester(first) else Modifier) {
                     com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.toggleSeries(ch, p))
+                    recordMenu = null
+                    activity++
+                }
+                if (seriesLabel == "Record series") MenuItem("Record new episodes only") {
+                    com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.toggleSeries(ch, p, newOnly = true))
                     recordMenu = null
                     activity++
                 }

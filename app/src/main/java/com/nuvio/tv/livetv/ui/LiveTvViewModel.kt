@@ -1424,12 +1424,12 @@ class LiveTvViewModel @Inject constructor(
     }
 
     /** Record every airing of this show on this channel (or stop that). Returns a message. */
-    fun toggleSeries(channel: LiveChannel, program: EpgProgram): String {
+    fun toggleSeries(channel: LiveChannel, program: EpgProgram, newOnly: Boolean = false): String {
         scheduler.seriesFor(channel.key, titleMarks(program.title).title)?.let {
             scheduler.removeSeries(it.id)
             return "Stopped recording \"${it.title}\""
         }
-        return scheduler.addSeries(channel, program)
+        return scheduler.addSeries(channel, program, newOnly)
     }
 
     fun isSeries(channel: LiveChannel, program: EpgProgram): Boolean =
