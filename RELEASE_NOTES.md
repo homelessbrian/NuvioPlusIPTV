@@ -12,6 +12,7 @@
 ### Multiview
 - **Hold OK on a pane to watch it full screen.** Back takes you to all your panes, still playing
 - Pane names, numbers and the highlight fade away with the top bar
+- **Filter the Sports tab:** My Sports, All Events, Live Now, or one sport at a time. Your choice is remembered
 
 ### Live TV
 - **A guide for each playlist:** paste a guide link when you add a playlist (on the phone page too, Stalker portals included), and switch each playlist's guides on or off under **Guides**

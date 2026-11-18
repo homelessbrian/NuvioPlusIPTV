@@ -12,6 +12,9 @@ internal data class SportsWatchGame(val event: SportsEvent, val channels: List<C
 /** The Sports page's row/section order, with only games that can be watched now or shortly. */
 internal data class SportsWatchRow(val key: String, val title: String, val games: List<SportsWatchGame>)
 
+/** A filter chip over Multiview's Sports list: My Sports, All Events, Live Now, or one sport. */
+internal data class SportsWatchFilter(val key: String, val icon: String, val label: String)
+
 internal data class SportsWatchRules(
     val user: LiveUserState,
     val live: LiveTvSettings,
@@ -64,6 +67,40 @@ internal object SportsWatchPolicy {
     fun pageQuery(selection: SportsWatchPageSelection?, profile: Int, follows: SportsFollows): SportsPageQuery =
         selection?.takeIf { it.profileId == profile }?.query
             ?: SportsPageQuery(0, if (follows.isEmpty) CHIP_ALL else CHIP_MINE, null, null)
+
+    const val FILTER_MINE = "mine"
+    const val FILTER_ALL = "all"
+    const val FILTER_LIVE = "live"
+    private const val FILTER_SPORT = "sport:"
+
+    /** My Sports (when something is followed), All Events, Live Now, then each sport with a game on now or soon. */
+    fun filters(games: List<SportsWatchGame>, follows: SportsFollows, settings: SportsSettings): List<SportsWatchFilter> {
+        val order = SportsCatalog.sportsOrder(settings)
+        val sports = games.mapNotNull { SportsCatalog.league(it.event.leagueId)?.sport }.distinct()
+            .sortedBy { order.indexOf(it).let { i -> if (i < 0) 99 else i } }
+        return buildList {
+            if (!follows.isEmpty) add(SportsWatchFilter(FILTER_MINE, "★", "My Sports"))
+            add(SportsWatchFilter(FILTER_ALL, "▦", "All Events"))
+            add(SportsWatchFilter(FILTER_LIVE, "●", "Live Now"))
+            sports.forEach { add(SportsWatchFilter(FILTER_SPORT + it.name, it.icon, it.label)) }
+        }
+    }
+
+    /** Which chip the current page selection is (null: one the chips don't offer, like a league). */
+    fun filterKey(query: SportsPageQuery): String? = when {
+        query.chip == CHIP_MINE && query.rowsSport == null -> FILTER_MINE
+        query.chip == CHIP_LIVE -> FILTER_LIVE
+        query.chip == CHIP_ALL -> query.allSportPick?.let { FILTER_SPORT + it } ?: FILTER_ALL
+        else -> null
+    }
+
+    /** The page selection a chip stands for (today, so the list is what's on now). */
+    fun filterQuery(key: String): SportsPageQuery = when {
+        key == FILTER_MINE -> SportsPageQuery(0, CHIP_MINE, null, null)
+        key == FILTER_LIVE -> SportsPageQuery(0, CHIP_LIVE, null, null)
+        key.startsWith(FILTER_SPORT) -> SportsPageQuery(0, CHIP_ALL, key.removePrefix(FILTER_SPORT), null)
+        else -> SportsPageQuery(0, CHIP_ALL, null, null)
+    }
 
     fun allowedChannels(
         playlistChannels: List<LiveChannel>,

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,6 +65,7 @@ import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.sports.ChannelMatch
 import com.nuvio.tv.livetv.sports.SportsBadge
+import com.nuvio.tv.livetv.sports.SportsWatchFilter
 import com.nuvio.tv.livetv.sports.SportsWatchGame
 import com.nuvio.tv.livetv.sports.SportsWatchRow
 import com.nuvio.tv.livetv.sports.StripGameCard
@@ -153,6 +155,11 @@ internal fun MultiviewChannelPicker(
     sportsMode: Boolean,
     onSportsMode: (Boolean) -> Unit,
     rows: List<SportsWatchRow>,
+    /** Chips over the games: My Sports, All Events, Live Now and each sport on now. */
+    filters: List<SportsWatchFilter>,
+    /** The chip the list is showing now (null: a Sports page filter the chips don't offer). */
+    filterKey: String?,
+    onFilter: (String) -> Unit,
     /** The games are still being fetched and matched to channels (the first time Sports is used). */
     loadingGames: Boolean,
     selectedEventId: String?,
@@ -241,6 +248,9 @@ internal fun MultiviewChannelPicker(
     val hasChannel = selectedPane?.channelKey != null
     val failed = selectedPane?.error != null
     val showActions = searching || !sportsMode || hasChannel || failed
+    // The filter chips sit under the buttons while the games list is showing.
+    val filterFocus = remember { FocusRequester() }
+    var filterJump by remember { mutableStateOf(false) }
 
     // Sports: the games under their section titles, a cursor over the games, and one game's streams.
     val items = remember(rows) {
@@ -311,6 +321,13 @@ internal fun MultiviewChannelPicker(
         searchState.scrollToItem(0)
     }
     LaunchedEffect(items) {
+        if (filterJump) {
+            // A new filter: the list starts at the top.
+            filterJump = false
+            gameCursor = 0
+            sportsState.scrollToItem(0)
+            return@LaunchedEffect
+        }
         if (gameAt.isEmpty()) return@LaunchedEffect
         if (!gamePlaced) {
             gamePlaced = true
@@ -336,8 +353,27 @@ internal fun MultiviewChannelPicker(
         runCatching { listFocus.requestFocus() }
     }
 
+    val filtersShown = sportsMode && !searching && optionsGame == null && streamsGame == null && filters.isNotEmpty()
     fun upFromList() {
-        runCatching { (if (searching) fieldFocus else if (showActions) actionFocus else tabFocus).requestFocus() }
+        runCatching {
+            (if (searching) fieldFocus else if (filtersShown) filterFocus else if (showActions) actionFocus else tabFocus).requestFocus()
+        }
+    }
+    fun pickFilter(key: String) {
+        if (key == filterKey) {
+            runCatching { listFocus.requestFocus() }
+            return
+        }
+        filterJump = true
+        gameCursor = 0
+        onFilter(key)
+        scope.launch {
+            sportsState.scrollToItem(0)
+            // The new list normally arrives well within this; a later update mustn't jump to the top.
+            delay(3_000L)
+            filterJump = false
+        }
+        runCatching { listFocus.requestFocus() }
     }
     fun openSearch() {
         searching = true
@@ -426,6 +462,7 @@ internal fun MultiviewChannelPicker(
                                         val target = when {
                                             searching -> fieldFocus
                                             showActions -> actionFocus
+                                            filtersShown -> filterFocus
                                             else -> listFocus
                                         }
                                         if (!runCatching { target.requestFocus() }.isSuccess) runCatching { listFocus.requestFocus() }
@@ -478,7 +515,9 @@ internal fun MultiviewChannelPicker(
                             Modifier.fillMaxWidth()
                                 .onPreviewKeyEvent { event ->
                                     if (event.key == Key.DirectionDown) {
-                                        if (event.type == KeyEventType.KeyDown) runCatching { listFocus.requestFocus() }
+                                        if (event.type == KeyEventType.KeyDown) {
+                                            runCatching { (if (filtersShown) filterFocus else listFocus).requestFocus() }
+                                        }
                                         true
                                     } else false
                                 },
@@ -499,6 +538,44 @@ internal fun MultiviewChannelPicker(
                                 )
                             }
                             if (failed) MultiviewChip("Retry", icon = Icons.Default.Refresh, onClick = onRetry)
+                        }
+                    }
+                    if (filtersShown) {
+                        // Up goes back to the buttons (or the tabs), Down to the games; Left/Right move along.
+                        val chipKey = filterKey?.takeIf { k -> filters.any { it.key == k } } ?: filters.first().key
+                        val chipState = rememberLazyListState()
+                        LaunchedEffect(chipKey, filters) {
+                            val at = filters.indexOfFirst { it.key == chipKey }
+                            if (at > 0) chipState.scrollToItem((at - 1).coerceAtLeast(0))
+                        }
+                        LazyRow(
+                            Modifier.fillMaxWidth()
+                                .onPreviewKeyEvent { event ->
+                                    when (event.key) {
+                                        Key.DirectionDown -> {
+                                            if (event.type == KeyEventType.KeyDown) runCatching { listFocus.requestFocus() }
+                                            true
+                                        }
+                                        Key.DirectionUp -> {
+                                            if (event.type == KeyEventType.KeyDown) {
+                                                runCatching { (if (showActions) actionFocus else tabFocus).requestFocus() }
+                                            }
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                },
+                            state = chipState,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp)
+                        ) {
+                            itemsIndexed(filters, key = { _, f -> f.key }) { _, f ->
+                                MultiviewChip(
+                                    "${f.icon}  ${f.label}",
+                                    if (f.key == chipKey) Modifier.focusRequester(filterFocus) else Modifier,
+                                    selected = f.key == filterKey
+                                ) { pickFilter(f.key) }
+                            }
                         }
                     }
                 }
