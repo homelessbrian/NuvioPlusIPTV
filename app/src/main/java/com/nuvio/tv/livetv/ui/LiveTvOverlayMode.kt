@@ -207,13 +207,13 @@ private fun OverlayModeContent(
     }
 
     // ---- schedule of one channel, grouped by day
-    val schedule: List<ScheduleRow> = remember(scheduleChannel, programs, now / 3_600_000L, settings.epgPastHours) {
+    val schedule: List<ScheduleRow> = remember(scheduleChannel, programs) {
         val ch = scheduleChannel ?: return@remember emptyList()
         val out = ArrayList<ScheduleRow>()
         var lastDay = Long.MIN_VALUE
-        // The same shows as the guide's row for this channel (catch-up hours with no listings
-        // included, so they can be played from here too).
-        prepareGuidePrograms(ch, programs[ch.key].orEmpty(), now, settings.epgPastHours).forEach { p ->
+        // Real listings only: the guide's empty catch-up hours filled the top of this list with
+        // days of "No Program Guide Available" on channels with no past listings.
+        programs[ch.key].orEmpty().forEach { p ->
             val day = startOfDay(p.startMs)
             if (day != lastDay) {
                 out += ScheduleRow.Day(dayLabel(day, now), day)
