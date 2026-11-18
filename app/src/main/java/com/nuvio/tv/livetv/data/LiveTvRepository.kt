@@ -90,6 +90,7 @@ class LiveTvRepository @Inject constructor(
         .followRedirects(true)
         .followSslRedirects(true)
         .retryOnConnectionFailure(true)
+        .dns(ForkDns.provider)
         .apply { ForgivingTls.trustManager?.let { tm -> ForgivingTls.socketFactory?.let { sslSocketFactory(it, tm) } } }
         .build()
 
@@ -129,6 +130,8 @@ class LiveTvRepository @Inject constructor(
             withContext(Dispatchers.IO) { runCatching { File(baseDir, "epg_channel_lists.bin").delete() } }
             // Saved channels and guide first: reading them only uses the device's storage.
             loadFromCache()
+            // The servers channels play from get the player's automatic DNS retry.
+            scope.launch { channels.collect { ForkDns.addProviderHosts(it) } }
             // A playlist running out within a week: say so (once per app start).
             runCatching {
                 val names = prefs.currentPlaylists().associate { it.id to it.name }

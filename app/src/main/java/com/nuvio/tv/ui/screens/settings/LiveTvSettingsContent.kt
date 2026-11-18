@@ -223,6 +223,7 @@ private sealed interface LiveDialog {
     data object BannerTime : LiveDialog
     data object PlaylistRefresh : LiveDialog
     data object EpgRefresh : LiveDialog
+    data object Dns : LiveDialog
     data object FutureDays : LiveDialog
     data object PastHours : LiveDialog
     data object SortChoice : LiveDialog
@@ -248,6 +249,17 @@ private sealed interface LiveDialog {
 }
 
 private val EPG_OFFSETS = (-48..48).map { it * 30 }
+
+private fun dnsLabel(context: Context, value: com.nuvio.tv.livetv.data.DnsChoice) = when (value) {
+    com.nuvio.tv.livetv.data.DnsChoice.SYSTEM -> context.getString(R.string.iptv_settings_dns_system)
+    com.nuvio.tv.livetv.data.DnsChoice.CLOUDFLARE -> context.getString(R.string.iptv_settings_dns_cloudflare)
+    com.nuvio.tv.livetv.data.DnsChoice.GOOGLE -> context.getString(R.string.iptv_settings_dns_google)
+}
+
+private fun dnsDescription(context: Context, value: com.nuvio.tv.livetv.data.DnsChoice) = when (value) {
+    com.nuvio.tv.livetv.data.DnsChoice.SYSTEM -> context.getString(R.string.iptv_settings_dns_system_desc)
+    else -> context.getString(R.string.iptv_settings_dns_service_desc)
+}
 private val REFRESH_HOURS = listOf(3, 6, 12, 24, 48, 72, 168)
 private val BANNER_SECONDS = listOf(3, 5, 8, 10, 15)
 private val FUTURE_DAYS = listOf(1, 2, 3, 5, 7, 10, 14)
@@ -343,6 +355,7 @@ internal fun LiveTvSettingsContent(
     val status by viewModel.status.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<LiveDialog?>(null) }
+    var dnsChoice by remember { mutableStateOf(com.nuvio.tv.livetv.data.ForkDns.choice) }
     val drive by viewModel.driveSync.state.collectAsStateWithLifecycle()
     val cloud by viewModel.cloudSync.state.collectAsStateWithLifecycle()
     val syncParts by viewModel.cloudSync.enabledParts.collectAsStateWithLifecycle()
@@ -566,6 +579,12 @@ internal fun LiveTvSettingsContent(
                         context.getString(R.string.iptv_settings_show_playlist_epg_and_on_demand_update_progress),
                         s.showImportProgress,
                         { update { it.copy(showImportProgress = !it.showImportProgress) } }
+                    )
+                    SubHeading(context.getString(R.string.iptv_settings_connection))
+                    SettingsActionRow(
+                        context.getString(R.string.iptv_settings_dns),
+                        context.getString(R.string.iptv_settings_dns_subtitle),
+                        dnsLabel(context, dnsChoice), onClick = { dialog = LiveDialog.Dns }
                     )
                 }
             }
@@ -2149,6 +2168,14 @@ internal fun LiveTvSettingsContent(
             options = REFRESH_HOURS.map { SettingsPickerOption(it, hoursLabel(context, it)) },
             selectedValue = s.playlistRefreshHours,
             onOptionSelected = { v -> update { it.copy(playlistRefreshHours = v) }; close() },
+            onDismiss = close
+        )
+        LiveDialog.Dns -> SettingsSingleChoiceDialog(
+            title = context.getString(R.string.iptv_settings_dns),
+            subtitle = context.getString(R.string.iptv_settings_dns_dialog_subtitle),
+            options = com.nuvio.tv.livetv.data.DnsChoice.entries.map { SettingsPickerOption(it, dnsLabel(context, it), description = dnsDescription(context, it)) },
+            selectedValue = dnsChoice,
+            onOptionSelected = { v -> com.nuvio.tv.livetv.data.ForkDns.set(context, v); dnsChoice = v; close() },
             onDismiss = close
         )
         LiveDialog.EpgRefresh -> SettingsSingleChoiceDialog(

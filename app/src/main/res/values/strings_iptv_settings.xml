@@ -691,4 +691,13 @@
     <string name="profile_matched_with">"Matched with %1$s"</string>
     <string name="profile_stop_matching">"Stop Matching"</string>
     <string name="profile_stopped_matching">"%1$s is no longer matched. It keeps its current settings."</string>
+    <string name="iptv_settings_connection">"Connection"</string>
+    <string name="iptv_settings_dns">"DNS"</string>
+    <string name="iptv_settings_dns_subtitle">"How the app finds your provider\'s servers. Try Cloudflare or Google if channels say the server can\'t be found"</string>
+    <string name="iptv_settings_dns_dialog_subtitle">"Not used while the VPN is on: the VPN handles it. Home server names (like nas.local) always work."</string>
+    <string name="iptv_settings_dns_system">"System"</string>
+    <string name="iptv_settings_dns_cloudflare">"Cloudflare (1.1.1.1)"</string>
+    <string name="iptv_settings_dns_google">"Google (8.8.8.8)"</string>
+    <string name="iptv_settings_dns_system_desc">"Your network\'s normal lookup. If it can\'t find a provider\'s server, the app tries Cloudflare and Google by itself."</string>
+    <string name="iptv_settings_dns_service_desc">"Gets around internet companies that block IPTV servers. Goes around home ad blockers and family filters."</string>
 </resources>

@@ -77,7 +77,7 @@ class LiveTvDriveSync @Inject constructor(
     private val http = ForkHttp.builder()
         // IPv4 first, like Nuvio's own connections: many VPNs (and some routers) leave IPv6
         // half working, and each Google address then hung until it timed out.
-        .dns(com.nuvio.tv.core.network.IPv4FirstDns())
+        .dns(com.nuvio.tv.core.network.IPv4FirstDns(com.nuvio.tv.livetv.data.ForkDns.app))
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()

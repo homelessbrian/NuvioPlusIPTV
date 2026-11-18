@@ -72,6 +72,7 @@ class StalkerGateway @Inject constructor(
         // Portal identity headers may only follow a redirect to the same origin.
         .followRedirects(false).followSslRedirects(false)
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
+        .dns(com.nuvio.tv.livetv.data.ForkDns.provider)
         .build()
 
     init {

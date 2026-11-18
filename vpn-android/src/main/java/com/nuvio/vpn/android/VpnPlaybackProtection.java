@@ -197,6 +197,15 @@ public final class VpnPlaybackProtection {
     }
     public static long settingsRevision() { return settingsRevision.get(); }
     /**
+     * Whether VPN protection is switched on (any mode), for callers that must leave address
+     * lookups to the VPN. Not proof a tunnel is connected. Reads from disk: call it off the main
+     * thread. Unreadable settings count as on, so callers keep the normal lookup.
+     */
+    public static boolean isOn() {
+        try { return settings().getMode() != ProtectionMode.OFF; }
+        catch (IOException unavailable) { return true; }
+    }
+    /**
      * Session-based portals need one network identity for their control and media requests.
      * The returned value is an in-memory cache key, not evidence that a tunnel is connected;
      * each request must still pass beforeRequest and use VpnHttpClient.

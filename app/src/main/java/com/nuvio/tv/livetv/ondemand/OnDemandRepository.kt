@@ -124,6 +124,7 @@ class OnDemandRepository @Inject constructor(
         .readTimeout(120, TimeUnit.SECONDS)
         // Big catalogs (100,000+ titles) on slow panels can take a long time to send.
         .callTimeout(40, TimeUnit.MINUTES)
+        .dns(com.nuvio.tv.livetv.data.ForkDns.provider)
         .build()
 
     /**

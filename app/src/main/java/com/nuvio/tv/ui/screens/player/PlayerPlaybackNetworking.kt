@@ -49,7 +49,7 @@ internal object PlayerPlaybackNetworking {
         }
         OkHttpClient.Builder()
             .dispatcher(dispatcher)
-            .dns(IPv4FirstDns())
+            .dns(IPv4FirstDns(com.nuvio.tv.livetv.data.ForkDns.playback))
             .socketFactory(PlaybackSocketFactory)
             .eventListenerFactory(PlaybackConnectionEvents)
             .sslSocketFactory(sslContext.socketFactory, trustAllManager)
@@ -76,7 +76,7 @@ internal object PlayerPlaybackNetworking {
         }
         OkHttpClient.Builder()
             .dispatcher(dispatcher)
-            .dns(IPv4FirstDns())
+            .dns(IPv4FirstDns(com.nuvio.tv.livetv.data.ForkDns.playback))
             .socketFactory(PlaybackSocketFactory)
             .eventListenerFactory(PlaybackConnectionEvents)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
