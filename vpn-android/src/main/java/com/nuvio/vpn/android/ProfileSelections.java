@@ -28,6 +28,25 @@ final class ProfileSelections {
                 ? value.withSelectedProfile(null) : value);
     }
 
+    /**
+     * Protection that is on with no profile to use is switched off. A restored or synced setup
+     * could otherwise turn the VPN on with nothing to connect through, and playback stayed
+     * blocked until the user found the setting.
+     */
+    boolean turnOffWithoutProfile() {
+        boolean changed = false;
+        if (lacksProfile(shared)) { shared = shared.withMode(ProtectionMode.OFF); changed = true; }
+        for (Map.Entry<Integer, VpnPreferences> entry : overrides.entrySet()) {
+            if (lacksProfile(entry.getValue())) { entry.setValue(entry.getValue().withMode(ProtectionMode.OFF)); changed = true; }
+        }
+        return changed;
+    }
+
+    private static boolean lacksProfile(VpnPreferences value) {
+        String id = value.getSelectedProfileId();
+        return value.getMode() != ProtectionMode.OFF && (id == null || id.isEmpty());
+    }
+
     void checkProfiles(Set<String> ids) throws IOException {
         checkProfile(shared, ids);
         for (VpnPreferences value : overrides.values()) checkProfile(value, ids);

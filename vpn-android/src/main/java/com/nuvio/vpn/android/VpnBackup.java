@@ -80,6 +80,9 @@ public final class VpnBackup {
             JSONArray profiles = payload.getJSONArray("profiles");
             if (profiles.length() > 32) throw new IOException("VPN profile limit reached.");
             ProfileSelections selections = ProfileSelections.parse(payload);
+            // Never turn the VPN on here without a profile to use (the copy is kept matching, so
+            // the "nothing changed" check below compares like with like).
+            if (selections.turnOffWithoutProfile()) selections.writeTo(payload);
             HashSet<String> ids = new HashSet<>();
             ArrayList<ProfileImport.Candidate> candidates = new ArrayList<>();
             try {

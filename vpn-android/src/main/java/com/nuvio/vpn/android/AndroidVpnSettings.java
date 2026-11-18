@@ -40,9 +40,15 @@ final class AndroidVpnSettings {
             AtomicFile source = exists(file) ? file : legacy;
             if (!exists(source)) return new ProfileSelections(VpnPreferences.defaults());
             byte[] data = readBytes(source);
-            if (data.length == 0 || data[0] != '{') return new ProfileSelections(VpnPreferences.decode(data));
-            try { return ProfileSelections.parse(new JSONObject(new String(data, StandardCharsets.UTF_8))); }
-            catch (JSONException e) { throw new IOException("Invalid VPN settings."); }
+            ProfileSelections state;
+            if (data.length == 0 || data[0] != '{') state = new ProfileSelections(VpnPreferences.decode(data));
+            else {
+                try { state = ProfileSelections.parse(new JSONObject(new String(data, StandardCharsets.UTF_8))); }
+                catch (JSONException e) { throw new IOException("Invalid VPN settings."); }
+            }
+            // Saved before this rule (or by an older sync): on with no profile counts as off.
+            state.turnOffWithoutProfile();
+            return state;
         }
     }
 
@@ -58,8 +64,12 @@ final class AndroidVpnSettings {
         }
     }
 
-    void saveMode(ProtectionMode mode) throws IOException {
-        synchronized (LOCK) { save(read().withMode(mode)); }
+    /** False when [mode] wasn't kept because no profile is chosen (the VPN stays off). */
+    boolean saveMode(ProtectionMode mode) throws IOException {
+        synchronized (LOCK) {
+            save(read().withMode(mode));
+            return read().getMode() == mode;
+        }
     }
 
     void selectProfile(String id) throws IOException {
@@ -108,6 +118,9 @@ final class AndroidVpnSettings {
 
     void replace(ProfileSelections state) throws IOException {
         synchronized (LOCK) {
+            // The VPN is never left on without a profile: choosing a scope first, clearing the
+            // chosen profile or removing it all leave it off.
+            state.turnOffWithoutProfile();
             byte[] bytes;
             try { bytes = state.overrides.isEmpty() ? state.shared.encode()
                     : state.writeTo(new JSONObject()).toString().getBytes(StandardCharsets.UTF_8); }

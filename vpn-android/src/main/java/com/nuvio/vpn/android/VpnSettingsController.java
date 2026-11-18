@@ -224,7 +224,7 @@ public final class VpnSettingsController {
             int message = R.string.vpn_scope_saved;
             boolean failed = false;
             try {
-                settings().saveMode(mode);
+                if (!settings().saveMode(mode)) message = R.string.vpn_scope_needs_profile;
                 VpnConnectionService.settingsChanged(app, true);
             } catch (Exception e) {
                 message = R.string.vpn_scope_failed;
