@@ -208,6 +208,7 @@ object SportsCatalog {
         soc("fifa.worldq.caf", "World Cup Qualifying (Africa)", "WCQ AF", listOf("World Cup Qualifier", "World Cup Qualifying"), color = 0xFF006233, national = true),
         soc("fifa.worldq.ofc", "World Cup Qualifying (Oceania)", "WCQ OC", listOf("World Cup Qualifier", "World Cup Qualifying"), color = 0xFF1B4F72, national = true),
         soc("caf.nations", "Africa Cup of Nations", "AFCON", listOf("Africa Cup of Nations", "AFCON"), color = 0xFF006233, national = true),
+        soc("caf.nations_qual", "AFCON Qualifying", "AFCON Q", listOf("AFCON Qualifier", "AFCON Qualifying", "Africa Cup of Nations Qualifier", "Africa Cup of Nations Qualifying"), color = 0xFF006233, national = true),
         soc("afc.asian.cup", "AFC Asian Cup", "ASIAN", listOf("Asian Cup"), color = 0xFF1A3C6E, national = true),
         soc("fifa.olympics", "Olympic Football", "OLY", listOf("Olympic Football", "Olympics Football"), color = 0xFF0081C8),
         soc("club.friendly", "Club Friendlies", "FRIENDLY", listOf("Club Friendly", "Pre-Season Friendly", "Friendly"), color = 0xFF33415C),
