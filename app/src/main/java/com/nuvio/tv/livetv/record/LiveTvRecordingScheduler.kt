@@ -28,7 +28,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -214,6 +216,7 @@ class LiveTvRecordingScheduler @Inject constructor(
             load()
             armAll()
             watchNetwork()
+            scope.launch { forgetDeletedPlaylists() }
             // New guide listings: look for new airings of series.
             repository.programs.debounce(10_000).collect { if (_series.value.isNotEmpty()) expandSeries() }
         }
@@ -290,6 +293,31 @@ class LiveTvRecordingScheduler @Inject constructor(
             useCatchup && program.stopMs <= now -> "Saving \"$title\" from catch-up"
             useCatchup -> "Set to record \"$title\" ($whenText). It's saved from catch-up after it ends."
             else -> "Set to record \"$title\" ($whenText)"
+        }
+    }
+
+    /**
+     * Shows and series set to record on a playlist that has been deleted can never record: they
+     * go when it's deleted (or at start, for ones deleted before). Not while there are no
+     * playlists at all at start (a fresh install or a restore on its way), only when the last
+     * one is deleted while the app is open.
+     */
+    private suspend fun forgetDeletedPlaylists() {
+        var hadAny = false
+        prefs.playlists.map { list -> list.mapTo(HashSet()) { it.id } }.distinctUntilChanged().collect { ids ->
+            if (ids.isEmpty() && !hadAny) return@collect
+            hadAny = ids.isNotEmpty()
+            mutex.withLock {
+                fun gone(c: ChannelSnapshot) = c.sourceId.isNotEmpty() && c.sourceId !in ids
+                val deadSchedules = _schedules.value.filter { gone(it.channel) }
+                val deadSeries = _series.value.filter { gone(it.channel) }
+                if (deadSchedules.isEmpty() && deadSeries.isEmpty()) return@withLock
+                deadSchedules.forEach { disarm(it) }
+                _schedules.value = _schedules.value - deadSchedules.toSet()
+                _series.value = _series.value - deadSeries.toSet()
+                save()
+                Log.i(TAG, "Deleted playlists: took out ${deadSchedules.size} scheduled recordings and ${deadSeries.size} series")
+            }
         }
     }
 
