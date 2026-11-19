@@ -853,7 +853,7 @@ private fun LiveTvGuideScreenBody(
     // While browsing the group list, the info panel stays on what's playing in the preview;
     // it only follows the highlight when you're moving through the channels themselves.
     val browsingGroups = groupsOpen && !gridFocused
-    val playingChannel = viewModel.channelByKey(playback.channelKey)
+    val playingChannel = viewModel.shownChannel(playback.channelKey)
     val headerChannel = if (browsingGroups && playingChannel != null) playingChannel else focusedChannel
     val headerBlock = if (browsingGroups && playingChannel != null) {
         val headerPrograms = if (playingChannel.key == focusedChannel?.key) focusedPrograms

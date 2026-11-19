@@ -1403,6 +1403,13 @@ class LiveTvViewModel @Inject constructor(
     fun channelByKey(key: String?): LiveChannel? =
         key?.let { k -> channelKeyLookup.find(displayChannels.value, k) ?: playback.playingChannel?.takeIf { it.key == k } }
 
+    /**
+     * The channel as the current group shows it, for on-screen labels: with "Number channels
+     * 1, 2, 3… in each group" on, its number in that group (as in the guide), not the playlist's.
+     */
+    fun shownChannel(key: String?): LiveChannel? =
+        key?.let { k -> uiState.value.channels.firstOrNull { it.key == k } } ?: channelByKey(key)
+
     // ------------------------------------------------------------ recording
 
     val schedules = scheduler.schedules

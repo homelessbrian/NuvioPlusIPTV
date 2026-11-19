@@ -162,8 +162,9 @@ fun LiveTvPlayerScreen(
     // loading left full screen stuck on "Nothing playing"). Falls back to the player's own
     // channel, so full screen always knows what it's showing.
     val displayList by viewModel.displayChannels.collectAsStateWithLifecycle()
-    val current: LiveChannel? = remember(displayList, playback.channelKey) {
-        playback.channelKey?.let { k -> displayList.firstOrNull { it.key == k } }
+    val current: LiveChannel? = remember(ui.channels, displayList, playback.channelKey) {
+        // The current group's list first: its numbers match the guide's (1, 2, 3… per group).
+        playback.channelKey?.let { k -> ui.channels.firstOrNull { it.key == k } ?: displayList.firstOrNull { it.key == k } }
             ?: viewModel.playback.playingChannel?.takeIf { it.key == playback.channelKey }
     }
 
