@@ -29,6 +29,8 @@ internal object SportsRows {
     private const val DAY = 24 * HOUR
     /** Results kept at the start of a team's row. */
     private const val RESULTS = 5
+    /** Results kept at the start of a league's row: a full NFL week (16 games); busy leagues show their last few days. */
+    private const val LEAGUE_RESULTS = 16
 
     /** The keys of My Sports' rows (not Live & Upcoming), in your order (see [SportsFollows.order]). */
     fun rowKeys(f: SportsFollows): List<String> {
@@ -111,15 +113,15 @@ internal object SportsRows {
         for (id in leagueIds) {
             val l = SportsCatalog.league(id) ?: continue
             val all = leagueGames[id].orEmpty()
-            // This week (with the last two days' results); a league between rounds: its next games.
-            // The last couple of days' results, then every game ahead we have (up to five weeks;
-            // capped so a busy league like MLB stays a row you can get through).
-            val recent = all.filter { it.startMs >= now - 2 * DAY && (it.state == GameState.POST || it.state == GameState.OFF) }
+            // The last week's results (a weekly league like the NFL keeps its whole last round,
+            // midweek too), then every game ahead we have (up to five weeks; capped so a busy
+            // league like MLB stays a row you can get through).
+            val recent = all.filter { it.startMs >= now - 7 * DAY && (it.state == GameState.POST || it.state == GameState.OFF) }
             val ahead = all.filter { it.state == GameState.LIVE || ((it.state == GameState.PRE || it.state == GameState.OFF) && it.startMs >= now - 3 * HOUR) }
                 .sortedBy { it.startMs }.take(60)
             val games = recent + ahead
             if (games.isEmpty()) continue
-            rows += timeline("l:$id", l.name, SportsRow.Kind.LEAGUE, games.distinctBy { it.id }, now, league = l, results = 8)
+            rows += timeline("l:$id", l.name, SportsRow.Kind.LEAGUE, games.distinctBy { it.id }, now, league = l, results = LEAGUE_RESULTS)
         }
 
         // ---- names you follow

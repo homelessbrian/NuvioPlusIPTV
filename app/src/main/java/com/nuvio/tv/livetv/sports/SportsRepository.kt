@@ -1191,12 +1191,20 @@ class SportsRepository @Inject constructor(
         }
     }
 
-    /** The week before yesterday, for the page's past days: only when someone has looked at one. */
+    /**
+     * The week before yesterday: for the page's past days when someone has looked at one, and for
+     * My Sports' league rows (they keep the last week's results, so a weekly league like the NFL
+     * still has last weekend's games midweek): only those leagues, every 6 hours.
+     */
     private suspend fun updatePast(now: Long) {
         com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
-        if (now - pastWanted > 30 * MINUTE) return
-        val due = activeLeagues().filter { l ->
-            l.espnPath != null && now - (weekData.value["p|" + l.id]?.fetchedAt ?: 0L) > 2 * HOUR
+        val pageWants = now - pastWanted <= 30 * MINUTE
+        val f = follows.value
+        val rowLeagues = HashSet<String>().apply { addAll(f.pins); addAll(f.leagues) }
+        if (!pageWants && rowLeagues.isEmpty()) return
+        val pool = if (pageWants) activeLeagues() else allEspnLeagues().filter { it.id in rowLeagues }
+        val due = pool.filter { l ->
+            l.espnPath != null && now - (weekData.value["p|" + l.id]?.fetchedAt ?: 0L) > (if (pageWants) 2 * HOUR else 6 * HOUR)
         }
         if (due.isEmpty()) return
         val fmt = SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = TimeZone.getTimeZone("America/New_York") }
