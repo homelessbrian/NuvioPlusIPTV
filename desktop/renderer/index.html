@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src * data: blob:; media-src * blob: data:; connect-src *; worker-src blob:; object-src 'none'; base-uri 'none'; frame-src 'none'">
+<title>Nuvio IPTV</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="player.css">
+<link rel="stylesheet" href="features/livetv.css">
+<link rel="stylesheet" href="features/guide.css">
+<link rel="stylesheet" href="features/ondemand.css">
+<link rel="stylesheet" href="features/sports.css">
+<link rel="stylesheet" href="features/recordings.css">
+<link rel="stylesheet" href="features/settings.css">
+</head>
+<body>
+<div id="shell">
+  <aside id="side"><div id="brand"><img src="app_logo_wordmark.png" alt="Nuvio + IPTV"></div><nav id="tabs" aria-label="Sections"></nav></aside>
+  <main id="main">
+    <div id="tab-content"></div>
+    <aside id="player-dock"></aside>
+  </main>
+</div>
+<div id="toasts" aria-live="polite"></div>
+<script src="../node_modules/hls.js/dist/hls.min.js"></script>
+<script src="../node_modules/mpegts.js/dist/mpegts.js"></script>
+<script src="shell.js"></script>
+<script src="player.js"></script>
+<script src="features/livetv.js"></script>
+<script src="features/guide.js"></script>
+<script src="features/sports.js"></script>
+<script src="features/ondemand.js"></script>
+<script src="features/recordings.js"></script>
+<script src="features/settings.js"></script>
+<script src="boot.js"></script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+name: Desktop (Windows installer)
+
+# Builds the Windows desktop preview in desktop/ and uploads the installer as a workflow artifact.
+# It does not publish a release; that needs maintainer agreement.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['desktop/**', '.github/workflows/desktop-windows.yml']
+  push:
+    branches: [dev]
+    paths: ['desktop/**', '.github/workflows/desktop-windows.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - name: Tests (parsers and a real-app end-to-end run)
+        run: npm test
+      - name: Build installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist
+      - name: Silent install and launch check
+        shell: pwsh
+        run: |
+          $inst = Join-Path $env:RUNNER_TEMP 'nuvio-install'
+          $p = Start-Process (Get-Item dist/Nuvio-IPTV-Setup-*.exe).FullName -ArgumentList '/S',"/D=$inst" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exit $($p.ExitCode)" }
+          $r = Start-Process "$inst\Nuvio IPTV.exe" -ArgumentList '--smoke' -Wait -PassThru
+          if ($r.ExitCode -ne 0) { throw "app smoke exit $($r.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nuvio-IPTV-Windows-installer
+          path: desktop/dist/Nuvio-IPTV-Setup-*.exe
+          if-no-files-found: error

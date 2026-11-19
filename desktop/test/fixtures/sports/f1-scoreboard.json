@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "id": "9001", "date": "2026-11-13T17:30Z", "endDate": "2026-11-15T20:00Z", "name": "Las Vegas Grand Prix",
+      "circuit": { "fullName": "Las Vegas Strip Circuit" },
+      "status": { "type": { "name": "STATUS_SCHEDULED", "state": "pre" } },
+      "competitions": [
+        { "date": "2026-11-13T17:30Z", "type": { "abbreviation": "FP1", "text": "Practice 1" }, "status": { "type": { "state": "post" } }, "competitors": [] },
+        { "date": "2026-11-14T04:00Z", "type": { "abbreviation": "Qual", "text": "Qualifying" }, "status": { "type": { "state": "post" } }, "competitors": [] },
+        { "date": "2026-11-15T04:00Z", "type": { "abbreviation": "Race", "text": "Race" }, "status": { "type": { "state": "pre" } },
+          "broadcasts": [ { "market": "national", "names": ["ESPN"] } ],
+          "competitors": [] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+@font-face { font-family:"Inter"; src:url("fonts/inter_variable.ttf") format("truetype"); font-weight:100 900; font-display:swap; }
+/* Palette taken from the Nuvio TV app theme (default dark, white accent). */
+:root {
+  color-scheme: dark;
+  --bg:#0c0d0f; --panel:#17191d; --panel2:#24282e; --card:#20242a; --menu:#1c1f23; --line:#333333;
+  --text:#ffffff; --dim:#b3b3b3; --dim2:#808080;
+  --accent:#ffffff; --on-accent:#0c0d0f; --focus:#ffffff;
+  --err:#cf6679; --ok:#4caf50; --warn:#ffb74d; --rating:#ffd700;
+  --radius:14px; --radius-sm:10px;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px/1.45 "Inter", "Segoe UI", system-ui, sans-serif; overflow:hidden; -webkit-font-smoothing:antialiased; }
+::-webkit-scrollbar { width:10px; height:10px; } ::-webkit-scrollbar-thumb { background:#3a3d42; border-radius:8px; } ::-webkit-scrollbar-track { background:transparent; }
+#shell { display:flex; height:100vh; }
+/* Left side menu, like the TV app */
+#side { width:220px; flex:none; background:var(--bg); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:18px 12px; }
+#brand { padding:2px 10px 20px; } #brand img { height:30px; display:block; }
+#tabs { display:flex; flex-direction:column; gap:4px; }
+.tab-btn { display:flex; align-items:center; gap:12px; background:none; border:0; border-radius:999px; color:var(--dim); padding:11px 16px; font-size:14px; font-weight:500; text-align:left; cursor:pointer; transition:background .12s, color .12s; }
+.tab-btn:hover { background:var(--panel2); color:var(--text); border-color:transparent; }
+.tab-btn.active { background:var(--accent); color:var(--on-accent); font-weight:600; }
+.tab-ico { width:18px; text-align:center; font-size:15px; line-height:1; }
+#main { flex:1; display:grid; grid-template-columns:minmax(0,1fr) 440px; min-width:0; min-height:0; }
+body[data-tab="guide"] #main, body[data-tab="settings"] #main { grid-template-columns:minmax(0,1fr) 360px; }
+body[data-tab="ondemand"] #main, body[data-tab="recordings"] #main { grid-template-columns:minmax(0,1fr) 400px; }
+#tab-content { min-width:0; min-height:0; position:relative; border-right:1px solid var(--line); background:var(--bg); }
+.tab-root { position:absolute; inset:0; display:flex; flex-direction:column; min-height:0; }
+.tab-root[hidden] { display:none; }
+button { background:var(--panel2); border:1px solid transparent; color:var(--text); padding:8px 16px; border-radius:999px; cursor:pointer; font:inherit; font-weight:500; transition:background .12s; }
+button:hover { background:#33383f; }
+button.primary { background:var(--accent); color:var(--on-accent); font-weight:600; }
+button.primary:hover { background:#e6e6e6; }
+input[type=text], input[type=search], input[type=password], input[type=number], select, textarea { padding:9px 14px; background:var(--panel2); border:1px solid transparent; border-radius:999px; color:var(--text); font:inherit; }
+input::placeholder { color:var(--dim2); }
+input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); }
+:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
+.dim { color:var(--dim); }
+h1, h2, h3 { font-weight:700; letter-spacing:-.01em; }
+#toasts { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:8px; z-index:50; }
+.toast { background:var(--menu); border:1px solid var(--line); padding:10px 18px; border-radius:var(--radius-sm); box-shadow:0 8px 28px #000a; }
+.toast.error { border-color:var(--err); color:var(--err); }
