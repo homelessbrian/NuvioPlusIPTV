@@ -62,6 +62,7 @@ private class Seen {
         growing = p.isCurrentMediaItemDynamic
         val f = p.videoFormat
         height = f?.height ?: 0
+        SeekThumbs.playingFormat(SeekThumbs.Owner.LIVE, f?.sampleMimeType, f?.width ?: 0, f?.height ?: 0)
         hdr = f?.colorInfo?.colorTransfer.let { it == C.COLOR_TRANSFER_ST2084 || it == C.COLOR_TRANSFER_HLG }
     }
 

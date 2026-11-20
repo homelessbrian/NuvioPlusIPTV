@@ -150,6 +150,8 @@ fun SearchScreen(
     val context = LocalContext.current
     val view = LocalView.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    // Leaving Search (a details page, the player): don't let the keyboard follow.
+    com.nuvio.tv.livetv.ui.HideKeyboardOn(onClose = true)
     val strVoiceNoSpeech = stringResource(R.string.search_voice_no_speech)
     val strVoiceMicPermission = stringResource(R.string.search_voice_mic_permission)
     val strVoiceFailed = stringResource(R.string.search_voice_failed)

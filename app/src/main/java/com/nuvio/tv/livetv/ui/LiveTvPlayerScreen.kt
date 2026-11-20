@@ -103,6 +103,8 @@ fun LiveTvPlayerScreen(
     /** The play bar's Multiview button: the normal Multiview, starting with this channel. */
     onOpenMultiview: () -> Unit = {}
 ) {
+    // Full screen from the guide's search: the keyboard doesn't stay over the video.
+    HideKeyboardOn(onOpen = true)
     val sports: com.nuvio.tv.livetv.sports.SportsWatchViewModel = hiltViewModel()
     val sportsSettings by sports.settings.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()

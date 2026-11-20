@@ -273,7 +273,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                     "Tunneled playback skipped: media audio goes to USB (route=${currentAudioOutputRoute?.key})"
                 )
             }
-            val tunnelingActive = playerSettings.effectiveTunnelingEnabled && !tunnelingBlockedByUsbAudio
+            // Software decoders can't tunnel: a stream rebuilt on one plays untunneled.
+            val tunnelingActive = playerSettings.effectiveTunnelingEnabled && !tunnelingBlockedByUsbAudio &&
+                forceSoftwareVideoForStreamUrl != currentStreamUrl
             if (rememberAudioDelayPerDeviceEnabled) {
                 applyStoredAudioDelayForCurrentRouteIfEnabled()
             }
@@ -926,7 +928,13 @@ internal fun PlayerRuntimeController.initializePlayer(
             isMapDv7ToHevcActiveForCurrentPlayback = mapDv7ToHevcEnabled
             val convertToDv81Active = !mapDv7ToHevcEnabled &&
                     dv7AutoResult?.decision == DolbyVisionBaseLayerPolicy.Decision.CONVERT_TO_DV81
-            val codecSelector = createDolbyVisionFallbackCodecSelector(convertToDv81Active = convertToDv81Active)
+            val forceSoftwareVideo = forceSoftwareVideoForStreamUrl == currentStreamUrl
+            if (forceSoftwareVideo) Log.i(PlayerRuntimeController.TAG, "VIDEO_DECODER: this stream uses a software decoder after a hardware failure")
+            val codecSelector = if (forceSoftwareVideo) {
+                softwareVideoCodecSelector(createDolbyVisionFallbackCodecSelector(convertToDv81Active = convertToDv81Active))
+            } else {
+                createDolbyVisionFallbackCodecSelector(convertToDv81Active = convertToDv81Active)
+            }
             scope.launch(kotlinx.coroutines.Dispatchers.Default) { softwareOnlyDecoderNames }
             // Bluetooth media sink (A2DP / LE Audio): Media3 only advertises PCM. Do not attempt
             // optical/HDMI passthrough — decode to PCM and let the BT stack encode SBC/AAC/aptX/LDAC.
@@ -1553,6 +1561,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         cancelFirstFrameWatchdog()
                         val detailedError = if (isStalker) "Stalker playback failed (${error.errorCodeName}). Retry playback to refresh the stream link."
                             else error.toDisplayMessage(context)
+                        val userFacingError = error.toUserFacingMessage(context, detailedError)
                         cancelStableProgressReset()
 
                         if (Vc1VideoFormatHeuristics.isVc1PlaybackFailure(
@@ -1720,6 +1729,11 @@ internal fun PlayerRuntimeController.initializePlayer(
                             return
                         }
 
+                        // A failed hardware video decoder gets one software-decoder rebuild first.
+                        if (trySoftwareVideoDecoderFallback(error)) {
+                            return
+                        }
+
                         // ── Main Engine Failover ──
                         if (!isStalker && maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
                             return
@@ -1767,11 +1781,12 @@ internal fun PlayerRuntimeController.initializePlayer(
                              error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
                              error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ||
                              error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES ||
+                             error.errorCode == PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED ||
                              error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
                              error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED)
                         _uiState.update {
                             it.copy(
-                                error = detailedError,
+                                error = userFacingError,
                                 showSwitchToMpvErrorAction = canSwitchToMpvOnFatal,
                                 showLoadingOverlay = false,
                                 showPauseOverlay = false,
@@ -2722,6 +2737,17 @@ private fun createDolbyVisionFallbackCodecSelector(
     }
     return MediaCodecSelector.DEFAULT
 }
+
+/** Only Android's software decoders for video; audio and everything else keep [base]. */
+private fun softwareVideoCodecSelector(base: MediaCodecSelector): MediaCodecSelector =
+    MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+        val all = base.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+        if (!MimeTypes.isVideo(mimeType)) return@MediaCodecSelector all
+        val software = all.filter { it.softwareOnly }
+        // Nothing in software (protected streams, Dolby Vision): keep the hardware list so the
+        // stream still gets its normal error and MPV button.
+        software.ifEmpty { all }
+    }
 
 private fun describeExtensionRendererMode(mode: Int): String {
     return when (mode) {

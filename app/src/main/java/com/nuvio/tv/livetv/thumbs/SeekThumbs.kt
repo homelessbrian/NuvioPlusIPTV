@@ -84,6 +84,15 @@ object SeekThumbs {
     const val MSG_CATCHUP_SAVE = "Turn on Faster Catch-Up Skipping for thumbnails"
     const val MSG_PROTECTED = "This stream is protected: no thumbnails"
     const val MSG_TORRENT = "No thumbnails for torrents"
+    const val MSG_ONE_DECODER = "No thumbnails: this TV needs its only video decoder for the video"
+
+    /** What each player is showing now (mime type and size), for [SeekThumbDecoders]. */
+    private val playingFormats = java.util.concurrent.ConcurrentHashMap<Owner, Triple<String, Int, Int>>()
+
+    /** The players tell this what they're showing; thumbnails then check the TV has a decoder to spare. */
+    fun playingFormat(owner: Owner, mime: String?, width: Int, height: Int) {
+        if (mime == null) playingFormats.remove(owner) else playingFormats[owner] = Triple(mime, width, height)
+    }
 
     const val THUMB_W = 240
     const val THUMB_H = 135
@@ -145,6 +154,13 @@ object SeekThumbs {
                 sessions.remove(owner)?.stop()
                 setMessage(owner, MSG_4K_OFF)
                 return
+            }
+            playingFormats[owner]?.let { (mime, w, h) ->
+                if (!SeekThumbDecoders.safe(mime, w, h)) {
+                    sessions.remove(owner)?.stop()
+                    setMessage(owner, MSG_ONE_DECODER)
+                    return
+                }
             }
             (failed[source.key] ?: failed[FOUR_K + source.key]?.takeIf { !settings.include4k })?.let { reason ->
                 sessions.remove(owner)?.stop()

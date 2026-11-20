@@ -811,6 +811,8 @@ class LiveTvPlaybackController @Inject constructor(
         wrongShowSkips = 0
         wallCheckedFor = null
         if (previousChannelKey != channel.key) {
+            // A new channel starts on the hardware decoder again.
+            softwareVideoChannel = null
             neverStartedCount = 0
             sawLive = false
             audioHandled = false
@@ -1035,6 +1037,7 @@ class LiveTvPlaybackController @Inject constructor(
             PlaybackException.ERROR_CODE_DECODING_FAILED,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED ->
                 "This TV couldn't play this channel's picture or sound"
@@ -1642,6 +1645,9 @@ class LiveTvPlaybackController @Inject constructor(
         return ((heapMb shl 20) * 3 / 10).coerceIn(32L shl 20, 160L shl 20).toInt()
     }
 
+    /** The channel playing on a software video decoder after its hardware decoder failed. */
+    @Volatile private var softwareVideoChannel: String? = null
+
     private fun buildPlayer(): ExoPlayer {
         val passthrough = audioPassthrough
         val renderers = object : DefaultRenderersFactory(context) {
@@ -1662,6 +1668,14 @@ class LiveTvPlaybackController @Inject constructor(
         }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
+            // Asked each time a decoder opens: software only for a channel whose hardware
+            // decoder failed (see onPlayerError), hardware as normal everywhere else.
+            .setMediaCodecSelector { mime, secure, tunneling ->
+                val all = androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling)
+                if (softwareVideoChannel == null || softwareVideoChannel != currentChannel?.key ||
+                    !androidx.media3.common.MimeTypes.isVideo(mime)
+                ) all else all.filter { it.softwareOnly }.ifEmpty { all }
+            }
         // Buffer size setting: how much is downloaded ahead. Bigger rides out a shaky connection or
         // a slow provider; smaller starts channels a little faster.
         val (minMs, maxMs, startMs, rebufferMs) = when (bufferSize) {
@@ -2032,6 +2046,18 @@ class LiveTvPlaybackController @Inject constructor(
                 p.playWhenReady = true
                 return
             }
+            // The TV's hardware video decoder failed on this channel: play it once more on
+            // Android's software decoder before showing an error (a decoder taken away for a
+            // moment just reconnects as usual).
+            if (ch != null && p != null && error.errorCode in VIDEO_DECODER_ERRORS && softwareVideoChannel != ch.key) {
+                softwareVideoChannel = ch.key
+                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Channel ${ch.name}: video decoder failed (${error.errorCodeName}); trying the software decoder")
+                val url = currentUrl ?: ch.url
+                p.setMediaSource(buildMediaSource(url, ch.headers, isLive = _state.value.catchupTitle == null))
+                p.prepare()
+                p.playWhenReady = true
+                return
+            }
             if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW && p != null) {
                 p.seekToDefaultPosition()
                 p.prepare()
@@ -2345,6 +2371,13 @@ class LiveTvPlaybackController @Inject constructor(
         /** Two freezes within this long: the channel counts as failing (live games only). */
         private const val FREEZE_WINDOW_MS = 3 * 60_000L
         private val FORMAT_GUESSES = LiveStreamFormats.FORMAT_GUESSES
+        /** Hardware decoder failures worth one try on a software decoder (not "taken away"). */
+        private val VIDEO_DECODER_ERRORS = setOf(
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+        )
         /** No picture this long after the video moved to a new screen = stuck. */
         private const val FRAME_TIMEOUT_MS = 2_500L
         /** Still loading this long after the video moved to a new screen = stuck. */

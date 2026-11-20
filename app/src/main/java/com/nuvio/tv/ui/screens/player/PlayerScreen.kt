@@ -236,6 +236,8 @@ fun PlayerScreen(
     val postPlayRecommendationState by viewModel.postPlayRecommendationUiState.collectAsState()
     val effectiveAutoplayEnabled by viewModel.effectiveAutoplayEnabled.collectAsState(initial = false)
     val lifecycleOwner = LocalLifecycleOwner.current
+    // A keyboard left open on the page before (Search) never stays over the video.
+    com.nuvio.tv.livetv.ui.HideKeyboardOn(onOpen = true)
     val context = LocalContext.current
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val containerFocusRequester = remember { FocusRequester() }
@@ -2331,6 +2333,9 @@ private fun ExoPlayerSurface(
         if (playerView.player !== player) {
             playerView.player = player
         }
+        // Shown again in case the player was stopped and this view kept for the next video
+        // (see PlayerViewModel.stopAndRelease).
+        if (playerView.visibility != View.VISIBLE) playerView.visibility = View.VISIBLE
         latestBindSubtitleView(playerView.subtitleView)
         onDispose {
             latestBindSubtitleView(null)

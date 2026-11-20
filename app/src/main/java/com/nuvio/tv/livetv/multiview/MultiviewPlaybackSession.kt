@@ -633,7 +633,9 @@ internal object MultiviewPlaybackErrors {
             PlaybackException.ERROR_CODE_TIMEOUT,
             PlaybackException.ERROR_CODE_UNSPECIFIED,
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
-            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED -> true
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+            // The TV took this pane's decoder away for a moment (another pane or app needed it).
+            PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED -> true
             else -> false
         }
     }
@@ -660,6 +662,7 @@ internal object MultiviewPlaybackErrors {
             PlaybackException.ERROR_CODE_DECODING_FAILED,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED ->
                 "This TV can't decode this stream alongside the others. Remove a pane or choose another channel."
