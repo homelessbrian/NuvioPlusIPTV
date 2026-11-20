@@ -118,6 +118,9 @@ internal class YtMatch private constructor(
             }
         }
 
+        /** A whole fight, match or race ("FULL FIGHT", "Full Match Replay"), not a highlight of one. */
+        fun isWhole(title: String): Boolean = fold(title).let { WHOLE.containsMatchIn(it) && "highlight" !in it }
+
         /** Lower case, without accents ("São" -> "sao"). */
         fun fold(s: String): String =
             Normalizer.normalize(s, Normalizer.Form.NFD).replace(MARKS, "").lowercase()
@@ -168,6 +171,7 @@ internal class YtMatch private constructor(
         private val VERSUS = Regex("\\s+(?:vs\\.?|v\\.?|def\\.)\\s+", RegexOption.IGNORE_CASE)
         private val CARD = Regex("^([a-z][a-z ]*? (\\d{1,4}))\\b")
         private val SESSION = Regex("practice|qualifying|sprint|shootout|\\bfp[123]\\b|warm-up|preview")
+        private val WHOLE = Regex("full fight|full match|full race|full game|full replay|full world title match|full episode")
         private val BEST = Regex("full card|race highlights|extended highlights|condensed|full race|full match|full fight")
         private val MONTHS = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
         private const val MONTH_NAME = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"

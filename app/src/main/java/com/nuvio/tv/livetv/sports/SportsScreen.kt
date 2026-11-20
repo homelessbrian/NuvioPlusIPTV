@@ -1382,7 +1382,9 @@ private fun GamePage(
     val vodLooked = viewModel.repo.vodMatches.collectAsStateWithLifecycle().value[ev.id]
     // Official highlights and condensed games (ESPN, NHL, MLB, YouTube) go in the same list.
     val official = viewModel.repo.videoMatches.collectAsStateWithLifecycle().value[ev.id]
-    val replays = remember(vodLooked, official) { SportsVideos.merge(vodLooked.orEmpty(), official.orEmpty()) }
+    val replays = remember(vodLooked, official, settings.showHighlights, settings.showCondensed) {
+        SportsVideos.merge(vodLooked.orEmpty(), official.orEmpty(), settings.showHighlights, settings.showCondensed)
+    }
     val vodAddons = viewModel.repo.vodAddons.collectAsStateWithLifecycle().value[ev.id]
     val suggestNuvioSports by viewModel.repo.suggestNuvioSports.collectAsStateWithLifecycle()
     val nuvioSportsTip = if (suggestNuvioSports)

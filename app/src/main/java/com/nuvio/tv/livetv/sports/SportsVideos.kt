@@ -38,7 +38,7 @@ internal class SportsVideos(
     private val youTube: InAppYouTubeExtractor
 ) {
     enum class Kind(val label: String) {
-        CONDENSED("Condensed game"), RECAP("Recap"), HIGHLIGHTS("Highlights"), PLAY("Play")
+        REPLAY("Replay"), CONDENSED("Condensed game"), RECAP("Recap"), HIGHLIGHTS("Highlights"), PLAY("Play")
     }
 
     class Video(
@@ -206,7 +206,9 @@ internal class SportsVideos(
         val found = LinkedHashMap<String, Found>()
         fun add(id: String, title: String, from: String, url: String, order: Int) {
             if (id in found) return
-            found[id] = Found(Video("yt:$id", title, Kind.HIGHLIGHTS, from, null, url), YtMatch.rank(title), order)
+            // A whole fight, match or race a channel put up counts as a replay, not a highlight.
+            val kind = if (YtMatch.isWhole(title)) Kind.REPLAY else Kind.HIGHLIGHTS
+            found[id] = Found(Video("yt:$id", title, kind, from, null, url), YtMatch.rank(title), order)
         }
         // TheSportsDB's list: by its game id, or by the game's name.
         root.optJSONObject("days")?.let { days ->
@@ -372,12 +374,17 @@ internal class SportsVideos(
          * The game's replays list: your addons' full games first, then condensed games (official
          * ones before addons'), recaps, highlights, and single plays last.
          */
-        fun merge(addon: List<ChannelMatch>, official: List<ChannelMatch>): List<ChannelMatch> {
+        fun merge(
+            addon: List<ChannelMatch>,
+            official: List<ChannelMatch>,
+            showHighlights: Boolean = true,
+            showCondensed: Boolean = true
+        ): List<ChannelMatch> {
             fun rank(m: ChannelMatch): Int {
                 val how = m.how
                 val isOfficial = m.channel.sourceId == SOURCE_ID
                 return when {
-                    !isOfficial && (how.startsWith("Full game") || how.startsWith("Replay")) -> 0
+                    how.startsWith("Full game") || how.startsWith(Kind.REPLAY.label) -> 0
                     how.startsWith(Kind.CONDENSED.label) -> 1
                     !isOfficial && how.startsWith("Condensed") -> 2
                     how.startsWith(Kind.RECAP.label) -> 3
@@ -386,7 +393,18 @@ internal class SportsVideos(
                     else -> 6
                 }
             }
-            return (addon + official).withIndex().sortedWith(compareBy({ rank(it.value) }, { it.index })).map { it.value }
+            // Sports settings: Show Highlights / Show Condensed Games.
+            fun shown(m: ChannelMatch): Boolean {
+                val how = m.how
+                val isOfficial = m.channel.sourceId == SOURCE_ID
+                if (!showCondensed && how.startsWith("Condensed")) return false
+                if (!showHighlights) {
+                    if (how.startsWith(Kind.HIGHLIGHTS.label)) return false
+                    if (isOfficial && (how.startsWith(Kind.RECAP.label) || how.startsWith(Kind.PLAY.label))) return false
+                }
+                return true
+            }
+            return (addon + official).filter(::shown).withIndex().sortedWith(compareBy({ rank(it.value) }, { it.index })).map { it.value }
         }
 
         internal fun youTubeId(url: String): String? =
