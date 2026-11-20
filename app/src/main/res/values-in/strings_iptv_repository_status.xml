@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"Memperbarui playlist \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels">"Membaca saluran…"</string>
+    <string name="iptv_repository_status_downloading_guide">"Mengunduh panduan \"%1$s\"…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"Mengunduh panduan \"%1$s\""</string>
+    <string name="iptv_repository_status_matching_data">"Mencocokkan data panduan…"</string>
+    <string name="iptv_repository_status_updating_guide">"Memperbarui panduan…"</string>
+    <string name="iptv_repository_status_adding_playlist">"Menambahkan saluran dari \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"Membaca saluran dari \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"Membaca saluran dari \"%1$s\" (%2$d dari %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"Memori tidak cukup untuk panduan \"%1$s\" — dilewati"</string>
+    <string name="iptv_repository_status_reading_guide">"Membaca panduan \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"Membaca panduan \"%1$s\" (%2$d dari %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"Membaca panduan \"%1$s\"… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"Membaca panduan \"%1$s\" (%2$d dari %3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"Mencocokkan panduan \"%1$s\"…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"Mencocokkan panduan \"%1$s\" (%2$d dari %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"Mengunduh playlist \"%1$s\""</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s dari %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"Memuat saluran dari %1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"Server penyedia tidak ditemukan."</string>
+    <string name="iptv_repository_status_timeout_short">"Penyedia terlalu lama menjawab."</string>
+    <string name="iptv_repository_status_generic_error">"Terjadi kesalahan."</string>
+    <string name="iptv_repository_status_unknown_host_address">"Server penyedia tidak ditemukan (%1$s). Periksa alamat, internet Anda, atau coba lagi nanti."</string>
+    <string name="iptv_repository_status_provider_timeout">"Penyedia terlalu lama menjawab (waktu habis). Mungkin sedang sibuk; coba lagi nanti."</string>
+    <string name="iptv_repository_status_address">"alamat"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"Playlist \"%1$s\" tidak dapat diperbarui. %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"Panduan \"%1$s\" tidak dapat diperbarui. %2$s"</string>
+    <string name="iptv_repository_status_expired">"\"%1$s\" sudah kedaluwarsa"</string>
+    <string name="iptv_repository_status_expires_today">"\"%1$s\" kedaluwarsa hari ini"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"\"%1$s\" kedaluwarsa besok"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="other">"Menambahkan saluran dari %1$d playlist baru…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="other">"\"%1$s\" kedaluwarsa dalam %2$d hari"</item>
+    </plurals>
+</resources>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="other">"%1$d danh sách phát"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="other">"%1$d lịch phát sóng"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="other">"%1$d kênh"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="other">"Đã khớp %1$d chương trình"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="other">"Đã xóa %1$d"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="other">"%1$d phút"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="other">"%1$d ngày"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="other">"%1$d giờ"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="other">"%1$d giây"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="other">"%1$d ngày trước"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="other">"%1$d tuần trước"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="other">"%1$d tháng trước"</item>
+    </plurals>
+</resources>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="other">"%1$d playlist"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="other">"%1$d panduan"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="other">"%1$d saluran"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="other">"%1$d acara dicocokkan"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="other">"%1$d dihapus"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="other">"%1$d mnt"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="other">"%1$d hari"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="other">"%1$d jam"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="other">"%1$d detik"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="other">"%1$d hari lalu"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="other">"%1$d minggu lalu"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="other">"%1$d bulan lalu"</item>
+    </plurals>
+</resources>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"Kênh nhanh"</string>
+    <string name="iptv_quick_channels_subtitle">"Lối tắt nằm dưới thanh phát. Nhấn Xuống trên thanh để mở."</string>
+    <string name="iptv_quick_channels_show">"Hiện Kênh nhanh"</string>
+    <string name="iptv_quick_channels_opens_on">"Mở ở"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"Danh sách hiện đầu tiên"</string>
+    <string name="iptv_quick_channels_first_list">"Danh sách đầu tiên"</string>
+    <string name="iptv_quick_channels_last_used">"Danh sách dùng gần nhất"</string>
+    <string name="iptv_quick_channels_lists_hint">"Các danh sách trong hàng · OK bật hoặc tắt, mũi tên để di chuyển"</string>
+    <string name="iptv_quick_channels_recent">"Đã xem gần đây"</string>
+    <string name="iptv_quick_channels_favorites">"Yêu thích"</string>
+    <string name="iptv_quick_channels_built_in">"Có sẵn"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · nhóm danh sách phát"</string>
+    <string name="iptv_quick_channels_your_group">"Nhóm của bạn"</string>
+    <string name="iptv_quick_channels_group_missing">"Không tìm thấy nhóm"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"Hiện không có trong danh sách phát của bạn"</string>
+    <string name="iptv_quick_channels_add_group">"Thêm nhóm danh sách phát…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"Bất kỳ nhóm nào từ bất kỳ danh sách phát nào, cả nhóm của bạn"</string>
+    <string name="iptv_quick_channels_add_groups_title">"Thêm nhóm danh sách phát"</string>
+    <string name="iptv_quick_channels_no_groups">"Chưa có nhóm. Hãy thêm danh sách phát trước."</string>
+    <string name="iptv_quick_channels_add_groups_hint">"Mỗi nhóm bạn đánh dấu sẽ thành một danh sách riêng trong Kênh nhanh."</string>
+    <string name="iptv_quick_channels_my_groups">"Nhóm của tôi"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="other">"%1$d kênh"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"Thứ tự của nhà cung cấp"</string>
+    <string name="iptv_vod_sort_name_az">"A–Z"</string>
+    <string name="iptv_vod_sort_name_za">"Z–A"</string>
+    <string name="iptv_vod_sort_newest">"Phát hành mới nhất"</string>
+    <string name="iptv_vod_sort_oldest">"Phát hành cũ nhất"</string>
+    <string name="iptv_vod_sort_recently_added">"Mới thêm"</string>
+    <string name="iptv_vod_sort_highest_rated">"Đánh giá cao nhất"</string>
+    <string name="iptv_vod_sort_shuffle">"Ngẫu nhiên"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"Thứ tự nhà cung cấp gửi"</string>
+    <string name="iptv_vod_sort_name_az_hint">"Số và ký hiệu trước, sau đó A đến Z"</string>
+    <string name="iptv_vod_sort_name_za_hint">"Z đến A, sau đó số và ký hiệu"</string>
+    <string name="iptv_vod_sort_newest_hint">"Theo năm phát hành, mới nhất trước"</string>
+    <string name="iptv_vod_sort_oldest_hint">"Theo năm phát hành, cũ nhất trước"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"Nội dung nhà cung cấp vừa thêm"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"Theo đánh giá của nhà cung cấp, tốt nhất trước"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"Thứ tự ngẫu nhiên mới mỗi lần chọn"</string>
+    <string name="iptv_vod_sort_default_hint">"Theo Thứ tự sắp xếp mặc định trong Cài đặt"</string>
+</resources>

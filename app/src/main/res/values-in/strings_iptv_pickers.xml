@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"Saluran Cepat"</string>
+    <string name="iptv_quick_channels_subtitle">"Pintasan di bawah bilah putar. Tekan Bawah pada bilah untuk membukanya."</string>
+    <string name="iptv_quick_channels_show">"Tampilkan Saluran Cepat"</string>
+    <string name="iptv_quick_channels_opens_on">"Dibuka Di"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"Daftar yang ditampilkan pertama"</string>
+    <string name="iptv_quick_channels_first_list">"Daftar pertama"</string>
+    <string name="iptv_quick_channels_last_used">"Terakhir digunakan"</string>
+    <string name="iptv_quick_channels_lists_hint">"Daftar di baris · OK mengaktifkan atau menonaktifkan, panah memindahkannya"</string>
+    <string name="iptv_quick_channels_recent">"Baru Ditonton"</string>
+    <string name="iptv_quick_channels_favorites">"Favorit"</string>
+    <string name="iptv_quick_channels_built_in">"Bawaan"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · grup playlist"</string>
+    <string name="iptv_quick_channels_your_group">"Grup Anda"</string>
+    <string name="iptv_quick_channels_group_missing">"Grup tidak ditemukan"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"Saat ini tidak ada di playlist Anda"</string>
+    <string name="iptv_quick_channels_add_group">"Tambahkan Grup Playlist…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"Grup mana pun dari playlist mana pun, termasuk grup Anda sendiri"</string>
+    <string name="iptv_quick_channels_add_groups_title">"Tambahkan Grup Playlist"</string>
+    <string name="iptv_quick_channels_no_groups">"Belum ada grup. Tambahkan playlist dulu."</string>
+    <string name="iptv_quick_channels_add_groups_hint">"Setiap grup yang Anda centang menjadi daftar sendiri di Saluran Cepat."</string>
+    <string name="iptv_quick_channels_my_groups">"Grup Saya"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="other">"%1$d saluran"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"Urutan Penyedia"</string>
+    <string name="iptv_vod_sort_name_az">"A–Z"</string>
+    <string name="iptv_vod_sort_name_za">"Z–A"</string>
+    <string name="iptv_vod_sort_newest">"Rilis Terbaru"</string>
+    <string name="iptv_vod_sort_oldest">"Rilis Terlama"</string>
+    <string name="iptv_vod_sort_recently_added">"Baru Ditambahkan"</string>
+    <string name="iptv_vod_sort_highest_rated">"Rating Tertinggi"</string>
+    <string name="iptv_vod_sort_shuffle">"Acak"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"Urutan yang dikirim penyedia Anda"</string>
+    <string name="iptv_vod_sort_name_az_hint">"Angka dan simbol dulu, lalu A sampai Z"</string>
+    <string name="iptv_vod_sort_name_za_hint">"Z sampai A, lalu angka dan simbol"</string>
+    <string name="iptv_vod_sort_newest_hint">"Menurut tahun rilis, terbaru dulu"</string>
+    <string name="iptv_vod_sort_oldest_hint">"Menurut tahun rilis, terlama dulu"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"Yang terakhir ditambahkan penyedia Anda"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"Menurut rating penyedia, terbaik dulu"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"Urutan acak baru setiap kali Anda memilihnya"</string>
+    <string name="iptv_vod_sort_default_hint">"Mengikuti Urutan Bawaan di Pengaturan"</string>
+</resources>

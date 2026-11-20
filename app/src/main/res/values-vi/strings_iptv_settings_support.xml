@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Đang tìm…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Thử thất bại: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Danh sách phát"</string>
+    <string name="iptv_settings_support_remote_title">"Kiểm tra nút điều khiển"</string>
+    <string name="iptv_settings_support_remote_instructions">"Nhấn nút bất kỳ. Mới nhất ở trên cùng; dòng có màu là nút khác trong vòng 250 ms so với nút trước (ví dụ OK gửi kèm Lên/Xuống). Nhấn Quay lại 3 lần liên tiếp để đóng."</string>
+    <string name="iptv_settings_support_remote_waiting">"Đang chờ nút…"</string>
+    <string name="iptv_settings_support_remote_action_down">"NHẤN"</string>
+    <string name="iptv_settings_support_remote_action_up">"NHẢ"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"NHIỀU"</string>
+    <string name="iptv_settings_support_remote_repeat">"lặp %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"nhấn giữ"</string>
+    <string name="iptv_settings_support_remote_canceled">"đã hủy"</string>
+    <string name="iptv_settings_support_remote_held">"giữ %1$d ms"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Báo cáo khởi động Live TV"</string>
+    <string name="iptv_settings_support_report_subtitle">"Từ khi ứng dụng khởi động. ▲ ▼ để cuộn."</string>
+    <string name="iptv_settings_support_report_empty">"Chưa có gì: hãy mở Live TV trước."</string>
+    <string name="iptv_settings_support_report_send">"Gửi toàn bộ báo cáo"</string>
+    <string name="iptv_settings_support_report_no_network">"Kết nối TV này với Wi-Fi để gửi báo cáo từ điện thoại."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Cho điện thoại dùng cùng Wi-Fi với TV này.\n2. Quét mã này bằng camera điện thoại, hoặc gõ địa chỉ bên dưới.\n3. Chạm Sao chép báo cáo ngắn (vừa một tin nhắn Discord), rồi dán vào tin nhắn của bạn."</string>
+</resources>

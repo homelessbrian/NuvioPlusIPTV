@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"Perangkat Ini"</string>
+    <string name="iptv_storage_usb_drive">"Drive USB"</string>
+    <string name="iptv_storage_read_only">"Hanya-baca. Box ini bisa membaca drive tapi tidak bisa menulis ke sana (biasanya drive NTFS). Memformatnya ke exFAT memungkinkan Anda merekam ke sana."</string>
+    <string name="iptv_storage_unsupported_format">"Box ini tidak bisa membaca format drive. Memformatnya ke exFAT biasanya mengatasinya."</string>
+    <string name="iptv_storage_not_ready">"Belum siap. Tunggu sebentar lalu buka daftar ini lagi."</string>
+    <string name="iptv_storage_no_app_folder">"Android tidak memberi aplikasi folder di drive itu. Cabut drive lalu colokkan lagi, atau mulai ulang box."</string>
+    <string name="iptv_storage_unusable_state">"Tidak bisa dipakai saat ini (%1$s)."</string>
+</resources>
