@@ -456,6 +456,9 @@ private fun LiveTvGuideScreenBody(
     /** Schedule a Recording (long-press menu): the channel it's for. */
     var manualRecordingFor by remember { mutableStateOf<LiveChannel?>(null) }
     var infoTarget by remember { mutableStateOf<MenuTarget?>(null) }
+    // Program info opened from the hold-OK menu: Back goes back to that menu (on Program info).
+    var infoFromMenu by remember { mutableStateOf(false) }
+    var menuOnInfo by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var textPrompt by remember { mutableStateOf<TextPrompt?>(null) }
     var groupMenu by remember { mutableStateOf<ChannelGroup?>(null) }
@@ -930,7 +933,7 @@ private fun LiveTvGuideScreenBody(
                 CatchupUrlBuilder.isAvailable(ch, block.program, now) -> {
                 if (viewModel.playCatchup(ch, block.program)) goFullscreen()
             }
-            else -> infoTarget = MenuTarget(ch, block)
+            else -> { infoFromMenu = false; infoTarget = MenuTarget(ch, block) }
         }
     }
 
@@ -1525,7 +1528,7 @@ private fun LiveTvGuideScreenBody(
                                 if (isOk) {
                                     fun openMenu() {
                                         longPressFired = true
-                                        focusedChannel?.let { menuTarget = MenuTarget(it, focusedBlock) }
+                                        focusedChannel?.let { menuOnInfo = false; menuTarget = MenuTarget(it, focusedBlock) }
                                     }
                                     if (event.type == KeyEventType.KeyDown) {
                                         if (event.nativeKeyEvent.repeatCount == 0) {
@@ -1630,7 +1633,7 @@ private fun LiveTvGuideScreenBody(
                                     event.key == Key.MediaFastForward -> { repeat(4) { moveRight() }; true }
                                     event.key == Key.MediaRewind -> { repeat(4) { moveLeft(held = true) }; true }
                                     event.key == Key.Menu || event.key == Key.Info -> {
-                                        focusedChannel?.let { menuTarget = MenuTarget(it, focusedBlock) }
+                                        focusedChannel?.let { menuOnInfo = false; menuTarget = MenuTarget(it, focusedBlock) }
                                         true
                                     }
                                             event.key == Key.Search -> { LiveTvSearchBridge.origin.value = LiveTvSearchBridge.GUIDE; onOpenNuvioSearch(); true }
@@ -2210,7 +2213,8 @@ private fun LiveTvGuideScreenBody(
                     viewModel.hideGroup(target.channel.groupId)
                     menuTarget = null
                 },
-                onProgramInfo = { menuTarget = null; infoTarget = target },
+                onProgramInfo = { menuTarget = null; infoFromMenu = true; infoTarget = target },
+                focusProgramInfo = menuOnInfo,
                 streamProgram = target.block?.program ?: viewModel.currentProgram(target.channel.key),
                 onFindInNuvio = { p -> menuTarget = null; findInNuvio(p) },
                 onSearch = { menuTarget = null; LiveTvSearchBridge.origin.value = LiveTvSearchBridge.GUIDE; onOpenNuvioSearch() },
@@ -2233,7 +2237,10 @@ private fun LiveTvGuideScreenBody(
                 now = now,
                 use24h = settings.use24HourClock,
                 showEpisode = settings.showEpisodeNumbers,
-                onDismiss = { infoTarget = null },
+                onDismiss = {
+                    infoTarget = null
+                    if (infoFromMenu) { menuOnInfo = true; menuTarget = target }
+                },
                 onFind = { p -> infoTarget = null; findInNuvio(p) },
                 onWatch = { infoTarget = null; playChannel(target.channel) },
                 onCatchup = { p ->
@@ -3700,6 +3707,8 @@ private fun ChannelContextMenu(
     onPickFavorites: () -> Unit,
     onHideGroup: () -> Unit,
     onProgramInfo: () -> Unit,
+    /** Back from Program info: open with Program info highlighted. */
+    focusProgramInfo: Boolean = false,
     streamProgram: EpgProgram?,
     onFindInNuvio: (EpgProgram) -> Unit,
     reminderSet: Boolean = false,
@@ -3724,6 +3733,7 @@ private fun ChannelContextMenu(
     onSettings: () -> Unit
 ) {
     val first = remember { FocusRequester() }
+    val infoItem = remember { FocusRequester() }
     val ch = target.channel
     val program = target.block?.program
     val canCatchup = program != null && program.stopMs <= now && CatchupUrlBuilder.isAvailable(ch, program, now)
@@ -3744,7 +3754,7 @@ private fun ChannelContextMenu(
             if (canCatchup) item { MenuItem("Play from archive: ${program!!.title}", onClick = { onCatchup(program!!) }) }
             if (program != null || streamProgram != null) {
                 item { MenuHeader("This show") }
-                if (program != null) item { MenuItem("Program info", onClick = onProgramInfo) }
+                if (program != null) item { MenuItem("Program info", Modifier.focusRequester(infoItem), onClick = onProgramInfo) }
                 if (bell != null) item { MenuItem(bell.label, onClick = { bell.toggle(); onDismiss() }) }
                 if (streamProgram != null) {
                     item { MenuItem("Find & stream \"${streamProgram.title}\" in Nuvio", onClick = { onFindInNuvio(streamProgram) }) }
@@ -3790,7 +3800,11 @@ private fun ChannelContextMenu(
             item { MenuItem("Live TV settings…", onClick = onSettings) }
         }
     }
-    LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
+    LaunchedEffect(Unit) {
+        delay(60)
+        val onInfo = focusProgramInfo && program != null
+        runCatching { (if (onInfo) infoItem else first).requestFocus() }.onFailure { runCatching { first.requestFocus() } }
+    }
 }
 
 private data class EpgRow(
@@ -4448,7 +4462,11 @@ private fun ProgramInfoDialog(
     val block = target.block
     val p = rememberShowDetails(target.channel.key, block?.program)
     val infoBell = com.nuvio.tv.livetv.calendar.rememberLiveBell(p, target.channel)
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { (16.sp * 1.3f).toPx() } * 3
     LiveDialog(onDismiss = onDismiss, width = 640.dp) {
+      Column(Modifier.dpadScrollsText(scroll, scope, stepPx)) {
         LiveText(p?.title ?: target.channel.name, size = 24.sp, weight = FontWeight.Bold, maxLines = 2)
         Spacer(Modifier.height(6.dp))
         if (block != null) {
@@ -4460,7 +4478,8 @@ private fun ProgramInfoDialog(
             LiveText(meta, color = NuvioTheme.colors.TextSecondary, size = 14.sp, maxLines = 2)
         }
         Spacer(Modifier.height(12.dp))
-        ScrollingDescription(p?.description ?: "No description available.", color = NuvioTheme.colors.TextSecondary, size = 16.sp, maxLines = 10)
+        // The whole description, read with Up/Down (Left/Right still move between the buttons).
+        ReadableDescription(p?.description?.takeIf { it.isNotBlank() } ?: "No description available.", scroll, size = 16.sp, maxLines = 12)
         Spacer(Modifier.height(18.dp))
         // Scrolls sideways if the buttons don't all fit.
         Row(
@@ -4510,6 +4529,7 @@ private fun ProgramInfoDialog(
             }
             LiveFocusRow(onClick = onDismiss) { f -> LiveText("Close", color = focusedTextColor(f)) }
         }
+      }
     }
     LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
 }

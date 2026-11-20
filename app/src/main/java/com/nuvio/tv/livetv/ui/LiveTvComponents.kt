@@ -171,6 +171,70 @@ internal fun ScrollingDescription(
 }
 
 /**
+ * A show's whole description, read at your own pace: nothing moves by itself. Up/Down move it a
+ * few lines at a time (see [dpadScrollsText], put on the window around it), and a small hint
+ * shows when there's more than fits.
+ */
+@Composable
+internal fun ReadableDescription(
+    text: String,
+    scroll: androidx.compose.foundation.ScrollState,
+    modifier: Modifier = Modifier,
+    color: Color = NuvioTheme.colors.TextSecondary,
+    size: TextUnit = 16.sp,
+    maxLines: Int = 12
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val lineHeight = size * 1.3f
+    val boxHeight = with(density) { lineHeight.toDp() } * maxLines.coerceAtLeast(1)
+    Column(modifier) {
+        Box(Modifier.heightIn(max = boxHeight).clipToBounds()) {
+            Text(
+                text = text,
+                color = color,
+                fontSize = size,
+                lineHeight = lineHeight,
+                modifier = Modifier.verticalScroll(scroll, enabled = false)
+            )
+        }
+        if (scroll.maxValue > 0) {
+            val atTop = scroll.value <= 0
+            val atEnd = scroll.value >= scroll.maxValue
+            val hint = when {
+                atTop -> "▼  Down to read more"
+                atEnd -> "▲  Up to go back"
+                else -> "▲ ▼  Up / Down to read"
+            }
+            LiveText(
+                hint,
+                color = NuvioTheme.colors.TextTertiary,
+                size = size * 0.75f,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+    }
+}
+
+/** Up/Down move [scroll] three lines at a time while the text is longer than its box. */
+internal fun Modifier.dpadScrollsText(
+    scroll: androidx.compose.foundation.ScrollState,
+    scope: kotlinx.coroutines.CoroutineScope,
+    stepPx: Float
+): Modifier = onPreviewKeyEvent { e ->
+    val k = e.nativeKeyEvent.keyCode
+    val up = k == android.view.KeyEvent.KEYCODE_DPAD_UP
+    val down = k == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+    if ((!up && !down) || scroll.maxValue <= 0) return@onPreviewKeyEvent false
+    if (e.type == KeyEventType.KeyDown) {
+        scope.launch {
+            val target = (scroll.value + if (up) -stepPx else stepPx).toInt().coerceIn(0, scroll.maxValue)
+            scroll.animateScrollTo(target)
+        }
+    }
+    true
+}
+
+/**
  * The backdrop behind the whole guide / Sports hub (Settings → "Guide & Sports Background"). A
  * flat near-black background made the glass cards' translucency invisible — the fill and what's
  * behind it were nearly the same tone, so alpha blending had nothing to show against. Several soft

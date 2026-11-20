@@ -156,6 +156,10 @@ private fun OverlayModeContent(
     var futurePrompt by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
     // Holding OK on a channel or a show: Record / Record series, as in the guide.
     var recordMenu by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
+    // "Program info" from that menu: the show's whole description; Back goes back to the menu.
+    var infoMenu by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
+    // Back from Program info: the menu opens again with Program info highlighted.
+    var menuOnInfo by remember { mutableStateOf(false) }
     val recordingsList by viewModel.recordings.collectAsStateWithLifecycle()
     val schedulesList by viewModel.schedules.collectAsStateWithLifecycle()
     val seriesList by viewModel.seriesRules.collectAsStateWithLifecycle()
@@ -194,7 +198,7 @@ private fun OverlayModeContent(
     // Closes itself after a while without a key press.
     LaunchedEffect(activity) {
         delay(15_000)
-        if (futurePrompt == null && recordMenu == null) onClose()
+        if (futurePrompt == null && recordMenu == null && infoMenu == null) onClose()
     }
 
     val focusedChannel = channels.getOrNull(chIndex)
@@ -541,6 +545,7 @@ private fun OverlayModeContent(
     }
     recordMenu?.let { (ch, p) ->
         val first = remember { FocusRequester() }
+        val infoItem = remember { FocusRequester() }
         val onNow = now >= p.startMs && now < p.stopMs
         val recordingNow = recordingsList.any { it.channelKey == ch.key && it.isRecording }
         val recordLabel = when {
@@ -577,16 +582,75 @@ private fun OverlayModeContent(
                     recordMenu = null
                     activity++
                 }
+                MenuItem("Program info", Modifier.focusRequester(infoItem)) {
+                    recordMenu = null
+                    infoMenu = ch to p
+                    activity++
+                }
                 MenuItem("Close", if (recordLabel == null && seriesLabel == null) Modifier.focusRequester(first) else Modifier) {
                     recordMenu = null
                     activity++
                 }
             }
         }
-        LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
+        LaunchedEffect(Unit) {
+            delay(60)
+            val onInfo = menuOnInfo
+            menuOnInfo = false
+            runCatching { (if (onInfo) infoItem else first).requestFocus() }
+        }
     }
     LaunchedEffect(recordMenu) {
-        if (recordMenu == null) { delay(60); runCatching { focus.requestFocus() } }
+        if (recordMenu == null) {
+            delay(60)
+            if (recordMenu == null && infoMenu == null) runCatching { focus.requestFocus() }
+        }
+    }
+    infoMenu?.let { (ch, listed) ->
+        val p = rememberShowDetails(ch.key, listed) ?: listed
+        val close = remember { FocusRequester() }
+        val scroll = androidx.compose.foundation.rememberScrollState()
+        val scope = rememberCoroutineScope()
+        val lineSize = osp(16f)
+        val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { (lineSize * 1.3f).toPx() } * 3
+        // Back (or Close) goes back to the hold-OK menu, one step at a time.
+        val back: () -> Unit = {
+            infoMenu = null
+            menuOnInfo = true
+            recordMenu = ch to listed
+            activity++
+        }
+        LiveDialog(onDismiss = back, width = 640.dp) {
+            Column(
+                Modifier.dpadScrollsText(scroll, scope, stepPx).onPreviewKeyEvent { e ->
+                    // Reading counts as using the overlay: it doesn't close itself meanwhile.
+                    if (e.type == KeyEventType.KeyDown) activity++
+                    false
+                }
+            ) {
+                LiveText(p.title, size = osp(22f), weight = FontWeight.Bold, maxLines = 2)
+                Spacer(Modifier.height(6.dp))
+                val meta = listOfNotNull(
+                    "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)}",
+                    ch.name,
+                    p.episode?.takeIf { settings.showEpisodeNumbers && it.isNotBlank() },
+                    p.category?.takeIf { it.isNotBlank() }
+                ).joinToString("  ·  ")
+                LiveText(meta, color = NuvioTheme.colors.TextSecondary, size = osp(14f), maxLines = 2)
+                Spacer(Modifier.height(12.dp))
+                ReadableDescription(
+                    p.description?.takeIf { it.isNotBlank() } ?: "No description available.",
+                    scroll,
+                    size = lineSize,
+                    maxLines = 12
+                )
+                Spacer(Modifier.height(16.dp))
+                LiveFocusRow(modifier = Modifier.focusRequester(close), onClick = back) { f ->
+                    LiveText("Close", color = focusedTextColor(f))
+                }
+            }
+        }
+        LaunchedEffect(Unit) { delay(60); runCatching { close.requestFocus() } }
     }
 }
 
