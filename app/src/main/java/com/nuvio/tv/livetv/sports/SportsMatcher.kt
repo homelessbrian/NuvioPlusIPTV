@@ -6,8 +6,6 @@ import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.sports.SportsCatalog.hasWord
 import com.nuvio.tv.livetv.sports.SportsCatalog.norm
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 
 /**
@@ -1083,81 +1081,146 @@ internal class SportsMatcher(
 
     // ------------------------------------------------------------------ saved between app starts
 
-    private fun saveJson(name: String, o: JSONObject) {
+    // Saved as plain lines, not one JSON document: the whole file used to be read into memory,
+    // turned into a tree of JSON objects (several times the file's size on a big guide) and only
+    // then checked against the current guide, which after every guide change it no longer
+    // matched. Now the first line says which guide it was made for, so a stale file is passed
+    // over after one line, and the rest is read a line at a time. A show that's on several
+    // channels (or found for several games) is written once and shared when read back.
+    //   line 1: "<KIND>\t<key>"; then "P" shows (start, stop, title, description, category),
+    //   then the finds pointing at them by number.
+
+    private class ShowKey(val p: EpgProgram) {
+        override fun equals(other: Any?): Boolean = other is ShowKey && other.p.startMs == p.startMs &&
+            other.p.stopMs == p.stopMs && other.p.title == p.title &&
+            other.p.description == p.description && other.p.category == p.category
+        override fun hashCode(): Int = ((p.startMs.hashCode() * 31 + p.stopMs.hashCode()) * 31 + p.title.hashCode()) * 31 +
+            (p.description?.hashCode() ?: 0)
+    }
+
+    private fun esc(v: String?): String {
+        if (v == null) return "\\0"
+        if (v.none { it == '\\' || it == '\t' || it == '\n' || it == '\r' }) return v
+        val b = StringBuilder(v.length + 8)
+        for (c in v) when (c) {
+            '\\' -> b.append("\\\\")
+            '\t' -> b.append("\\t")
+            '\n' -> b.append("\\n")
+            '\r' -> b.append("\\r")
+            else -> b.append(c)
+        }
+        return b.toString()
+    }
+
+    private fun unesc(v: String): String? {
+        if (v == "\\0") return null
+        if ('\\' !in v) return v
+        val b = StringBuilder(v.length)
+        var i = 0
+        while (i < v.length) {
+            val c = v[i]
+            if (c == '\\' && i + 1 < v.length) {
+                when (v[i + 1]) {
+                    't' -> b.append('\t'); 'n' -> b.append('\n'); 'r' -> b.append('\r'); else -> b.append(v[i + 1])
+                }
+                i += 2
+            } else { b.append(c); i++ }
+        }
+        return b.toString()
+    }
+
+    /** Writes [name] through a temporary file, so a half-written copy is never read back. */
+    private fun saveLines(name: String, write: (java.io.Writer) -> Unit) {
         val d = dir ?: return
+        val tmp = File(d, "$name.tmp")
         sportsCatching {
             d.mkdirs()
-            val tmp = File(d, "$name.tmp")
-            tmp.writeText(o.toString())
+            tmp.bufferedWriter().use(write)
             if (!tmp.renameTo(File(d, name))) { File(d, name).delete(); tmp.renameTo(File(d, name)) }
-        }
+            // The copy an earlier version saved as one JSON document: no longer read.
+            File(d, name.removeSuffix(".txt") + ".json").delete()
+        }.onFailure { tmp.delete() }
     }
 
-    private fun loadJson(name: String): JSONObject? {
+    /** Reads [name] when it was saved as [kind] for [key]; null otherwise (after reading one line). */
+    private fun <T> loadLines(name: String, kind: String, key: Long, read: (java.io.BufferedReader) -> T): T? {
         val d = dir ?: return null
-        return sportsCatching { File(d, name).takeIf { it.exists() }?.readText()?.let { JSONObject(it) } }.getOrNull()
+        val f = File(d, name).takeIf { it.exists() } ?: return null
+        return sportsCatching {
+            f.bufferedReader().use { r ->
+                val head = r.readLine()?.split('\t') ?: return@use null
+                if (head.size < 2 || head[0] != kind || head[1].toLongOrNull() != key) return@use null
+                read(r)
+            }
+        }.getOrNull()
     }
 
-    private fun JSONArray.str(i: Int): String? = if (isNull(i)) null else getString(i)
+    /** Writes [p] as a "P" line and remembers its number. */
+    private fun writeShow(w: java.io.Writer, shows: HashMap<ShowKey, Int>, p: EpgProgram): Int =
+        shows.getOrPut(ShowKey(p)) {
+            w.write("P\t${p.startMs}\t${p.stopMs}\t${esc(p.title)}\t${esc(p.description)}\t${esc(p.category)}\n")
+            shows.size
+        }
 
-    /** A show as [start, stop, title, description, category]. */
-    private fun programJson(a: JSONArray, p: EpgProgram): JSONArray = a.put(p.startMs).put(p.stopMs).put(p.title)
-        .put(p.description ?: JSONObject.NULL).put(p.category ?: JSONObject.NULL)
-
-    private fun programFrom(a: JSONArray, at: Int): EpgProgram = EpgProgram(
-        startMs = a.getLong(at), stopMs = a.getLong(at + 1), title = a.getString(at + 2),
-        description = a.str(at + 3), category = a.str(at + 4)
+    private fun readShow(parts: List<String>): EpgProgram = EpgProgram(
+        startMs = parts[1].toLong(), stopMs = parts[2].toLong(), title = unesc(parts[3]).orEmpty(),
+        description = unesc(parts[4]), category = unesc(parts[5])
     )
 
-    private fun saveSlots(key: Long, cache: Map<Long, List<SlotFind>>) {
-        val s = JSONArray()
+    private fun saveSlots(key: Long, cache: Map<Long, List<SlotFind>>) = saveLines(SLOTS_FILE) { w ->
+        w.write("$SLOTS_KIND\t$key\n")
+        val shows = HashMap<ShowKey, Int>()
+        val at = HashMap<SlotFind, Int>()
+        cache.values.forEach { finds -> finds.forEach { x -> at[x] = writeShow(w, shows, x.program) } }
         cache.forEach { (sig, finds) ->
-            val f = JSONArray()
-            finds.forEach { x -> f.put(programJson(JSONArray().put(x.eventId).put(x.key).put(x.score).put(x.how), x.program)) }
-            s.put(JSONArray().put(sig).put(f))
+            w.write("S\t$sig\n")
+            finds.forEach { x -> w.write("F\t${esc(x.eventId)}\t${esc(x.key)}\t${x.score}\t${esc(x.how)}\t${at.getValue(x)}\n") }
         }
-        saveJson(SLOTS_FILE, JSONObject().put("v", 1).put("k", key).put("s", s))
     }
 
     /** The saved half-hour finds, when they were saved for [key] (same guide, channels and time shift). */
-    private fun loadSlots(key: Long): Map<Long, List<SlotFind>>? = sportsCatching {
-        val o = loadJson(SLOTS_FILE) ?: return null
-        if (o.optInt("v") != 1 || o.optLong("k") != key) return null
-        val s = o.getJSONArray("s")
-        val out = HashMap<Long, List<SlotFind>>(s.length())
-        for (i in 0 until s.length()) {
-            val e = s.getJSONArray(i)
-            val f = e.getJSONArray(1)
-            out[e.getLong(0)] = (0 until f.length()).map { j ->
-                val x = f.getJSONArray(j)
-                SlotFind(x.getString(0), x.getString(1), x.getInt(2), x.getString(3), programFrom(x, 4))
+    private fun loadSlots(key: Long): Map<Long, List<SlotFind>>? = loadLines(SLOTS_FILE, SLOTS_KIND, key) { r ->
+        val shows = ArrayList<EpgProgram>()
+        val out = HashMap<Long, List<SlotFind>>()
+        var current: ArrayList<SlotFind>? = null
+        while (true) {
+            val line = r.readLine() ?: break
+            val x = line.split('\t')
+            when (x[0]) {
+                "P" -> shows += readShow(x)
+                "S" -> current = ArrayList<SlotFind>().also { out[x[1].toLong()] = it }
+                "F" -> current?.add(SlotFind(unesc(x[1]).orEmpty(), unesc(x[2]).orEmpty(), x[3].toInt(), unesc(x[4]).orEmpty(), shows[x[5].toInt()]))
             }
         }
         out
-    }.getOrNull()
-
-    private fun saveDays(key: Long, byDay: Map<Long, List<Pair<String, EpgProgram>>>) {
-        val d = JSONArray()
-        byDay.forEach { (ds, hits) ->
-            val h = JSONArray()
-            hits.forEach { (ch, p) -> h.put(programJson(JSONArray().put(ch), p)) }
-            d.put(JSONArray().put(ds).put(h))
-        }
-        saveJson(DAYS_FILE, JSONObject().put("v", 1).put("k", key).put("d", d))
     }
 
-    private fun loadDays(key: Long): Map<Long, List<Pair<String, EpgProgram>>>? = sportsCatching {
-        val o = loadJson(DAYS_FILE) ?: return null
-        if (o.optInt("v") != 1 || o.optLong("k") != key) return null
-        val d = o.getJSONArray("d")
-        val out = HashMap<Long, List<Pair<String, EpgProgram>>>(d.length())
-        for (i in 0 until d.length()) {
-            val e = d.getJSONArray(i)
-            val h = e.getJSONArray(1)
-            out[e.getLong(0)] = (0 until h.length()).map { j -> h.getJSONArray(j).let { x -> x.getString(0) to programFrom(x, 1) } }
+    private fun saveDays(key: Long, byDay: Map<Long, List<Pair<String, EpgProgram>>>) = saveLines(DAYS_FILE) { w ->
+        w.write("$DAYS_KIND\t$key\n")
+        val shows = HashMap<ShowKey, Int>()
+        val numbers = byDay.mapValues { (_, hits) -> hits.map { (_, p) -> writeShow(w, shows, p) } }
+        byDay.forEach { (ds, hits) ->
+            w.write("D\t$ds\n")
+            val n = numbers.getValue(ds)
+            hits.forEachIndexed { i, (ch, _) -> w.write("H\t${esc(ch)}\t${n[i]}\n") }
+        }
+    }
+
+    private fun loadDays(key: Long): Map<Long, List<Pair<String, EpgProgram>>>? = loadLines(DAYS_FILE, DAYS_KIND, key) { r ->
+        val shows = ArrayList<EpgProgram>()
+        val out = HashMap<Long, List<Pair<String, EpgProgram>>>()
+        var current: ArrayList<Pair<String, EpgProgram>>? = null
+        while (true) {
+            val line = r.readLine() ?: break
+            val x = line.split('\t')
+            when (x[0]) {
+                "P" -> shows += readShow(x)
+                "D" -> current = ArrayList<Pair<String, EpgProgram>>().also { out[x[1].toLong()] = it }
+                "H" -> current?.add(unesc(x[1]).orEmpty() to shows[x[2].toInt()])
+            }
         }
         out
-    }.getOrNull()
+    }
 
     // ------------------------------------------------------------------ how a game is named
 
@@ -1327,8 +1390,12 @@ internal class SportsMatcher(
         const val AHEAD_MS = 56 * HOUR
 
         /** What the guide gave each half-hour of games, and the guide-only sports by day (see [match], [guideEventsDays]). */
-        private const val SLOTS_FILE = "matcher_slots.json"
-        private const val DAYS_FILE = "matcher_days.json"
+        // New names: a copy saved as one JSON document by an earlier version is never read
+        // (it's deleted when the new one is first saved; see saveLines).
+        private const val SLOTS_FILE = "matcher_slots.txt"
+        private const val DAYS_FILE = "matcher_days.txt"
+        private const val SLOTS_KIND = "SLOTS2"
+        private const val DAYS_KIND = "DAYS2"
 
         private val NAME_PREFIX = Regex("""^\s*[A-Za-z]{2,3}\s*[:|\-]\s*""")
         private val NAME_NOISE = Regex(""" (fhd|uhd|hd|sd|4k|hevc|raw|backup|vip) """)
