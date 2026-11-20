@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"מחפש…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"הבדיקה נכשלה: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"רשימת השמעה"</string>
+    <string name="iptv_settings_support_remote_title">"בודק לחצני השלט"</string>
+    <string name="iptv_settings_support_remote_instructions">"לחצו על לחצן כלשהו. החדש ביותר למעלה; שורות צבעוניות הן לחצן אחר בתוך 250 ms מהקודם (למשל OK שנשלח עם למעלה/למטה). לחצו חזרה 3 פעמים ברצף כדי לסגור."</string>
+    <string name="iptv_settings_support_remote_waiting">"ממתין ללחצן…"</string>
+    <string name="iptv_settings_support_remote_action_down">"לחיצה"</string>
+    <string name="iptv_settings_support_remote_action_up">"שחרור"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"מרובה"</string>
+    <string name="iptv_settings_support_remote_repeat">"חזרה %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"לחיצה ארוכה"</string>
+    <string name="iptv_settings_support_remote_canceled">"בוטל"</string>
+    <string name="iptv_settings_support_remote_held">"הוחזק %1$d ms"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"דוח הפעלה של Live TV"</string>
+    <string name="iptv_settings_support_report_subtitle">"מאז שהאפליקציה הופעלה. ▲ ▼ לגלילה."</string>
+    <string name="iptv_settings_support_report_empty">"עוד אין כלום: פתחו קודם את Live TV."</string>
+    <string name="iptv_settings_support_report_send">"שליחת הדוח המלא"</string>
+    <string name="iptv_settings_support_report_no_network">"חברו את הטלוויזיה הזו ל-Wi-Fi כדי לשלוח את הדוח מהטלפון."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. חברו את הטלפון לאותה רשת Wi-Fi של הטלוויזיה הזו.\n2. סרקו את הקוד במצלמת הטלפון, או הקלידו את הכתובת למטה.\n3. הקישו על העתקת דוח קצר (נכנס בהודעת Discord אחת), ואז הדביקו אותו בהודעה."</string>
+</resources>

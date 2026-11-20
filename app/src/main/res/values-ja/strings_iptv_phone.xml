@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"Nuvio + IPTV に追加"</string>
+    <string name="iptv_phone_connected_to">"%1$s に接続済み"</string>
+    <string name="iptv_phone_heading">"テレビに追加"</string>
+    <string name="iptv_phone_instructions">"入力して「テレビに送信」をタップすると、すぐにテレビに表示されます。"</string>
+    <string name="iptv_phone_what_to_add">"追加するもの"</string>
+    <string name="iptv_phone_m3u_tab">"M3U リンク"</string>
+    <string name="iptv_phone_epg_tab">"EPG のみ"</string>
+    <string name="iptv_phone_name_label">"名前（任意）"</string>
+    <string name="iptv_phone_provider_placeholder">"マイプロバイダー"</string>
+    <string name="iptv_phone_playlist_label">"プレイリストのリンク"</string>
+    <string name="iptv_phone_epg_optional_label">"EPG リンク（任意）"</string>
+    <string name="iptv_phone_user_agent_label">"ユーザーエージェント（任意）"</string>
+    <string name="iptv_phone_user_agent_placeholder">"空欄でデフォルト"</string>
+    <string name="iptv_phone_server_label">"サーバー"</string>
+    <string name="iptv_phone_username_label">"ユーザー名"</string>
+    <string name="iptv_phone_password_label">"パスワード"</string>
+    <string name="iptv_phone_include_live">"テレビチャンネルを含める"</string>
+    <string name="iptv_phone_include_vod">"映画とシリーズを含める（On Demand）"</string>
+    <string name="iptv_phone_epg_label">"EPG リンク"</string>
+    <string name="iptv_phone_send">"テレビに送信"</string>
+    <string name="iptv_phone_network_note">"テレビと同じ Wi‑Fi でのみ使えます。テレビでこの画面を閉じると、このページは使えなくなります。"</string>
+    <string name="iptv_phone_guide_placeholder">"番組表"</string>
+    <string name="iptv_phone_sending">"送信中…"</string>
+    <string name="iptv_phone_unreachable">"テレビに接続できませんでした。テレビで「スマホから追加」画面が開いたままで、同じ Wi‑Fi に接続しているか確認してください。"</string>
+    <string name="iptv_phone_not_found">"見つかりません"</string>
+    <string name="iptv_phone_nothing_to_send">"送信するものがありません。"</string>
+    <string name="iptv_phone_missing">"入力されていない項目があります。"</string>
+    <string name="iptv_phone_could_not_add">"テレビで追加できませんでした。もう一度お試しください。"</string>
+    <string name="iptv_phone_playlist_missing">"プレイリストのリンクを貼り付けてください。"</string>
+    <string name="iptv_phone_playlist_scheme">"プレイリストのリンクは http:// または https:// で始まる必要があります。"</string>
+    <string name="iptv_phone_epg_scheme">"EPG リンクは http:// または https:// で始まる必要があります。"</string>
+    <string name="iptv_phone_server_missing">"サーバーのアドレスを入力してください。"</string>
+    <string name="iptv_phone_server_invalid">"サーバーのアドレスではないようです。"</string>
+    <string name="iptv_phone_credentials_missing">"ユーザー名とパスワードを入力してください。"</string>
+    <string name="iptv_phone_inclusion_missing">"テレビチャンネルか映画とシリーズをオンにしてください。"</string>
+    <string name="iptv_phone_epg_missing">"EPG リンクを貼り付けてください。"</string>
+    <string name="iptv_phone_kind_missing">"追加するものを選んでください。"</string>
+</resources>

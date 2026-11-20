@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="one">"רשימת השמעה אחת"</item>
+        <item quantity="two">"%1$d רשימות השמעה"</item>
+        <item quantity="other">"%1$d רשימות השמעה"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="one">"מדריך אחד"</item>
+        <item quantity="two">"%1$d מדריכים"</item>
+        <item quantity="other">"%1$d מדריכים"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="one">"ערוץ אחד"</item>
+        <item quantity="two">"%1$d ערוצים"</item>
+        <item quantity="other">"%1$d ערוצים"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="one">"תוכנית אחת הותאמה"</item>
+        <item quantity="two">"%1$d תוכניות הותאמו"</item>
+        <item quantity="other">"%1$d תוכניות הותאמו"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="one">"%1$d הוסר"</item>
+        <item quantity="two">"%1$d הוסרו"</item>
+        <item quantity="other">"%1$d הוסרו"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="one">"%1$d דק׳"</item>
+        <item quantity="two">"%1$d דק׳"</item>
+        <item quantity="other">"%1$d דק׳"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="one">"יום אחד"</item>
+        <item quantity="two">"יומיים"</item>
+        <item quantity="other">"%1$d ימים"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="one">"שעה אחת"</item>
+        <item quantity="two">"שעתיים"</item>
+        <item quantity="other">"%1$d שעות"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="one">"שנייה אחת"</item>
+        <item quantity="two">"%1$d שניות"</item>
+        <item quantity="other">"%1$d שניות"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="one">"לפני יום"</item>
+        <item quantity="two">"לפני יומיים"</item>
+        <item quantity="other">"לפני %1$d ימים"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="one">"לפני שבוע"</item>
+        <item quantity="two">"לפני שבועיים"</item>
+        <item quantity="other">"לפני %1$d שבועות"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="one">"לפני חודש"</item>
+        <item quantity="two">"לפני חודשיים"</item>
+        <item quantity="other">"לפני %1$d חודשים"</item>
+    </plurals>
+</resources>

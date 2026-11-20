@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"ערוצים מהירים"</string>
+    <string name="iptv_quick_channels_subtitle">"קיצורי דרך מתחת לסרגל הניגון. לחצו למטה על הסרגל כדי לפתוח אותם."</string>
+    <string name="iptv_quick_channels_show">"הצגת ערוצים מהירים"</string>
+    <string name="iptv_quick_channels_opens_on">"נפתח על"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"הרשימה שמוצגת ראשונה"</string>
+    <string name="iptv_quick_channels_first_list">"הרשימה הראשונה"</string>
+    <string name="iptv_quick_channels_last_used">"האחרונה שבשימוש"</string>
+    <string name="iptv_quick_channels_lists_hint">"רשימות בשורה · OK מפעיל או מכבה, החצים מזיזים"</string>
+    <string name="iptv_quick_channels_recent">"נצפו לאחרונה"</string>
+    <string name="iptv_quick_channels_favorites">"מועדפים"</string>
+    <string name="iptv_quick_channels_built_in">"מובנה"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · קבוצה מרשימת השמעה"</string>
+    <string name="iptv_quick_channels_your_group">"הקבוצה שלך"</string>
+    <string name="iptv_quick_channels_group_missing">"הקבוצה לא נמצאה"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"לא נמצאת כרגע ברשימות ההשמעה"</string>
+    <string name="iptv_quick_channels_add_group">"הוספת קבוצה מרשימת השמעה…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"כל קבוצה מכל רשימת השמעה, גם הקבוצות שלך"</string>
+    <string name="iptv_quick_channels_add_groups_title">"הוספת קבוצות מרשימות השמעה"</string>
+    <string name="iptv_quick_channels_no_groups">"אין עדיין קבוצות. הוסיפו קודם רשימת השמעה."</string>
+    <string name="iptv_quick_channels_add_groups_hint">"כל קבוצה שמסמנים הופכת לרשימה משלה בערוצים המהירים."</string>
+    <string name="iptv_quick_channels_my_groups">"הקבוצות שלי"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="one">"ערוץ אחד"</item>
+        <item quantity="two">"%1$d ערוצים"</item>
+        <item quantity="other">"%1$d ערוצים"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"הסדר של הספק"</string>
+    <string name="iptv_vod_sort_name_az">"A–Z"</string>
+    <string name="iptv_vod_sort_name_za">"Z–A"</string>
+    <string name="iptv_vod_sort_newest">"יציאה אחרונה"</string>
+    <string name="iptv_vod_sort_oldest">"יציאה מוקדמת"</string>
+    <string name="iptv_vod_sort_recently_added">"נוספו לאחרונה"</string>
+    <string name="iptv_vod_sort_highest_rated">"הדירוג הגבוה"</string>
+    <string name="iptv_vod_sort_shuffle">"ערבוב"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"הסדר שהספק שולח"</string>
+    <string name="iptv_vod_sort_name_az_hint">"מספרים וסמלים קודם, אחר כך מ-A עד Z"</string>
+    <string name="iptv_vod_sort_name_za_hint">"מ-Z עד A, אחר כך מספרים וסמלים"</string>
+    <string name="iptv_vod_sort_newest_hint">"לפי שנת יציאה, החדש קודם"</string>
+    <string name="iptv_vod_sort_oldest_hint">"לפי שנת יציאה, הישן קודם"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"מה שהספק הוסיף לאחרונה"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"לפי דירוג הספק, הטוב קודם"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"סדר אקראי חדש בכל בחירה"</string>
+    <string name="iptv_vod_sort_default_hint">"לפי סדר המיון שבהגדרות"</string>
+</resources>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"プレイリスト「%1$s」を更新中…"</string>
+    <string name="iptv_repository_status_reading_channels">"チャンネルを読み込み中…"</string>
+    <string name="iptv_repository_status_downloading_guide">"番組表「%1$s」をダウンロード中…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"番組表「%1$s」をダウンロード中"</string>
+    <string name="iptv_repository_status_matching_data">"番組表データを照合中…"</string>
+    <string name="iptv_repository_status_updating_guide">"番組表を更新中…"</string>
+    <string name="iptv_repository_status_adding_playlist">"「%1$s」からチャンネルを追加中…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"「%1$s」からチャンネルを読み込み中…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"「%1$s」からチャンネルを読み込み中（%2$d／%3$d）…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"メモリ不足のため番組表「%1$s」をスキップしました"</string>
+    <string name="iptv_repository_status_reading_guide">"番組表「%1$s」を読み込み中…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"番組表「%1$s」を読み込み中（%2$d／%3$d）…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"番組表「%1$s」を読み込み中… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"番組表「%1$s」を読み込み中（%2$d／%3$d）… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"番組表「%1$s」を照合中…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"番組表「%1$s」を照合中（%2$d／%3$d）…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"プレイリスト「%1$s」をダウンロード中"</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s／%3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"%1$s からチャンネルを読み込み中… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"プロバイダーのサーバーが見つかりませんでした。"</string>
+    <string name="iptv_repository_status_timeout_short">"プロバイダーの応答に時間がかかりすぎました。"</string>
+    <string name="iptv_repository_status_generic_error">"問題が発生しました。"</string>
+    <string name="iptv_repository_status_unknown_host_address">"プロバイダーのサーバー（%1$s）が見つかりませんでした。アドレスやインターネットを確認するか、後でもう一度お試しください。"</string>
+    <string name="iptv_repository_status_provider_timeout">"プロバイダーの応答に時間がかかりすぎました（タイムアウト）。混雑している可能性があります。後でもう一度お試しください。"</string>
+    <string name="iptv_repository_status_address">"アドレス"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"プレイリスト「%1$s」を更新できませんでした。%2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"番組表「%1$s」を更新できませんでした。%2$s"</string>
+    <string name="iptv_repository_status_expired">"「%1$s」の期限が切れました"</string>
+    <string name="iptv_repository_status_expires_today">"「%1$s」は今日期限切れになります"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"「%1$s」は明日期限切れになります"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="other">"新しいプレイリスト %1$d 件からチャンネルを追加中…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="other">"「%1$s」はあと %2$d 日で期限切れになります"</item>
+    </plurals>
+</resources>

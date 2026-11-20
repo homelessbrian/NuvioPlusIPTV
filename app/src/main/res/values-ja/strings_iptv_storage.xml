@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"この端末"</string>
+    <string name="iptv_storage_usb_drive">"USB ドライブ"</string>
+    <string name="iptv_storage_read_only">"読み取り専用。この端末はドライブを読み取れますが、書き込めません（多くは NTFS ドライブ）。exFAT でフォーマットすると録画できます。"</string>
+    <string name="iptv_storage_unsupported_format">"この端末はドライブの形式を読み取れません。exFAT でフォーマットすると通常は解決します。"</string>
+    <string name="iptv_storage_not_ready">"まだ準備ができていません。少し待ってからこの一覧を開き直してください。"</string>
+    <string name="iptv_storage_no_app_folder">"Android がアプリにドライブ上のフォルダを割り当てませんでした。ドライブを抜き差しするか、端末を再起動してください。"</string>
+    <string name="iptv_storage_unusable_state">"現在使用できません（%1$s）。"</string>
+</resources>
