@@ -1105,7 +1105,9 @@ internal fun LiveTvBackupFlyout(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onLongPress: (LiveChannel) -> Unit = {},
-    menuOpen: Boolean = false
+    menuOpen: Boolean = false,
+    gameTitle: String = "",
+    gameChannels: List<LiveChannel> = emptyList()
 ) {
     val sizeSettings by viewModel.settings.collectAsStateWithLifecycle()
     val (textScale, rowScale) = when (sizeSettings.effectiveGuideSize) {
@@ -1118,14 +1120,16 @@ internal fun LiveTvBackupFlyout(
         LocalOverlayScale provides textScale,
         LocalOverlayRowScale provides rowScale
     ) {
-        BackupFlyoutContent(viewModel, channels, playingKey, onPick, onClose, modifier, onLongPress, menuOpen)
+        BackupFlyoutContent(viewModel, channels, gameTitle, gameChannels, playingKey, onPick, onClose, modifier, onLongPress, menuOpen)
     }
 }
 
 @Composable
 private fun BackupFlyoutContent(
     viewModel: LiveTvViewModel,
-    channels: List<LiveChannel>,
+    copies: List<LiveChannel>,
+    gameTitle: String,
+    gameChannels: List<LiveChannel>,
     playingKey: String?,
     onPick: (LiveChannel) -> Unit,
     onClose: () -> Unit,
@@ -1137,12 +1141,17 @@ private fun BackupFlyoutContent(
     val now by viewModel.now.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()
+    // This channel's copies, then the other channels showing the game on it (if any), one list
+    // to move through; the two get a heading each when both show.
+    val channels = remember(copies, gameChannels) { copies + gameChannels }
+    val headed = gameChannels.isNotEmpty()
+    fun rowAt(i: Int): Int = i + (if (headed && copies.isNotEmpty()) 1 else 0) + (if (headed && i >= copies.size) 1 else 0)
     // Opens on the first copy that isn't the one playing.
     var index by remember { mutableIntStateOf(channels.indexOfFirst { it.key != playingKey }.coerceAtLeast(0)) }
     var activity by remember { mutableIntStateOf(0) }
     val focus = remember { FocusRequester() }
-    val state = rememberLazyListState(initialFirstVisibleItemIndex = (index - 3).coerceAtLeast(0))
-    keepVisible(state, index)
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = (rowAt(index) - 3).coerceAtLeast(0))
+    keepVisible(state, rowAt(index))
     // On opening, and again when the long-press menu closes.
     LaunchedEffect(menuOpen) { if (!menuOpen) { delay(60); runCatching { focus.requestFocus() } } }
     // Closes itself after a while without a key press, like overlay mode (not while its menu is up).
@@ -1219,68 +1228,105 @@ private fun BackupFlyoutContent(
             }
         }
         LazyColumn(state = state, modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(channels, key = { _, c -> c.key }) { i, ch ->
-                val p = programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
-                    ?: viewModel.currentProgram(ch.key)
-                val isFocused = i == index
-                val colors = liveCellColors(focused = isFocused, idle = if (ch.key == playingKey) Color.White.copy(alpha = 0.08f) else Color.Transparent)
-                // On a solid highlight the accent-colored bits would disappear: make them white.
-                val onSolid = isFocused && LocalLiveSolidHighlight.current
-                val accent = if (onSolid) Color.White else NuvioTheme.colors.Secondary
-                val dim = if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextSecondary
-                val shape = RoundedCornerShape(8.dp)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(orow(74f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                        .clip(shape)
-                        .background(colors.background)
-                        .border(2.dp, colors.border, shape)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (settings.showChannelLogos) {
-                        ChannelLogo(ch.logo, 32.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            LiveText(ch.name, color = colors.text, size = osp(15f), modifier = Modifier.weight(1f, fill = false), marquee = isFocused && i == restingIndex)
-                            backupQuality(ch.name)?.let { q ->
-                                Spacer(Modifier.width(6.dp))
-                                LiveText(q, color = dim, size = osp(11f), weight = FontWeight.Bold)
-                            }
-                        }
-                        val from = playlistNames[ch.sourceId] ?: ch.sourceName
-                        // The group always shows here (even when hidden on the play bar): it's what tells
-                        // same-named copies apart (UK, World, another language).
-                        LiveText(
-                            listOfNotNull(from.takeIf { it.isNotBlank() }, ch.group.takeIf { it.isNotBlank() }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
-                            color = dim, size = osp(12f), maxLines = 1,
-                            marquee = isFocused && i == restingIndex
-                        )
-                        LiveText(
-                            p?.title?.let { titleMarks(it).title } ?: "No program information",
-                            color = if (p == null) (if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextTertiary) else accent,
-                            size = osp(13f),
-                            marquee = isFocused && i == restingIndex
-                        )
-                        if (p != null) {
-                            Spacer(Modifier.height(3.dp))
-                            ProgressBar(
-                                p.progress(now),
-                                Modifier.fillMaxWidth(),
-                                color = if (onSolid) Color.White else null,
-                                trackColor = if (onSolid) Color.White.copy(alpha = 0.35f) else null
-                            )
-                        }
-                    }
-                    if (ch.key == playingKey) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Playing", tint = accent, modifier = Modifier.size(odp(20f)))
-                    }
+            if (headed && copies.isNotEmpty()) item(key = "head:copies") {
+                FlyoutSection(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_other_copies, copies.firstOrNull { it.key == playingKey }?.name ?: copies.first().name))
+            }
+            itemsIndexed(copies, key = { _, c -> c.key }) { i, ch ->
+                FlyoutRow(viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames)
+            }
+            if (headed) item(key = "head:game") {
+                FlyoutSection(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle))
+            }
+            itemsIndexed(gameChannels, key = { _, c -> "game:" + c.key }) { j, ch ->
+                val i = copies.size + j
+                FlyoutRow(viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames)
+            }
+        }
+    }
+}
+
+/** A heading in the backup flyout ("Other copies of ESPN", "Also showing Bears vs Lions"). */
+@Composable
+private fun FlyoutSection(text: String) {
+    LiveText(
+        text,
+        color = NuvioTheme.colors.TextSecondary,
+        size = osp(12f),
+        weight = FontWeight.SemiBold,
+        maxLines = 1,
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun FlyoutRow(
+    viewModel: LiveTvViewModel,
+    ch: LiveChannel,
+    isFocused: Boolean,
+    resting: Boolean,
+    playingKey: String?,
+    programs: Map<String, List<EpgProgram>>,
+    now: Long,
+    showLogos: Boolean,
+    playlistNames: Map<String, String>
+) {
+    val p = programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
+        ?: viewModel.currentProgram(ch.key)
+    val colors = liveCellColors(focused = isFocused, idle = if (ch.key == playingKey) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+    // On a solid highlight the accent-colored bits would disappear: make them white.
+    val onSolid = isFocused && LocalLiveSolidHighlight.current
+    val accent = if (onSolid) Color.White else NuvioTheme.colors.Secondary
+    val dim = if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextSecondary
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(orow(74f))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .clip(shape)
+            .background(colors.background)
+            .border(2.dp, colors.border, shape)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (showLogos) {
+            ChannelLogo(ch.logo, 32.dp)
+            Spacer(Modifier.width(8.dp))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LiveText(ch.name, color = colors.text, size = osp(15f), modifier = Modifier.weight(1f, fill = false), marquee = isFocused && resting)
+                backupQuality(ch.name)?.let { q ->
+                    Spacer(Modifier.width(6.dp))
+                    LiveText(q, color = dim, size = osp(11f), weight = FontWeight.Bold)
                 }
             }
+            val from = playlistNames[ch.sourceId] ?: ch.sourceName
+            // The group always shows here (even when hidden on the play bar): it's what tells
+            // same-named copies apart (UK, World, another language).
+            LiveText(
+                listOfNotNull(from.takeIf { it.isNotBlank() }, ch.group.takeIf { it.isNotBlank() }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
+                color = dim, size = osp(12f), maxLines = 1,
+                marquee = isFocused && resting
+            )
+            LiveText(
+                p?.title?.let { titleMarks(it).title } ?: "No program information",
+                color = if (p == null) (if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextTertiary) else accent,
+                size = osp(13f),
+                marquee = isFocused && resting
+            )
+            if (p != null) {
+                Spacer(Modifier.height(3.dp))
+                ProgressBar(
+                    p.progress(now),
+                    Modifier.fillMaxWidth(),
+                    color = if (onSolid) Color.White else null,
+                    trackColor = if (onSolid) Color.White.copy(alpha = 0.35f) else null
+                )
+            }
+        }
+        if (ch.key == playingKey) {
+            Icon(Icons.Default.PlayArrow, contentDescription = "Playing", tint = accent, modifier = Modifier.size(odp(20f)))
         }
     }
 }

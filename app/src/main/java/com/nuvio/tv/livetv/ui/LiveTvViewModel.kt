@@ -387,6 +387,10 @@ class LiveTvViewModel @Inject constructor(
         return if (others.isEmpty()) emptyList() else listOf(ch) + others
     }
 
+    /** Backup lists: false for channels in a locked group (as in [backupsFor]). */
+    fun canOfferAsBackup(ch: LiveChannel): Boolean =
+        !com.nuvio.tv.livetv.parental.ParentalControls.isLocked(ch.groupId, ch.group, settings.value, userState.value.lockedGroups)
+
     /** [watchedIn]: the group it was picked from outside the guide (Quick Channels), saved as the group you watched in. */
     fun preview(channel: LiveChannel, watchedIn: String? = null) {
         if (!switchingToBackup) backupTried.clear()

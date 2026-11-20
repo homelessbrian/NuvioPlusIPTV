@@ -557,6 +557,44 @@ class SportsRepository @Inject constructor(
         return (copies + others).firstOrNull()?.channel
     }
 
+    /** A live game and the other channels showing it (see [gameChannelsFor]). */
+    data class GameChannels(val title: String, val channels: List<LiveChannel>)
+
+    /**
+     * The player's backup lists (Right twice, the bar's Backups button): the live game (or one
+     * starting within 15 minutes) that [channelKey] is showing, and every other channel showing it
+     * in the game page's order (your region first), the same channels "won't play" moves through.
+     * Your own channels only. [exclude]: channels the list already shows (this channel's own copies). Null when the
+     * channel isn't showing a game we know of, Sports is off, or there are no other channels.
+     */
+    fun gameChannelsFor(channelKey: String, exclude: Set<String> = emptySet()): GameChannels? {
+        if (!settings.value.showInSidebar) return null
+        val now = System.currentTimeMillis()
+        val evs = events.value.associateBy { it.id }
+        var game: SportsEvent? = null
+        val list = matches.value.entries.firstOrNull { (id, l) ->
+            val ev = evs[id] ?: return@firstOrNull false
+            val on = ev.state == GameState.LIVE || (ev.state == GameState.PRE && ev.startMs - now < 15 * MINUTE)
+            (on && l.any { it.channel.key == channelKey && (it.sure || it.score >= 150) }).also { if (it) game = ev }
+        }?.value ?: return null
+        val ev = game ?: return null
+        val playing = list.first { it.channel.key == channelKey }
+        val copyKey = SportsMatcher.copyKey(playing.channel)
+        val others = list.asSequence()
+            .filter { it.channel.key != channelKey && it.channel.key !in exclude }
+            // Your own channels only: addon streams and videos stay on the game page.
+            .filter { it.channel.sourceId != SportsAddonSource.SOURCE_ID && it.channel.sourceId != SportsVideos.SOURCE_ID }
+            .filter { it.sure || it.score >= 150 || SportsMatcher.copyKey(it.channel) == copyKey }
+            .map { it.channel }
+            .distinctBy { it.key }
+            .toList()
+        if (others.isEmpty()) return null
+        val league = SportsCatalog.league(ev.leagueId)
+        val sides = if (league != null) ev.ordered(league.sport) else ev.sides
+        val title = if (sides.size == 2) sides.joinToString(" vs ") { it.team.name } else ev.title
+        return GameChannels(title, others)
+    }
+
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
     private val _matching = MutableStateFlow(false)

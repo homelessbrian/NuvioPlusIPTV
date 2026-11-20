@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV player: backup lists (Right twice, the bar's Backups button) -->
+    <string name="livetv_backups_other_copies">Other copies of %1$s</string>
+    <string name="livetv_backups_also_showing">Also showing %1$s</string>
+</resources>

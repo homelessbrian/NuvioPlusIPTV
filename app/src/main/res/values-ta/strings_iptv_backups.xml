@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_other_copies">"%1$s இன் பிற நகல்கள்"</string>
+    <string name="livetv_backups_also_showing">"இதிலும் ஒளிபரப்பாகிறது: %1$s"</string>
+</resources>

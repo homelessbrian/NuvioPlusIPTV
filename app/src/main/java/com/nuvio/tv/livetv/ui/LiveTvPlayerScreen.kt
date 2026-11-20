@@ -475,6 +475,20 @@ fun LiveTvPlayerScreen(
     val backups = remember(current?.key, panelFull, playback.catchupTitle, backupsTick) {
         current?.takeIf { playback.catchupTitle == null }?.let { viewModel.backupsFor(it) }.orEmpty()
     }
+    // A live game on this channel: the other channels showing it, under this channel's own
+    // copies in both backup lists (worked out again each time a list opens).
+    val sportsRepo = remember {
+        runCatching {
+            dagger.hilt.android.EntryPointAccessors.fromApplication(context.applicationContext, com.nuvio.tv.livetv.sports.SportsEntryPoint::class.java).sportsRepository()
+        }.getOrNull()
+    }
+    val gameBackups = remember(current?.key, panelFull, playback.catchupTitle, backupsTick, dialog, backups) {
+        val ch = current?.takeIf { playback.catchupTitle == null }
+        if (ch == null || sportsRepo == null) null
+        else runCatching { sportsRepo.gameChannelsFor(ch.key, exclude = backups.mapTo(HashSet()) { it.key }) }.getOrNull()
+            ?.let { g -> g.copy(channels = g.channels.filter(viewModel::canOfferAsBackup)) }?.takeIf { it.channels.isNotEmpty() }
+    }
+    val anyBackups = backups.isNotEmpty() || gameBackups != null
     val poster by androidx.compose.runtime.produceState<String?>(initialValue = null, watchingTitle, current?.key) {
         value = null
         // In archive playback the guide entry isn't the live one, so no movie/series hint.
@@ -631,7 +645,7 @@ fun LiveTvPlayerScreen(
                         else if (shiftStartedAt != null || (ownTimeline && viewModel.playback.shiftIsBehind())) PanelMode.SHIFT
                         else PanelMode.LIVE
                     val paused = playback.userPaused
-                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty(), sports = multiviewEligible)
+                    val list = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = anyBackups, sports = multiviewEligible)
                     if (e.type == KeyEventType.KeyUp) return@onPreviewKeyEvent isOk || e.key == Key.Back
                     showBanner()
                     val buttons = list.filter { it != PanelControl.TIMELINE }
@@ -797,7 +811,12 @@ fun LiveTvPlayerScreen(
                                     // Right twice: this channel's backups from the right edge.
                                     lastRightTapAt = 0L
                                     rightHoldDone = true
-                                    if (backups.isNotEmpty()) {
+                                    // Asked again now: a game may have started since the list was last worked out.
+                                    val freshGame = current?.takeIf { playback.catchupTitle == null }?.let { ch ->
+                                        runCatching { sportsRepo?.gameChannelsFor(ch.key, exclude = backups.mapTo(HashSet()) { it.key }) }.getOrNull()
+                                            ?.channels?.filter(viewModel::canOfferAsBackup)?.takeIf { it.isNotEmpty() }
+                                    }
+                                    if (backups.isNotEmpty() || freshGame != null) {
                                         closeFull()
                                         bannerVisible = false
                                         dialog = PlayerDialog.BACKUP_FLYOUT
@@ -1168,7 +1187,7 @@ fun LiveTvPlayerScreen(
                     showPosters = settings.showPosters,
                     timeline = timeline,
                     paused = paused,
-                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = backups.isNotEmpty(), sports = multiviewEligible),
+                    controls = panelControls(mode, paused, canSkip = archive || viewModel.playback.shiftCanSeek(), bell = bellInBar, pin = pinGame != null, backups = anyBackups, sports = multiviewEligible),
                     focused = controlFocus,
                     captionsOn = captionsOn,
                     audioLabel = remember(playback.channelKey, bannerVisible) { viewModel.playback.audioLabel() },
@@ -1212,10 +1231,12 @@ fun LiveTvPlayerScreen(
         }
 
         // Right twice: backup channels from the right edge, in overlay mode's look.
-        if (dialog == PlayerDialog.BACKUP_FLYOUT && backups.isNotEmpty()) {
+        if (dialog == PlayerDialog.BACKUP_FLYOUT && anyBackups) {
             LiveTvBackupFlyout(
                 viewModel = viewModel,
                 channels = backups,
+                gameTitle = gameBackups?.title.orEmpty(),
+                gameChannels = gameBackups?.channels.orEmpty(),
                 playingKey = playback.channelKey,
                 modifier = Modifier.align(Alignment.CenterEnd),
                 onLongPress = { ch -> backupMenuFor = ch },
@@ -1488,9 +1509,11 @@ fun LiveTvPlayerScreen(
             onDismiss = { dialog = PlayerDialog.NONE }
         )
         // Hidden while a copy's long-press menu is up; it comes back on that copy afterwards.
-        PlayerDialog.BACKUPS -> if (backups.isEmpty()) dialog = PlayerDialog.NONE else if (backupMenuFor == null) BackupChannelsDialog(
+        PlayerDialog.BACKUPS -> if (!anyBackups) dialog = PlayerDialog.NONE else if (backupMenuFor == null) BackupChannelsDialog(
             anchor = backupsAnchor,
             channels = backups,
+            gameTitle = gameBackups?.title.orEmpty(),
+            gameChannels = gameBackups?.channels.orEmpty(),
             playingKey = playback.channelKey,
             startKey = backupMenuLastKey,
             onLongPress = { ch -> backupMenuFor = ch; backupMenuLastKey = ch.key },
@@ -1519,7 +1542,7 @@ fun LiveTvPlayerScreen(
             },
             onDismiss = { dialog = PlayerDialog.NONE }
         )
-        PlayerDialog.BACKUP_FLYOUT -> if (backups.isEmpty()) dialog = PlayerDialog.NONE
+        PlayerDialog.BACKUP_FLYOUT -> if (!anyBackups) dialog = PlayerDialog.NONE
         PlayerDialog.NONE -> Unit
     }
     // Holding OK on a copy in either backups list: its options (record, favorites, rename…).
@@ -1631,6 +1654,8 @@ private fun TrackDialog(
 private fun BackupChannelsDialog(
     channels: List<LiveChannel>,
     playingKey: String?,
+    gameTitle: String = "",
+    gameChannels: List<LiveChannel> = emptyList(),
     nowTitle: (String) -> String?,
     onPick: (LiveChannel) -> Unit,
     onDismiss: () -> Unit,
@@ -1641,8 +1666,13 @@ private fun BackupChannelsDialog(
 ) {
     val first = remember { FocusRequester() }
     val colors = NuvioTheme.colors
-    val focusKey = startKey?.takeIf { k -> channels.any { it.key == k } }
-        ?: channels.firstOrNull { it.key != playingKey }?.key ?: channels.first().key
+    // This channel's copies, then the other channels showing the game on it, each under a heading
+    // when both show.
+    val copies = channels
+    val all = copies + gameChannels
+    val headed = gameChannels.isNotEmpty()
+    val focusKey = startKey?.takeIf { k -> all.any { it.key == k } }
+        ?: all.firstOrNull { it.key != playingKey }?.key ?: all.first().key
     // A small flyout above the button (a centered panel if the button's spot isn't known yet).
     LiveDialog(onDismiss = onDismiss, width = 260.dp, anchor = anchor, minWidth = 240.dp, corner = 12.dp, pad = 10.dp) {
         LiveText("Backups", size = 13.sp, weight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
@@ -1651,34 +1681,40 @@ private fun BackupChannelsDialog(
             Modifier.fillMaxWidth().heightIn(max = 190.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            items(channels.size, key = { channels[it].key }) { i ->
-                val ch = channels[i]
-                val playing = ch.key == playingKey
-                LiveFocusRow(
-                    modifier = Modifier.fillMaxWidth().then(if (ch.key == focusKey) Modifier.focusRequester(first) else Modifier),
-                    selected = playing,
-                    onClick = { onPick(ch) },
-                    onLongClick = { onLongPress(ch) },
-                    horizontalPadding = 10.dp,
-                    verticalPadding = 6.dp
-                ) { f ->
-                    Column(Modifier.fillMaxWidth()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            LiveText(ch.name, size = 12.sp, color = focusedTextColor(f), weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
-                            backupQuality(ch.name)?.let { q ->
-                                Spacer(Modifier.width(6.dp))
-                                LiveText(q, size = 9.sp, weight = FontWeight.Bold, color = focusedTextColor(f))
+            if (headed && copies.isNotEmpty()) item(key = "head:copies") {
+                BackupsHeading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_other_copies, copies.firstOrNull { it.key == playingKey }?.name ?: copies.first().name))
+            }
+            items(all.size, key = { (if (it >= copies.size) "game:" else "") + all[it].key }) { i ->
+                Column(Modifier.fillMaxWidth()) {
+                    if (headed && i == copies.size) BackupsHeading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle))
+                    val ch = all[i]
+                    val playing = ch.key == playingKey
+                    LiveFocusRow(
+                        modifier = Modifier.fillMaxWidth().then(if (ch.key == focusKey) Modifier.focusRequester(first) else Modifier),
+                        selected = playing,
+                        onClick = { onPick(ch) },
+                        onLongClick = { onLongPress(ch) },
+                        horizontalPadding = 10.dp,
+                        verticalPadding = 6.dp
+                    ) { f ->
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                LiveText(ch.name, size = 12.sp, color = focusedTextColor(f), weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                                backupQuality(ch.name)?.let { q ->
+                                    Spacer(Modifier.width(6.dp))
+                                    LiveText(q, size = 9.sp, weight = FontWeight.Bold, color = focusedTextColor(f))
+                                }
+                                if (playing) {
+                                    Spacer(Modifier.width(6.dp))
+                                    LiveText("Watching", size = 9.sp, color = focusedTextColor(f))
+                                }
                             }
-                            if (playing) {
-                                Spacer(Modifier.width(6.dp))
-                                LiveText("Watching", size = 9.sp, color = focusedTextColor(f))
+                            // Only the highlighted copy shows where it comes from and what's on.
+                            if (f) {
+                                val line = listOf(ch.sourceName, ch.group.takeIf { showGroup }.orEmpty(), nowTitle(ch.key)?.let { "Now: $it" }.orEmpty())
+                                    .filter { it.isNotBlank() }.joinToString(" · ")
+                                if (line.isNotBlank()) LiveText(line, size = 9.sp, color = focusedTextColor(f), maxLines = 1)
                             }
-                        }
-                        // Only the highlighted copy shows where it comes from and what's on.
-                        if (f) {
-                            val line = listOf(ch.sourceName, ch.group.takeIf { showGroup }.orEmpty(), nowTitle(ch.key)?.let { "Now: $it" }.orEmpty())
-                                .filter { it.isNotBlank() }.joinToString(" · ")
-                            if (line.isNotBlank()) LiveText(line, size = 9.sp, color = focusedTextColor(f), maxLines = 1)
                         }
                     }
                 }
@@ -1686,6 +1722,15 @@ private fun BackupChannelsDialog(
         }
     }
     LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
+}
+
+/** A heading in the bar's backups list. */
+@Composable
+private fun BackupsHeading(text: String) {
+    LiveText(
+        text, size = 10.sp, weight = FontWeight.SemiBold, color = NuvioTheme.colors.TextSecondary, maxLines = 1,
+        modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 2.dp)
+    )
 }
 
 /** Picture size, with the same choices as Nuvio's movie player (Fit, Crop, Stretch, Cinema Zoom, …). */

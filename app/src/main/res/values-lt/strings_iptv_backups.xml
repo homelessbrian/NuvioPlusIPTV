@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_other_copies">"Kitos %1$s kopijos"</string>
+    <string name="livetv_backups_also_showing">"Taip pat rodo: %1$s"</string>
+</resources>
