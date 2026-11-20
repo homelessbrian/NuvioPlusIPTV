@@ -329,6 +329,29 @@ data class EpgProgram(
     }
 }
 
+/** Starts a description whose first line is the guide's sub-title (see [EpgProgram.subTitle]). */
+const val SUB_TITLE_MARK = '\u2063'
+
+/** The guide's sub-title (an episode's name, a game's match-up), when the guide has one. */
+val EpgProgram.subTitle: String?
+    get() {
+        val d = description ?: return null
+        if (d.isEmpty() || d[0] != SUB_TITLE_MARK) return null
+        return d.substring(1).substringBefore('\n').trim().takeIf { it.isNotEmpty() }
+    }
+
+/** The description without its sub-title line (null when there's nothing else). */
+val EpgProgram.descriptionText: String?
+    get() {
+        val d = description ?: return null
+        if (d.isEmpty() || d[0] != SUB_TITLE_MARK) return d
+        return d.substringAfter('\n', "").trim().takeIf { it.isNotEmpty() }
+    }
+
+/** "College Football : Texas at LSU", TiviMate style; just [title] when the sub-title adds nothing. */
+fun guideTitleWithSub(title: String, sub: String?): String =
+    if (sub.isNullOrBlank() || title.contains(sub, ignoreCase = true)) title else "$title : $sub"
+
 enum class ZapMode { GROUP, ALL }
 
 enum class ChannelSort { PLAYLIST, NUMBER, NAME }
@@ -689,8 +712,18 @@ data class LiveUserState(
     val vodGroupOrder: List<String> = emptyList(),
     val vodGroupNames: Map<String, String> = emptyMap(),
     /** On Demand: the sort you picked for a category (category uid -> VodSort name). */
-    val vodSorts: Map<String, String> = emptyMap()
-)
+    val vodSorts: Map<String, String> = emptyMap(),
+    /** Playlists this profile doesn't show (their ids): no channels, On Demand or Sports from them. */
+    val hiddenPlaylists: Set<String> = emptySet()
+) {
+    /** An On Demand category (uid "movie:<playlist>:<category>") hidden here, on its own or with its playlist. */
+    fun hidesVodCategory(uid: String): Boolean =
+        uid in vodHiddenCategories || (hiddenPlaylists.isNotEmpty() && uid.split(':').getOrNull(1) in hiddenPlaylists)
+
+    /** A channel from a playlist this profile doesn't show. */
+    fun hidesPlaylistOf(channel: LiveChannel): Boolean =
+        hiddenPlaylists.isNotEmpty() && channel.sourceId in hiddenPlaylists
+}
 
 /** "Remind me" on an upcoming show. */
 data class Reminder(
@@ -958,7 +991,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-20 01:55"
+    const val KIT_STAMP = "2026-11-20 10:30"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

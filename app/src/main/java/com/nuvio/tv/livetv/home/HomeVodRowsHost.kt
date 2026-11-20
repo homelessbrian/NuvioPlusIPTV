@@ -65,16 +65,42 @@ fun HomeVodRowsHost(
     val specs = remember(vodRows, names) {
         vodRows.map { OnDemandViewModel.HomeScreenRowSpec(it.id, it.source, it.limit, names[it.id] ?: it.title) }
     }
-    LaunchedEffect(specs, version) { vod.loadHomeScreenRows(specs) }
+    // Continue Watching On Demand also follows what you watch.
+    val hasContinue = remember(vodRows) { vodRows.any { it.source == HomeLiveRow.VOD_CONTINUE } }
+    val watchedFlow = remember(vod, hasContinue) { if (hasContinue) vod.continueChanges else kotlinx.coroutines.flow.flowOf(0) }
+    val watched by watchedFlow.collectAsStateWithLifecycle(0)
+    LaunchedEffect(specs, version, watched) { vod.loadHomeScreenRows(specs) }
     LaunchedEffect(vod) { vod.homeScreenRows.collect { rowsModel.setVodRows(it) } }
 
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var providerItem by remember { mutableStateOf<VodItem?>(null) }
     var opening by remember { mutableStateOf(false) }
     val actions = remember(vod) {
         HomeVodActions(
             open = open@{ metaId ->
                 if (VodHomeIds.uidOf(metaId) == null) return@open false
+                // Continue Watching On Demand: straight back to where you left off.
+                vod.continueTarget(metaId)?.let { (item, at) ->
+                    if (!opening) {
+                        opening = true
+                        scope.launch {
+                            try {
+                                val played = com.nuvio.tv.livetv.ondemand.OnDemandPlay.resolve(context, item.uid, at.season, at.episode)
+                                if (played != null) {
+                                    onPlay(
+                                        played.url, played.title, if (item.kind == VodKind.SERIES) "series" else "movie",
+                                        at.poster ?: played.poster, at.contentId, at.name, at.season, at.episode, at.episodeTitle
+                                    )
+                                } else {
+                                    // Gone from the provider, or its link couldn't be made: its details instead.
+                                    providerItem = item
+                                }
+                            } finally { opening = false }
+                        }
+                    }
+                    return@open true
+                }
                 val item = vod.homeItem(metaId) ?: return@open true
                 if (!opening) {
                     opening = true

@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"Format video ini tidak bisa membuat thumbnail di perangkat ini"</string>
     <string name="iptv_thumbs_msg_open_failed">"Video ini tidak bisa dibuka untuk thumbnail"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"Tidak ada thumbnail untuk stream siaran ulang ini"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Tanpa thumbnail: TV ini memerlukan satu-satunya dekoder videonya untuk video"</string>
 </resources>

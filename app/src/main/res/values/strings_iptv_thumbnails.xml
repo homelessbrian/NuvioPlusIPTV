@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">This video\'s format can\'t make thumbnails on this device</string>
     <string name="iptv_thumbs_msg_open_failed">This video couldn\'t be opened for thumbnails</string>
     <string name="iptv_thumbs_msg_catchup_stream">No thumbnails for this catch-up stream</string>
+    <string name="iptv_thumbs_msg_one_decoder">No thumbnails: this TV needs its only video decoder for the video</string>
 </resources>

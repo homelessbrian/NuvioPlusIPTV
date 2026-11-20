@@ -210,6 +210,7 @@ private sealed interface LiveDialog {
     data object HiddenGroups : LiveDialog
     data class PlaylistGuideShift(val source: PlaylistSource) : LiveDialog
     data class PlaylistGuides(val playlistId: String) : LiveDialog
+    data class PlaylistProfiles(val playlistId: String) : LiveDialog
     data class PlaylistCatchupShift(val source: PlaylistSource) : LiveDialog
     data class EpgSourceShift(val source: EpgSource) : LiveDialog
     data object ClockMode : LiveDialog
@@ -231,6 +232,9 @@ private sealed interface LiveDialog {
     data object CustomGroups : LiveDialog
     data object ChannelRow : LiveDialog
     data object ConfirmRestore : LiveDialog
+    data object BackupPhone : LiveDialog
+    data object BackupsOnTv : LiveDialog
+    data class ConfirmRestoreBackup(val backup: com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup) : LiveDialog
     data object PinCheck : LiveDialog
     data object PinNew : LiveDialog
     data object PinRemove : LiveDialog
@@ -354,7 +358,11 @@ internal fun LiveTvSettingsContent(
     val user by viewModel.userState.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle()
+    val hiddenPlaylistsByProfile by viewModel.hiddenPlaylistsByProfile.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<LiveDialog?>(null) }
+    /** The backup file section's last result ("Saved to …", "Restored"), shown as its summary. */
+    var backupMessage by remember { mutableStateOf<String?>(null) }
     var dnsChoice by remember { mutableStateOf(com.nuvio.tv.livetv.data.ForkDns.choice) }
     val drive by viewModel.driveSync.state.collectAsStateWithLifecycle()
     val cloud by viewModel.cloudSync.state.collectAsStateWithLifecycle()
@@ -483,6 +491,44 @@ internal fun LiveTvSettingsContent(
                         ) { viewModel.driveSync.disconnect() }
                     }
                 )
+            }
+
+            // ------------------------------------------------------------ Backup file (.nptv)
+            if (show(LiveTvPage.MAIN)) item(key = "backup_file") {
+                LiveSection(
+                    title = context.getString(R.string.iptv_backup_file),
+                    summary = backupMessage ?: context.getString(R.string.iptv_backup_file_summary),
+                    icon = Icons.Default.Backup,
+                    open = "backup_file" in open,
+                    onToggle = { toggle("backup_file") }
+                ) {
+                    Text(
+                        text = context.getString(R.string.iptv_backup_file_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioTheme.colors.TextSecondary
+                    )
+                    SettingsActionRow(
+                        context.getString(R.string.iptv_backup_with_phone),
+                        context.getString(R.string.iptv_backup_with_phone_description),
+                        onClick = { dialog = LiveDialog.BackupPhone }
+                    )
+                    SettingsActionRow(
+                        context.getString(R.string.iptv_backup_save_on_tv),
+                        context.getString(R.string.iptv_backup_save_on_tv_description),
+                        onClick = {
+                            backupMessage = context.getString(R.string.iptv_backup_saving)
+                            viewModel.saveBackupOnTv { where ->
+                                backupMessage = if (where != null) context.getString(R.string.iptv_backup_saved_to, where)
+                                    else context.getString(R.string.iptv_backup_save_failed)
+                            }
+                        }
+                    )
+                    SettingsActionRow(
+                        context.getString(R.string.iptv_backup_restore_on_tv),
+                        context.getString(R.string.iptv_backup_restore_on_tv_description),
+                        onClick = { dialog = LiveDialog.BackupsOnTv }
+                    )
+                }
             }
 
             // ------------------------------------------------------------ Playlists & Guides
@@ -1826,6 +1872,15 @@ internal fun LiveTvSettingsContent(
                 (context.getString(R.string.iptv_settings_catchup_shift_value, offsetLabel(context, d.source.catchupShiftMinutes))).takeIf { d.source.liveEnabled && !d.source.isStalker }?.let {
                     it to { dialog = LiveDialog.PlaylistCatchupShift(d.source) }
                 },
+                // Which Nuvio profiles see this playlist (only with more than one profile).
+                if (profiles.size > 1) {
+                    val shownOn = profiles.count { d.source.id !in hiddenPlaylistsByProfile[it.id].orEmpty() }
+                    context.getString(
+                        R.string.iptv_settings_show_on_profiles_value,
+                        if (shownOn == profiles.size) context.getString(R.string.iptv_settings_show_on_profiles_all)
+                        else context.getString(R.string.iptv_settings_show_on_profiles_count, shownOn, profiles.size)
+                    ) to { dialog = LiveDialog.PlaylistProfiles(d.source.id) }
+                } else null,
                 context.getString(R.string.iptv_settings_move_up) to { viewModel.movePlaylist(d.source.id, -1); close() },
                 context.getString(R.string.iptv_settings_move_down) to { viewModel.movePlaylist(d.source.id, 1); close() }
             ),
@@ -2069,6 +2124,43 @@ internal fun LiveTvSettingsContent(
             onUnhideAll = { viewModel.unhideAllGroups(); close() },
             onDismiss = close
         )
+        LiveDialog.BackupPhone -> BackupPhoneDialog(
+            viewModel = viewModel,
+            onBackup = { b -> dialog = LiveDialog.ConfirmRestoreBackup(b) },
+            onDismiss = close
+        )
+        LiveDialog.BackupsOnTv -> BackupsOnTvDialog(
+            viewModel = viewModel,
+            onPick = { b -> dialog = LiveDialog.ConfirmRestoreBackup(b) },
+            onDismiss = close
+        )
+        is LiveDialog.ConfirmRestoreBackup -> {
+            val b = d.backup
+            val whenText = if (b.createdAt > 0) DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, context.settingsLocale).format(Date(b.createdAt)) else ""
+            ConfirmDeleteDialog(
+                title = context.getString(R.string.iptv_backup_restore_confirm_title),
+                message = context.getString(R.string.iptv_backup_restore_confirm_message, whenText, b.device.ifBlank { "?" }),
+                confirmLabel = context.getString(R.string.iptv_backup_restore_confirm_button),
+                onConfirm = {
+                    close()
+                    backupMessage = context.getString(R.string.iptv_backup_restoring)
+                    viewModel.restoreBackup(b) { ok ->
+                        backupMessage = context.getString(if (ok) R.string.iptv_backup_restored else R.string.iptv_backup_restore_failed)
+                    }
+                },
+                onDismiss = close
+            )
+        }
+        is LiveDialog.PlaylistProfiles -> {
+            val src = playlists.firstOrNull { it.id == d.playlistId }
+            if (src == null) LaunchedEffect(Unit) { close() } else PlaylistProfilesDialog(
+                source = src,
+                profiles = profiles,
+                hidden = hiddenPlaylistsByProfile,
+                onToggle = { profileId, shown -> viewModel.setPlaylistShownOn(src.id, profileId, shown) },
+                onDismiss = close
+            )
+        }
         is LiveDialog.PlaylistGuides -> {
             val src = playlists.firstOrNull { it.id == d.playlistId }
             if (src == null) LaunchedEffect(Unit) { close() } else PlaylistGuidesDialog(
@@ -2464,6 +2556,172 @@ private fun DriveSignInDialog(prompt: com.nuvio.tv.livetv.sync.SignInPrompt, onC
 // ==================================================================== dialogs
 
 /**
+ * "Back up or restore with your phone": a QR code opens a page on the home network where the
+ * phone saves this TV's backup file or sends one back. A file sent back is only restored after
+ * Restore is chosen on the TV.
+ */
+@Composable
+private fun BackupPhoneDialog(
+    viewModel: LiveTvSettingsViewModel,
+    onBackup: (com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val closeFocus = remember { FocusRequester() }
+    var handle by remember { mutableStateOf<com.nuvio.tv.livetv.crash.BackupPhoneServer.Handle?>(null) }
+    var noNetwork by remember { mutableStateOf(false) }
+    val logoRes = com.nuvio.tv.livetv.branding.LiveTvBranding.iptvWordmark(NuvioTheme.currentTheme.brandWordmarkResource)
+    val accentArgb = NuvioTheme.colors.Secondary.toArgb()
+    val tvName = remember(context) {
+        runCatching { android.provider.Settings.Global.getString(context.contentResolver, "device_name") }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: android.os.Build.MODEL
+            ?: context.getString(R.string.iptv_settings_your_tv)
+    }
+    val phoneTexts = remember(context, tvName) { com.nuvio.tv.livetv.crash.BackupPhoneServer.Texts.from(context.resources, tvName) }
+    val logoBytes = remember(context, logoRes) {
+        runCatching { context.resources.openRawResource(logoRes).use { it.readBytes() } }.getOrNull()
+    }
+    val checkTv = remember(context) { context.getString(R.string.iptv_backup_phone_check_tv) }
+    val currentOnBackup by androidx.compose.runtime.rememberUpdatedState(onBackup)
+    androidx.compose.runtime.DisposableEffect(phoneTexts, logoBytes, accentArgb, viewModel) {
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val h = com.nuvio.tv.livetv.crash.BackupPhoneServer.start(
+            texts = phoneTexts,
+            accent = String.format(java.util.Locale.US, "#%06X", accentArgb and 0xFFFFFF),
+            logo = { logoBytes },
+            backup = { runCatching { kotlinx.coroutines.runBlocking { viewModel.backupFile() } }.getOrNull() },
+            onRestore = { b ->
+                main.post { currentOnBackup(b) }
+                checkTv
+            }
+        )
+        handle = h
+        noNetwork = h == null
+        onDispose { h?.stop() }
+    }
+    LaunchedEffect(Unit) {
+        delay(80)
+        runCatching { closeFocus.requestFocus() }
+    }
+    val qrBitmap = remember(handle?.url) {
+        handle?.url?.let { runCatching { com.nuvio.tv.core.qr.QrCodeGenerator.generate(it, 420, margin = 1) }.getOrNull() }
+    }
+    NuvioDialog(onDismiss = onDismiss, title = context.getString(R.string.iptv_backup_with_phone), width = 620.dp) {
+        if (noNetwork) {
+            Text(
+                text = context.getString(R.string.iptv_settings_connect_this_tv_to_your_home_wi_fi),
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            androidx.compose.foundation.layout.Row(
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                qrBitmap?.let {
+                    androidx.compose.foundation.Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = context.getString(R.string.iptv_settings_qr_code),
+                        modifier = Modifier.size(196.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+                ) {
+                    Text(
+                        text = context.getString(R.string.iptv_backup_phone_steps),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = NuvioTheme.colors.TextSecondary
+                    )
+                    handle?.url?.let {
+                        Text(
+                            text = context.getString(R.string.iptv_settings_phone_address, it.removePrefix("http://")),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioTheme.colors.TextPrimary
+                        )
+                    }
+                }
+            }
+            Text(
+                text = context.getString(R.string.iptv_backup_private_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        SettingsDialogActionRow(horizontalAlignment = Alignment.CenterHorizontally) {
+            androidx.compose.foundation.layout.Box(Modifier.focusRequester(closeFocus)) {
+                SettingsDialogActionButton(text = context.getString(R.string.action_close), onClick = onDismiss)
+            }
+        }
+    }
+}
+
+/** The backups saved on this TV (Downloads › Nuvio + IPTV), newest first: pick one to restore. */
+@Composable
+private fun BackupsOnTvDialog(
+    viewModel: LiveTvSettingsViewModel,
+    onPick: (com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val first = remember { FocusRequester() }
+    var saved by remember { mutableStateOf<List<com.nuvio.tv.livetv.sync.LiveTvBackupFile.Saved>?>(null) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        saved = viewModel.tvBackups()
+        delay(80)
+        runCatching { first.requestFocus() }
+    }
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = context.getString(R.string.iptv_backup_restore_on_tv),
+        subtitle = context.getString(R.string.iptv_backup_restore_on_tv_description),
+        width = 620.dp
+    ) {
+        val list = saved
+        if (list != null && list.isEmpty()) {
+            Text(
+                text = context.getString(R.string.iptv_backup_none_on_tv),
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        if (!list.isNullOrEmpty()) {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+            ) {
+                itemsIndexed(list, key = { _, s -> s.ref }) { i, s ->
+                    SettingsActionRow(
+                        title = s.name,
+                        subtitle = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, context.settingsLocale).format(Date(s.modifiedMs)),
+                        onClick = {
+                            scope.launch {
+                                val b = viewModel.readTvBackup(s)
+                                if (b != null) onPick(b) else problem = context.getString(R.string.iptv_backup_not_a_backup)
+                            }
+                        },
+                        modifier = if (i == 0) Modifier.focusRequester(first) else Modifier
+                    )
+                }
+            }
+        }
+        problem?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = NuvioTheme.colors.TextSecondary) }
+        SettingsDialogActionRow {
+            androidx.compose.foundation.layout.Box(if (list.isNullOrEmpty()) Modifier.focusRequester(first) else Modifier) {
+                SettingsDialogActionButton(text = context.getString(R.string.action_close), onClick = onDismiss)
+            }
+        }
+    }
+}
+
+/**
  * "Add from your phone": a QR code opens a page on the home network where a playlist link, an
  * Xtream login or an EPG link can be pasted on the phone. Whatever is sent is added right away
  * (the code in the address means only someone who can see this screen can use it).
@@ -2648,6 +2906,47 @@ private fun guidesValue(
     val on = rows.count { it.on }
     return if (on == rows.size) context.getString(R.string.iptv_settings_guides_all)
     else context.getString(R.string.iptv_settings_guides_count, on, rows.size)
+}
+
+@Composable
+private fun PlaylistProfilesDialog(
+    source: PlaylistSource,
+    profiles: List<com.nuvio.tv.domain.model.UserProfile>,
+    hidden: Map<Int, Set<String>>,
+    onToggle: (Int, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(80)
+        runCatching { first.requestFocus() }
+    }
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = context.getString(R.string.iptv_settings_show_on_profiles),
+        subtitle = context.getString(R.string.iptv_settings_show_on_profiles_description, source.name),
+        width = 560.dp
+    ) {
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 360.dp),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+        ) {
+            itemsIndexed(profiles, key = { _, p -> p.id }) { i, p ->
+                val shown = source.id !in hidden[p.id].orEmpty()
+                SettingsToggleRow(
+                    title = p.name,
+                    subtitle = null,
+                    checked = shown,
+                    onToggle = { onToggle(p.id, !shown) },
+                    modifier = if (i == 0) Modifier.focusRequester(first) else Modifier
+                )
+            }
+        }
+        SettingsDialogActionRow {
+            SettingsDialogActionButton(text = context.getString(R.string.iptv_settings_done), onClick = onDismiss, primary = true)
+        }
+    }
 }
 
 @Composable

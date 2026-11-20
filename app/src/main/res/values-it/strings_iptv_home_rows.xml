@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Verticale"</string>
     <string name="home_rows_shape_landscape">"Orizzontale"</string>
     <string name="home_rows_option_remove">"Rimuovi questa riga"</string>
+    <string name="home_rows_vod_continue_title">"Continua a guardare On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"I film e gli episodi del tuo provider che hai iniziato e non finito, dal più recente. OK riprende da dove eri rimasto"</string>
 </resources>

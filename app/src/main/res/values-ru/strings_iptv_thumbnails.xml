@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"Формат этого видео не позволяет создавать миниатюры на этом устройстве"</string>
     <string name="iptv_thumbs_msg_open_failed">"Не удалось открыть видео для миниатюр"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"Нет миниатюр для этого потока catch-up"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Без миниатюр: телевизору нужен его единственный видеодекодер для видео"</string>
 </resources>

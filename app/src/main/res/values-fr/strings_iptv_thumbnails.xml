@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"Le format de cette vidéo ne permet pas de créer des miniatures sur cet appareil"</string>
     <string name="iptv_thumbs_msg_open_failed">"Cette vidéo n’a pas pu être ouverte pour les miniatures"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"Pas de miniatures pour ce flux de replay"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Pas de miniatures : ce téléviseur a besoin de son seul décodeur vidéo pour la vidéo"</string>
 </resources>

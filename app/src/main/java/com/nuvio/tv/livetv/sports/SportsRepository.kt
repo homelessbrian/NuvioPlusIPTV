@@ -112,7 +112,7 @@ class SportsRepository @Inject constructor(
     ) { found, user, live ->
         found.mapValues { (_, list) ->
             list.filter { ch ->
-                ch.key !in user.hiddenChannels && ch.groupId !in user.hiddenGroups &&
+                ch.key !in user.hiddenChannels && ch.groupId !in user.hiddenGroups && !user.hidesPlaylistOf(ch) &&
                     !ParentalControls.isLocked(ch.groupId, ch.group, live, user.lockedGroups) &&
                     !(ParentalControls.enabled(live) && live.lockAdultContent && ParentalControls.isAdult(ch.name))
             }
@@ -1965,6 +1965,7 @@ class SportsRepository @Inject constructor(
         val all = channelStore.displayChannels.value
         val picked = SportsPickedChannels.keys(SportsPickedChannels.resolve(sp, all))
         return all.filter { ch ->
+            !user.hidesPlaylistOf(ch) &&
             (ch.key in picked || (ch.key !in user.hiddenChannels && ch.groupId !in user.hiddenGroups)) &&
                 !ParentalControls.isLocked(ch.groupId, ch.group, live, user.lockedGroups) &&
                 !(ParentalControls.enabled(live) && live.lockAdultContent && ParentalControls.isAdult(ch.name))

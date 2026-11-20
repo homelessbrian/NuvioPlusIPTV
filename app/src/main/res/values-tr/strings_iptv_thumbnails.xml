@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"Bu videonun biçimiyle bu cihazda küçük resim oluşturulamıyor"</string>
     <string name="iptv_thumbs_msg_open_failed">"Bu video küçük resimler için açılamadı"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"Bu catch-up yayınında küçük resim yok"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Küçük resim yok: bu TV'nin tek video kod çözücüsü video için gerekli"</string>
 </resources>

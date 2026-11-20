@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"この映像の形式では、この端末でサムネイルを作れません"</string>
     <string name="iptv_thumbs_msg_open_failed">"この映像はサムネイル用に開けませんでした"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"このキャッチアップのストリームにはサムネイルがありません"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"サムネイルなし：このテレビは唯一のビデオデコーダーを動画再生に使う必要があります"</string>
 </resources>

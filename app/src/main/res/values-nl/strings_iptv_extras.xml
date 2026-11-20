@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"Deze tv kon deze video niet afspelen. Probeer een andere bron of schakel over naar MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Tonen op profielen"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Tonen op profielen: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Alle"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d van %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Profielen die je hier uitzet krijgen geen zenders, On Demand of Sports van %1$s. De playlist zelf blijft voor iedereen"</string>
+    <string name="iptv_backup_file">"Back-upbestand"</string>
+    <string name="iptv_backup_file_summary">"Bewaar je instellingen als bestand of zet er een terug"</string>
+    <string name="iptv_backup_file_description">"Een kopie van je Live TV-instellingen in één .nptv-bestand: playlists met hun logins, gidsen, favorieten, groepen, Sports en instellingen. Handig zonder Setup Sync, of om zelf een kopie te bewaren."</string>
+    <string name="iptv_backup_with_phone">"Back-up maken of terugzetten met je telefoon"</string>
+    <string name="iptv_backup_with_phone_description">"Scan een code om het bestand op je telefoon op te slaan of er een terug te sturen"</string>
+    <string name="iptv_backup_save_on_tv">"Back-up op deze tv opslaan"</string>
+    <string name="iptv_backup_save_on_tv_description">"Opgeslagen in Downloads › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Terugzetten vanaf deze tv"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Back-ups op deze tv, nieuwste eerst"</string>
+    <string name="iptv_backup_none_on_tv">"Nog geen back-ups op deze tv. Sla er eerst een op of gebruik je telefoon."</string>
+    <string name="iptv_backup_saving">"Opslaan…"</string>
+    <string name="iptv_backup_saved_to">"Opgeslagen in %1$s"</string>
+    <string name="iptv_backup_save_failed">"De back-up kon niet op deze tv worden opgeslagen. Probeer het met je telefoon."</string>
+    <string name="iptv_backup_restoring">"Terugzetten…"</string>
+    <string name="iptv_backup_restored">"Back-up teruggezet. Gewijzigde playlists en gidsen worden geladen."</string>
+    <string name="iptv_backup_restore_failed">"Die back-up kon niet worden teruggezet (er staan geen playlists of gidsen in)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Deze back-up terugzetten?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Opgeslagen op %1$s op %2$s. Hij vervangt de Live TV-instellingen van deze tv. Met Setup Sync aan veranderen je andere tv's ook."</string>
+    <string name="iptv_backup_restore_confirm_button">"Terugzetten"</string>
+    <string name="iptv_backup_not_a_backup">"Dat is geen Nuvio + IPTV-back-upbestand (.nptv)."</string>
+    <string name="iptv_backup_private_note">"Het back-upbestand bevat je playlistlogins. Houd het privé."</string>
+    <string name="iptv_backup_phone_steps">"1. Zet je telefoon op hetzelfde wifi als deze tv.\n2. Scan de code met de camera van je telefoon.\n3. Sla de back-up op of kies een back-upbestand om hierheen te sturen."</string>
+    <string name="iptv_backup_phone_check_tv">"Verstuurd. Kies Terugzetten op je tv om af te ronden."</string>
+    <string name="iptv_backup_phone_title">"Nuvio + IPTV-back-up"</string>
+    <string name="iptv_backup_phone_save_heading">"Back-up opslaan"</string>
+    <string name="iptv_backup_phone_save_text">"Slaat de Live TV-instellingen van deze tv op je telefoon op als .nptv-bestand."</string>
+    <string name="iptv_backup_phone_save_button">"Back-upbestand opslaan"</string>
+    <string name="iptv_backup_phone_restore_heading">"Back-up terugzetten"</string>
+    <string name="iptv_backup_phone_restore_text">"Kies een .nptv-bestand om naar de tv te sturen. Er verandert niets tot je het op de tv bevestigt."</string>
+    <string name="iptv_backup_phone_choose_file">"Bestand kiezen"</string>
+    <string name="iptv_backup_phone_restore_button">"Naar tv sturen"</string>
+</resources>

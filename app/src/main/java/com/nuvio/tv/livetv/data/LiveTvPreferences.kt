@@ -239,6 +239,8 @@ class LiveTvPreferences @Inject constructor(
 
         val hiddenChannels = stringSetPreferencesKey("hidden_channels")
         val hiddenGroups = stringSetPreferencesKey("hidden_groups")
+        /** Playlists (their ids) a profile doesn't show; the playlists themselves stay shared. */
+        val hiddenPlaylists = stringSetPreferencesKey("hidden_playlists")
         val favorites = stringPreferencesKey("favorites")
         val recent = stringPreferencesKey("recent")
         /** Recently watched channel -> the group it was opened from, as JSON. */
@@ -278,7 +280,7 @@ class LiveTvPreferences @Inject constructor(
         Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine, Keys.homeRows
     )
     private val personalSetKeys: List<Preferences.Key<Set<String>>> = listOf(
-        Keys.hiddenChannels, Keys.hiddenGroups, Keys.vodHiddenCategories, Keys.favoriteGroups
+        Keys.hiddenChannels, Keys.hiddenGroups, Keys.vodHiddenCategories, Keys.favoriteGroups, Keys.hiddenPlaylists
     )
 
     /**
@@ -743,6 +745,7 @@ class LiveTvPreferences @Inject constructor(
         LiveUserState(
             hiddenChannels = p[Keys.hiddenChannels] ?: emptySet(),
             hiddenGroups = p[Keys.hiddenGroups] ?: emptySet(),
+            hiddenPlaylists = p[Keys.hiddenPlaylists] ?: emptySet(),
             favorites = decodeStringList(p[Keys.favorites]),
             recent = decodeStringList(p[Keys.recent]),
             recentGroups = decodeStringMap(p[Keys.recentGroups]),
@@ -1382,7 +1385,7 @@ class LiveTvPreferences @Inject constructor(
                     val dead: ((String) -> Boolean) = when (base) {
                         "hidden_channels" -> ::deadChannel
                         "hidden_groups", "locked_groups", "favorite_groups" -> ::deadGroup
-                        "collapsed_playlists" -> ::deadOwner
+                        "collapsed_playlists", "hidden_playlists" -> ::deadOwner
                         else -> continue
                     }
                     val set = value.filterIsInstance<String>()
@@ -1543,6 +1546,22 @@ class LiveTvPreferences @Inject constructor(
 
     suspend fun clearHiddenChannels() {
         store.edit { it[my(Keys.hiddenChannels)] = emptySet() }
+    }
+
+    /** Which playlists each profile doesn't show (profile id → playlist ids). */
+    val hiddenPlaylistsByProfile: Flow<Map<Int, Set<String>>> =
+        kotlinx.coroutines.flow.combine(store.data, profileManager.profiles) { p, profiles ->
+            profiles.associate { it.id to (profileView(p, it.id)[Keys.hiddenPlaylists] ?: emptySet()) }
+        }.distinctUntilChanged()
+
+    /** Shows or hides playlist [playlistId] on profile [profileId] (profiles kept matched change together). */
+    suspend fun setPlaylistShownOn(playlistId: String, profileId: Int, shown: Boolean) {
+        if (playlistId.isBlank()) return
+        store.edit { p ->
+            val key = my(Keys.hiddenPlaylists, profileId)
+            val cur = profileView(p, profileId)[Keys.hiddenPlaylists] ?: emptySet()
+            p[key] = if (shown) cur - playlistId else cur + playlistId
+        }
     }
 
     suspend fun setGroupHidden(groupId: String, hidden: Boolean) {

@@ -38,7 +38,7 @@ import com.nuvio.tv.ui.screens.settings.SettingsToggleRow
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 
-private enum class PickerOption { FAVORITES, RECENT, PLAYLIST_GROUP, MY_GROUP, SPORTS_ALL, SPORTS_ONE, VOD_GROUP, VOD_RECENT }
+private enum class PickerOption { FAVORITES, RECENT, PLAYLIST_GROUP, MY_GROUP, SPORTS_ALL, SPORTS_ONE, VOD_GROUP, VOD_RECENT, VOD_CONTINUE }
 
 @Composable
 private fun Heading(text: String) {
@@ -153,6 +153,14 @@ fun AddHomeRowDialog(
                         onFocused = { shown = PickerOption.VOD_RECENT }
                     )
                 }
+                item(key = "vod_continue") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.home_rows_vod_continue_title),
+                        subtitle = null,
+                        onClick = { add(HomeLiveRow.vod(HomeLiveRow.VOD_CONTINUE)) },
+                        onFocused = { shown = PickerOption.VOD_CONTINUE }
+                    )
+                }
             }
             Box(Modifier.padding(horizontal = NuvioTheme.spacing.md).width(1.dp).fillMaxHeight().background(NuvioTheme.colors.Border))
             Column(Modifier.weight(0.54f).fillMaxHeight()) {
@@ -178,6 +186,7 @@ fun AddHomeRowDialog(
                                 PickerOption.FAVORITES -> R.string.home_rows_pick_favorites_hint
                                 PickerOption.RECENT -> R.string.home_rows_pick_recent_hint
                                 PickerOption.SPORTS_ALL -> R.string.home_rows_pick_sports_all_detail
+                                PickerOption.VOD_CONTINUE -> R.string.home_rows_vod_continue_hint
                                 else -> R.string.home_rows_add_hint
                             }
                         ),
@@ -398,7 +407,8 @@ fun HomeRowOptionsDialog(
             val choices = if (vod) {
                 listOf(
                     HomeLiveRow.VOD_RECENT_MOVIES to stringResource(R.string.home_rows_vod_recent_movies_title),
-                    HomeLiveRow.VOD_RECENT_SERIES to stringResource(R.string.home_rows_vod_recent_series_title)
+                    HomeLiveRow.VOD_RECENT_SERIES to stringResource(R.string.home_rows_vod_recent_series_title),
+                    HomeLiveRow.VOD_CONTINUE to stringResource(R.string.home_rows_vod_continue_title)
                 ) + vodGroups.map { g ->
                     g.source to listOfNotNull(g.name, stringResource(if (g.series) R.string.home_rows_vod_series else R.string.home_rows_vod_movies), g.playlist).joinToString(" · ")
                 }
@@ -429,6 +439,7 @@ fun HomeRowOptionsDialog(
         when (row.source) {
             HomeLiveRow.VOD_RECENT_MOVIES -> stringResource(R.string.home_rows_vod_recent_movies_title)
             HomeLiveRow.VOD_RECENT_SERIES -> stringResource(R.string.home_rows_vod_recent_series_title)
+            HomeLiveRow.VOD_CONTINUE -> stringResource(R.string.home_rows_vod_continue_title)
             else -> vodGroups.firstOrNull { it.source == row.source }?.name ?: row.label
         }
     } else if (sports) {

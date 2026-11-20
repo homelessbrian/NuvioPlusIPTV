@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Pionowe"</string>
     <string name="home_rows_shape_landscape">"Poziome"</string>
     <string name="home_rows_option_remove">"Usuń ten rząd"</string>
+    <string name="home_rows_vod_continue_title">"Oglądaj dalej On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"Filmy i odcinki od dostawcy, które zacząłeś i nie skończyłeś, od ostatnio oglądanych. OK wznawia tam, gdzie przerwałeś"</string>
 </resources>

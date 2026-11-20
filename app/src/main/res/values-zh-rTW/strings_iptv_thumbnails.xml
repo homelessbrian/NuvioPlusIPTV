@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"此影片的格式在本裝置上無法生成預覽圖"</string>
     <string name="iptv_thumbs_msg_open_failed">"無法開啟此影片以生成預覽圖"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"此回看流不生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"無縮圖：這台電視需要用它唯一的影片解碼器播放影片"</string>
 </resources>

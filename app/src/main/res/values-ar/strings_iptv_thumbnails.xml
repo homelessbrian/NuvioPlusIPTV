@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"صيغة هذا الفيديو لا تتيح صنع صور مصغرة على هذا الجهاز"</string>
     <string name="iptv_thumbs_msg_open_failed">"تعذّر فتح هذا الفيديو للصور المصغرة"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"لا صور مصغرة لبث إعادة المشاهدة هذا"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"لا صور مصغّرة: يحتاج هذا التلفاز إلى مفكك ترميز الفيديو الوحيد لديه لتشغيل الفيديو"</string>
 </resources>

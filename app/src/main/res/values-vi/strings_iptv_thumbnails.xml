@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"Định dạng video này không tạo được ảnh thu nhỏ trên thiết bị này"</string>
     <string name="iptv_thumbs_msg_open_failed">"Không mở được video này để tạo ảnh thu nhỏ"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"Không có ảnh thu nhỏ cho luồng xem lại này"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Không có hình thu nhỏ: TV này cần bộ giải mã video duy nhất cho video"</string>
 </resources>

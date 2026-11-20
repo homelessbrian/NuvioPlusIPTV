@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"Ten telewizor nie mógł odtworzyć tego wideo. Spróbuj innego źródła albo przełącz na MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Pokaż w profilach"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Pokaż w profilach: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Wszystkie"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d z %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Profile wyłączone tutaj nie dostają kanałów, On Demand ani Sports z %1$s. Sama playlista zostaje dla wszystkich"</string>
+    <string name="iptv_backup_file">"Plik kopii zapasowej"</string>
+    <string name="iptv_backup_file_summary">"Zapisz konfigurację do pliku albo przywróć ją"</string>
+    <string name="iptv_backup_file_description">"Kopia konfiguracji Live TV w jednym pliku .nptv: playlisty z danymi logowania, przewodniki, ulubione, grupy, Sports i ustawienia. Przydatne bez Setup Sync albo jako własna kopia."</string>
+    <string name="iptv_backup_with_phone">"Kopia lub przywracanie przez telefon"</string>
+    <string name="iptv_backup_with_phone_description">"Zeskanuj kod, aby zapisać plik w telefonie albo odesłać plik"</string>
+    <string name="iptv_backup_save_on_tv">"Zapisz kopię na tym telewizorze"</string>
+    <string name="iptv_backup_save_on_tv_description">"Zapisywana w Pobrane › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Przywróć z tego telewizora"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Kopie zapisane na tym telewizorze, od najnowszej"</string>
+    <string name="iptv_backup_none_on_tv">"Na tym telewizorze nie ma jeszcze kopii. Najpierw ją zapisz albo użyj telefonu."</string>
+    <string name="iptv_backup_saving">"Zapisywanie…"</string>
+    <string name="iptv_backup_saved_to">"Zapisano w %1$s"</string>
+    <string name="iptv_backup_save_failed">"Nie udało się zapisać kopii na tym telewizorze. Spróbuj przez telefon."</string>
+    <string name="iptv_backup_restoring">"Przywracanie…"</string>
+    <string name="iptv_backup_restored">"Kopia przywrócona. Zmienione playlisty i przewodniki się wczytują."</string>
+    <string name="iptv_backup_restore_failed">"Nie udało się przywrócić tej kopii (nie ma w niej playlist ani przewodników)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Przywrócić tę kopię?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Zapisana %1$s na %2$s. Zastąpi konfigurację Live TV tego telewizora. Przy włączonym Setup Sync zmienią się też inne telewizory."</string>
+    <string name="iptv_backup_restore_confirm_button">"Przywróć"</string>
+    <string name="iptv_backup_not_a_backup">"To nie jest plik kopii Nuvio + IPTV (.nptv)."</string>
+    <string name="iptv_backup_private_note">"Plik kopii zawiera dane logowania do playlist. Nie udostępniaj go."</string>
+    <string name="iptv_backup_phone_steps">"1. Połącz telefon z tą samą siecią Wi-Fi co telewizor.\n2. Zeskanuj kod aparatem telefonu.\n3. Zapisz kopię albo wybierz plik kopii do wysłania tutaj."</string>
+    <string name="iptv_backup_phone_check_tv">"Wysłano. Wybierz Przywróć na telewizorze, aby dokończyć."</string>
+    <string name="iptv_backup_phone_title">"Kopia Nuvio + IPTV"</string>
+    <string name="iptv_backup_phone_save_heading">"Zapisz kopię"</string>
+    <string name="iptv_backup_phone_save_text">"Zapisuje konfigurację Live TV tego telewizora w telefonie jako plik .nptv."</string>
+    <string name="iptv_backup_phone_save_button">"Zapisz plik kopii"</string>
+    <string name="iptv_backup_phone_restore_heading">"Przywróć kopię"</string>
+    <string name="iptv_backup_phone_restore_text">"Wybierz plik .nptv do wysłania na telewizor. Nic się nie zmieni, dopóki nie potwierdzisz na telewizorze."</string>
+    <string name="iptv_backup_phone_choose_file">"Wybierz plik"</string>
+    <string name="iptv_backup_phone_restore_button">"Wyślij na telewizor"</string>
+</resources>

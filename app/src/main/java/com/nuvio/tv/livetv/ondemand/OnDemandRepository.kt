@@ -1000,7 +1000,7 @@ class OnDemandRepository @Inject constructor(
         val settings = prefs.settings.first()
         val allowed = candidates.values.filter { item ->
             val uid = "${item.kind.key}:${item.playlistId}:${item.categoryId}"
-            if (uid in user.vodHiddenCategories) return@filter false
+            if (user.hidesVodCategory(uid)) return@filter false
             val name = runCatching { db.categoryName(item.playlistId, item.kind, item.categoryId) }.getOrNull().orEmpty()
             !com.nuvio.tv.livetv.parental.ParentalControls.isLocked("vod:$uid", name, settings, user.lockedGroups)
         }

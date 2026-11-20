@@ -324,9 +324,22 @@ class LiveTvViewModel @Inject constructor(
 
     fun checkPin(pin: String) = com.nuvio.tv.livetv.parental.ParentalControls.checkPin(pin, settings.value)
 
+    /** The group the guide was showing before a search, for Back from the results. */
+    private var searchReturnGroup: String? = null
+
     fun setSearchQuery(q: String) {
+        val previous = session.currentGroupId.value
+        if (previous != null && previous != ChannelGroup.SEARCH) searchReturnGroup = previous
         searchQuery.value = q
         session.currentGroupId.value = ChannelGroup.SEARCH
+    }
+
+    /** Back from search results: the group you were in before searching (or the first group). */
+    fun leaveSearch() {
+        searchQuery.value = ""
+        val back = searchReturnGroup?.takeIf { id -> uiState.value.groups.any { it.id == id } }
+        session.currentGroupId.value = back ?: uiState.value.defaultGroupId
+        searchReturnGroup = null
     }
 
     /** Channels already tried in a row of backup switches (cleared when you change channel). */
@@ -1694,6 +1707,7 @@ internal fun stationNote(name: String): String? =
 internal fun sameForLiveTvLists(a: LiveUserState, b: LiveUserState): Boolean =
     a.favorites == b.favorites && a.recent == b.recent &&
         a.hiddenChannels == b.hiddenChannels && a.hiddenGroups == b.hiddenGroups &&
+        a.hiddenPlaylists == b.hiddenPlaylists &&
         a.lockedGroups == b.lockedGroups && a.customGroups == b.customGroups &&
         a.channelOrder == b.channelOrder && a.groupOrder == b.groupOrder &&
         a.channelCopies == b.channelCopies && a.favoriteGroups == b.favoriteGroups

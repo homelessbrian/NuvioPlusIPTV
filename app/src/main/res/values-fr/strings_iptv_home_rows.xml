@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Portrait"</string>
     <string name="home_rows_shape_landscape">"Paysage"</string>
     <string name="home_rows_option_remove">"Retirer cette rangée"</string>
+    <string name="home_rows_vod_continue_title">"Reprendre On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"Les films et épisodes de votre fournisseur commencés et non terminés, le dernier regardé d'abord. OK reprend là où vous vous êtes arrêté"</string>
 </resources>

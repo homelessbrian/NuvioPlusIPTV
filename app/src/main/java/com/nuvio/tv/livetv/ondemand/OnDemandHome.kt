@@ -32,8 +32,13 @@ object VodHomeIds {
     const val ADDON_ID = "nuvio-iptv-on-demand"
     private const val PREFIX = "nuviovod:"
 
+    /** Ends the ids of Continue Watching On Demand cards, whose OK resumes the title. */
+    private const val CONTINUE_MARK = "#cw"
+
     fun metaId(uid: String) = PREFIX + uid
-    fun uidOf(metaId: String): String? = metaId.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)
+    fun continueMetaId(uid: String) = PREFIX + uid + CONTINUE_MARK
+    fun isContinue(metaId: String) = metaId.startsWith(PREFIX) && metaId.endsWith(CONTINUE_MARK)
+    fun uidOf(metaId: String): String? = metaId.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.removeSuffix(CONTINUE_MARK)
 
     /** A card for a provider title: the matched addon details when found (poster, backdrop,
      *  logo, description, rating), otherwise the provider's own name and picture. */

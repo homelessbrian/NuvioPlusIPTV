@@ -75,6 +75,8 @@ data class HomeLiveRow(
         const val KIND_VOD = "ondemand"
         const val VOD_RECENT_MOVIES = "recent:movie"
         const val VOD_RECENT_SERIES = "recent:series"
+        /** The On Demand titles you started and haven't finished, last watched first. */
+        const val VOD_CONTINUE = "continue"
         const val VOD_GROUP_PREFIX = "group:"
         const val SHAPE_AUTO = "auto"
         const val SHAPE_PORTRAIT = "portrait"
@@ -189,6 +191,7 @@ class HomeLiveRows @Inject constructor(
                     HomeLiveRow.KIND_VOD -> when (row.source) {
                         HomeLiveRow.VOD_RECENT_MOVIES -> ctx.getString(R.string.home_rows_vod_recent_movies_title)
                         HomeLiveRow.VOD_RECENT_SERIES -> ctx.getString(R.string.home_rows_vod_recent_series_title)
+                        HomeLiveRow.VOD_CONTINUE -> ctx.getString(R.string.home_rows_vod_continue_title)
                         else -> vodRenamed[row.source.removePrefix(HomeLiveRow.VOD_GROUP_PREFIX)]?.takeIf { it.isNotBlank() }
                             ?: row.label.ifBlank { ctx.getString(R.string.home_rows_type_vod) }
                     }

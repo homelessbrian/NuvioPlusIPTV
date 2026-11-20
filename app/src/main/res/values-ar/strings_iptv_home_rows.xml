@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"عمودي"</string>
     <string name="home_rows_shape_landscape">"أفقي"</string>
     <string name="home_rows_option_remove">"إزالة هذا الصف"</string>
+    <string name="home_rows_vod_continue_title">"متابعة مشاهدة On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"الأفلام والحلقات من مزوّدك التي بدأتها ولم تكملها، الأحدث مشاهدة أولًا. زر OK يكمل من حيث توقفت"</string>
 </resources>

@@ -116,7 +116,7 @@ object LiveTvLauncherRows {
         // copy kept from last time (an update while the app isn't open).
         val channels = entry.channelStore().displayChannels.value
         val user = prefs.userState.first()
-        fun visible(ch: LiveChannel) = ch.key !in user.hiddenChannels && ch.groupId !in user.hiddenGroups
+        fun visible(ch: LiveChannel) = ch.key !in user.hiddenChannels && ch.groupId !in user.hiddenGroups && !user.hidesPlaylistOf(ch)
         val kept = readKept(store)
         val sources: Map<String, Src> = if (channels.isNotEmpty()) {
             val byKey = channels.associateBy { it.key }

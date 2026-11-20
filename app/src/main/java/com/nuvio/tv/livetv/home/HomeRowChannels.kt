@@ -58,7 +58,7 @@ internal fun homeRowChannelSelections(
 // Keep in step with buildUi's saved-state reads (including its group preparation).
 // Retain only these collections, not older audio/quality/reminder maps from skipped saves.
 internal fun rowUser(u: LiveUserState): LiveUserState = LiveUserState(
-    hiddenChannels = u.hiddenChannels, hiddenGroups = u.hiddenGroups,
+    hiddenChannels = u.hiddenChannels, hiddenGroups = u.hiddenGroups, hiddenPlaylists = u.hiddenPlaylists,
     favorites = u.favorites, recent = u.recent, lockedGroups = u.lockedGroups,
     customGroups = u.customGroups, channelOrder = u.channelOrder,
     channelCopies = u.channelCopies, groupOrder = u.groupOrder

@@ -29,8 +29,58 @@ class LiveTvSettingsViewModel @Inject constructor(
     val cloudSync: com.nuvio.tv.livetv.sync.LiveTvCloudSync,
     val onDemand: com.nuvio.tv.livetv.ondemand.OnDemandRepository,
     private val posterResolver: com.nuvio.tv.livetv.data.LiveTvPosterResolver,
-    private val matcher247: com.nuvio.tv.livetv.data.LiveTv247Matcher
+    private val matcher247: com.nuvio.tv.livetv.data.LiveTv247Matcher,
+    private val profileManager: com.nuvio.tv.core.profile.ProfileManager
 ) : ViewModel() {
+
+    /** Nuvio's profiles, for "Show on Profiles" on a playlist. */
+    val profiles: StateFlow<List<com.nuvio.tv.domain.model.UserProfile>> = profileManager.profiles
+
+    /** Which playlists each profile doesn't show (profile id → playlist ids). */
+    val hiddenPlaylistsByProfile: StateFlow<Map<Int, Set<String>>> =
+        prefs.hiddenPlaylistsByProfile.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    // ------------------------------------------------------------ backup file (.nptv)
+
+    /** This TV's Live TV setup as a backup file: its name and contents. */
+    suspend fun backupFile(): Pair<String, ByteArray> {
+        val data = prefs.exportForSync()
+        return com.nuvio.tv.livetv.sync.LiveTvBackupFile.fileName() to com.nuvio.tv.livetv.sync.LiveTvBackupFile.encode(data)
+    }
+
+    /** Saves a backup on this TV; [onDone] gets where it went (null if it couldn't be saved). */
+    fun saveBackupOnTv(onDone: (String?) -> Unit) = viewModelScope.launch {
+        val where = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val (name, bytes) = backupFile()
+            com.nuvio.tv.livetv.sync.LiveTvBackupFile.saveOnTv(context, bytes, name)
+        }
+        onDone(where)
+    }
+
+    /** The backups saved on this TV, newest first. */
+    suspend fun tvBackups(): List<com.nuvio.tv.livetv.sync.LiveTvBackupFile.Saved> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.nuvio.tv.livetv.sync.LiveTvBackupFile.listOnTv(context) }
+
+    suspend fun readTvBackup(saved: com.nuvio.tv.livetv.sync.LiveTvBackupFile.Saved): com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.nuvio.tv.livetv.sync.LiveTvBackupFile.read(context, saved) }
+
+    /**
+     * Replaces this TV's Live TV setup with [backup] (like restoring from Google Drive): playlists
+     * and guides that changed download again. With Setup Sync on, the other TVs follow.
+     */
+    fun restoreBackup(backup: com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup, onDone: (Boolean) -> Unit) = viewModelScope.launch {
+        val ok = runCatching {
+            if (!prefs.syncHasSources(backup.data)) error("empty backup")
+            val changed = prefs.importFromSync(backup.data)
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Backup file: restored a backup from ${backup.device.ifBlank { "another device" }}")
+            repository.reloadAfterSync(changed)
+        }.onFailure { com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Backup file: couldn't restore (${it.message})") }.isSuccess
+        onDone(ok)
+    }
+
+    /** Shows or hides a playlist on one profile; the playlist itself stays for everyone. */
+    fun setPlaylistShownOn(playlistId: String, profileId: Int, shown: Boolean) =
+        viewModelScope.launch { prefs.setPlaylistShownOn(playlistId, profileId, shown) }
 
     val playlists: StateFlow<List<PlaylistSource>> =
         prefs.playlists.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())

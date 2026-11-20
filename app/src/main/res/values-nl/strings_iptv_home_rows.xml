@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Staand"</string>
     <string name="home_rows_shape_landscape">"Liggend"</string>
     <string name="home_rows_option_remove">"Deze rij verwijderen"</string>
+    <string name="home_rows_vod_continue_title">"Verder kijken On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"Films en afleveringen van je provider die je begon en niet afmaakte, laatst bekeken eerst. OK gaat verder waar je was"</string>
 </resources>

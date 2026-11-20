@@ -108,6 +108,9 @@ import com.nuvio.tv.LocalContentFocusRequester
 import com.nuvio.tv.livetv.data.CatchupUrlBuilder
 import com.nuvio.tv.livetv.model.ChannelGroup
 import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.model.descriptionText
+import com.nuvio.tv.livetv.model.guideTitleWithSub
+import com.nuvio.tv.livetv.model.subTitle
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.effectiveGuideSize
@@ -803,6 +806,15 @@ private fun LiveTvGuideScreenBody(
             }
             // Browse by channel name: from the shows, Back goes to the channel name first.
             settings.browseByChannelName && !nameFocus && !groupsOpen -> nameFocus = true
+            // Back from search results: the group you were in before searching.
+            ui.selectedGroupId == ChannelGroup.SEARCH && !groupsOpen -> {
+                viewModel.leaveSearch()
+                row = 0
+                column = GuideColumn.CHANNEL
+                windowStart = floorSlot(now)
+                cursorMs = now
+                scope.launch { delay(60); runCatching { gridFocus.requestFocus() } }
+            }
             // Back from the channels: the group list, with the group you're in highlighted.
             !groupsOpen -> focusGroups()
             else -> openSidebar()
@@ -2643,7 +2655,7 @@ private fun GuideHeader(
                 val p = rememberShowDetails(channel.key, block?.program)
                 if (GuideInfoPart.TITLE !in hid) {
                     LiveText(
-                        text = p?.title?.let { titleMarks(it).title } ?: channel.name,
+                        text = p?.title?.let { guideTitleWithSub(titleMarks(it).title, p.subTitle) } ?: channel.name,
                         modifier = Modifier.fillMaxWidth(),
                         size = if (small) 22.sp else 28.sp,
                         weight = FontWeight.ExtraBold,
@@ -2687,7 +2699,7 @@ private fun GuideHeader(
                     val lines = (maxHeight / lineHeight).toInt().coerceIn(1, 8)
                     ScrollingDescription(
                         text = about?.description?.takeIf { it.isNotBlank() }
-                            ?: p?.description ?: if (p == null) "No program information" else "",
+                            ?: p?.descriptionText ?: if (p == null) "No program information" else "",
                         color = NuvioTheme.colors.TextSecondary,
                         size = textSize,
                         maxLines = lines
@@ -4486,7 +4498,7 @@ private fun ProgramInfoDialog(
     val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { (16.sp * 1.3f).toPx() } * 3
     LiveDialog(onDismiss = onDismiss, width = 640.dp) {
       Column(Modifier.dpadScrollsText(scroll, scope, stepPx)) {
-        LiveText(p?.title?.let { titleMarks(it).title } ?: target.channel.name, size = 24.sp, weight = FontWeight.Bold, maxLines = 2)
+        LiveText(p?.title?.let { guideTitleWithSub(titleMarks(it).title, p.subTitle) } ?: target.channel.name, size = 24.sp, weight = FontWeight.Bold, maxLines = 2)
         Spacer(Modifier.height(6.dp))
         if (block != null) {
             val meta = listOfNotNull(
@@ -4498,7 +4510,7 @@ private fun ProgramInfoDialog(
         }
         Spacer(Modifier.height(12.dp))
         // The whole description, read with Up/Down (Left/Right still move between the buttons).
-        ReadableDescription(p?.description?.takeIf { it.isNotBlank() } ?: "No description available.", scroll, size = 16.sp, maxLines = 12)
+        ReadableDescription(p?.descriptionText?.takeIf { it.isNotBlank() } ?: "No description available.", scroll, size = 16.sp, maxLines = 12)
         Spacer(Modifier.height(18.dp))
         // Scrolls sideways if the buttons don't all fit.
         Row(

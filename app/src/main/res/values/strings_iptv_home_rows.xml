@@ -90,4 +90,6 @@
     <string name="home_rows_shape_portrait">Portrait</string>
     <string name="home_rows_shape_landscape">Landscape</string>
     <string name="home_rows_option_remove">Remove this row</string>
+    <string name="home_rows_vod_continue_title">Continue Watching On Demand</string>
+    <string name="home_rows_vod_continue_hint">The movies and episodes from your provider that you started and haven\'t finished, last watched first. OK picks up where you left off</string>
 </resources>

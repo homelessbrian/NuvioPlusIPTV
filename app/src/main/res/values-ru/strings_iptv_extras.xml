@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"Этот телевизор не смог воспроизвести видео. Попробуйте другой источник или переключитесь на MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Показывать в профилях"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Показывать в профилях: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Все"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d из %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Профили, отключённые здесь, не получают каналы, On Demand и Sports из %1$s. Сам плейлист остаётся для всех"</string>
+    <string name="iptv_backup_file">"Файл резервной копии"</string>
+    <string name="iptv_backup_file_summary">"Сохраните настройки в файл или восстановите их"</string>
+    <string name="iptv_backup_file_description">"Копия ваших настроек Live TV в одном файле .nptv: плейлисты с логинами, телегиды, избранное, группы, Sports и настройки. Удобно без Setup Sync или чтобы хранить свою копию."</string>
+    <string name="iptv_backup_with_phone">"Копия или восстановление через телефон"</string>
+    <string name="iptv_backup_with_phone_description">"Отсканируйте код, чтобы сохранить файл на телефоне или отправить его обратно"</string>
+    <string name="iptv_backup_save_on_tv">"Сохранить копию на этом телевизоре"</string>
+    <string name="iptv_backup_save_on_tv_description">"Сохраняется в Загрузки › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Восстановить с этого телевизора"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Копии на этом телевизоре, сначала новые"</string>
+    <string name="iptv_backup_none_on_tv">"На этом телевизоре пока нет копий. Сначала сохраните копию или используйте телефон."</string>
+    <string name="iptv_backup_saving">"Сохранение…"</string>
+    <string name="iptv_backup_saved_to">"Сохранено в %1$s"</string>
+    <string name="iptv_backup_save_failed">"Не удалось сохранить копию на этом телевизоре. Попробуйте через телефон."</string>
+    <string name="iptv_backup_restoring">"Восстановление…"</string>
+    <string name="iptv_backup_restored">"Копия восстановлена. Изменённые плейлисты и телегиды загружаются."</string>
+    <string name="iptv_backup_restore_failed">"Не удалось восстановить копию (в ней нет плейлистов и телегидов)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Восстановить эту копию?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Сохранена %1$s на %2$s. Она заменит настройки Live TV на этом телевизоре. При включённом Setup Sync изменятся и другие телевизоры."</string>
+    <string name="iptv_backup_restore_confirm_button">"Восстановить"</string>
+    <string name="iptv_backup_not_a_backup">"Это не файл резервной копии Nuvio + IPTV (.nptv)."</string>
+    <string name="iptv_backup_private_note">"Файл копии содержит логины ваших плейлистов. Храните его в тайне."</string>
+    <string name="iptv_backup_phone_steps">"1. Подключите телефон к той же сети Wi-Fi, что и телевизор.\n2. Отсканируйте код камерой телефона.\n3. Сохраните копию или выберите файл копии для отправки сюда."</string>
+    <string name="iptv_backup_phone_check_tv">"Отправлено. Выберите «Восстановить» на телевизоре, чтобы завершить."</string>
+    <string name="iptv_backup_phone_title">"Резервная копия Nuvio + IPTV"</string>
+    <string name="iptv_backup_phone_save_heading">"Сохранить копию"</string>
+    <string name="iptv_backup_phone_save_text">"Сохраняет настройки Live TV этого телевизора на телефон в файл .nptv."</string>
+    <string name="iptv_backup_phone_save_button">"Сохранить файл копии"</string>
+    <string name="iptv_backup_phone_restore_heading">"Восстановить копию"</string>
+    <string name="iptv_backup_phone_restore_text">"Выберите файл .nptv для отправки на телевизор. Ничего не изменится, пока вы не подтвердите на телевизоре."</string>
+    <string name="iptv_backup_phone_choose_file">"Выбрать файл"</string>
+    <string name="iptv_backup_phone_restore_button">"Отправить на телевизор"</string>
+</resources>

@@ -86,7 +86,7 @@ class HomeRowsSetupViewModel @Inject constructor(
                     val order = u.vodGroupOrder.withIndex().associate { (i, uid) -> uid to i }
                     _vodGroups.value = cats.withIndex()
                         .filter { (_, c) ->
-                            c.uid !in u.vodHiddenCategories &&
+                            !u.hidesVodCategory(c.uid) &&
                                 !com.nuvio.tv.livetv.parental.ParentalControls.isLocked("vod:${c.uid}", c.name, s, u.lockedGroups)
                         }
                         .sortedWith(compareBy({ order[it.value.uid] ?: Int.MAX_VALUE }, { it.index }))

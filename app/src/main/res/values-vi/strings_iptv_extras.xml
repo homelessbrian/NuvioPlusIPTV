@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"TV này không phát được video này. Hãy thử nguồn khác hoặc chuyển sang MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Hiện trên hồ sơ"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Hiện trên hồ sơ: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Tất cả"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d/%2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Hồ sơ bị tắt ở đây sẽ không có kênh, On Demand hay Sports từ %1$s. Bản thân danh sách vẫn giữ cho mọi người"</string>
+    <string name="iptv_backup_file">"Tệp sao lưu"</string>
+    <string name="iptv_backup_file_summary">"Lưu thiết lập thành tệp, hoặc khôi phục từ tệp"</string>
+    <string name="iptv_backup_file_description">"Bản sao thiết lập Live TV trong một tệp .nptv: danh sách phát kèm thông tin đăng nhập, lịch phát sóng, mục yêu thích, nhóm, Sports và cài đặt. Hữu ích khi không dùng Setup Sync hoặc để giữ bản sao riêng."</string>
+    <string name="iptv_backup_with_phone">"Sao lưu hoặc khôi phục bằng điện thoại"</string>
+    <string name="iptv_backup_with_phone_description">"Quét mã để lưu tệp vào điện thoại hoặc gửi tệp trở lại"</string>
+    <string name="iptv_backup_save_on_tv">"Lưu bản sao lưu trên TV này"</string>
+    <string name="iptv_backup_save_on_tv_description">"Lưu trong Tải xuống › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Khôi phục từ TV này"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Các bản sao lưu trên TV này, mới nhất trước"</string>
+    <string name="iptv_backup_none_on_tv">"Chưa có bản sao lưu nào trên TV này. Hãy lưu một bản trước hoặc dùng điện thoại."</string>
+    <string name="iptv_backup_saving">"Đang lưu…"</string>
+    <string name="iptv_backup_saved_to">"Đã lưu vào %1$s"</string>
+    <string name="iptv_backup_save_failed">"Không thể lưu bản sao lưu trên TV này. Hãy thử bằng điện thoại."</string>
+    <string name="iptv_backup_restoring">"Đang khôi phục…"</string>
+    <string name="iptv_backup_restored">"Đã khôi phục. Danh sách phát và lịch phát sóng thay đổi đang được tải."</string>
+    <string name="iptv_backup_restore_failed">"Không thể khôi phục bản sao lưu đó (không có danh sách phát hay lịch phát sóng)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Khôi phục bản sao lưu này?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Lưu lúc %1$s trên %2$s. Bản này sẽ thay thế thiết lập Live TV của TV này. Khi bật Setup Sync, các TV khác cũng thay đổi."</string>
+    <string name="iptv_backup_restore_confirm_button">"Khôi phục"</string>
+    <string name="iptv_backup_not_a_backup">"Đây không phải tệp sao lưu Nuvio + IPTV (.nptv)."</string>
+    <string name="iptv_backup_private_note">"Tệp sao lưu chứa thông tin đăng nhập danh sách phát. Hãy giữ kín."</string>
+    <string name="iptv_backup_phone_steps">"1. Kết nối điện thoại cùng Wi-Fi với TV này.\n2. Quét mã bằng camera điện thoại.\n3. Lưu bản sao lưu, hoặc chọn tệp sao lưu để gửi tới đây."</string>
+    <string name="iptv_backup_phone_check_tv">"Đã gửi. Chọn Khôi phục trên TV để hoàn tất."</string>
+    <string name="iptv_backup_phone_title">"Sao lưu Nuvio + IPTV"</string>
+    <string name="iptv_backup_phone_save_heading">"Lưu bản sao lưu"</string>
+    <string name="iptv_backup_phone_save_text">"Lưu thiết lập Live TV của TV này vào điện thoại dưới dạng tệp .nptv."</string>
+    <string name="iptv_backup_phone_save_button">"Lưu tệp sao lưu"</string>
+    <string name="iptv_backup_phone_restore_heading">"Khôi phục bản sao lưu"</string>
+    <string name="iptv_backup_phone_restore_text">"Chọn tệp .nptv để gửi tới TV. Không có gì thay đổi cho đến khi bạn xác nhận trên TV."</string>
+    <string name="iptv_backup_phone_choose_file">"Chọn tệp"</string>
+    <string name="iptv_backup_phone_restore_button">"Gửi tới TV"</string>
+</resources>

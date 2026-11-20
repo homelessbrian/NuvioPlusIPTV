@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"تعذّر على هذا التلفاز تشغيل هذا الفيديو. جرّب مصدرًا آخر أو انتقل إلى MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"العرض في الملفات الشخصية"</string>
+    <string name="iptv_settings_show_on_profiles_value">"العرض في الملفات الشخصية: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"الكل"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d من %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"الملفات الشخصية المُطفأة هنا لا تحصل على قنوات أو On Demand أو Sports من %1$s. تبقى قائمة التشغيل نفسها للجميع"</string>
+    <string name="iptv_backup_file">"ملف النسخة الاحتياطية"</string>
+    <string name="iptv_backup_file_summary">"احفظ إعدادك في ملف أو استعِد ملفًا"</string>
+    <string name="iptv_backup_file_description">"نسخة من إعداد Live TV في ملف .nptv واحد: قوائم التشغيل مع بيانات الدخول والأدلة والمفضلة والمجموعات وSports والإعدادات. مفيد دون Setup Sync أو للاحتفاظ بنسختك الخاصة."</string>
+    <string name="iptv_backup_with_phone">"النسخ الاحتياطي أو الاستعادة بالهاتف"</string>
+    <string name="iptv_backup_with_phone_description">"امسح رمزًا لحفظ الملف على هاتفك أو إرسال ملف إلى التلفاز"</string>
+    <string name="iptv_backup_save_on_tv">"حفظ نسخة احتياطية على هذا التلفاز"</string>
+    <string name="iptv_backup_save_on_tv_description">"تُحفظ في التنزيلات › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"الاستعادة من هذا التلفاز"</string>
+    <string name="iptv_backup_restore_on_tv_description">"النسخ المحفوظة على هذا التلفاز، الأحدث أولًا"</string>
+    <string name="iptv_backup_none_on_tv">"لا توجد نسخ احتياطية على هذا التلفاز بعد. احفظ واحدة أولًا أو استخدم هاتفك."</string>
+    <string name="iptv_backup_saving">"جارٍ الحفظ…"</string>
+    <string name="iptv_backup_saved_to">"حُفظت في %1$s"</string>
+    <string name="iptv_backup_save_failed">"تعذّر حفظ النسخة على هذا التلفاز. جرّب هاتفك بدلًا من ذلك."</string>
+    <string name="iptv_backup_restoring">"جارٍ الاستعادة…"</string>
+    <string name="iptv_backup_restored">"تمت استعادة النسخة. يجري تحميل القوائم والأدلة التي تغيّرت."</string>
+    <string name="iptv_backup_restore_failed">"تعذّرت استعادة هذه النسخة (لا تحتوي على قوائم تشغيل أو أدلة)."</string>
+    <string name="iptv_backup_restore_confirm_title">"استعادة هذه النسخة؟"</string>
+    <string name="iptv_backup_restore_confirm_message">"حُفظت في %1$s على %2$s. ستحل محل إعداد Live TV على هذا التلفاز. مع تشغيل Setup Sync تتغيّر أجهزتك الأخرى أيضًا."</string>
+    <string name="iptv_backup_restore_confirm_button">"استعادة"</string>
+    <string name="iptv_backup_not_a_backup">"هذا ليس ملف نسخة احتياطية لـ Nuvio + IPTV (.nptv)."</string>
+    <string name="iptv_backup_private_note">"يحتوي ملف النسخة على بيانات دخول قوائم التشغيل. احتفظ به خاصًا."</string>
+    <string name="iptv_backup_phone_steps">"1. صِل هاتفك بشبكة Wi-Fi نفسها المتصل بها هذا التلفاز.\n2. امسح الرمز بكاميرا الهاتف.\n3. احفظ النسخة أو اختر ملف نسخة لإرساله هنا."</string>
+    <string name="iptv_backup_phone_check_tv">"تم الإرسال. اختر «استعادة» على التلفاز للإنهاء."</string>
+    <string name="iptv_backup_phone_title">"نسخة Nuvio + IPTV الاحتياطية"</string>
+    <string name="iptv_backup_phone_save_heading">"حفظ نسخة احتياطية"</string>
+    <string name="iptv_backup_phone_save_text">"يحفظ إعداد Live TV لهذا التلفاز على هاتفك كملف .nptv."</string>
+    <string name="iptv_backup_phone_save_button">"حفظ ملف النسخة"</string>
+    <string name="iptv_backup_phone_restore_heading">"استعادة نسخة"</string>
+    <string name="iptv_backup_phone_restore_text">"اختر ملف .nptv لإرساله إلى التلفاز. لن يتغيّر شيء حتى تؤكد على التلفاز."</string>
+    <string name="iptv_backup_phone_choose_file">"اختيار ملف"</string>
+    <string name="iptv_backup_phone_restore_button">"إرسال إلى التلفاز"</string>
+</resources>

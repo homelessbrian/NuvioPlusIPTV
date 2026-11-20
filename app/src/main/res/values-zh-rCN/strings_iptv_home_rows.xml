@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"竖版"</string>
     <string name="home_rows_shape_landscape">"横版"</string>
     <string name="home_rows_option_remove">"删除这一行"</string>
+    <string name="home_rows_vod_continue_title">"继续观看 On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"你开始看但还没看完的提供商电影和剧集，最近观看的在前。按 OK 从上次停下的地方继续"</string>
 </resources>

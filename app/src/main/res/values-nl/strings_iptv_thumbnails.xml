@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"Met het formaat van deze video kunnen op dit apparaat geen voorbeeldbeelden worden gemaakt"</string>
     <string name="iptv_thumbs_msg_open_failed">"Deze video kon niet worden geopend voor voorbeeldbeelden"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"Geen voorbeeldbeelden voor deze catch-up-stream"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Geen miniaturen: deze tv heeft zijn enige videodecoder nodig voor de video"</string>
 </resources>

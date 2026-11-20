@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Hochformat"</string>
     <string name="home_rows_shape_landscape">"Querformat"</string>
     <string name="home_rows_option_remove">"Diese Reihe entfernen"</string>
+    <string name="home_rows_vod_continue_title">"On Demand weiterschauen"</string>
+    <string name="home_rows_vod_continue_hint">"Filme und Folgen deines Anbieters, die du angefangen und nicht beendet hast, zuletzt gesehene zuerst. OK macht dort weiter, wo du aufgehört hast"</string>
 </resources>

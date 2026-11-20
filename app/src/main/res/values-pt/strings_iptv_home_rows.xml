@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Retrato"</string>
     <string name="home_rows_shape_landscape">"Paisagem"</string>
     <string name="home_rows_option_remove">"Remover esta fileira"</string>
+    <string name="home_rows_vod_continue_title">"Continuar assistindo On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"Os filmes e episódios do seu provedor que você começou e não terminou, o último assistido primeiro. OK continua de onde parou"</string>
 </resources>

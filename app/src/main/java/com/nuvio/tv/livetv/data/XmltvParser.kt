@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.data
 
 import android.util.Xml
 import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.model.SUB_TITLE_MARK
 import org.xmlpull.v1.XmlPullParser
 import java.io.InputStream
 
@@ -225,10 +226,14 @@ object XmltvParser {
         // air date here instead ("20260929"), which would make every poster look "wrong year".
         val year = date?.trim()?.takeIf { it.length == 4 }?.toIntOrNull()?.takeIf { it in 1900..2100 }
             ?: yearIn(title) ?: yearIn(desc)
+        // The sub-title (often a game's match-up: "College Football" / "Texas at LSU") leads the
+        // description behind an invisible mark, so the guide can show it beside the title
+        // without storing anything new (see EpgProgram.subTitle).
+        val sub = subTitle?.trim()?.takeIf { it.isNotBlank() }?.let { if (it.length > 120) it.take(120).trimEnd() else it }
         val fullDesc = when {
-            subTitle.isNullOrBlank() -> desc?.takeIf { it.isNotBlank() }
-            desc.isNullOrBlank() -> subTitle
-            else -> "$subTitle\n$desc"
+            sub == null -> desc?.takeIf { it.isNotBlank() }
+            desc.isNullOrBlank() -> "$SUB_TITLE_MARK$sub"
+            else -> "$SUB_TITLE_MARK$sub\n$desc"
         }
         return EpgProgram(
             startMs = start,

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"הטלוויזיה הזו לא הצליחה לנגן את הסרטון. נסו מקור אחר או עברו ל-MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"הצגה בפרופילים"</string>
+    <string name="iptv_settings_show_on_profiles_value">"הצגה בפרופילים: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"הכול"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d מתוך %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"פרופילים שכובו כאן לא יקבלו ערוצים, On Demand או Sports מ-%1$s. הפלייליסט עצמו נשאר לכולם"</string>
+    <string name="iptv_backup_file">"קובץ גיבוי"</string>
+    <string name="iptv_backup_file_summary">"שמרו את ההגדרות בקובץ או שחזרו קובץ"</string>
+    <string name="iptv_backup_file_description">"עותק של הגדרות Live TV בקובץ ‎.nptv אחד: פלייליסטים עם פרטי הכניסה, מדריכים, מועדפים, קבוצות, Sports והגדרות. שימושי בלי Setup Sync או כעותק משלכם."</string>
+    <string name="iptv_backup_with_phone">"גיבוי או שחזור עם הטלפון"</string>
+    <string name="iptv_backup_with_phone_description">"סרקו קוד כדי לשמור את הקובץ בטלפון או לשלוח קובץ בחזרה"</string>
+    <string name="iptv_backup_save_on_tv">"שמירת גיבוי בטלוויזיה הזו"</string>
+    <string name="iptv_backup_save_on_tv_description">"נשמר בהורדות › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"שחזור מהטלוויזיה הזו"</string>
+    <string name="iptv_backup_restore_on_tv_description">"גיבויים שנשמרו בטלוויזיה הזו, החדש ביותר קודם"</string>
+    <string name="iptv_backup_none_on_tv">"אין עדיין גיבויים בטלוויזיה הזו. שמרו גיבוי קודם או השתמשו בטלפון."</string>
+    <string name="iptv_backup_saving">"שומר…"</string>
+    <string name="iptv_backup_saved_to">"נשמר ב-%1$s"</string>
+    <string name="iptv_backup_save_failed">"לא ניתן היה לשמור את הגיבוי בטלוויזיה הזו. נסו עם הטלפון."</string>
+    <string name="iptv_backup_restoring">"משחזר…"</string>
+    <string name="iptv_backup_restored">"הגיבוי שוחזר. פלייליסטים ומדריכים שהשתנו נטענים."</string>
+    <string name="iptv_backup_restore_failed">"לא ניתן היה לשחזר את הגיבוי (אין בו פלייליסטים או מדריכים)."</string>
+    <string name="iptv_backup_restore_confirm_title">"לשחזר את הגיבוי הזה?"</string>
+    <string name="iptv_backup_restore_confirm_message">"נשמר ב-%1$s במכשיר %2$s. הוא יחליף את הגדרות Live TV בטלוויזיה הזו. כש-Setup Sync פועל, גם הטלוויזיות האחרות ישתנו."</string>
+    <string name="iptv_backup_restore_confirm_button">"שחזור"</string>
+    <string name="iptv_backup_not_a_backup">"זה לא קובץ גיבוי של Nuvio + IPTV ‏(‎.nptv)."</string>
+    <string name="iptv_backup_private_note">"קובץ הגיבוי מכיל את פרטי הכניסה לפלייליסטים. שמרו אותו בפרטיות."</string>
+    <string name="iptv_backup_phone_steps">"1. חברו את הטלפון לאותה רשת Wi-Fi של הטלוויזיה.\n2. סרקו את הקוד במצלמת הטלפון.\n3. שמרו את הגיבוי או בחרו קובץ גיבוי לשליחה לכאן."</string>
+    <string name="iptv_backup_phone_check_tv">"נשלח. בחרו \"שחזור\" בטלוויזיה כדי לסיים."</string>
+    <string name="iptv_backup_phone_title">"גיבוי Nuvio + IPTV"</string>
+    <string name="iptv_backup_phone_save_heading">"שמירת גיבוי"</string>
+    <string name="iptv_backup_phone_save_text">"שומר את הגדרות Live TV של הטלוויזיה בטלפון כקובץ ‎.nptv."</string>
+    <string name="iptv_backup_phone_save_button">"שמירת קובץ הגיבוי"</string>
+    <string name="iptv_backup_phone_restore_heading">"שחזור גיבוי"</string>
+    <string name="iptv_backup_phone_restore_text">"בחרו קובץ ‎.nptv לשליחה לטלוויזיה. שום דבר לא ישתנה עד שתאשרו בטלוויזיה."</string>
+    <string name="iptv_backup_phone_choose_file">"בחירת קובץ"</string>
+    <string name="iptv_backup_phone_restore_button">"שליחה לטלוויזיה"</string>
+</resources>

@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Potret"</string>
     <string name="home_rows_shape_landscape">"Lanskap"</string>
     <string name="home_rows_option_remove">"Hapus baris ini"</string>
+    <string name="home_rows_vod_continue_title">"Lanjutkan Menonton On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"Film dan episode dari penyedia Anda yang sudah dimulai dan belum selesai, terakhir ditonton dulu. OK melanjutkan dari tempat terakhir"</string>
 </resources>

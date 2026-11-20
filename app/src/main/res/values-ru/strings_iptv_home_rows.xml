@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Вертикальные"</string>
     <string name="home_rows_shape_landscape">"Горизонтальные"</string>
     <string name="home_rows_option_remove">"Удалить этот ряд"</string>
+    <string name="home_rows_vod_continue_title">"Продолжить просмотр On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"Фильмы и серии от провайдера, которые вы начали и не досмотрели, сначала последние. OK продолжает с того места, где вы остановились"</string>
 </resources>

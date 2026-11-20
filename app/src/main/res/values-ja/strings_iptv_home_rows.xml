@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"縦長"</string>
     <string name="home_rows_shape_landscape">"横長"</string>
     <string name="home_rows_option_remove">"この行を削除"</string>
+    <string name="home_rows_vod_continue_title">"On Demandの続きを見る"</string>
+    <string name="home_rows_vod_continue_hint">"見始めて最後まで見ていないプロバイダーの映画とエピソード（最近見た順）。OKで続きから再生します"</string>
 </resources>

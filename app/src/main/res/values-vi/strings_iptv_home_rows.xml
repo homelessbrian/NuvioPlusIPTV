@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Dọc"</string>
     <string name="home_rows_shape_landscape">"Ngang"</string>
     <string name="home_rows_option_remove">"Xóa hàng này"</string>
+    <string name="home_rows_vod_continue_title">"Xem tiếp On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"Phim và tập phim từ nhà cung cấp mà bạn đã bắt đầu nhưng chưa xem xong, xem gần nhất trước. OK tiếp tục từ chỗ bạn dừng"</string>
 </resources>

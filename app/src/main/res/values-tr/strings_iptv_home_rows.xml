@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"Dikey"</string>
     <string name="home_rows_shape_landscape">"Yatay"</string>
     <string name="home_rows_option_remove">"Bu satırı kaldır"</string>
+    <string name="home_rows_vod_continue_title">"On Demand'i izlemeye devam et"</string>
+    <string name="home_rows_vod_continue_hint">"Sağlayıcınızdan başlayıp bitirmediğiniz filmler ve bölümler, son izlenen önce. OK kaldığınız yerden devam eder"</string>
 </resources>

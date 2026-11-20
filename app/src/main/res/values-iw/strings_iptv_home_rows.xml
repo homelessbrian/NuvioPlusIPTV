@@ -61,4 +61,6 @@
     <string name="home_rows_shape_portrait">"לאורך"</string>
     <string name="home_rows_shape_landscape">"לרוחב"</string>
     <string name="home_rows_option_remove">"הסרת השורה הזו"</string>
+    <string name="home_rows_vod_continue_title">"המשך צפייה On Demand"</string>
+    <string name="home_rows_vod_continue_hint">"סרטים ופרקים מהספק שהתחלתם ולא סיימתם, האחרון שנצפה קודם. OK ממשיך מהמקום שבו עצרתם"</string>
 </resources>

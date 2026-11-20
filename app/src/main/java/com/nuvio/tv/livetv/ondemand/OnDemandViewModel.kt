@@ -190,7 +190,7 @@ class OnDemandViewModel @Inject constructor(
         viewModelScope.launch { repository.genreUpdates.drop(1).collect { refreshGenres() } }
         // Only reload when hidden or locked categories actually change (not on every saved setting).
         viewModelScope.launch {
-            prefs.userState.map { it.vodHiddenCategories to it.lockedGroups }
+            prefs.userState.map { Triple(it.vodHiddenCategories, it.lockedGroups, it.hiddenPlaylists) }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect { reload(keepSelection = true) }
@@ -220,6 +220,7 @@ class OnDemandViewModel @Inject constructor(
         val s = prefs.settings.first()
         val all = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
         val hidden = user.vodHiddenCategories + all.filter { c ->
+            c.playlistId in user.hiddenPlaylists ||
             ParentalControls.isLocked("vod:${c.uid}", c.name, s, user.lockedGroups)
         }.map { it.uid }
         val merge = s.vodMergeDuplicates
@@ -382,7 +383,7 @@ class OnDemandViewModel @Inject constructor(
             val names = playlistNames.value
             val all = repository.categories(kind)
             val multi = all.map { it.playlistId }.distinct().size > 1
-            val visible = all.filter { it.uid !in user.vodHiddenCategories }
+            val visible = all.filter { !user.hidesVodCategory(it.uid) }
                 .map { OnDemandSection.Category(it, if (multi) names[it.playlistId] else null) }
             val genres = repository.genres(kind)
             val byGenre = _ui.value.byGenre && genres.isNotEmpty()
@@ -390,6 +391,7 @@ class OnDemandViewModel @Inject constructor(
                 if (byGenre) genres.map { (g, n) -> OnDemandSection.Genre(g, n) } else visible
             val s = prefs.settings.first()
             excludedNow = user.vodHiddenCategories + all.filter { c ->
+                c.playlistId in user.hiddenPlaylists ||
                 ParentalControls.isLocked("vod:${c.uid}", c.name, s, user.lockedGroups)
             }.map { it.uid }
             val selected = _ui.value.selectedKey.takeIf { k -> keepSelection && sections.any { it.key == k } }
@@ -431,7 +433,8 @@ class OnDemandViewModel @Inject constructor(
             val ordered = cats.withIndex()
                 .sortedWith(compareBy({ orderIndex[it.value.uid] ?: Int.MAX_VALUE }, { it.index }))
                 .map { it.value }
-            val entries = ordered.map { c ->
+            // Groups of a playlist this profile doesn't show aren't listed at all.
+            val entries = ordered.filter { it.playlistId !in user.hiddenPlaylists }.map { c ->
                 VodGroupEntry(
                     uid = c.uid,
                     defaultName = c.name,
@@ -442,7 +445,7 @@ class OnDemandViewModel @Inject constructor(
                 )
             }
             val visible = ordered.filter { c ->
-                c.uid !in user.vodHiddenCategories &&
+                !user.hidesVodCategory(c.uid) &&
                     !ParentalControls.isLocked("vod:${c.uid}", c.name, settings.value, user.lockedGroups)
             }
             homeGroups = visible.map { it to (user.vodGroupNames[it.uid]?.takeIf { n -> n.isNotBlank() } ?: it.name) }
@@ -657,6 +660,7 @@ class OnDemandViewModel @Inject constructor(
             val s = prefs.settings.first()
             val cats = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
             val excluded = user.vodHiddenCategories + cats.filter { c ->
+                c.playlistId in user.hiddenPlaylists ||
                 ParentalControls.isLocked("vod:${c.uid}", c.name, s, user.lockedGroups)
             }.map { it.uid }
             val merge = s.vodMergeDuplicates
@@ -668,7 +672,11 @@ class OnDemandViewModel @Inject constructor(
                     "recent:series" -> VodKind.SERIES
                     else -> null
                 }
-                val (kind, raw) = if (recentKind != null) {
+                val (kind, raw) = if (spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) {
+                    val started = continueWatching(user, spec.limit)
+                    // A mix of movies and series: the row's own kind follows its first title.
+                    (started.firstOrNull()?.kind ?: VodKind.MOVIE) to started
+                } else if (recentKind != null) {
                     recentKind to repository.items(recentKind, null, excluded, true, spec.limit, 0, VodSort.DEFAULT, merge = merge)
                 } else {
                     val uid = spec.source.removePrefix("group:")
@@ -705,6 +713,7 @@ class OnDemandViewModel @Inject constructor(
                     kind = kind,
                     items = items.map { item ->
                         VodHomeIds.toMeta(item, homeMatched[item.uid], posters[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name))
+                            .let { if (spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) it.copy(id = VodHomeIds.continueMetaId(item.uid)) else it }
                     },
                     hasMore = false,
                     page = 1
@@ -925,6 +934,53 @@ class OnDemandViewModel @Inject constructor(
 
     /** Leaving the page: no trailer lookups carry on in the background. */
     fun stopTrailers() { trailerJob?.cancel() }
+
+    /** Changes when an On Demand title's saved place changes (Continue Watching On Demand refreshes). */
+    val continueChanges: kotlinx.coroutines.flow.Flow<Int> = watchProgressRepository.allProgress
+        .map { list -> list.filter { VodHomeIds.uidOf(it.contentId) != null }.map { it.contentId to it.lastWatched }.hashCode() }
+        .distinctUntilChanged()
+
+    /** Where each started On Demand title was left (by item uid), for Continue Watching On Demand. */
+    private val continueAt = ConcurrentHashMap<String, com.nuvio.tv.domain.model.WatchProgress>()
+
+    /**
+     * The provider titles played from On Demand (saved under their "nuviovod:" ids) that you
+     * started and haven't finished, last watched first: one card per movie or series, the series
+     * on the episode you watched last. Hidden groups and playlists (and locked ones) stay out.
+     */
+    private suspend fun continueWatching(user: com.nuvio.tv.livetv.model.LiveUserState, limit: Int): List<VodItem> {
+        val settings = prefs.settings.first()
+        val all = runCatching { watchProgressRepository.allProgress.first() }.getOrDefault(emptyList())
+        val latest = all.asSequence()
+            .filter { VodHomeIds.uidOf(it.contentId) != null }
+            .filter { p -> p.duration <= 0L || p.position < p.duration * 0.92 }
+            .filter { p -> p.position > 0L || (p.progressPercent ?: 0f) > 0f }
+            .sortedByDescending { it.lastWatched }
+            .distinctBy { it.contentId }
+            .toList()
+        continueAt.clear()
+        val out = ArrayList<VodItem>()
+        for (p in latest) {
+            if (out.size >= limit) break
+            val uid = VodHomeIds.uidOf(p.contentId) ?: continue
+            val item = repository.itemByUid(uid) ?: continue
+            val cat = "${item.kind.key}:${item.playlistId}:${item.categoryId}"
+            if (user.hidesVodCategory(cat)) continue
+            val catName = runCatching { repository.categories(item.kind).firstOrNull { it.uid == cat }?.name }.getOrNull().orEmpty()
+            if (ParentalControls.isLocked("vod:$cat", catName, settings, user.lockedGroups)) continue
+            continueAt[item.uid] = p
+            out += item
+        }
+        return out
+    }
+
+    /** A Continue Watching On Demand card: the title and where it was left (null for any other card). */
+    fun continueTarget(metaId: String): Pair<VodItem, com.nuvio.tv.domain.model.WatchProgress>? {
+        if (!VodHomeIds.isContinue(metaId)) return null
+        val item = homeItem(metaId) ?: return null
+        val at = continueAt[item.uid] ?: return null
+        return item to at
+    }
 
     /** The title behind a card (for opening it). */
     fun homeItem(metaId: String): VodItem? {

@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"הפורמט של הסרטון הזה לא מאפשר תמונות ממוזערות במכשיר הזה"</string>
     <string name="iptv_thumbs_msg_open_failed">"לא ניתן לפתוח את הסרטון הזה לתמונות ממוזערות"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"אין תמונות ממוזערות לשידור החוזר הזה"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"אין תמונות ממוזערות: הטלוויזיה צריכה את מפענח הווידאו היחיד שלה לסרטון"</string>
 </resources>
