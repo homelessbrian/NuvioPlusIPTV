@@ -85,6 +85,7 @@ import com.nuvio.tv.LocalSidebarExpanded
 import com.nuvio.tv.LocalContentFocusRequester
 import com.nuvio.tv.ui.util.LocalRecompositionHighlighterEnabled
 import com.nuvio.tv.ui.util.StableList
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.tv.ui.util.StableRef
 import com.nuvio.tv.ui.util.asStable
 import com.nuvio.tv.ui.util.formatHeroRuntime
@@ -727,8 +728,33 @@ fun ModernHomeContent(
                 }
             }
 
+            // Live TV fork: a highlighted Live TV or Sports card's own hero (see LiveHomeHero).
+            val liveRowHeroState = com.nuvio.tv.livetv.home.LiveHomeHero.hero.collectAsStateWithLifecycle()
             val resolvedHeroState = remember(activeCarouselItemState, enrichedPreviews, enrichingItemId, heroItem, uiState.heroEnrichmentEnabled, uiState.homeImdbRatingsVisibility, failedEnrichmentIds) {
                 derivedStateOf {
+                    val liveKey = activeRowKey.value?.takeIf { com.nuvio.tv.livetv.home.isLiveHomeRowKey(it) }
+                    if (liveKey != null) {
+                        val live = liveRowHeroState.value?.takeIf { it.rowKey == liveKey }
+                        if (live != null) {
+                            return@derivedStateOf Triple(
+                                live.backdrop,
+                                HeroPreview(
+                                    title = live.title,
+                                    logo = null,
+                                    description = live.description,
+                                    contentTypeText = live.badge,
+                                    yearText = null,
+                                    secondaryHighlightText = live.extra,
+                                    imdbText = null,
+                                    genres = StableList(emptyList()),
+                                    poster = null,
+                                    backdrop = live.backdrop,
+                                    imageUrl = live.backdrop
+                                ),
+                                false
+                            )
+                        }
+                    }
                     val activeCarouselItem = activeCarouselItemState.value
                     val activeItemId = activeCarouselItem?.metaPreview?.id
                     val enrichingId = enrichingItemId.value

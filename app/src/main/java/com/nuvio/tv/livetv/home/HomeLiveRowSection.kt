@@ -215,6 +215,8 @@ private fun ChannelsRow(
             horizontalArrangement = Arrangement.spacedBy(style.cardSpacing)
         ) {
             items(entries, key = { it.channel.key }) { e ->
+                // Highlighted: Home's hero shows this channel (not the last movie's picture).
+                Box(Modifier.onFocusChanged { if (it.hasFocus) viewModel.focusChannel(row.key, e) }) {
                 ChannelCard(
                     entry = e,
                     landscape = landscape,
@@ -233,6 +235,7 @@ private fun ChannelsRow(
                         }
                     }
                 )
+                }
             }
         }
         }
@@ -429,6 +432,8 @@ private fun SportsRow(
                 val upcoming = if (game.event.state == GameState.PRE && game.event.startMs > clockNow + com.nuvio.tv.livetv.sports.SportsWatchPolicy.STARTING_SOON_MS) {
                     upcomingLabel(game.event.startMs, clockNow, use24h)
                 } else null
+                // Highlighted: Home's hero shows this game (not the last movie's picture).
+                Box(Modifier.onFocusChanged { if (it.hasFocus) viewModel.focusGame(row.key, game, sportsSettings.hideScores) }) {
                 if (landscape) {
                     // The same card as the Sports page's game strip and Multiview.
                     StripGameCard(
@@ -445,6 +450,7 @@ private fun SportsRow(
                     )
                 } else {
                     TallGameCard(game, width, height, now, use24h, sportsSettings.hideScores, playingHere, onClick, onLongClick, upcoming)
+                }
                 }
             }
         }

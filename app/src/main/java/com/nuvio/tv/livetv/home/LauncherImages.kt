@@ -64,7 +64,7 @@ object LauncherImages {
     }
 
     /** A logo, from the app's own copy (fetched once, refreshed weekly). */
-    private fun logo(context: Context, url: String?): Bitmap? {
+    internal fun logo(context: Context, url: String?): Bitmap? {
         if (url.isNullOrBlank() || !(url.startsWith("http://", true) || url.startsWith("https://", true))) return null
         val file = File(logoDir(context), sha(url))
         val fresh = file.exists() && file.length() > 0 && System.currentTimeMillis() - file.lastModified() < LOGO_MAX_AGE
