@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"已添加主页行"</string>
     <string name="home_rows_confirm_removed">"已移除主页行"</string>
     <string name="home_rows_confirm_changed">"主页行设置已更改"</string>
+    <string name="home_rows_shape_step_title">"卡片形状"</string>
+    <string name="home_rows_shape_step_subtitle">"这一行卡片的样子。之后可以在该行的选项中更改。"</string>
+    <string name="home_rows_shape_landscape_hint">"宽卡片：最适合体育（网球、高尔夫、拳击等）和频道"</string>
+    <string name="home_rows_shape_portrait_hint">"高卡片，像电影海报"</string>
+    <string name="home_rows_shape_auto_hint">"与主页其他行一致"</string>
+    <string name="home_rows_shape_recommended">"推荐"</string>
 </resources>

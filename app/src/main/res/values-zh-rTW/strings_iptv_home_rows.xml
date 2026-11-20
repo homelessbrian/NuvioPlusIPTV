@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"已新增首頁列"</string>
     <string name="home_rows_confirm_removed">"已移除首頁列"</string>
     <string name="home_rows_confirm_changed">"首頁列設定已變更"</string>
+    <string name="home_rows_shape_step_title">"卡片形狀"</string>
+    <string name="home_rows_shape_step_subtitle">"這一列卡片的樣子。之後可以在該列的選項中更改。"</string>
+    <string name="home_rows_shape_landscape_hint">"寬卡片：最適合體育（網球、高爾夫、拳擊等）和頻道"</string>
+    <string name="home_rows_shape_portrait_hint">"高卡片，像電影海報"</string>
+    <string name="home_rows_shape_auto_hint">"與首頁其他列一致"</string>
+    <string name="home_rows_shape_recommended">"推薦"</string>
 </resources>

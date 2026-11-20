@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Rijen toegevoegd aan Home"</string>
     <string name="home_rows_confirm_removed">"Rijen verwijderd van Home"</string>
     <string name="home_rows_confirm_changed">"Rij-instellingen gewijzigd"</string>
+    <string name="home_rows_shape_step_title">"Kaartvorm"</string>
+    <string name="home_rows_shape_step_subtitle">"Hoe de kaarten van deze rij eruitzien. Je kunt dit later wijzigen in de opties van de rij."</string>
+    <string name="home_rows_shape_landscape_hint">"Brede kaarten: het best voor sport (tennis, golf, boksen en meer) en zenders"</string>
+    <string name="home_rows_shape_portrait_hint">"Hoge kaarten, zoals filmposters"</string>
+    <string name="home_rows_shape_auto_hint">"Zoals de andere rijen op je startscherm"</string>
+    <string name="home_rows_shape_recommended">"Aanbevolen"</string>
 </resources>

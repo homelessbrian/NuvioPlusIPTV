@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"נוספו שורות לדף הבית"</string>
     <string name="home_rows_confirm_removed">"הוסרו שורות מדף הבית"</string>
     <string name="home_rows_confirm_changed">"הגדרות השורות שונו"</string>
+    <string name="home_rows_shape_step_title">"צורת הכרטיסים"</string>
+    <string name="home_rows_shape_step_subtitle">"כך ייראו הכרטיסים בשורה הזו. אפשר לשנות זאת מאוחר יותר באפשרויות השורה."</string>
+    <string name="home_rows_shape_landscape_hint">"כרטיסים רחבים: הכי מתאים לספורט (טניס, גולף, אגרוף ועוד) ולערוצים"</string>
+    <string name="home_rows_shape_portrait_hint">"כרטיסים גבוהים, כמו כרזות של סרטים"</string>
+    <string name="home_rows_shape_auto_hint">"כמו שאר השורות במסך הבית"</string>
+    <string name="home_rows_shape_recommended">"מומלץ"</string>
 </resources>

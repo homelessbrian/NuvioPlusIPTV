@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Dodano wiersze na stronie głównej"</string>
     <string name="home_rows_confirm_removed">"Usunięto wiersze ze strony głównej"</string>
     <string name="home_rows_confirm_changed">"Zmieniono ustawienia wierszy"</string>
+    <string name="home_rows_shape_step_title">"Kształt kart"</string>
+    <string name="home_rows_shape_step_subtitle">"Wygląd kart w tym rzędzie. Możesz to zmienić później w opcjach rzędu."</string>
+    <string name="home_rows_shape_landscape_hint">"Szerokie karty: najlepsze do sportu (tenis, golf, boks i inne) i kanałów"</string>
+    <string name="home_rows_shape_portrait_hint">"Wysokie karty, jak plakaty filmowe"</string>
+    <string name="home_rows_shape_auto_hint">"Tak jak pozostałe rzędy ekranu głównego"</string>
+    <string name="home_rows_shape_recommended">"Zalecane"</string>
 </resources>

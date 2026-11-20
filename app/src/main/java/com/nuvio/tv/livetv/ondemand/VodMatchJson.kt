@@ -25,7 +25,8 @@ object VodMatchJson {
             put("id", m.id)
             put("rt", m.rawType)
             put("n", m.name)
-            m.poster?.let { put("p", it) }
+            // The title's own poster: your poster provider's is made from it when the card is drawn.
+            (m.rawPosterUrl ?: m.poster)?.let { put("p", it) }
             m.background?.let { put("b", it) }
             m.logo?.let { put("l", it) }
             m.description?.let { put("d", it) }

@@ -63,7 +63,7 @@ fun HomeVodRowsHost(
     val vod: OnDemandViewModel = hiltViewModel(key = "home_vod_rows")
     val version by vod.catalogVersion.collectAsStateWithLifecycle()
     val specs = remember(vodRows, names) {
-        vodRows.map { OnDemandViewModel.HomeScreenRowSpec(it.id, it.source, it.limit, names[it.id] ?: it.title) }
+        vodRows.map { OnDemandViewModel.HomeScreenRowSpec(it.id, it.source, it.limit, names[it.id] ?: it.title, wide = it.shape == HomeLiveRow.SHAPE_LANDSCAPE) }
     }
     // Continue Watching On Demand also follows what you watch.
     val hasContinue = remember(vodRows) { vodRows.any { it.source == HomeLiveRow.VOD_CONTINUE } }

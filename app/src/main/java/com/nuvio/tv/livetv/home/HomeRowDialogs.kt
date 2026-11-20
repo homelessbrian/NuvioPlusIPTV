@@ -90,12 +90,15 @@ fun AddHomeRowDialog(
     var total by remember { mutableStateOf(0) }
     val focus = remember { HashMap<String, FocusRequester>() }
     fun requester(key: String) = focus.getOrPut(key) { FocusRequester() }
-    fun add(row: HomeLiveRow) { viewModel.add(row); onDismiss() }
+    // The row picked, waiting for its card shape (the last step).
+    var pending by remember { mutableStateOf<HomeLiveRow?>(null) }
+    fun add(row: HomeLiveRow) { position = 1; pending = row }
+    fun finish(shape: String) { pending?.let { viewModel.add(it.copy(shape = shape)) }; onDismiss() }
     fun openList(option: PickerOption, from: String) { returnTo = from; position = 1; step = option }
 
     NuvioDialog(
-        onDismiss = { if (step != null) step = null else onDismiss() },
-        title = when (step) {
+        onDismiss = { if (pending != null) pending = null else if (step != null) step = null else onDismiss() },
+        title = if (pending != null) stringResource(R.string.home_rows_shape_step_title) else when (step) {
             null -> stringResource(R.string.home_rows_add_title)
             PickerOption.PLAYLIST_GROUP -> stringResource(R.string.home_rows_pick_playlist_group_title)
             PickerOption.MY_GROUP -> stringResource(R.string.home_rows_pick_my_group_title)
@@ -103,13 +106,21 @@ fun AddHomeRowDialog(
             PickerOption.VOD_GROUP -> stringResource(R.string.home_rows_pick_vod_group_title)
             PickerOption.VOD_RECENT -> stringResource(R.string.home_rows_pick_vod_recent)
         },
-        subtitle = stringResource(if (step == null) R.string.home_rows_add_subtitle else R.string.home_rows_add_pick_subtitle),
+        subtitle = stringResource(if (pending != null) R.string.home_rows_shape_step_subtitle else if (step == null) R.string.home_rows_add_subtitle else R.string.home_rows_add_pick_subtitle),
         width = 680.dp,
         usePlatformDefaultWidth = false,
         contentSpacing = NuvioTheme.spacing.md
     ) {
         val listState = rememberLazyListState()
-        LaunchedEffect(step) {
+        val shapeRecommended = pending?.let(::recommendedShape)
+        LaunchedEffect(step, pending == null) {
+            if (pending != null) {
+                // The card shape: starts on the one that suits the row best.
+                listState.scrollToItem(0)
+                delay(80)
+                runCatching { requester("shape_" + (shapeRecommended ?: HomeLiveRow.SHAPE_AUTO)).requestFocus() }
+                return@LaunchedEffect
+            }
             // Back from a second list lands on the choice that opened it.
             val key = if (step == null) returnTo ?: "fav" else "first"
             listState.scrollToItem(if (step == null) (MAIN_INDEX[key] ?: 0).minus(1).coerceAtLeast(0) else 0)
@@ -118,7 +129,13 @@ fun AddHomeRowDialog(
         }
         Box(Modifier.fillMaxWidth().height(430.dp)) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                when (step) {
+                val picked = pending
+                if (picked != null) shapeChoices(
+                    recommended = recommendedShape(picked),
+                    requester = ::requester,
+                    onFocused = { pos, count -> position = pos; total = count },
+                    onPick = ::finish
+                ) else when (step) {
                     null -> mainChoices(
                         favorites = favorites,
                         requester = ::requester,
@@ -170,9 +187,48 @@ fun AddHomeRowDialog(
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = stringResource(if (step == null) R.string.home_rows_add_keys_main else R.string.home_rows_add_keys_pick),
+                text = stringResource(if (step == null && pending == null) R.string.home_rows_add_keys_main else R.string.home_rows_add_keys_pick),
                 style = MaterialTheme.typography.labelMedium,
                 color = NuvioTheme.colors.TextTertiary
+            )
+        }
+    }
+}
+
+/**
+ * The shape that suits a row best: wide cards for Sports (a tall card squeezes two names, scores
+ * and a league into a strip, and looked bad for tennis, golf, boxing and the like), and the
+ * Home layout's own cards for the rest.
+ */
+private fun recommendedShape(row: HomeLiveRow): String =
+    if (row.kind == HomeLiveRow.KIND_SPORTS) HomeLiveRow.SHAPE_LANDSCAPE else HomeLiveRow.SHAPE_AUTO
+
+/** Add a row's last step: the row's card shape (it can be changed later in the row's options). */
+private fun LazyListScope.shapeChoices(
+    recommended: String,
+    requester: (String) -> FocusRequester,
+    onFocused: (Int, Int) -> Unit,
+    onPick: (String) -> Unit
+) {
+    val shapes = listOf(
+        Triple(HomeLiveRow.SHAPE_LANDSCAPE, R.string.home_rows_shape_landscape, R.string.home_rows_shape_landscape_hint),
+        Triple(HomeLiveRow.SHAPE_PORTRAIT, R.string.home_rows_shape_portrait, R.string.home_rows_shape_portrait_hint),
+        Triple(HomeLiveRow.SHAPE_AUTO, R.string.home_rows_shape_auto, R.string.home_rows_shape_auto_hint)
+    )
+    shapes.forEachIndexed { i, (shape, title, hint) ->
+        item(key = "shape_$shape") {
+            Choice(
+                icon = when (shape) {
+                    HomeLiveRow.SHAPE_LANDSCAPE -> Icons.Default.Tv
+                    HomeLiveRow.SHAPE_PORTRAIT -> Icons.Default.Movie
+                    else -> Icons.AutoMirrored.Filled.List
+                },
+                title = stringResource(title),
+                subtitle = stringResource(hint),
+                value = if (shape == recommended) stringResource(R.string.home_rows_shape_recommended) else null,
+                modifier = Modifier.focusRequester(requester("shape_$shape")),
+                onFocused = { onFocused(i + 1, shapes.size) },
+                onClick = { onPick(shape) }
             )
         }
     }
@@ -588,7 +644,7 @@ fun HomeRowOptionsDialog(
                 )
             }
             if (vod) {
-                // On Demand rows are Nuvio's own poster rows: OK and the card shape work as on Home.
+                // On Demand rows are Nuvio's own poster rows: OK works as on Home.
             } else if (sports) {
                 item(key = "soon") {
                     SettingsToggleRow(
@@ -648,7 +704,7 @@ fun HomeRowOptionsDialog(
                     onClick = { choosing = "limit" }
                 )
             }
-            if (!vod) item(key = "shape") {
+            item(key = "shape") {
                 SettingsActionRow(
                     title = stringResource(R.string.home_rows_option_shape),
                     subtitle = null,

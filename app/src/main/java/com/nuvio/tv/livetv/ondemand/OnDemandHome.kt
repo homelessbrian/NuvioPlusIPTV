@@ -4,6 +4,7 @@ import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.core.poster.withCustomPosterUrl
 
 /**
  * The On Demand page, Nuvio-home style: one row per provider group (in your order, with your
@@ -66,9 +67,52 @@ object VodHomeIds {
     fun addonId(cardId: String): String? =
         uidOf(cardId)?.let { realIds[it] }?.match?.takeIf { !it.startsWith("tmdb:") }
 
+    /** The real id a title's custom poster is made from: its match's id, else the provider's TMDB id. */
+    fun posterId(item: VodItem, matched: MetaPreview?): String? =
+        matched?.id?.takeIf { it.isNotBlank() && !it.startsWith(PREFIX) }
+            ?: item.tmdbId?.trim()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.let { "tmdb:$it" }
+
+    /**
+     * Your poster provider's picture for a title (Settings › Layout › custom posters, e.g.
+     * RPDB), as on your addons' rows; null when there's no pattern or the title has no real id.
+     */
+    fun customPoster(item: VodItem, matched: MetaPreview?, pattern: String): String? {
+        if (pattern.isBlank()) return null
+        val id = posterId(item, matched) ?: return null
+        return com.nuvio.tv.core.poster.CustomPosterUrlResolver.resolve(
+            pattern = pattern,
+            ids = com.nuvio.tv.core.poster.CustomPosterUrlResolver.extractIds(id, explicitImdbId = matched?.imdbId),
+            type = if (item.kind == VodKind.SERIES) "series" else "movie",
+            shape = "poster"
+        )
+    }
+
     /** A card for a provider title: the matched addon details when found (poster, backdrop,
-     *  logo, description, rating), otherwise the provider's own name and picture. */
-    fun toMeta(item: VodItem, matched: MetaPreview?, poster: String?, name: String): MetaPreview {
+     *  logo, description, rating), otherwise the provider's own name and picture. With
+     *  [posterPattern], your poster provider's pictures, as on your addons' rows. With [wide],
+     *  a wide card showing the backdrop (a row set to wide cards). */
+    fun toMeta(item: VodItem, matched: MetaPreview?, poster: String?, name: String, posterPattern: String = "", wide: Boolean = false): MetaPreview {
+        val card = baseMeta(item, matched, poster, name)
+        val custom = posterId(item, matched)?.takeIf { posterPattern.isNotBlank() }?.let { id ->
+            card.copy(id = id, imdbId = matched?.imdbId ?: card.imdbId)
+                .withCustomPosterUrl(posterPattern)
+        }
+        val withPoster = if (custom == null) card else card.copy(
+            poster = custom.poster,
+            rawPosterUrl = custom.rawPosterUrl,
+            landscapePoster = custom.landscapePoster
+        )
+        if (!wide) return withPoster
+        // A wide card: the title's own wide artwork (your poster provider's, or the backdrop).
+        val art = withPoster.landscapePoster ?: withPoster.background
+        return withPoster.copy(
+            posterShape = PosterShape.LANDSCAPE,
+            poster = art ?: withPoster.poster,
+            rawPosterUrl = if (art != null) withPoster.background ?: withPoster.rawPosterUrl else withPoster.rawPosterUrl
+        )
+    }
+
+    private fun baseMeta(item: VodItem, matched: MetaPreview?, poster: String?, name: String): MetaPreview {
         val type = if (item.kind == VodKind.SERIES) ContentType.SERIES else ContentType.MOVIE
         return matched?.copy(
             id = metaId(item.uid),

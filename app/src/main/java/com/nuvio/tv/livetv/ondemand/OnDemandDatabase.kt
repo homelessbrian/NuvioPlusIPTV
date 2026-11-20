@@ -15,6 +15,10 @@ enum class VodKind(val key: String) { MOVIE("movie"), SERIES("series") }
  * What makes two catalog entries the same title: the TMDB id when there is one, otherwise the
  * name and year. Used to show each title once ("Merge duplicates").
  */
+/** items.fl: a title in another language for sure (TMDB, subtitles, another script), or only guessed (its group or label). */
+private const val FL_SURE = 1
+private const val FL_GUESS = 2
+
 private const val DUP_KEY = "CASE WHEN tmdb IS NOT NULL AND tmdb != '' THEN 't' || tmdb ELSE 'n' || norm || '|' || IFNULL(year, '') END"
 
 /** How On Demand lists are sorted (the bar above the posters). */
@@ -237,11 +241,15 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
 
     // ------------------------------------------------------------------ original languages
 
-    /** Titles not checked yet (or not found a month ago), newest first, one per title. */
+    /**
+     * Titles not checked yet (or not found a month ago), one per title: titles set aside only on a
+     * guess (a language group or label) first, so an English one among them comes back quickly,
+     * then the newest.
+     */
     fun needingLanguage(limit: Int, retryBefore: Long): List<VodItem> =
         query(
-            "SELECT * FROM items WHERE fl IS NULL AND NOT EXISTS (SELECT 1 FROM langs l WHERE l.k = items.kind || $DUP_KEY AND (l.lang != '' OR l.checked > ?)) " +
-                "GROUP BY items.kind || $DUP_KEY ORDER BY MAX(added) DESC LIMIT $limit",
+            "SELECT * FROM items WHERE (fl IS NULL OR fl = $FL_GUESS) AND NOT EXISTS (SELECT 1 FROM langs l WHERE l.k = items.kind || $DUP_KEY AND (l.lang != '' OR l.checked > ?)) " +
+                "GROUP BY items.kind || $DUP_KEY ORDER BY MAX(IFNULL(fl, 0)) DESC, MAX(added) DESC LIMIT $limit",
             arrayListOf(retryBefore.toString())
         )
 
@@ -260,8 +268,8 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
 
     /**
      * Saves original languages ([languageKey] to "en", "fr"…, or "" for unknown) and marks every
-     * copy of a title in another language, so lists leave it out from now on. Returns how many
-     * titles were newly marked.
+     * copy of a title in another language, so lists leave it out from now on; an English title
+     * set aside on a guess (its group or label) is put back. Returns how many titles changed.
      */
     fun saveLanguages(found: Map<String, String>): Int {
         if (found.isEmpty()) return 0
@@ -271,20 +279,26 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         db.beginTransaction()
         try {
             val put = db.compileStatement("INSERT OR REPLACE INTO langs (k, lang, checked) VALUES (?,?,?)")
-            val byTmdb = db.compileStatement("UPDATE items SET fl = 1 WHERE fl IS NULL AND kind = ? AND tmdb = ?")
-            val byName = db.compileStatement("UPDATE items SET fl = 1 WHERE fl IS NULL AND kind = ? AND norm = ? AND items.kind || $DUP_KEY = ?")
+            // Another language: marked for sure (a guess becomes certain). English: a guess is undone.
+            val markTmdb = db.compileStatement("UPDATE items SET fl = $FL_SURE WHERE (fl IS NULL OR fl = $FL_GUESS) AND kind = ? AND tmdb = ?")
+            val markName = db.compileStatement("UPDATE items SET fl = $FL_SURE WHERE (fl IS NULL OR fl = $FL_GUESS) AND kind = ? AND norm = ? AND items.kind || $DUP_KEY = ?")
+            val backTmdb = db.compileStatement("UPDATE items SET fl = NULL WHERE fl = $FL_GUESS AND kind = ? AND tmdb = ?")
+            val backName = db.compileStatement("UPDATE items SET fl = NULL WHERE fl = $FL_GUESS AND kind = ? AND norm = ? AND items.kind || $DUP_KEY = ?")
             for ((k, lang) in found) {
                 put.clearBindings(); put.bindString(1, k); put.bindString(2, lang); put.bindLong(3, now); put.executeInsert()
-                if (!isForeignLanguage(lang)) continue
+                val foreign = isForeignLanguage(lang)
+                if (!foreign && !lang.equals("en", ignoreCase = true)) continue
                 val kind = if (k.startsWith(VodKind.SERIES.key)) VodKind.SERIES.key else VodKind.MOVIE.key
                 val rest = k.removePrefix(kind)
                 if (rest.startsWith("t")) {
-                    byTmdb.clearBindings(); byTmdb.bindString(1, kind); byTmdb.bindString(2, rest.substring(1))
-                    marked += byTmdb.executeUpdateDelete()
+                    val stmt = if (foreign) markTmdb else backTmdb
+                    stmt.clearBindings(); stmt.bindString(1, kind); stmt.bindString(2, rest.substring(1))
+                    marked += stmt.executeUpdateDelete()
                 } else if (rest.startsWith("n")) {
                     val norm = rest.substring(1).substringBeforeLast('|')
-                    byName.clearBindings(); byName.bindString(1, kind); byName.bindString(2, norm); byName.bindString(3, k)
-                    marked += byName.executeUpdateDelete()
+                    val stmt = if (foreign) markName else backName
+                    stmt.clearBindings(); stmt.bindString(1, kind); stmt.bindString(2, norm); stmt.bindString(3, k)
+                    marked += stmt.executeUpdateDelete()
                 }
             }
             db.setTransactionSuccessful()
@@ -304,7 +318,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         db.beginTransaction()
         try {
             db.execSQL(
-                "UPDATE items SET fl = 1 WHERE pl = ? AND fl IS NULL AND items.kind || $DUP_KEY IN (SELECT k FROM langs WHERE lang != '' AND lang != 'en')",
+                "UPDATE items SET fl = $FL_SURE WHERE pl = ? AND (fl IS NULL OR fl = $FL_GUESS) AND items.kind || $DUP_KEY IN (SELECT k FROM langs WHERE lang != '' AND lang != 'en')",
                 arrayOf(playlistId)
             )
             val foreignGroups = ArrayList<Pair<String, String>>()
@@ -312,18 +326,28 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 while (c.moveToNext()) if (VodLanguageTags.groupIsForeign(c.getString(2))) foreignGroups += c.getString(0) to c.getString(1)
             }
             foreignGroups.forEach { (kind, cat) ->
-                db.execSQL("UPDATE items SET fl = 1 WHERE pl = ? AND kind = ? AND cat = ? AND fl IS NULL", arrayOf(playlistId, kind, cat))
+                // Only a guess: a group can hold the odd English title (an Australian film in "Netflix Asia").
+                db.execSQL("UPDATE items SET fl = $FL_GUESS WHERE pl = ? AND kind = ? AND cat = ? AND fl IS NULL", arrayOf(playlistId, kind, cat))
             }
             run {
-                val rows = ArrayList<Long>()
-                db.rawQuery("SELECT rowid, name FROM items WHERE pl = ? AND fl IS NULL", arrayOf(playlistId)).use { c ->
-                    while (c.moveToNext()) if (VodLanguageTags.titleIsForeign(c.getString(1))) rows += c.getLong(0)
+                val rows = ArrayList<Pair<Long, Int>>()
+                db.rawQuery("SELECT rowid, name, fl FROM items WHERE pl = ? AND (fl IS NULL OR fl = $FL_GUESS)", arrayOf(playlistId)).use { c ->
+                    while (c.moveToNext()) {
+                        val signal = VodLanguageTags.titleSignal(c.getString(1))
+                        val current = if (c.isNull(2)) 0 else c.getInt(2)
+                        if (signal == VodLanguageTags.SURE || (signal == VodLanguageTags.GUESS && current == 0)) rows += c.getLong(0) to signal
+                    }
                 }
                 if (rows.isNotEmpty()) {
-                    val stmt = db.compileStatement("UPDATE items SET fl = 1 WHERE rowid = ?")
-                    rows.forEach { stmt.clearBindings(); stmt.bindLong(1, it); stmt.executeUpdateDelete() }
+                    val stmt = db.compileStatement("UPDATE items SET fl = ? WHERE rowid = ?")
+                    rows.forEach { (id, fl) -> stmt.clearBindings(); stmt.bindLong(1, fl.toLong()); stmt.bindLong(2, id); stmt.executeUpdateDelete() }
                 }
             }
+            // Guesses TMDB has already said are English stay on the lists.
+            db.execSQL(
+                "UPDATE items SET fl = NULL WHERE pl = ? AND fl = $FL_GUESS AND items.kind || $DUP_KEY IN (SELECT k FROM langs WHERE lang = 'en')",
+                arrayOf(playlistId)
+            )
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

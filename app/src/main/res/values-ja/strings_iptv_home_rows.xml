@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"ホームに行を追加"</string>
     <string name="home_rows_confirm_removed">"ホームから行を削除"</string>
     <string name="home_rows_confirm_changed">"行の設定を変更"</string>
+    <string name="home_rows_shape_step_title">"カードの形"</string>
+    <string name="home_rows_shape_step_subtitle">"この行のカードの見た目です。あとで行のオプションから変更できます。"</string>
+    <string name="home_rows_shape_landscape_hint">"横長カード：スポーツ（テニス、ゴルフ、ボクシングなど）やチャンネルに最適"</string>
+    <string name="home_rows_shape_portrait_hint">"縦長カード：映画のポスターのように"</string>
+    <string name="home_rows_shape_auto_hint">"ホームのほかの行と同じ"</string>
+    <string name="home_rows_shape_recommended">"おすすめ"</string>
 </resources>

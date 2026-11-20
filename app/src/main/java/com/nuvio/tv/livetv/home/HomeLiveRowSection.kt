@@ -1,9 +1,13 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package com.nuvio.tv.livetv.home
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -135,6 +139,39 @@ fun HomeLiveRowSection(
     }
 }
 
+/**
+ * Keeps a highlighted card where the row starts (at [startPadding]), like Nuvio's own rows. A row
+ * inside Home's list otherwise took the list's up-and-down scrolling rule for its sideways
+ * scrolling too, and highlighting a card slid the whole row to the left of the rows around it.
+ */
+@Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun HomeRowScroll(startPadding: Dp, content: @Composable () -> Unit) {
+    val parent = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    val spec = remember(parent, startPadding, density, rtl) {
+        val startPx = with(density) { startPadding.toPx() }
+        object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+            override val scrollAnimationSpec: androidx.compose.animation.core.AnimationSpec<Float> = parent.scrollAnimationSpec
+
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+                val child = kotlin.math.abs(size)
+                return if (rtl) {
+                    val target = containerSize - startPx
+                    val trailing = if (child <= containerSize && target < child) child else target
+                    (offset + size) - trailing
+                } else {
+                    val leading = if (child <= containerSize && containerSize - startPx < child) containerSize - child else startPx
+                    offset - leading
+                }
+            }
+        }
+    }
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides spec, content = content)
+}
+
 @Composable
 private fun RowTitle(title: String, style: HomeLiveRowStyle) {
     Row(
@@ -169,8 +206,10 @@ private fun ChannelsRow(
     val playback by viewModel.playbackState.collectAsStateWithLifecycle()
     val use24h by viewModel.use24h.collectAsStateWithLifecycle()
     val actions = LocalLiveTvHomeActions.current
-    Column(modifier = modifier.fillMaxWidth()) {
+    // One stop for focus: coming back to the row (from the side menu) lands on the card you were on.
+    Column(modifier = modifier.focusRestorer().focusGroup().fillMaxWidth()) {
         RowTitle(title, style)
+        HomeRowScroll(style.startPadding) {
         LazyRow(
             contentPadding = PaddingValues(start = style.startPadding, end = maxOf(style.startPadding, 24.dp), top = 4.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(style.cardSpacing)
@@ -195,6 +234,7 @@ private fun ChannelsRow(
                     }
                 )
             }
+        }
         }
     }
 }
@@ -372,8 +412,10 @@ private fun SportsRow(
         actions.openFullscreen()
     }
     fun openPage(game: SportsWatchGame) = actions.openGame(game.event.id)
-    Column(modifier = modifier.fillMaxWidth()) {
+    // One stop for focus: coming back to the row (from the side menu) lands on the card you were on.
+    Column(modifier = modifier.focusRestorer().focusGroup().fillMaxWidth()) {
         RowTitle(title, style)
+        HomeRowScroll(style.startPadding) {
         LazyRow(
             contentPadding = PaddingValues(start = style.startPadding, end = maxOf(style.startPadding, 24.dp), top = 4.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(style.cardSpacing)
@@ -405,6 +447,7 @@ private fun SportsRow(
                     TallGameCard(game, width, height, now, use24h, sportsSettings.hideScores, playingHere, onClick, onLongClick, upcoming)
                 }
             }
+        }
         }
     }
 }

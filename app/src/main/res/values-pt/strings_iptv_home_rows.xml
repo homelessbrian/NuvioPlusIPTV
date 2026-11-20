@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Linhas adicionadas ao Início"</string>
     <string name="home_rows_confirm_removed">"Linhas removidas do Início"</string>
     <string name="home_rows_confirm_changed">"Definições das linhas alteradas"</string>
+    <string name="home_rows_shape_step_title">"Forma dos cartões"</string>
+    <string name="home_rows_shape_step_subtitle">"O aspeto dos cartões desta fila. Pode alterar mais tarde nas opções da fila."</string>
+    <string name="home_rows_shape_landscape_hint">"Cartões largos: ideais para desporto (ténis, golfe, boxe e mais) e canais"</string>
+    <string name="home_rows_shape_portrait_hint">"Cartões altos, como cartazes de filmes"</string>
+    <string name="home_rows_shape_auto_hint">"Igual às restantes filas do início"</string>
+    <string name="home_rows_shape_recommended">"Recomendado"</string>
 </resources>

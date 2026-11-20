@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Рядки додано на головну"</string>
     <string name="home_rows_confirm_removed">"Рядки видалено з головної"</string>
     <string name="home_rows_confirm_changed">"Налаштування рядків змінено"</string>
+    <string name="home_rows_shape_step_title">"Форма карток"</string>
+    <string name="home_rows_shape_step_subtitle">"Як виглядають картки цього ряду. Це можна змінити пізніше в налаштуваннях ряду."</string>
+    <string name="home_rows_shape_landscape_hint">"Широкі картки: найкраще для спорту (теніс, гольф, бокс тощо) і каналів"</string>
+    <string name="home_rows_shape_portrait_hint">"Високі картки, як постери фільмів"</string>
+    <string name="home_rows_shape_auto_hint">"Як решта рядів головного екрана"</string>
+    <string name="home_rows_shape_recommended">"Рекомендовано"</string>
 </resources>

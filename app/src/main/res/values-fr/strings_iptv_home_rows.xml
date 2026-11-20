@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Rangées ajoutées à l’Accueil"</string>
     <string name="home_rows_confirm_removed">"Rangées retirées de l’Accueil"</string>
     <string name="home_rows_confirm_changed">"Réglages des rangées modifiés"</string>
+    <string name="home_rows_shape_step_title">"Forme des cartes"</string>
+    <string name="home_rows_shape_step_subtitle">"L\'apparence des cartes de cette rangée. Vous pourrez la changer plus tard dans les options de la rangée."</string>
+    <string name="home_rows_shape_landscape_hint">"Cartes larges : idéales pour le sport (tennis, golf, boxe et plus) et les chaînes"</string>
+    <string name="home_rows_shape_portrait_hint">"Cartes hautes, comme des affiches de films"</string>
+    <string name="home_rows_shape_auto_hint">"Comme les autres rangées de votre accueil"</string>
+    <string name="home_rows_shape_recommended">"Recommandé"</string>
 </resources>

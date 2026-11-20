@@ -60,18 +60,25 @@ object VodLanguageTags {
         return BRACKETED.findAll(up).any { it.groupValues[1] in CODES }
     }
 
+    /** No sign the title is in another language. */
+    const val NONE = 0
+    /** Certainly in another language: "(EN Subs)", or a name written in another script. */
+    const val SURE = 1
+    /** Probably: a language label or group. Checked with TMDB first, and back on the lists if it's English. */
+    const val GUESS = 2
+
     /**
-     * A title whose provider label (one the provider puts in front of many titles, learned from
-     * its catalog: see [OnDemandDatabase.knownPrefixes]) is another language. A one-off "IT - …"
-     * is a film called It, not an Italian label.
+     * What a title's name says about its language ([NONE], [SURE] or [GUESS]). A provider label
+     * (one it puts in front of many titles, learned from its catalog: see
+     * [OnDemandDatabase.knownPrefixes]) only counts then: a one-off "IT - …" is a film called It.
      */
-    fun titleIsForeign(name: String): Boolean {
-        if (ENGLISH_SUBS.containsMatchIn(name)) return true
+    fun titleSignal(name: String): Int {
+        if (ENGLISH_SUBS.containsMatchIn(name)) return SURE
         // A name written mostly in another script ("火锅之王 (2022)").
         val letters = name.filter { it.isLetter() }
-        if (letters.isNotEmpty() && letters.count { isOtherScript(it) } * 2 > letters.length) return true
-        val seg = OnDemandDatabase.leadingSegment(name) ?: return false
-        if (seg !in OnDemandDatabase.knownPrefixes) return false
-        return seg.uppercase().split(NON_LETTERS).any { it.isNotEmpty() && (it in CODES || it in WORDS) }
+        if (letters.isNotEmpty() && letters.count { isOtherScript(it) } * 2 > letters.length) return SURE
+        val seg = OnDemandDatabase.leadingSegment(name) ?: return NONE
+        if (seg !in OnDemandDatabase.knownPrefixes) return NONE
+        return if (seg.uppercase().split(NON_LETTERS).any { it.isNotEmpty() && (it in CODES || it in WORDS) }) GUESS else NONE
     }
 }

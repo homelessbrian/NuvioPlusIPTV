@@ -76,8 +76,12 @@ class OnDemandViewModel @Inject constructor(
     private val trailerService: com.nuvio.tv.data.trailer.TrailerService,
     private val watchProgressRepository: com.nuvio.tv.domain.repository.WatchProgressRepository,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val layoutPrefs: com.nuvio.tv.data.local.LayoutPreferenceDataStore
 ) : ViewModel() {
+
+    /** Your poster provider's pattern for Home rows (Settings › Layout), or "" when none. */
+    @Volatile private var posterPattern: String = ""
 
     private val imdbIds = com.nuvio.tv.livetv.data.boundedCache<String, String>(2_000)
 
@@ -217,6 +221,16 @@ class OnDemandViewModel @Inject constructor(
     init {
         repository.start()
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { VodPictures.tidy(appContext) }
+        // A poster provider set in Nuvio (RPDB and the like) shows on On Demand cards too.
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(layoutPrefs.customPosterUrlPattern, layoutPrefs.customPosterEnabledScreens) { pattern, screens ->
+                com.nuvio.tv.core.poster.patternForScreen(pattern, com.nuvio.tv.core.poster.CustomPosterScreen.HOME, screens)
+            }.distinctUntilChanged().collect { p ->
+                if (p == posterPattern) return@collect
+                posterPattern = p
+                updateHomeRows()
+            }
+        }
         viewModelScope.launch { repository.version.collect { reload() } }
         // New genres from the background fill: refresh the lists, keep your place.
         viewModelScope.launch { repository.genreUpdates.drop(1).collect { refreshGenres() } }
@@ -349,13 +363,13 @@ class OnDemandViewModel @Inject constructor(
 
     /** Your own addon's poster when it has the title; otherwise the provider's. */
     suspend fun posterFor(item: VodItem): String? {
-        posters[item.uid]?.let { return it }
+        posters[item.uid]?.let { return withProvider(item, it) }
         // "Use posters from my addons" off: the provider's image, no lookups at all.
         if (!settings.value.onDemandAddonPosters) return item.icon
         // Remembered from an earlier visit (kept between app starts).
         repository.cachedPoster(item)?.let { (cached, checked) ->
             val fresh = System.currentTimeMillis() - checked < WEEK_MS
-            if (cached.isNotBlank()) { posters[item.uid] = cached; return cached }
+            if (cached.isNotBlank()) { posters[item.uid] = cached; return withProvider(item, cached) }
             if (fresh) return item.icon
         }
         // The provider's TMDB id, when it sends one, says exactly which title it is: same-named
@@ -373,14 +387,19 @@ class OnDemandViewModel @Inject constructor(
         } else if (hit != null) noteMatch(item, hit, detailed = false)
         // Nothing found only because lookups were paused or your addons didn't answer: not
         // remembered as "no poster" (that kept the provider's picture for a week).
-        if (hit != null || answered) repository.cachePoster(item, hit?.meta?.poster ?: byId, hit?.meta?.name)
+        val raw = hit?.meta?.let { it.rawPosterUrl ?: it.poster }
+        if (hit != null || answered) repository.cachePoster(item, raw ?: byId, hit?.meta?.name)
         hit?.meta?.name?.let { names[item.uid] = it }
         // The same match carries the title's genres: keep them for "By genre".
         hit?.meta?.genres?.takeIf { it.isNotEmpty() }?.let { repository.fillGenres(item, it) }
-        val poster = hit?.meta?.poster ?: byId ?: item.icon
+        val poster = raw ?: byId ?: item.icon
         if (poster != null) posters[item.uid] = poster
-        return poster
+        return poster?.let { withProvider(item, it, hit?.meta) }
     }
+
+    /** [poster], or your poster provider's picture for the title when one is set (as on Home). */
+    private fun withProvider(item: VodItem, poster: String, matched: com.nuvio.tv.domain.model.MetaPreview? = null): String =
+        VodHomeIds.customPoster(item, matched ?: homeMatched[item.uid], posterPattern) ?: poster
 
     suspend fun targetFor(item: VodItem): OnDemandTarget {
         // Adult titles never open Nuvio's details page (which would put them in Continue watching).
@@ -715,7 +734,7 @@ class OnDemandViewModel @Inject constructor(
                 homeTried += item.uid
                 if (detailed) homeDetailed += item.uid
                 hit.meta.name.takeIf { it.isNotBlank() }?.let { names[item.uid] = it }
-                hit.meta.poster?.let { posters[item.uid] = it }
+                (hit.meta.rawPosterUrl ?: hit.meta.poster)?.let { posters[item.uid] = it }
                 VodHomeIds.rememberReal(item, hit.meta.id)
             }
             if (posters[item.uid] == null) {
@@ -737,7 +756,7 @@ class OnDemandViewModel @Inject constructor(
     // ============================================== On Demand rows on Nuvio's home screen
 
     /** One On Demand row added to Home: what it shows (see HomeLiveRow.source) and how many titles. */
-    data class HomeScreenRowSpec(val rowId: String, val source: String, val limit: Int, val name: String)
+    data class HomeScreenRowSpec(val rowId: String, val source: String, val limit: Int, val name: String, val wide: Boolean = false)
 
     @Volatile private var homeRowSpecs: List<HomeScreenRowSpec> = emptyList()
     private val homeRowKinds = ConcurrentHashMap<String, VodKind>()
@@ -829,7 +848,7 @@ class OnDemandViewModel @Inject constructor(
                     name = spec.name,
                     kind = kind,
                     items = items.map { item ->
-                        VodHomeIds.toMeta(item, homeMatched[item.uid], posters[item.uid] ?: icons[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name))
+                        VodHomeIds.toMeta(item, homeMatched[item.uid], posters[item.uid] ?: icons[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name), posterPattern, spec.wide)
                             .let { if (spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) it.copy(id = VodHomeIds.continueMetaId(item.uid)) else it }
                     },
                     hasMore = false,
@@ -856,7 +875,7 @@ class OnDemandViewModel @Inject constructor(
             kind = c.kind,
             items = items.map { item ->
                 val matched = homeMatched[item.uid]
-                VodHomeIds.toMeta(item, matched, posters[item.uid] ?: icons[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name))
+                VodHomeIds.toMeta(item, matched, posters[item.uid] ?: icons[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name), posterPattern)
             },
             hasMore = c.uid !in homeEnded,
             page = (items.size + HOME_PAGE - 1) / HOME_PAGE
@@ -958,7 +977,8 @@ class OnDemandViewModel @Inject constructor(
         homeHits[item.uid] = hit
         homeMatched[item.uid] = hit.meta
         if (detailed) homeDetailed += item.uid
-        hit.meta.poster?.let { posters[item.uid] = it; repository.cachePoster(item, it, hit.meta.name) }
+        // The title's own poster (your poster provider's is made from it when the card is drawn).
+        (hit.meta.rawPosterUrl ?: hit.meta.poster)?.let { posters[item.uid] = it; repository.cachePoster(item, it, hit.meta.name) }
         hit.meta.name.takeIf { it.isNotBlank() }?.let { names[item.uid] = it }
         hit.meta.genres.takeIf { it.isNotEmpty() && hit.addonBaseUrl != VodMatchJson.TMDB_SOURCE }?.let { repository.fillGenres(item, it) }
         noteMatch(item, hit, detailed)
@@ -1024,7 +1044,7 @@ class OnDemandViewModel @Inject constructor(
         val item = homeItem(metaId) ?: return null
         val t = targetFor(item) as? OnDemandTarget.Details ?: return null
         val isSeries = item.kind == VodKind.SERIES
-        val card = VodHomeIds.toMeta(item, homeMatched[uid], posters[item.uid], nameFor(item))
+        val card = VodHomeIds.toMeta(item, homeMatched[uid], posters[item.uid], nameFor(item), posterPattern)
         val meta = card.copy(
             id = t.itemId,
             type = if (isSeries) com.nuvio.tv.domain.model.ContentType.SERIES else com.nuvio.tv.domain.model.ContentType.MOVIE,

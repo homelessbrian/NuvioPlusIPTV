@@ -106,4 +106,10 @@
     <string name="home_rows_confirm_added">Home rows added</string>
     <string name="home_rows_confirm_removed">Home rows removed</string>
     <string name="home_rows_confirm_changed">Home row settings changed</string>
+    <string name="home_rows_shape_step_title">"Card shape"</string>
+    <string name="home_rows_shape_step_subtitle">"How this row\'s cards look. You can change it later in the row\'s options."</string>
+    <string name="home_rows_shape_landscape_hint">"Wide cards: best for sports (tennis, golf, boxing and more) and channels"</string>
+    <string name="home_rows_shape_portrait_hint">"Tall cards, like movie posters"</string>
+    <string name="home_rows_shape_auto_hint">"Matches the rest of your Home rows"</string>
+    <string name="home_rows_shape_recommended">"Recommended"</string>
 </resources>

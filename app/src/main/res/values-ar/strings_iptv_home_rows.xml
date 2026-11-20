@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"تمت إضافة صفوف إلى الرئيسية"</string>
     <string name="home_rows_confirm_removed">"تمت إزالة صفوف من الرئيسية"</string>
     <string name="home_rows_confirm_changed">"تم تغيير إعدادات الصفوف"</string>
+    <string name="home_rows_shape_step_title">"شكل البطاقة"</string>
+    <string name="home_rows_shape_step_subtitle">"شكل بطاقات هذا الصف. يمكنك تغييره لاحقًا من خيارات الصف."</string>
+    <string name="home_rows_shape_landscape_hint">"بطاقات عريضة: الأفضل للرياضة (التنس والغولف والملاكمة وغيرها) وللقنوات"</string>
+    <string name="home_rows_shape_portrait_hint">"بطاقات طويلة، مثل ملصقات الأفلام"</string>
+    <string name="home_rows_shape_auto_hint">"مثل بقية صفوف الشاشة الرئيسية"</string>
+    <string name="home_rows_shape_recommended">"موصى به"</string>
 </resources>

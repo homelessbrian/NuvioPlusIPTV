@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Filas añadidas a Inicio"</string>
     <string name="home_rows_confirm_removed">"Filas quitadas de Inicio"</string>
     <string name="home_rows_confirm_changed">"Ajustes de filas cambiados"</string>
+    <string name="home_rows_shape_step_title">"Forma de las tarjetas"</string>
+    <string name="home_rows_shape_step_subtitle">"Cómo se ven las tarjetas de esta fila. Puedes cambiarlo luego en las opciones de la fila."</string>
+    <string name="home_rows_shape_landscape_hint">"Tarjetas anchas: lo mejor para deportes (tenis, golf, boxeo y más) y canales"</string>
+    <string name="home_rows_shape_portrait_hint">"Tarjetas altas, como pósteres de películas"</string>
+    <string name="home_rows_shape_auto_hint">"Igual que el resto de filas de tu inicio"</string>
+    <string name="home_rows_shape_recommended">"Recomendado"</string>
 </resources>

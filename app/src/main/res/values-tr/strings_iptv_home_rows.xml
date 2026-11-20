@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Ana sayfaya satır eklendi"</string>
     <string name="home_rows_confirm_removed">"Ana sayfadan satır kaldırıldı"</string>
     <string name="home_rows_confirm_changed">"Satır ayarları değişti"</string>
+    <string name="home_rows_shape_step_title">"Kart şekli"</string>
+    <string name="home_rows_shape_step_subtitle">"Bu satırdaki kartların görünümü. Daha sonra satırın seçeneklerinden değiştirebilirsiniz."</string>
+    <string name="home_rows_shape_landscape_hint">"Geniş kartlar: spor (tenis, golf, boks ve daha fazlası) ve kanallar için en iyisi"</string>
+    <string name="home_rows_shape_portrait_hint">"Uzun kartlar, film afişleri gibi"</string>
+    <string name="home_rows_shape_auto_hint">"Ana ekranınızdaki diğer satırlarla aynı"</string>
+    <string name="home_rows_shape_recommended">"Önerilen"</string>
 </resources>

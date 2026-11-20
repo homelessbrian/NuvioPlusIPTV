@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Baris ditambahkan ke Beranda"</string>
     <string name="home_rows_confirm_removed">"Baris dihapus dari Beranda"</string>
     <string name="home_rows_confirm_changed">"Pengaturan baris diubah"</string>
+    <string name="home_rows_shape_step_title">"Bentuk kartu"</string>
+    <string name="home_rows_shape_step_subtitle">"Tampilan kartu di baris ini. Bisa diubah nanti di opsi baris."</string>
+    <string name="home_rows_shape_landscape_hint">"Kartu lebar: paling cocok untuk olahraga (tenis, golf, tinju, dan lainnya) dan saluran"</string>
+    <string name="home_rows_shape_portrait_hint">"Kartu tinggi, seperti poster film"</string>
+    <string name="home_rows_shape_auto_hint">"Sama seperti baris Beranda lainnya"</string>
+    <string name="home_rows_shape_recommended">"Disarankan"</string>
 </resources>

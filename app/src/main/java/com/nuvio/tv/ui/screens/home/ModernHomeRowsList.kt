@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusDirection
@@ -459,7 +460,12 @@ internal fun ModernHomeRowsList(
                             cornerRadius = posterCardCornerRadius,
                             titleStyle = androidx.tv.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
                             titleBottom = 14.dp
-                        )
+                        ),
+                        // The row Home goes back to (from the side menu, or back from a page) is
+                        // this one when a card here was the last one highlighted.
+                        modifier = Modifier
+                            .focusRequester(rowFocusRequesters.getOrPut(row.key) { FocusRequester() })
+                            .onFocusChanged { if (it.hasFocus && activeRowKey.value != row.key) onActiveRowKeyChange(row.key) }
                     )
                 } else
                 ModernRowSection(

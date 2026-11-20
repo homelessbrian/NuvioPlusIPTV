@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Reihen zur Startseite hinzugefügt"</string>
     <string name="home_rows_confirm_removed">"Reihen von der Startseite entfernt"</string>
     <string name="home_rows_confirm_changed">"Reiheneinstellungen geändert"</string>
+    <string name="home_rows_shape_step_title">"Kartenform"</string>
+    <string name="home_rows_shape_step_subtitle">"So sehen die Karten dieser Zeile aus. Du kannst es später in den Optionen der Zeile ändern."</string>
+    <string name="home_rows_shape_landscape_hint">"Breite Karten: am besten für Sport (Tennis, Golf, Boxen und mehr) und Sender"</string>
+    <string name="home_rows_shape_portrait_hint">"Hohe Karten, wie Filmplakate"</string>
+    <string name="home_rows_shape_auto_hint">"Wie die übrigen Zeilen deines Startbildschirms"</string>
+    <string name="home_rows_shape_recommended">"Empfohlen"</string>
 </resources>

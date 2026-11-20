@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Строки добавлены на главную"</string>
     <string name="home_rows_confirm_removed">"Строки удалены с главной"</string>
     <string name="home_rows_confirm_changed">"Настройки строк изменены"</string>
+    <string name="home_rows_shape_step_title">"Форма карточек"</string>
+    <string name="home_rows_shape_step_subtitle">"Как выглядят карточки этого ряда. Это можно изменить позже в настройках ряда."</string>
+    <string name="home_rows_shape_landscape_hint">"Широкие карточки: лучше всего для спорта (теннис, гольф, бокс и другое) и каналов"</string>
+    <string name="home_rows_shape_portrait_hint">"Высокие карточки, как постеры фильмов"</string>
+    <string name="home_rows_shape_auto_hint">"Как остальные ряды главного экрана"</string>
+    <string name="home_rows_shape_recommended">"Рекомендуется"</string>
 </resources>

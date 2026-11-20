@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Righe aggiunte alla Home"</string>
     <string name="home_rows_confirm_removed">"Righe rimosse dalla Home"</string>
     <string name="home_rows_confirm_changed">"Impostazioni delle righe modificate"</string>
+    <string name="home_rows_shape_step_title">"Forma delle schede"</string>
+    <string name="home_rows_shape_step_subtitle">"L\'aspetto delle schede di questa riga. Potrai cambiarlo più tardi nelle opzioni della riga."</string>
+    <string name="home_rows_shape_landscape_hint">"Schede larghe: ideali per lo sport (tennis, golf, boxe e altro) e i canali"</string>
+    <string name="home_rows_shape_portrait_hint">"Schede alte, come locandine di film"</string>
+    <string name="home_rows_shape_auto_hint">"Come le altre righe della Home"</string>
+    <string name="home_rows_shape_recommended">"Consigliato"</string>
 </resources>

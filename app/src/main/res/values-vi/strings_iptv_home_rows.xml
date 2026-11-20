@@ -77,4 +77,10 @@
     <string name="home_rows_confirm_added">"Đã thêm hàng vào Trang chủ"</string>
     <string name="home_rows_confirm_removed">"Đã xóa hàng khỏi Trang chủ"</string>
     <string name="home_rows_confirm_changed">"Đã đổi cài đặt hàng"</string>
+    <string name="home_rows_shape_step_title">"Hình dạng thẻ"</string>
+    <string name="home_rows_shape_step_subtitle">"Giao diện thẻ của hàng này. Bạn có thể đổi sau trong tùy chọn của hàng."</string>
+    <string name="home_rows_shape_landscape_hint">"Thẻ rộng: tốt nhất cho thể thao (quần vợt, golf, quyền anh và hơn thế) và kênh"</string>
+    <string name="home_rows_shape_portrait_hint">"Thẻ cao, giống áp phích phim"</string>
+    <string name="home_rows_shape_auto_hint">"Giống các hàng khác trên Màn hình chính"</string>
+    <string name="home_rows_shape_recommended">"Đề xuất"</string>
 </resources>

@@ -70,6 +70,7 @@ class OnDemandLanguages @Inject constructor(
         if (sweepJob?.isActive == true) return
         sweepJob = scope.launch(com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
             var marked = 0
+            var firstBatch = true
             try {
                 while (isActive && enabled()) {
                     com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
@@ -86,6 +87,10 @@ class OnDemandLanguages @Inject constructor(
                         if (found.isEmpty()) return@launch
                         marked += runCatching { db.saveLanguages(found) }.getOrDefault(0)
                     }
+                    // The first batch holds the titles set aside on a guess: lists reload right
+                    // away, so an English one among them is back in about a minute.
+                    if (firstBatch && marked > 0) { onMarked(); marked = 0 }
+                    firstBatch = false
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

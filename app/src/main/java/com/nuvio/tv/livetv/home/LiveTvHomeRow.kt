@@ -341,6 +341,7 @@ private fun LiveTvHomeRowContent(
                     LiveText(title, size = 16.sp, weight = FontWeight.SemiBold)
                 }
             }
+            HomeRowScroll(startPadding) {
             LazyRow(
                 state = listState,
                 contentPadding = PaddingValues(start = startPadding, end = maxOf(startPadding, 24.dp)),
@@ -383,6 +384,7 @@ private fun LiveTvHomeRowContent(
                         }
                     )
                 }
+            }
             }
         }
     }
