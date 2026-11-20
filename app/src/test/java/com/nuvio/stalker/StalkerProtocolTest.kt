@@ -185,6 +185,40 @@ class StalkerProtocolTest {
         assertEquals((24 * 31).toString(), period)
     }
 
+    @Test fun aBrokenFirstLoginPathFallsBackToTheNextOneAndErrorsSayWhatHappened() = runBlocking {
+        val tried = mutableListOf<String>()
+        val portal = StalkerClient(config, StalkerTransport { url, _ ->
+            val parsed = Url(url)
+            tried += parsed.encodedPath
+            if (parsed.encodedPath.endsWith("/portal.php")) return@StalkerTransport StalkerHttpResponse(500, "oops", finalUrl = url)
+            StalkerHttpResponse(200, when (parsed.parameters["action"]) {
+                "handshake" -> """{"js":{"token":"fixture-session"}}"""
+                "get_profile" -> """{"js":{"id":"fixture-account","status":0}}"""
+                else -> """{"js":[{"id":"1","title":"News"}]}"""
+            }, finalUrl = url)
+        }, { now })
+        assertEquals(listOf("1"), portal.liveGroups().map { it.id })
+        assertTrue(tried.any { it.endsWith("/server/load.php") })
+
+        val broken = StalkerClient(config, StalkerTransport { url, _ -> StalkerHttpResponse(502, "bad gateway", finalUrl = url) }, { now })
+        val error = assertFailsWith<StalkerException> { broken.authenticate() }
+        assertEquals(StalkerError.SERVER_ERROR, error.error)
+        assertEquals("The Stalker portal answered with an error (code 502).", error.message)
+    }
+
+    @Test fun aPortalHandingOffToAnotherServerIsAccepted() = runBlocking {
+        val client = StalkerClient(config, StalkerTransport { url, _ ->
+            val parsed = Url(url)
+            val handedOff = "https://lb2.example.test/stalker_portal/server/load.php?" + parsed.encodedQuery
+            StalkerHttpResponse(200, when (parsed.parameters["action"]) {
+                "handshake" -> """{"js":{"token":"fixture-session"}}"""
+                "get_profile" -> """{"js":{"id":"fixture-account","status":0}}"""
+                else -> """{"js":[{"id":"1","title":"News"}]}"""
+            }, finalUrl = handedOff)
+        }, { now })
+        assertEquals(listOf("1"), client.liveGroups().map { it.id })
+    }
+
     @Test fun canonicalDatesAndProviderParserAreStrict() {
         assertEquals(0L, StalkerWire.timestamp("1970-01-01T00:00:00Z", "UTC", null))
         assertEquals(0L, StalkerWire.timestamp("1970-01-01T01:00:00+01:00", "UTC", null))

@@ -247,7 +247,7 @@ class StalkerClient(
                 active = acquireSession()
             } else {
                 if (response.status in setOf(404, 405, 501)) throw StalkerException(StalkerError.UNSUPPORTED)
-                if (response.status !in 200..299) throw StalkerException(StalkerError.NETWORK)
+                if (response.status !in 200..299) throw StalkerException(StalkerError.SERVER_ERROR, response.status)
                 response.error?.let { throw StalkerException(it) }
                 if (emitted == 0 && skippedForTime > 0) throw StalkerException(StalkerError.GUIDE_TIMEZONE_UNSUPPORTED)
                 return
@@ -409,7 +409,7 @@ class StalkerClient(
         suspend fun fetch(page: Int): JsonElement {
             val parameters = mapOf("type" to type, "action" to action, "p" to page.toString()) + extra
             return try { authenticated(parameters) } catch (e: StalkerException) {
-                if (e.error != StalkerError.NETWORK) throw e
+                if (e.error !in RETRYABLE) throw e
                 delay(PAGE_RETRY_DELAY_MS)
                 authenticated(parameters)
             }
@@ -493,6 +493,12 @@ class StalkerClient(
             val supplied = StalkerWire.configUrl(config)
             val candidates = StalkerWire.endpoints(supplied)
             var failure: StalkerException? = null
+            fun keep(e: StalkerException) {
+                val rank = { x: StalkerException? -> x?.let { DISCOVERY_RANK.indexOf(it.error).takeIf { i -> i >= 0 } } ?: Int.MAX_VALUE }
+                if (rank(e) < rank(failure)) failure = e
+            }
+            // Each login path is tried before giving up: a portal whose portal.php answers with an
+            // error, a refusal or a redirect loop may still work at server/load.php.
             for (endpoint in candidates) {
                 checkGeneration(expectedGeneration)
                 try {
@@ -504,12 +510,12 @@ class StalkerClient(
                     }
                     return@withLock authenticated
                 } catch (_: EndpointMissing) {
-                    failure = StalkerException(StalkerError.UNSUPPORTED)
+                    keep(StalkerException(StalkerError.UNSUPPORTED))
                 } catch (_: AuthenticationFailure) {
-                    throw StalkerException(StalkerError.AUTHENTICATION_FAILED)
+                    keep(StalkerException(StalkerError.AUTHENTICATION_FAILED))
                 } catch (e: StalkerException) {
-                    if (e.error !in setOf(StalkerError.INVALID_RESPONSE, StalkerError.UNSUPPORTED)) throw e
-                    failure = e
+                    if (e.error in HOST_UNREACHABLE || e.error !in DISCOVERY_RANK) throw e
+                    keep(e)
                 }
             }
             throw failure ?: StalkerException(StalkerError.UNSUPPORTED)
@@ -598,7 +604,7 @@ class StalkerClient(
         checkFinalUrl(endpoint, response.finalUrl)
         if (response.status in setOf(401, 403)) throw AuthenticationFailure()
         if (response.status in setOf(404, 405, 501)) throw EndpointMissing()
-        if (response.status !in 200..299) throw StalkerException(StalkerError.NETWORK)
+        if (response.status !in 200..299) throw StalkerException(StalkerError.SERVER_ERROR, response.status)
         if (response.body.length > limits.maxResponseChars) throw StalkerException(StalkerError.TOO_LARGE)
         val trimmed = response.body.trim()
         if (isAuthMessage(trimmed)) throw AuthenticationFailure()
@@ -633,9 +639,9 @@ class StalkerClient(
 
     private fun checkFinalUrl(endpoint: String, finalUrl: String?) {
         finalUrl?.let { redirected ->
-            if (!StalkerWire.sameOrigin(Url(endpoint), StalkerWire.httpUrl(redirected, StalkerError.INVALID_RESPONSE))) {
-                throw StalkerException(StalkerError.INVALID_RESPONSE)
-            }
+            // A portal may hand us on to another server (the transport only follows safe hand-offs).
+            val target = StalkerWire.httpUrl(redirected, StalkerError.INVALID_RESPONSE)
+            if (Url(endpoint).protocol.name == "https" && target.protocol.name != "https") throw StalkerException(StalkerError.INVALID_RESPONSE)
         }
     }
 
@@ -655,6 +661,13 @@ class StalkerClient(
         const val PARALLEL_PAGES = 4
         const val PAGE_RETRY_DELAY_MS = 750L
         const val VOD_LIST_REUSE_MS = 10 * 60_000L
+        val RETRYABLE = setOf(StalkerError.NETWORK, StalkerError.TIMED_OUT, StalkerError.SERVER_ERROR)
+        // Same address for every login path: no point trying the others.
+        val HOST_UNREACHABLE = setOf(StalkerError.PORTAL_NOT_FOUND, StalkerError.CONNECTION_FAILED,
+            StalkerError.TIMED_OUT, StalkerError.SECURE_CONNECTION_FAILED)
+        // When no login path works, the most telling failure is reported.
+        val DISCOVERY_RANK = listOf(StalkerError.AUTHENTICATION_FAILED, StalkerError.SERVER_ERROR,
+            StalkerError.TOO_MANY_REDIRECTS, StalkerError.NETWORK, StalkerError.INVALID_RESPONSE, StalkerError.UNSUPPORTED)
     }
 
     private fun checkNotInvalidated() { if (invalidated) throw StalkerException(StalkerError.STALE_SESSION) }

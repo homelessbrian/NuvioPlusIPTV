@@ -262,10 +262,12 @@ enum class StalkerError {
     INVALID_CONFIG, NETWORK, INVALID_RESPONSE, AUTHENTICATION_REQUIRED, ACCOUNT_BLOCKED,
     DEVICE_AUTH_REQUIRED, AUTHENTICATION_FAILED, UNSUPPORTED, AMBIGUOUS_MEDIA_FILES, PAGINATION_FAILED,
     TOO_LARGE, STALE_SESSION, LINK_UNAVAILABLE, GUIDE_TIMEZONE_UNSUPPORTED,
+    // What kind of "can't reach it": each gets its own message so a report says which one it was.
+    PORTAL_NOT_FOUND, CONNECTION_FAILED, TIMED_OUT, SECURE_CONNECTION_FAILED, SERVER_ERROR, TOO_MANY_REDIRECTS,
 }
 
 /** Deliberately contains no server text, URLs, identifiers, response bodies or nested causes. */
-class StalkerException(val error: StalkerError) : Exception(when (error) {
+class StalkerException(val error: StalkerError, val httpCode: Int? = null) : Exception(when (error) {
     StalkerError.INVALID_CONFIG -> "Check the Stalker portal address and provider-issued identity."
     StalkerError.NETWORK -> "The Stalker portal could not be reached."
     StalkerError.INVALID_RESPONSE -> "The Stalker portal returned an invalid response."
@@ -280,6 +282,12 @@ class StalkerException(val error: StalkerError) : Exception(when (error) {
     StalkerError.STALE_SESSION -> "The Stalker source changed while the request was running."
     StalkerError.LINK_UNAVAILABLE -> "The provider did not return a playable stream link."
     StalkerError.GUIDE_TIMEZONE_UNSUPPORTED -> "The guide needs a supported provider time zone."
+    StalkerError.PORTAL_NOT_FOUND -> "The Stalker portal address wasn't found. Check the address is typed correctly."
+    StalkerError.CONNECTION_FAILED -> "Couldn't connect to the Stalker portal. Check the address and port; the portal may be down or blocked on this network."
+    StalkerError.TIMED_OUT -> "The Stalker portal took too long to answer. Try again later."
+    StalkerError.SECURE_CONNECTION_FAILED -> "The Stalker portal's secure (https) connection failed. Try the address with http:// instead."
+    StalkerError.SERVER_ERROR -> if (httpCode != null) "The Stalker portal answered with an error (code $httpCode)." else "The Stalker portal answered with an error."
+    StalkerError.TOO_MANY_REDIRECTS -> "The Stalker portal kept redirecting and never answered."
 })
 
 data class StalkerLimits(

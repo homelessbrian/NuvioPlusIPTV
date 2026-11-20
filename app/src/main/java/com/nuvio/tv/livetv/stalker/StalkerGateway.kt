@@ -284,9 +284,17 @@ class StalkerGateway @Inject constructor(
                 try {
                     val location = response.header("Location")
                     if (response.code in setOf(301, 302, 303, 307, 308)) {
-                        if (hop == 5 || location.isNullOrBlank()) throw StalkerException(StalkerError.NETWORK)
-                        val target = URI(address).resolve(location)
-                        if (!sameOrigin(origin, target)) throw StalkerException(StalkerError.NETWORK)
+                        if (location.isNullOrBlank()) throw StalkerException(StalkerError.INVALID_RESPONSE)
+                        if (hop == 5) throw StalkerException(StalkerError.TOO_MANY_REDIRECTS)
+                        val target = try { URI(address).resolve(location) } catch (_: Exception) {
+                            throw StalkerException(StalkerError.INVALID_RESPONSE)
+                        }
+                        // Many portals hand the box on to another server (load balancing, a new domain);
+                        // MAG boxes follow, so do we. Never to a non-web address, a login-in-the-link
+                        // address, or from https down to http.
+                        if (!sameOrigin(origin, target) && !portalHandOff(URI(address), target)) {
+                            throw StalkerException(StalkerError.INVALID_RESPONSE)
+                        }
                         address = target.toString()
                     } else {
                         checkRouting(routing)
@@ -310,7 +318,7 @@ class StalkerGateway @Inject constructor(
         continuation.invokeOnCancellation { cancel() }
         enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (continuation.isActive) continuation.resumeWithException(StalkerException(StalkerError.NETWORK))
+                if (continuation.isActive) continuation.resumeWithException(StalkerException(connectionError(e)))
             }
             override fun onResponse(call: Call, response: Response) {
                 if (continuation.isActive) continuation.resume(response) { _, value, _ -> value.close() }
@@ -354,6 +362,19 @@ class StalkerGateway @Inject constructor(
             "VPN user profile is not ready. Reopen the app before using a Stalker portal.",
             "Could not save the Stalker channel cache.",
         )
+        /** Which kind of connection failure, without any address or server text. */
+        internal fun connectionError(e: IOException): StalkerError = when (e) {
+            is java.net.UnknownHostException -> StalkerError.PORTAL_NOT_FOUND
+            is java.net.ConnectException, is java.net.NoRouteToHostException, is java.net.PortUnreachableException -> StalkerError.CONNECTION_FAILED
+            is java.net.SocketTimeoutException, is java.io.InterruptedIOException -> StalkerError.TIMED_OUT
+            is javax.net.ssl.SSLException -> StalkerError.SECURE_CONNECTION_FAILED
+            else -> StalkerError.NETWORK
+        }
+
+        internal fun portalHandOff(from: URI, target: URI): Boolean =
+            target.scheme?.lowercase() in setOf("http", "https") && !target.host.isNullOrBlank() &&
+                target.userInfo == null && !(from.scheme.equals("https", true) && target.scheme.equals("http", true))
+
         internal fun sameOrigin(origin: URI, target: URI): Boolean =
             target.scheme?.lowercase() in setOf("http", "https") &&
                 origin.scheme.equals(target.scheme, true) && origin.host.equals(target.host, true) &&

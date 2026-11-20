@@ -184,10 +184,11 @@ class StalkerSecuritySimulationTest {
     }
 
     @Test
-    fun crossOriginOrDowngradedApiResponseIsRejected() = runBlocking {
+    fun downgradedApiResponseIsRejected() = runBlocking {
+        // Hand-offs to another https server are allowed (portals load-balance); https down to http never is.
         for (finalUrl in listOf(
-            "https://cdn.example.invalid/portal.php",
             "http://portal.example.invalid/installation/portal.php",
+            "http://cdn.example.invalid/portal.php",
         )) {
             val portal = Portal { token("fixture-token").copy(finalUrl = finalUrl) }
             val error = failure { StalkerClient(config, portal, { 0L }).authenticate() }
