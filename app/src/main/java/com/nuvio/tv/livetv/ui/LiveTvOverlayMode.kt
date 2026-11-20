@@ -481,7 +481,7 @@ private fun OverlayModeContent(
                     .background(Color.Black.copy(alpha = 0.55f))
                     .padding(16.dp)
             ) {
-                LiveText(p.title, size = osp(20f), weight = FontWeight.Bold, marquee = true, modifier = Modifier.fillMaxWidth())
+                LiveText(titleMarks(p.title).title, size = osp(20f), weight = FontWeight.Bold, marquee = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(6.dp))
                 val live = now >= p.startMs && now < p.stopMs
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -507,7 +507,7 @@ private fun OverlayModeContent(
         val first = remember { FocusRequester() }
         val bell = com.nuvio.tv.livetv.calendar.rememberLiveBell(p, ch)
         LiveDialog(onDismiss = { futurePrompt = null; activity++ }, width = 460.dp) {
-            LiveText(p.title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
+            LiveText(titleMarks(p.title).title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
             LiveText(
                 "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)} · ${ch.name}",
                 color = NuvioTheme.colors.TextSecondary, size = osp(13f)
@@ -559,7 +559,7 @@ private fun OverlayModeContent(
             if (seriesList.any { it.channel.key == ch.key && it.norm == n }) "Stop recording series" else "Record series"
         }
         LiveDialog(onDismiss = { recordMenu = null; activity++ }, width = 460.dp) {
-            LiveText(p.title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
+            LiveText(titleMarks(p.title).title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
             LiveText(
                 "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)} · ${ch.name}",
                 color = NuvioTheme.colors.TextSecondary, size = osp(13f)
@@ -628,7 +628,7 @@ private fun OverlayModeContent(
                     false
                 }
             ) {
-                LiveText(p.title, size = osp(22f), weight = FontWeight.Bold, maxLines = 2)
+                LiveText(titleMarks(p.title).title, size = osp(22f), weight = FontWeight.Bold, maxLines = 2)
                 Spacer(Modifier.height(6.dp))
                 val meta = listOfNotNull(
                     "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)}",
@@ -780,7 +780,7 @@ private fun ChannelsPanel(
                             if (ch.key in favorites) LiveText("  ★", color = if (onSolid) Color.White else NuvioTheme.colors.Rating, size = osp(12f))
                         }
                         LiveText(
-                            p?.title ?: "No program information",
+                            p?.title?.let { titleMarks(it).title } ?: "No program information",
                             color = when {
                                 p == null -> if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextTertiary
                                 else -> accent
@@ -929,7 +929,7 @@ private fun SchedulePreview(channel: LiveChannel, list: List<EpgProgram>, now: L
             Row(modifier = Modifier.fillMaxWidth().height(orow(36f)).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                 LiveText(formatClock(p.startMs, use24h), color = color, size = osp(14f), weight = weight, modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
                 Spacer(Modifier.width(10.dp))
-                LiveText(p.title, color = color, size = osp(14f), weight = weight, modifier = Modifier.weight(1f))
+                LiveText(titleMarks(p.title).title, color = color, size = osp(14f), weight = weight, modifier = Modifier.weight(1f))
                 if (live) {
                     Spacer(Modifier.width(6.dp))
                     LiveText(
@@ -1007,7 +1007,7 @@ private fun SchedulePanel(
                         ) {
                             LiveText(formatClock(p.startMs, use24h), color = colors.text, size = osp(14f), weight = if (live) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
                             Spacer(Modifier.width(10.dp))
-                            LiveText(p.title, color = colors.text, size = osp(14f), weight = if (live) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f), marquee = isFocused)
+                            LiveText(titleMarks(p.title).title, color = colors.text, size = osp(14f), weight = if (live) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f), marquee = isFocused)
                             if (live && channel.key == playingKey) {
                                 val onSolid = isFocused && focused && LocalLiveSolidHighlight.current
                                 Icon(
@@ -1261,7 +1261,7 @@ private fun BackupFlyoutContent(
                             marquee = isFocused && i == restingIndex
                         )
                         LiveText(
-                            p?.title ?: "No program information",
+                            p?.title?.let { titleMarks(it).title } ?: "No program information",
                             color = if (p == null) (if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextTertiary) else accent,
                             size = osp(13f),
                             marquee = isFocused && i == restingIndex

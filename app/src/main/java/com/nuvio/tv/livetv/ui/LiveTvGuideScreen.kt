@@ -3751,13 +3751,13 @@ private fun ChannelContextMenu(
             if (canRestart && (program == null || (now >= program.startMs && now < program.stopMs))) item {
                 MenuItem(restartLabel, onClick = onRestart)
             }
-            if (canCatchup) item { MenuItem("Play from archive: ${program!!.title}", onClick = { onCatchup(program!!) }) }
+            if (canCatchup) item { MenuItem("Play from archive: ${titleMarks(program!!.title).title}", onClick = { onCatchup(program!!) }) }
             if (program != null || streamProgram != null) {
                 item { MenuHeader("This show") }
                 if (program != null) item { MenuItem("Program info", Modifier.focusRequester(infoItem), onClick = onProgramInfo) }
                 if (bell != null) item { MenuItem(bell.label, onClick = { bell.toggle(); onDismiss() }) }
                 if (streamProgram != null) {
-                    item { MenuItem("Find & stream \"${streamProgram.title}\" in Nuvio", onClick = { onFindInNuvio(streamProgram) }) }
+                    item { MenuItem("Find & stream \"${titleMarks(streamProgram.title).title}\" in Nuvio", onClick = { onFindInNuvio(streamProgram) }) }
                 }
                 // Upcoming show: Remind me (or Cancel reminder), right in the long-press menu.
                 if (program != null && program.startMs > now) item {
@@ -4467,7 +4467,7 @@ private fun ProgramInfoDialog(
     val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { (16.sp * 1.3f).toPx() } * 3
     LiveDialog(onDismiss = onDismiss, width = 640.dp) {
       Column(Modifier.dpadScrollsText(scroll, scope, stepPx)) {
-        LiveText(p?.title ?: target.channel.name, size = 24.sp, weight = FontWeight.Bold, maxLines = 2)
+        LiveText(p?.title?.let { titleMarks(it).title } ?: target.channel.name, size = 24.sp, weight = FontWeight.Bold, maxLines = 2)
         Spacer(Modifier.height(6.dp))
         if (block != null) {
             val meta = listOfNotNull(

@@ -312,6 +312,8 @@ internal fun LiveTvPlayerPanel(
                 }
 
                 // ---- middle: channel line, title, description, the controls and progress
+                // The guide's LIVE / NEW marks come off the title (NEW shows as a tag instead).
+                val marks = remember(title) { titleMarks(title) }
                 Column(Modifier.weight(1f).onSizeChanged { middleHeight = with(density) { it.height.toDp() } }) {
                     if (showChannel || showTags || groupName != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -344,6 +346,8 @@ internal fun LiveTvPlayerPanel(
                                 }
                                 // The score first, so a long line of chips can't push it off the bar.
                                 if (mode == PanelMode.LIVE) com.nuvio.tv.livetv.sports.SportsScoreTag(channel.key)
+                                // A first showing: the guide's NEW mark as a tag, not left in the title.
+                                if (marks.isNew && mode == PanelMode.LIVE) { Spacer(Modifier.width(6.dp)); GlassChip("NEW") }
                                 resolution?.let { Spacer(Modifier.width(6.dp)); GlassChip(it.uppercase()) }
                                 audioBadge?.let { Spacer(Modifier.width(6.dp)); GlassChip(it) }
                                 if (catchupAvailable && mode == PanelMode.LIVE) { Spacer(Modifier.width(6.dp)); GlassChip("CATCH-UP") }
@@ -351,7 +355,7 @@ internal fun LiveTvPlayerPanel(
                         }
                         Spacer(Modifier.height(4.dp))
                     }
-                    LiveText(title, size = 20.sp, weight = FontWeight.ExtraBold, maxLines = 1, marquee = true, color = colors.TextPrimary)
+                    LiveText(marks.title, size = 20.sp, weight = FontWeight.ExtraBold, maxLines = 1, marquee = true, color = colors.TextPrimary)
                     val line = listOfNotNull(meta.takeIf { it.isNotBlank() }, desc).joinToString("  ·  ")
                     if (on(BarPart.DESCRIPTION) && (line.isNotEmpty() || browsing)) {
                         Spacer(Modifier.height(2.dp))
@@ -755,7 +759,7 @@ private fun RecentRow(recent: List<PanelRecent>, focus: Int?, showClear: Boolean
                     // No logo: the name (cut short; highlighted, it scrolls).
                     else LiveText(r.channel.name, size = 12.sp, weight = FontWeight.Bold, color = fg, marquee = f)
                     Spacer(Modifier.height(3.dp))
-                    LiveText(r.title ?: r.channel.name, size = 10.sp, color = fgDim, marquee = f)
+                    LiveText(r.title?.let { titleMarks(it).title } ?: r.channel.name, size = 10.sp, color = fgDim, marquee = f)
                 }
             }
         }

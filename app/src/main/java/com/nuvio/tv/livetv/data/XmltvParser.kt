@@ -228,7 +228,7 @@ object XmltvParser {
             // show, and very long descriptions are cut: a big guide held several hundred thousand
             // listings in memory, which is what made huge playlists freeze.
             title = title?.trim().orEmpty().ifBlank { "No information" }
-                .let { if (newTag && !NEW_IN_TITLE.containsMatchIn(it)) "$it (New)" else it }
+                .let { if (newTag && !saysNew(it)) "$it (New)" else it }
                 .let { if (it.length <= 80) it.intern() else it },
             description = fullDesc?.let { if (it.length > 800) it.take(800).trimEnd() + "…" else it },
             category = category?.trim()?.intern(),
@@ -242,7 +242,14 @@ object XmltvParser {
     }
 
     /** A title that already says it's new (see titleMarks). */
-    private val NEW_IN_TITLE = Regex("""^\s*new\s*[:\-–|]|[(\[]\s*new\s*[)\]]|ᴺᴱᵂ""", RegexOption.IGNORE_CASE)
+    private val NEW_IN_TITLE = Regex("""^\s*new\s*[:\-–|]|[(\[]\s*new\s*[)\]]""", RegexOption.IGNORE_CASE)
+
+    /**
+     * The title already has a NEW mark: "NEW:", "(New)", or small raised letters in any mix of
+     * cases ("ᴺᴱᵂ", "ᴺᵉʷ"). Adding " (New)" on top of those showed the mark twice.
+     */
+    private fun saysNew(title: String): Boolean =
+        NEW_IN_TITLE.containsMatchIn(title) || "new" in com.nuvio.tv.livetv.ui.LiveTvSearchBridge.smallWords(title)
 
     private val yearInParens = Regex("""\((19\d{2}|20\d{2})\)""")
 

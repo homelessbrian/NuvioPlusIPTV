@@ -1269,7 +1269,7 @@ fun LiveTvPlayerScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 LiveText("Up next in $upNextSec", size = 13.sp, weight = FontWeight.Medium, color = Color.White.copy(alpha = 0.7f))
-                LiveText(n.title, size = 20.sp, weight = FontWeight.Bold, color = Color.White)
+                LiveText(titleMarks(n.title).title, size = 20.sp, weight = FontWeight.Bold, color = Color.White)
                 LiveText(n.episode, size = 15.sp, color = Color.White.copy(alpha = 0.85f))
                 Spacer(Modifier.height(6.dp))
                 LiveText("OK to play now · Back to stop", size = 12.sp, color = Color.White.copy(alpha = 0.6f))
