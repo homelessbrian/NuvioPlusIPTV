@@ -78,7 +78,7 @@ private val FORM_W = 70.dp
 private fun cellWidth(key: String) = when (key) {
     "gamesPlayed", "wins", "ties", "losses", "otLosses" -> 28.dp
     "pointDifferential", "points", "gamesBehind" -> 38.dp
-    "winPercent" -> 44.dp
+    "winPercent", "conf" -> 44.dp
     "behind" -> 56.dp
     else -> 40.dp
 }
@@ -144,6 +144,10 @@ internal fun TablesPage(
         val t = table ?: return@LaunchedEffect
         if (conference == null && t.hasDivisions) {
             conference = marked.firstNotNullOfOrNull { id -> t.find(id)?.first?.parent } ?: t.conferences.first()
+        }
+        // College: your team's conference, else the first.
+        if (conference == null && t.groupTabs) {
+            conference = marked.firstNotNullOfOrNull { id -> t.find(id)?.first?.let(t::tabOf) } ?: t.tabs.first()
         }
     }
 
@@ -331,6 +335,33 @@ private fun TableView(
     }
 
     Column(modifier) {
+        if (table.groupTabs) {
+            // College: the conferences as tabs, opening scrolled to the one showing.
+            val shownName = table.tabName(conference)
+            val tabState = rememberLazyListState()
+            val tabReqs = remember(table.leagueId) { HashMap<String, FocusRequester>() }
+            fun tabReq(name: String) = tabReqs.getOrPut(name) { FocusRequester() }
+            LaunchedEffect(table.leagueId, shownName) {
+                val i = table.tabs.indexOf(shownName)
+                if (i >= 0 && tabState.layoutInfo.visibleItemsInfo.none { it.index == i }) runCatching { tabState.scrollToItem((i - 1).coerceAtLeast(0)) }
+            }
+            LazyRow(
+                Modifier.fillMaxWidth().padding(top = SportsSpace.RowGap)
+                    .focusRestorer { tabReq(shownName) }
+                    .keepFocusWhileHeld(vertical = false),
+                state = tabState,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)
+            ) {
+                items(table.tabs, key = { "g$it" }) { tab ->
+                    DayTab(
+                        table.tabLabel(tab),
+                        selected = tab == shownName,
+                        modifier = Modifier.focusRequester(tabReq(tab))
+                    ) { onConference(tab) }
+                }
+            }
+        }
         if (table.hasDivisions) {
             LazyRow(
                 Modifier.fillMaxWidth().padding(top = SportsSpace.RowGap).keepFocusWhileHeld(vertical = false),
@@ -351,7 +382,10 @@ private fun TableView(
                 }
             }
         }
-        val season = listOfNotNull(table.season?.let { "Season $it" }, "from ${table.source}").joinToString(" · ")
+        val season = listOfNotNull(
+            if (table.groupTabs) table.tabName(conference) else null,
+            table.season?.let { "Season $it" }, "from ${table.source}"
+        ).joinToString(" · ")
         LiveText(season, color = SportsLook.Faint, size = 10.sp, modifier = Modifier.padding(start = 6.dp, top = 6.dp))
         // Column headings.
         // The last five as squares (every team sport); US tables' streak column gives way to them.

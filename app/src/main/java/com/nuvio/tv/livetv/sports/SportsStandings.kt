@@ -48,8 +48,12 @@ data class StandingsRow(
     val altColor: Long? = null
 )
 
-/** A division, a conference, a group, or the whole league. [parent]: its conference, if any. */
-data class StandingsGroup(val name: String, val parent: String?, val rows: List<StandingsRow>)
+/**
+ * A division, a conference, a group, or the whole league. [parent]: its conference, if any.
+ * [short]: college only, the short name of its conference from the feed ("ACC" for "Atlantic
+ * Coast Conference"; "Sun Belt" for both "Sun Belt - East" and "Sun Belt - West").
+ */
+data class StandingsGroup(val name: String, val parent: String?, val rows: List<StandingsRow>, val short: String? = null)
 
 enum class StandingsView { DIVISION, CONFERENCE, LEAGUE }
 
@@ -77,11 +81,38 @@ data class Standings(
     /** The conferences (AFC, NFC…), when the groups have them. */
     val conferences: List<String> get() = groups.mapNotNull { it.parent }.distinct()
 
-    /** True when there are divisions inside conferences (Division / Conference / League make sense). */
-    val hasDivisions: Boolean get() = conferences.isNotEmpty()
+    /**
+     * True when there are divisions inside conferences (Division / Conference / League make sense).
+     * Not in college: there only a few conferences have divisions (Sun Belt East / West), and
+     * the conferences themselves are what matters.
+     */
+    val hasDivisions: Boolean get() = conferences.isNotEmpty() && !isCollegeLeague(leagueId)
+
+    /**
+     * College tables: one table per conference (32 of them in men's basketball), picked from
+     * tabs across the top rather than one long list. A tab is a conference's name; a conference
+     * with divisions shows them one under the other.
+     */
+    val groupTabs: Boolean get() = isCollegeLeague(leagueId) && tabs.size > 1
+
+    /** The conference tabs, in the feed's order. */
+    val tabs: List<String> get() = groups.map { it.parent ?: it.name }.distinct()
+
+    /** The tab [name] when it's one of them, else the first. */
+    fun tabName(name: String?): String = name?.takeIf { it in tabs } ?: tabs.first()
+
+    /** A tab's label: the conference's short name ("ACC"). */
+    fun tabLabel(tab: String): String = groups.firstOrNull { (it.parent ?: it.name) == tab }?.short ?: shortGroupName(tab)
+
+    /** The tab a team's group is on. */
+    fun tabOf(group: StandingsGroup): String = group.parent ?: group.name
+
+    /** The groups a tab shows. */
+    fun tabGroups(name: String?): List<StandingsGroup> = tabName(name).let { t -> groups.filter { (it.parent ?: it.name) == t } }
 
     /** The groups for a view: divisions of one conference, a whole conference, or the league. */
     fun view(view: StandingsView, conference: String?): List<StandingsGroup> {
+        if (groupTabs) return tabGroups(conference)
         if (!hasDivisions) return groups
         val conf = conference?.takeIf { it in conferences } ?: conferences.first()
         return when (view) {
@@ -108,6 +139,7 @@ data class Standings(
         val (g, r) = find(teamId) ?: return null
         val where = when {
             groups.size == 1 -> SportsCatalog.league(leagueId)?.name ?: g.name
+            g.parent == null && g.short != null -> g.short
             else -> shortGroupName(g.name)
         }
         return ordinal(r.pos) + " in " + where
@@ -134,6 +166,9 @@ data class Standings(
     companion object {
         private const val HOUR = 3_600_000L
 
+        /** US college leagues (their tables come one per conference). */
+        fun isCollegeLeague(leagueId: String): Boolean = "college" in leagueId || ".ncaa." in leagueId
+
         fun ordinal(n: Int): String {
             val suffix = if (n % 100 in 11..13) "th" else when (n % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
             return "$n$suffix"
@@ -159,7 +194,10 @@ data class Standings(
 
         fun parseEspn(league: League, raw: String, now: Long = System.currentTimeMillis()): Standings? {
             val root = JSONObject(raw)
+            val college = isCollegeLeague(league.id)
             val leaves = ArrayList<Triple<String, String?, JSONObject>>()
+            // College conferences' short names ("ACC"), by full name, for the tabs.
+            val shortNames = HashMap<String, String>()
             var season: String? = null
             fun walk(node: JSONObject, parent: String?) {
                 val st = node.optJSONObject("standings")
@@ -171,6 +209,7 @@ data class Standings(
                 val kids = node.optJSONArray("children") ?: return
                 // A node with children: its name is the parent of what's inside (a conference).
                 val name = node.str("name")
+                if (name != null) node.str("shortName")?.let { shortNames[name] = it }
                 for (i in 0 until kids.length()) kids.optJSONObject(i)?.let { walk(it, if (node === root) null else name) }
             }
             walk(root, null)
@@ -192,14 +231,14 @@ data class Standings(
             }
             val groups = used.map { (name, parent, node) ->
                 val entries = node.optJSONObject("standings")!!.optJSONArray("entries").objs()
-                StandingsGroup(name, parent, parseEntries(entries, kind))
+                StandingsGroup(name, parent, parseEntries(entries, kind, college), if (college) (parent ?: name).let { shortNames[it] ?: node.str("shortName") }?.takeIf { it != (parent ?: name) } else null)
             }
             val anyTies = groups.any { g -> g.rows.any { (it.values["ties"] ?: "0").let { t -> t != "0" && t.isNotBlank() } } }
             val columns = when (kind) {
                 StandingsKind.TABLE -> listOf(c("gamesPlayed", "P"), c("wins", "W"), c("ties", "D"), c("losses", "L"), c("pointDifferential", "GD"), c("points", "PTS"))
                 StandingsKind.HOCKEY -> listOf(c("gamesPlayed", "GP"), c("wins", "W"), c("losses", "L"), c("otLosses", "OTL"), c("points", "PTS"), c("streak", "STRK"))
                 StandingsKind.RACING -> listOf(c("points", "PTS"), c("behind", "BEHIND"))
-                StandingsKind.RECORD -> listOfNotNull(c("wins", "W"), c("losses", "L"), if (anyTies) c("ties", "T") else null, c("winPercent", "PCT"), c("gamesBehind", "GB"), c("streak", "STRK"))
+                StandingsKind.RECORD -> listOfNotNull(if (college) c("conf", "CONF") else null, c("wins", "W"), c("losses", "L"), if (anyTies) c("ties", "T") else null, c("winPercent", "PCT"), c("gamesBehind", "GB"), c("streak", "STRK"))
             }
             // Only columns the feed actually filled in.
             var filled = columns.filter { col -> col.key == "behind" || groups.any { g -> g.rows.any { !it.values[col.key].isNullOrBlank() } } }
@@ -219,8 +258,14 @@ data class Standings(
 
         private fun c(key: String, label: String) = StandingsColumn(key, label)
 
-        private fun parseEntries(entries: List<JSONObject>, kind: StandingsKind): List<StandingsRow> {
-            val rows = entries.mapNotNull { e -> runCatching { parseEntry(e, kind) }.getOrNull() }
+        /** A win % the way ESPN writes it: ".750", "1.000". */
+        private fun pctText(p: Double): String {
+            val k = kotlin.math.round(p * 1000).toInt().coerceIn(0, 1000)
+            return if (k == 1000) "1.000" else "." + k.toString().padStart(3, '0')
+        }
+
+        private fun parseEntries(entries: List<JSONObject>, kind: StandingsKind, college: Boolean = false): List<StandingsRow> {
+            val rows = entries.mapNotNull { e -> runCatching { parseEntry(e, kind, college) }.getOrNull() }
             // In table order: the feed's own rank; else the playoff seed (US divisions: ESPN's own
             // order isn't reliable, e.g. NBA divisions come worst first); else as the feed gives them.
             val ranked = when {
@@ -239,21 +284,24 @@ data class Standings(
             }
         }
 
-        private fun parseEntry(e: JSONObject, kind: StandingsKind): StandingsRow? {
+        private fun parseEntry(e: JSONObject, kind: StandingsKind, college: Boolean = false): StandingsRow? {
             val team = e.optJSONObject("team")
             val athlete = e.optJSONObject("athlete")
             val who = team ?: athlete ?: return null
             val id = who.str("id") ?: return null
             val stats = HashMap<String, JSONObject>()
-            var record: String? = null; var home: String? = null; var road: String? = null
+            var record: String? = null; var home: String? = null; var road: String? = null; var conf: String? = null
             e.optJSONArray("stats").objs().forEach { s ->
                 val type = s.str("type").orEmpty().lowercase()
                 when (type) {
                     "total" -> record = s.str("summary") ?: s.str("displayValue")
-                    "home" -> home = s.str("summary") ?: s.str("displayValue")
-                    "road", "away" -> road = s.str("summary") ?: s.str("displayValue")
+                    "home", "homerecord" -> home = s.str("summary") ?: s.str("displayValue")
+                    "road", "away", "awayrecord" -> road = s.str("summary") ?: s.str("displayValue")
+                    "vsconf" -> conf = s.str("summary") ?: s.str("displayValue")
                 }
-                s.str("name")?.let { stats[it] = s }
+                // College tables repeat every stat for home, away, conference and ranked-team
+                // games under the same name; the first one is the team's overall number.
+                s.str("name")?.let { if (it !in stats) stats[it] = s }
             }
             fun shown(name: String): String? = stats[name]?.let { s -> s.str("displayValue")?.trim()?.takeIf { it.isNotEmpty() } }
             fun num(name: String): Double? = stats[name]?.opt("value")?.let { (it as? Number)?.toDouble() ?: it.toString().toDoubleOrNull() }
@@ -262,6 +310,23 @@ data class Standings(
             for (k in stats.keys) shown(k)?.let { values[k] = it }
             if (kind == StandingsKind.RACING) (shown("championshipPts") ?: shown("points"))?.let { values["points"] = it }
             if (values["gamesBehind"] == "-") values["gamesBehind"] = "–"
+            // College football gives only "9-1" overall: wins, losses (and ties) and the win %
+            // from that when the feed has no numbers of its own.
+            var pct = num("winPercent")
+            if (kind == StandingsKind.RECORD) {
+                val parts = record?.split("-")?.map { it.trim().toIntOrNull() }
+                if (parts != null && parts.size in 2..3 && parts.all { it != null }) {
+                    val w = parts[0]!!; val l = parts[1]!!; val t = parts.getOrNull(2) ?: 0
+                    if (values["wins"] == null) values["wins"] = w.toString()
+                    if (values["losses"] == null) values["losses"] = l.toString()
+                    if (parts.size == 3 && values["ties"] == null) values["ties"] = t.toString()
+                    if (pct == null && w + l + t > 0) {
+                        pct = (w + t / 2.0) / (w + l + t)
+                        if (values["winPercent"] == null) values["winPercent"] = pctText(pct)
+                    }
+                }
+            }
+            if (college) conf?.let { values["conf"] = it }
             val rank = num("rank")?.toInt() ?: 0
             val note = e.optJSONObject("note")
             val zone = note?.str("description")?.let { d -> StandingsZone(d, parseColor(note.str("color")) ?: zoneColor(d)) }
@@ -270,7 +335,7 @@ data class Standings(
             val change = num("rankChange")?.toInt()?.takeIf { it != 0 }
             val sortValue = when (kind) {
                 StandingsKind.TABLE, StandingsKind.HOCKEY, StandingsKind.RACING -> (num("points") ?: num("championshipPts") ?: 0.0) * 1000 + (num("pointDifferential") ?: 0.0)
-                StandingsKind.RECORD -> (num("winPercent") ?: 0.0) * 1000 + (num("wins") ?: 0.0)
+                StandingsKind.RECORD -> (pct ?: 0.0) * 1000 + (values["wins"]?.toDoubleOrNull() ?: 0.0)
             }
             val logo = team?.optJSONArray("logos").objs().firstOrNull()?.str("href")
                 ?: athlete?.optJSONObject("flag")?.str("href")
