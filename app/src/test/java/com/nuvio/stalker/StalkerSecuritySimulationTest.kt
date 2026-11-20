@@ -292,8 +292,14 @@ class StalkerSecuritySimulationTest {
     }
 
     @Test
-    fun malformedAndRepeatedPagesFailWithoutPublishingPartialCatalogue() = runBlocking {
-        for (mode in listOf("repeated", "empty", "html", "partial-duplicate")) {
+    fun untidyPagesKeepEveryUniqueTitleWithoutSpinningButBrokenPagesStillFail() = runBlocking {
+        val expected = mapOf(
+            "repeated" to listOf("fixture-film"),
+            "empty" to listOf("fixture-film"),
+            "partial-duplicate" to listOf("fixture-a", "fixture-b", "fixture-c"),
+            "missing-id" to listOf("fixture-a"),
+        )
+        for (mode in listOf("repeated", "empty", "html", "partial-duplicate", "missing-id")) {
             var pages = 0
             val portal = Portal { request -> when (request.action) {
                 "handshake" -> token("fixture-token")
@@ -303,19 +309,25 @@ class StalkerSecuritySimulationTest {
                     when {
                         mode == "html" -> StalkerHttpResponse(200, "<html>synthetic sign-in page</html>")
                         mode == "partial-duplicate" -> {
-                            val ids = if (pages == 1) listOf("fixture-a", "fixture-b") else listOf("fixture-b", "fixture-c")
+                            val ids = if (request["p"] == "1") listOf("fixture-a", "fixture-b") else listOf("fixture-b", "fixture-c")
                             val data = ids.joinToString(",") { "{\"id\":\"$it\",\"name\":\"Fixture film\",\"cmd\":\"fixture-command\"}" }
                             json("{\"data\":[$data],\"total_items\":4,\"max_page_items\":2}")
                         }
-                        mode == "empty" && pages > 1 -> json("{\"data\":[],\"total_items\":3,\"max_page_items\":1}")
+                        mode == "missing-id" -> json("{\"data\":[{\"id\":\"fixture-a\",\"name\":\"Fixture film\",\"cmd\":\"fixture-command\"},{\"name\":\"No ID\"}],\"total_items\":2,\"max_page_items\":2}")
+                        mode == "empty" && request["p"] != "1" -> json("{\"data\":[],\"total_items\":3,\"max_page_items\":1}")
                         else -> json("{\"data\":[{\"id\":\"fixture-film\",\"name\":\"Fixture film\",\"cmd\":\"fixture-command\"}],\"total_items\":3,\"max_page_items\":1}")
                     }
                 }
                 else -> error("Unexpected synthetic operation")
             } }
-            val error = failure { StalkerClient(config, portal, { 0L }).movies() }
-            assertTrue(error.error in setOf(StalkerError.PAGINATION_FAILED, StalkerError.INVALID_RESPONSE))
-            assertTrue(pages <= 4, "Repeated or malformed pages must not spin or return a partial import")
+            if (mode == "html") {
+                val error = failure { StalkerClient(config, portal, { 0L }).movies() }
+                assertEquals(StalkerError.INVALID_RESPONSE, error.error)
+            } else {
+                val movies = StalkerClient(config, portal, { 0L }).movies()
+                assertEquals(expected.getValue(mode), movies.map { it.id }, mode)
+            }
+            assertTrue(pages <= 4, "Repeated or malformed pages must not spin ($mode)")
         }
     }
 

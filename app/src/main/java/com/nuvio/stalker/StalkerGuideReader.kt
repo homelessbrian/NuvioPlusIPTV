@@ -71,7 +71,10 @@ object StalkerGuideReader {
         when (json.peek()) {
             JsonToken.BEGIN_ARRAY -> {
                 json.beginArray()
-                while (json.hasNext()) onRow(channel, row(json))
+                // One odd entry (a number, null, a nested list) is skipped, never the whole guide.
+                while (json.hasNext()) {
+                    if (json.peek() == JsonToken.BEGIN_OBJECT) onRow(channel, row(json)) else json.skipValue()
+                }
                 json.endArray()
             }
             JsonToken.BEGIN_OBJECT -> {
@@ -89,7 +92,8 @@ object StalkerGuideReader {
                             if (channel != null) json.skipValue()
                             else when (json.peek()) {
                                 JsonToken.BEGIN_ARRAY, JsonToken.BEGIN_OBJECT -> { containers++; container(json, key, depth + 1, onRow) }
-                                else -> fail()
+                                // A channel with no listings sent as null, false or "": an empty channel, not a broken guide.
+                                else -> { containers++; json.skipValue() }
                             }
                         }
                     }

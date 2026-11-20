@@ -167,6 +167,24 @@ class StalkerProtocolTest {
         assertFalse(rows.last().archiveAvailable)
     }
 
+    @Test fun oneBadListingNeverDropsTheRestOfTheGuide() = runBlocking {
+        val good = """{"id":"ok","name":"Kept","start_timestamp":"1700000000","stop_timestamp":"1700003600"}"""
+        val zeroLength = """{"id":"zero","name":"Zero","start_timestamp":"1700003600","stop_timestamp":"1700003600"}"""
+        val noTimes = """{"id":"none","name":"No times"}"""
+        val client = client { _, _ -> """{"js":{"data":{"10":[$good,$zeroLength,$noTimes,7],"11":null,"12":false,"13":[]}}}""" }
+        assertEquals(listOf("ok"), client.guide().map { it.id })
+        val streamed = mutableListOf<String>()
+        client.forEachProgramme { streamed += it.id }
+        assertEquals(listOf("ok"), streamed)
+    }
+
+    @Test fun guideLongerThanTheLimitAsksForTheLimitInsteadOfFailing() = runBlocking {
+        var period: String? = null
+        val client = client { url, _ -> period = url.parameters["period"]; """{"js":{"data":{}}}""" }
+        assertTrue(client.guide(24 * 40).isEmpty())
+        assertEquals((24 * 31).toString(), period)
+    }
+
     @Test fun canonicalDatesAndProviderParserAreStrict() {
         assertEquals(0L, StalkerWire.timestamp("1970-01-01T00:00:00Z", "UTC", null))
         assertEquals(0L, StalkerWire.timestamp("1970-01-01T01:00:00+01:00", "UTC", null))
