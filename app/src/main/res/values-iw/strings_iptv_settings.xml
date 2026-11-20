@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"עוקף ספקי אינטרנט שחוסמים שרתי IPTV. עוקף גם חוסמי פרסומות ומסנני משפחה בבית."</string>
     <string name="iptv_settings_hide_stray_entries">"הסתרת פריטים תועים"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"משמיט שאריות מוזרות שחלק מהספקים מוסיפים לרשימות, כמו פרק בודד בקבוצה משלו. ערוצים אמיתיים אף פעם לא מוסתרים"</string>
+    <string name="iptv_settings_hide_non_english_titles">"הסתר כותרים שאינם באנגלית"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"משמיט סרטים וסדרות שנעשו בשפה אחרת (נבדק מול TMDB ומול קבוצות ותוויות השפה של הספק שלך). כותרים מוסתרים לעולם לא נטענים או נבדקים."</string>
 </resources>

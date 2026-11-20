@@ -56,6 +56,23 @@ interface TmdbApi {
         @Query("language") language: String? = null
     ): Response<TmdbDetailsResponse>
 
+    /** Live TV fork: On Demand titles looked up by name (their artwork and original language). */
+    @GET("search/movie")
+    suspend fun searchMovies(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String,
+        @Query("year") year: Int? = null,
+        @Query("include_adult") includeAdult: Boolean = false
+    ): Response<TmdbRecommendationsResponse>
+
+    @GET("search/tv")
+    suspend fun searchTv(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String,
+        @Query("first_air_date_year") year: Int? = null,
+        @Query("include_adult") includeAdult: Boolean = false
+    ): Response<TmdbRecommendationsResponse>
+
     @GET("movie/{movie_id}/credits")
     suspend fun getMovieCredits(
         @Path("movie_id") movieId: Int,

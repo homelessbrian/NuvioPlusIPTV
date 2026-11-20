@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"يتجاوز شركات الإنترنت التي تحجب خوادم IPTV. ويتجاوز أيضًا حاجبات الإعلانات والفلاتر العائلية في المنزل."</string>
     <string name="iptv_settings_hide_stray_entries">"إخفاء الإدخالات الشاردة"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"يستبعد بقايا غريبة يضيفها بعض المزوّدين إلى قوائمهم، مثل حلقة منفردة في مجموعة خاصة بها. القنوات الحقيقية لا تُخفى أبدًا"</string>
+    <string name="iptv_settings_hide_non_english_titles">"إخفاء العناوين غير الإنجليزية"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"يستبعد الأفلام والمسلسلات المصنوعة بلغة أخرى (يتم التحقق عبر TMDB وعبر مجموعات وتسميات اللغة لدى مزوّدك). العناوين المخفية لا يتم تحميلها أو البحث عنها أبدًا."</string>
 </resources>

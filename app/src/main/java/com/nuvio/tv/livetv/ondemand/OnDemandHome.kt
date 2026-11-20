@@ -40,6 +40,32 @@ object VodHomeIds {
     fun isContinue(metaId: String) = metaId.startsWith(PREFIX) && metaId.endsWith(CONTINUE_MARK)
     fun uidOf(metaId: String): String? = metaId.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.removeSuffix(CONTINUE_MARK)
 
+    /** The real ids behind On Demand cards: the matched title's id in your addons, and the provider's TMDB id. */
+    private data class RealIds(val match: String?, val tmdb: String?)
+    private val realIds = com.nuvio.tv.livetv.data.boundedCache<String, RealIds>(5_000)
+
+    /** Notes a card's real ids ([match]: its match's id, or null when only the TMDB id is known so far). */
+    fun rememberReal(item: VodItem, match: String?) {
+        val tmdb = item.tmdbId?.trim()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
+        val old = realIds[item.uid]
+        val m = match?.takeIf { it.isNotBlank() && !it.startsWith(PREFIX) } ?: old?.match
+        if (m == null && tmdb == null) return
+        if (old?.match != m || old?.tmdb != tmdb) realIds[item.uid] = RealIds(m, tmdb)
+    }
+
+    /**
+     * For Home's TMDB look-ups (trailers, backdrops, logos) on an On Demand card: the title's
+     * TMDB id or its matched id. Null for any other card, and for a card with neither yet.
+     */
+    fun tmdbLookupId(cardId: String): String? {
+        val r = uidOf(cardId)?.let { realIds[it] } ?: return null
+        return r.tmdb?.let { "tmdb:$it" } ?: r.match
+    }
+
+    /** For Home's details look-ups in your addons: the matched title's id (not a TMDB-only match). */
+    fun addonId(cardId: String): String? =
+        uidOf(cardId)?.let { realIds[it] }?.match?.takeIf { !it.startsWith("tmdb:") }
+
     /** A card for a provider title: the matched addon details when found (poster, backdrop,
      *  logo, description, rating), otherwise the provider's own name and picture. */
     fun toMeta(item: VodItem, matched: MetaPreview?, poster: String?, name: String): MetaPreview {

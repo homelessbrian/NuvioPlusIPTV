@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"Contourne les fournisseurs d’accès qui bloquent les serveurs IPTV. Contourne aussi les bloqueurs de pub et filtres parentaux de la maison."</string>
     <string name="iptv_settings_hide_stray_entries">"Masquer les entrées isolées"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"Écarte les restes bizarres que certains fournisseurs ajoutent à leurs playlists, comme un épisode seul dans son propre groupe. Les vraies chaînes ne sont jamais masquées"</string>
+    <string name="iptv_settings_hide_non_english_titles">"Masquer les titres non anglais"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"Masque les films et séries tournés dans une autre langue (vérifié avec TMDB et les groupes et étiquettes de langue de votre fournisseur). Les titres masqués ne sont jamais chargés ni recherchés."</string>
 </resources>

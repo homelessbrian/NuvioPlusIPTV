@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"Omija dostawców internetu, którzy blokują serwery IPTV. Omija też domowe blokery reklam i filtry rodzinne."</string>
     <string name="iptv_settings_hide_stray_entries">"Ukryj zabłąkane pozycje"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"Pomija dziwne resztki, które niektórzy dostawcy dodają do playlist, np. pojedynczy odcinek we własnej jednoelementowej grupie. Prawdziwe kanały nigdy nie są ukrywane"</string>
+    <string name="iptv_settings_hide_non_english_titles">"Ukryj tytuły nieanglojęzyczne"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"Pomija filmy i seriale nakręcone w innym języku (sprawdzane w TMDB oraz w grupach i oznaczeniach językowych dostawcy). Ukryte tytuły nigdy nie są wczytywane ani wyszukiwane."</string>
 </resources>

@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"Aggira i gestori internet che bloccano i server IPTV. Aggira anche blocchi pubblicità e filtri famiglia di casa."</string>
     <string name="iptv_settings_hide_stray_entries">"Nascondi voci isolate"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"Esclude strani avanzi che alcuni provider mettono nelle playlist, come un episodio da solo in un gruppo tutto suo. I canali veri non vengono mai nascosti"</string>
+    <string name="iptv_settings_hide_non_english_titles">"Nascondi titoli non in inglese"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"Esclude film e serie girati in un\'altra lingua (verificato con TMDB e con i gruppi e le etichette di lingua del tuo provider). I titoli nascosti non vengono mai caricati né cercati."</string>
 </resources>

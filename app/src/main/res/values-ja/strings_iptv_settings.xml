@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"IPTV サーバーをブロックするインターネット会社を回避します。自宅の広告ブロッカーやファミリーフィルターも回避します。"</string>
     <string name="iptv_settings_hide_stray_entries">"はぐれた項目を隠す"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"一部のプロバイダーがプレイリストに加える妙な残りもの（1 件だけのグループに入ったエピソードなど）を除外します。本物のチャンネルは隠されません"</string>
+    <string name="iptv_settings_hide_non_english_titles">"英語以外の作品を非表示"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"英語以外の言語で制作された映画やシリーズを除外します（TMDB とプロバイダーの言語グループ・ラベルで判定）。非表示の作品は読み込みも検索もされません。"</string>
 </resources>

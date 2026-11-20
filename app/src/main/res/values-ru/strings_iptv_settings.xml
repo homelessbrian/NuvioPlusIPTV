@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"Обходит интернет-провайдеров, блокирующих IPTV-серверы. Также обходит домашние блокировщики рекламы и семейные фильтры."</string>
     <string name="iptv_settings_hide_stray_entries">"Скрывать случайные записи"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"Убирает странные остатки, которые некоторые провайдеры добавляют в плейлисты, например отдельную серию в собственной группе. Настоящие каналы никогда не скрываются"</string>
+    <string name="iptv_settings_hide_non_english_titles">"Скрыть неанглоязычные фильмы"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"Скрывает фильмы и сериалы, снятые на другом языке (проверка по TMDB и по языковым группам и меткам провайдера). Скрытые фильмы никогда не загружаются и не ищутся."</string>
 </resources>

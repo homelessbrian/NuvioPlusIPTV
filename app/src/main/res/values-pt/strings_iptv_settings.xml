@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"Contorna operadoras de internet que bloqueiam servidores IPTV. Também passa por bloqueadores de anúncios e filtros familiares de casa."</string>
     <string name="iptv_settings_hide_stray_entries">"Ocultar entradas soltas"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"Deixa de fora sobras estranhas que alguns provedores colocam nas playlists, como um episódio sozinho em um grupo próprio. Canais de verdade nunca são ocultados"</string>
+    <string name="iptv_settings_hide_non_english_titles">"Ocultar títulos não ingleses"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"Oculta filmes e séries feitos noutra língua (verificado com o TMDB e com os grupos e etiquetas de idioma do seu fornecedor). Os títulos ocultos nunca são carregados nem pesquisados."</string>
 </resources>

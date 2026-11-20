@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"IPTV sunucularını engelleyen internet şirketlerini aşar. Evdeki reklam engelleyicileri ve aile filtrelerini de aşar."</string>
     <string name="iptv_settings_hide_stray_entries">"Başıboş Girişleri Gizle"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"Bazı sağlayıcıların listelerine eklediği tuhaf artıkları dışarıda bırakır; örneğin tek öğeli kendi grubunda duran bir bölüm. Gerçek kanallar asla gizlenmez"</string>
+    <string name="iptv_settings_hide_non_english_titles">"İngilizce olmayan yapımları gizle"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"Başka bir dilde çekilmiş filmleri ve dizileri gizler (TMDB ile ve sağlayıcınızın dil grupları ve etiketleriyle kontrol edilir). Gizlenen yapımlar hiçbir zaman yüklenmez veya aranmaz."</string>
 </resources>

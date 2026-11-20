@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"Mengakali perusahaan internet yang memblokir server IPTV. Juga melewati pemblokir iklan dan filter keluarga di rumah."</string>
     <string name="iptv_settings_hide_stray_entries">"Sembunyikan Entri Nyasar"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"Tidak menyertakan sisa-sisa aneh yang ditambahkan sebagian penyedia ke playlist, seperti satu episode di grupnya sendiri. Saluran asli tidak pernah disembunyikan"</string>
+    <string name="iptv_settings_hide_non_english_titles">"Sembunyikan judul non-Inggris"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"Menyembunyikan film dan serial yang dibuat dalam bahasa lain (dicek dengan TMDB serta grup dan label bahasa dari penyedia Anda). Judul yang disembunyikan tidak pernah dimuat atau dicari."</string>
 </resources>

@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"Umgeht Internetanbieter, die IPTV-Server sperren. Umgeht auch Werbeblocker und Familienfilter im Heimnetz."</string>
     <string name="iptv_settings_hide_stray_entries">"Verirrte Einträge ausblenden"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"Lässt seltsame Reste weg, die manche Anbieter in ihre Playlists packen, etwa eine einzelne Folge in einer eigenen Gruppe. Echte Sender werden nie ausgeblendet"</string>
+    <string name="iptv_settings_hide_non_english_titles">"Nicht-englische Titel ausblenden"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"Blendet Filme und Serien aus, die in einer anderen Sprache gedreht wurden (geprüft mit TMDB sowie den Sprachgruppen und -kennzeichnungen deines Anbieters). Ausgeblendete Titel werden nie geladen oder nachgeschlagen."</string>
 </resources>

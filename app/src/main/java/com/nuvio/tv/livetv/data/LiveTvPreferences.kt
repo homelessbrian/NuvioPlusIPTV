@@ -182,6 +182,7 @@ class LiveTvPreferences @Inject constructor(
         val audioPassthrough = booleanPreferencesKey("audio_passthrough")
         val showPosters = booleanPreferencesKey("show_posters")
         val vodMergeDuplicates = booleanPreferencesKey("vod_merge_duplicates")
+        val vodHideNonEnglish = booleanPreferencesKey("vod_hide_non_english")
         val vodDefaultSort = stringPreferencesKey("vod_default_sort")
         val recordingStorage = stringPreferencesKey("recording_storage")
         val recordingSpaceRule = stringPreferencesKey("recording_space_rule")
@@ -663,6 +664,7 @@ class LiveTvPreferences @Inject constructor(
             audioPassthrough = p[Keys.audioPassthrough] ?: d.audioPassthrough,
             showPosters = p[Keys.showPosters] ?: d.showPosters,
             vodMergeDuplicates = p[Keys.vodMergeDuplicates] ?: d.vodMergeDuplicates,
+            vodHideNonEnglish = p[Keys.vodHideNonEnglish] ?: d.vodHideNonEnglish,
             vodDefaultSort = p[Keys.vodDefaultSort] ?: d.vodDefaultSort,
             recordingStorage = p[Keys.recordingStorage] ?: d.recordingStorage,
             recordingSpaceRule = p[Keys.recordingSpaceRule] ?: d.recordingSpaceRule,
@@ -1004,6 +1006,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.audioPassthrough] = s.audioPassthrough
         p[Keys.showPosters] = s.showPosters
         p[Keys.vodMergeDuplicates] = s.vodMergeDuplicates
+        p[Keys.vodHideNonEnglish] = s.vodHideNonEnglish
         p[Keys.vodDefaultSort] = s.vodDefaultSort
         p[Keys.recordingStorage] = s.recordingStorage
         p[Keys.recordingSpaceRule] = s.recordingSpaceRule

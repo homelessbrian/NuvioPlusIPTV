@@ -586,6 +586,8 @@ data class LiveTvSettings(
     val showPosters: Boolean = true,
     /** On Demand: show each title once, even when the provider lists several copies. */
     val vodMergeDuplicates: Boolean = true,
+    /** On Demand: leave out movies and series made in another language than English (TMDB's original language, or the provider's own language labels). */
+    val vodHideNonEnglish: Boolean = false,
     /** On Demand: how categories are sorted unless you picked one for that category (VodSort name). */
     val vodDefaultSort: String = "DEFAULT",
     /** Recordings: where new ones are saved ("" = this device, else a storage volume's id). */

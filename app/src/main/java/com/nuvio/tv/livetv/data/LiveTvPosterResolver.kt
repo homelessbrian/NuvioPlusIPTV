@@ -73,7 +73,7 @@ class LiveTvPosterResolver @Inject constructor(
         if (System.currentTimeMillis() < pausedUntil) return null
         val query = LiveTvSearchBridge.cleanTitle(title).ifBlank { title.trim() }
         if (query.length < 2) return null
-        val key = normalize(query) + "|" + series + "|" + (year ?: "") + "|" + (imdbId ?: "")
+        val key = matchKey(query, series, year, imdbId)
         matchCache[key]?.let { return it }
         if (key in noMatch) return null
         // On Demand has its own small queue, so browsing movies never holds up the guide's posters.
@@ -89,6 +89,21 @@ class LiveTvPosterResolver @Inject constructor(
             } else failuresInARow = 0
             hit
         } }
+    }
+
+    private fun matchKey(query: String, series: Boolean, year: Int?, imdbId: String?) =
+        normalize(query) + "|" + series + "|" + (year ?: "") + "|" + (imdbId ?: "")
+
+    /**
+     * Whether [matchFor] gave a real answer for this title (found, or none of your catalogs has
+     * it), rather than nothing because lookups were paused or the addons couldn't be reached.
+     * A title with no real answer should be tried again later, not remembered as having none.
+     */
+    fun answered(title: String, series: Boolean, year: Int?, imdbId: String? = null): Boolean {
+        val query = LiveTvSearchBridge.cleanTitle(title).ifBlank { title.trim() }
+        if (query.length < 2) return true
+        val key = matchKey(query, series, year, imdbId)
+        return matchCache[key] != null || key in noMatch
     }
 
     private val titleHits = boundedCache<String, Hit>(500)

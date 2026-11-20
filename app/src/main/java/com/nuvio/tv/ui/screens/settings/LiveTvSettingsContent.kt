@@ -856,6 +856,12 @@ internal fun LiveTvSettingsContent(
                         { update { it.copy(vodMergeDuplicates = !it.vodMergeDuplicates) } }
                     )
                     SettingsToggleRow(
+                        context.getString(R.string.iptv_settings_hide_non_english_titles),
+                        context.getString(R.string.iptv_settings_hide_non_english_titles_sub),
+                        s.vodHideNonEnglish,
+                        { update { it.copy(vodHideNonEnglish = !it.vodHideNonEnglish) } }
+                    )
+                    SettingsToggleRow(
                         context.getString(R.string.iptv_settings_play_straight_from_my_provider),
                         context.getString(R.string.iptv_settings_play_on_a_title_opened_from_on_demand),
                         s.onDemandPlayDirect,

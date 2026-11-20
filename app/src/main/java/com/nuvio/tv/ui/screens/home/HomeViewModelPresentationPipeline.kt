@@ -532,9 +532,24 @@ private sealed interface ExternalMetaOutcome {
 private fun HomeViewModel.externalEnrichmentOutstanding(itemId: String): Boolean =
     externalMetaPrefetchEnabled && itemId !in prefetchedExternalMetaIds
 
+/**
+ * Live TV fork: the id to ask your addons for. On Demand cards carry their own ids, which no addon
+ * knows: their matched title's id instead, or null (no request) when the card has no match.
+ */
+private fun addonLookupId(id: String): String? =
+    if (com.nuvio.tv.livetv.ondemand.VodHomeIds.uidOf(id) != null) com.nuvio.tv.livetv.ondemand.VodHomeIds.addonId(id) else id
+
+/** Live TV fork: an On Demand card on Home (its rows aren't in the catalog index). */
+internal fun HomeViewModel.findVodCard(itemId: String): MetaPreview? {
+    if (com.nuvio.tv.livetv.ondemand.VodHomeIds.uidOf(itemId) == null) return null
+    return vodRowsCache.values.firstNotNullOfOrNull { row -> row.items.firstOrNull { it.id == itemId } }
+}
+
 private suspend fun HomeViewModel.fetchExternalMetaOutcome(item: MetaPreview): ExternalMetaOutcome =
     try {
-        val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id, item.sourceAddonBaseUrl)
+        val lookupId = addonLookupId(item.id)
+        val result = if (lookupId == null) NetworkResult.Error("No addon match", NetworkResult.META_NOT_FOUND_CODE)
+            else metaRepository.getMetaFromAllAddons(item.apiType, lookupId, item.sourceAddonBaseUrl)
             .first { it is NetworkResult.Success || it is NetworkResult.Error }
         when {
             result is NetworkResult.Success -> ExternalMetaOutcome.Resolved(result.data)
@@ -595,7 +610,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                 viewModelScope.launch {
                     metaRepository.getMetaFromAllAddons(
                         type = item.apiType,
-                        id = item.id
+                        id = addonLookupId(item.id) ?: return@launch
                     ).first { it !is NetworkResult.Loading }
                 }
             }
@@ -634,7 +649,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                     launch {
                         metaRepository.getMetaFromAllAddons(
                             type = item.apiType,
-                            id = item.id
+                            id = addonLookupId(item.id) ?: return@launch
                         ).first { it !is NetworkResult.Loading }
                     }
                 }
@@ -719,7 +734,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                 viewModelScope.launch {
                     metaRepository.getMetaFromAllAddons(
                         type = item.apiType,
-                        id = item.id
+                        id = addonLookupId(item.id) ?: return@launch
                     ).first { it !is NetworkResult.Loading }
                 }
             }
@@ -823,7 +838,7 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
                 viewModelScope.launch {
                     metaRepository.getMetaFromAllAddons(
                         type = item.apiType,
-                        id = item.id
+                        id = addonLookupId(item.id) ?: return@launch
                     ).first { it !is NetworkResult.Loading }
                 }
             }
@@ -927,7 +942,8 @@ private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: 
 
     applyEnrichmentToDisplayedRows(itemId, ::mergeItem)
 
-    findCatalogItemById(itemId)?.let { enriched ->
+    // Live TV fork: an On Demand card isn't in the catalog index; its hero gets the merge too.
+    (findCatalogItemById(itemId) ?: findVodCard(itemId)?.let(::mergeItem))?.let { enriched ->
         _lastEnrichedPreview.value = enriched
         addEnrichedPreview(itemId, enriched)
     }
@@ -1030,7 +1046,8 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
     clearEnrichmentFailure(itemId)
 
     applyEnrichmentToDisplayedRows(itemId, ::mergeItem)
-    findCatalogItemById(itemId)?.let { enriched ->
+    // Live TV fork: an On Demand card isn't in the catalog index; its hero gets the merge too.
+    (findCatalogItemById(itemId) ?: findVodCard(itemId)?.let(::mergeItem))?.let { enriched ->
         _lastEnrichedPreview.value = enriched
         addEnrichedPreview(itemId, enriched)
     }
@@ -1043,7 +1060,7 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
         // Bump version so any in-flight pipeline for this item treats itself as stale
         // and won't overwrite the retry result with a negative cache entry.
         trailerPreviewRequestVersion++
-        val currentItem = findCatalogItemById(itemId) ?: return
+        val currentItem = findCatalogItemById(itemId) ?: findVodCard(itemId) ?: return
         requestTrailerPreviewPipeline(currentItem)
     }
 }

@@ -701,4 +701,6 @@
     <string name="iptv_settings_dns_service_desc">"绕过屏蔽 IPTV 服务器的网络运营商。也会绕过家中的广告拦截器和家庭过滤。"</string>
     <string name="iptv_settings_hide_stray_entries">"隐藏零散条目"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"排除部分提供商加入播放列表的奇怪残留项，例如单独放在一个分组里的一集节目。真正的频道永远不会被隐藏"</string>
+    <string name="iptv_settings_hide_non_english_titles">"隐藏非英语影片"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"不显示以其他语言制作的电影和剧集（通过 TMDB 以及提供商自己的语言分组和标签判断）。隐藏的影片不会被加载或查找。"</string>
 </resources>
