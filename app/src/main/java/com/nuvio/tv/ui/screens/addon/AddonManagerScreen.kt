@@ -1296,6 +1296,61 @@ internal fun ConfirmAddonChangesDialog(
                             Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
                         }
 
+                        if (pendingChange.addedLiveRowNames.isNotEmpty()) {
+                            Text(
+                                text = stringResource(R.string.home_rows_confirm_added),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = NuvioTheme.colors.Success,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = NuvioTheme.spacing.xs)
+                            )
+                            pendingChange.addedLiveRowNames.forEach { name ->
+                                Text(
+                                    text = "+ $name",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NuvioTheme.colors.Success,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = NuvioTheme.spacing.sm, bottom = NuvioTheme.spacing.xxs)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+                        }
+
+                        if (pendingChange.removedLiveRowNames.isNotEmpty()) {
+                            Text(
+                                text = stringResource(R.string.home_rows_confirm_removed),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = NuvioTheme.colors.Error,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = NuvioTheme.spacing.xs)
+                            )
+                            pendingChange.removedLiveRowNames.forEach { name ->
+                                Text(
+                                    text = "- $name",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NuvioTheme.colors.Error,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = NuvioTheme.spacing.sm, bottom = NuvioTheme.spacing.xxs)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+                        }
+
+                        if (pendingChange.liveRowsEdited) {
+                            Text(
+                                text = stringResource(R.string.home_rows_confirm_changed),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioTheme.colors.TextSecondary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                            )
+                        }
+
                         if (pendingChange.collectionsChanged) {
                             Text(
                                 text = stringResource(R.string.addon_pending_collections_updated),
@@ -1322,7 +1377,10 @@ internal fun ConfirmAddonChangesDialog(
                             !pendingChange.catalogsReordered &&
                             pendingChange.disabledCatalogNames.isEmpty() &&
                             pendingChange.enabledCatalogNames.isEmpty() &&
-                            !pendingChange.collectionsChanged
+                            !pendingChange.collectionsChanged &&
+                            pendingChange.addedLiveRowNames.isEmpty() &&
+                            pendingChange.removedLiveRowNames.isEmpty() &&
+                            !pendingChange.liveRowsEdited
                         ) {
                             Text(
                                 text = stringResource(R.string.addon_confirm_no_changes),

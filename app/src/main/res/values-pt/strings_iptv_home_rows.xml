@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Remover esta fileira"</string>
     <string name="home_rows_vod_continue_title">"Continuar assistindo On Demand"</string>
     <string name="home_rows_vod_continue_hint">"Os filmes e episódios do seu provedor que você começou e não terminou, o último assistido primeiro. OK continua de onde parou"</string>
+    <string name="home_rows_add_pick_subtitle">"Escolha uma. Torna-se uma linha própria no Início."</string>
+    <string name="home_rows_add_position">"%1$d de %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK para escolher · Voltar para fechar"</string>
+    <string name="home_rows_add_keys_pick">"OK para adicionar · Voltar para regressar"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Um grupo de qualquer uma das suas listas"</string>
+    <string name="home_rows_pick_my_group_hint">"Um grupo criado por si"</string>
+    <string name="home_rows_pick_sports_one_hint">"Só os jogos do desporto ou liga que escolher"</string>
+    <string name="home_rows_pick_vod_group_hint">"Uma categoria de filmes ou séries do seu fornecedor"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Filmes e episódios começados, o último visto primeiro"</string>
+    <string name="home_rows_web_back">"Voltar"</string>
+    <string name="home_rows_web_done">"Concluído"</string>
+    <string name="home_rows_confirm_added">"Linhas adicionadas ao Início"</string>
+    <string name="home_rows_confirm_removed">"Linhas removidas do Início"</string>
+    <string name="home_rows_confirm_changed">"Definições das linhas alteradas"</string>
 </resources>

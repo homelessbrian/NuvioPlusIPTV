@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"הסרת השורה הזו"</string>
     <string name="home_rows_vod_continue_title">"המשך צפייה On Demand"</string>
     <string name="home_rows_vod_continue_hint">"סרטים ופרקים מהספק שהתחלתם ולא סיימתם, האחרון שנצפה קודם. OK ממשיך מהמקום שבו עצרתם"</string>
+    <string name="home_rows_add_pick_subtitle">"בחרו אחד. הוא יהפוך לשורה משלו בדף הבית."</string>
+    <string name="home_rows_add_position">"%1$d מתוך %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK לבחירה · חזרה לסגירה"</string>
+    <string name="home_rows_add_keys_pick">"OK להוספה · חזרה לחזור"</string>
+    <string name="home_rows_pick_playlist_group_hint">"קבוצה מכל אחת מרשימות ההשמעה שלך"</string>
+    <string name="home_rows_pick_my_group_hint">"קבוצה שיצרת בעצמך"</string>
+    <string name="home_rows_pick_sports_one_hint">"רק המשחקים של הענף או הליגה שבחרת"</string>
+    <string name="home_rows_pick_vod_group_hint">"קטגוריית סרטים או סדרות מהספק שלך"</string>
+    <string name="home_rows_pick_vod_continue_hint">"סרטים ופרקים שהתחלת, האחרון שנצפה ראשון"</string>
+    <string name="home_rows_web_back">"חזרה"</string>
+    <string name="home_rows_web_done">"סיום"</string>
+    <string name="home_rows_confirm_added">"נוספו שורות לדף הבית"</string>
+    <string name="home_rows_confirm_removed">"הוסרו שורות מדף הבית"</string>
+    <string name="home_rows_confirm_changed">"הגדרות השורות שונו"</string>
 </resources>

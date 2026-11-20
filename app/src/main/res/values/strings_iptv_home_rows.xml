@@ -92,4 +92,18 @@
     <string name="home_rows_option_remove">Remove this row</string>
     <string name="home_rows_vod_continue_title">Continue Watching On Demand</string>
     <string name="home_rows_vod_continue_hint">The movies and episodes from your provider that you started and haven\'t finished, last watched first. OK picks up where you left off</string>
+    <string name="home_rows_add_pick_subtitle">Pick one. It becomes its own row on Home.</string>
+    <string name="home_rows_add_position">%1$d of %2$d</string>
+    <string name="home_rows_add_keys_main">OK to pick · Back to close</string>
+    <string name="home_rows_add_keys_pick">OK to add · Back to go back</string>
+    <string name="home_rows_pick_playlist_group_hint">A group from any of your playlists</string>
+    <string name="home_rows_pick_my_group_hint">A group you made yourself</string>
+    <string name="home_rows_pick_sports_one_hint">Only the games from the sport or league you pick</string>
+    <string name="home_rows_pick_vod_group_hint">A movie or series category from your provider</string>
+    <string name="home_rows_pick_vod_continue_hint">Movies and episodes you started, last watched first</string>
+    <string name="home_rows_web_back">Back</string>
+    <string name="home_rows_web_done">Done</string>
+    <string name="home_rows_confirm_added">Home rows added</string>
+    <string name="home_rows_confirm_removed">Home rows removed</string>
+    <string name="home_rows_confirm_changed">Home row settings changed</string>
 </resources>

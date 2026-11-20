@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"إزالة هذا الصف"</string>
     <string name="home_rows_vod_continue_title">"متابعة مشاهدة On Demand"</string>
     <string name="home_rows_vod_continue_hint">"الأفلام والحلقات من مزوّدك التي بدأتها ولم تكملها، الأحدث مشاهدة أولًا. زر OK يكمل من حيث توقفت"</string>
+    <string name="home_rows_add_pick_subtitle">"اختر واحدًا. سيصبح صفًا مستقلًا في الرئيسية."</string>
+    <string name="home_rows_add_position">"%1$d من %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK للاختيار · رجوع للإغلاق"</string>
+    <string name="home_rows_add_keys_pick">"OK للإضافة · رجوع للعودة"</string>
+    <string name="home_rows_pick_playlist_group_hint">"مجموعة من أي من قوائم التشغيل لديك"</string>
+    <string name="home_rows_pick_my_group_hint">"مجموعة أنشأتها بنفسك"</string>
+    <string name="home_rows_pick_sports_one_hint">"مباريات الرياضة أو الدوري الذي تختاره فقط"</string>
+    <string name="home_rows_pick_vod_group_hint">"فئة أفلام أو مسلسلات من مزودك"</string>
+    <string name="home_rows_pick_vod_continue_hint">"الأفلام والحلقات التي بدأتها، الأحدث مشاهدة أولًا"</string>
+    <string name="home_rows_web_back">"رجوع"</string>
+    <string name="home_rows_web_done">"تم"</string>
+    <string name="home_rows_confirm_added">"تمت إضافة صفوف إلى الرئيسية"</string>
+    <string name="home_rows_confirm_removed">"تمت إزالة صفوف من الرئيسية"</string>
+    <string name="home_rows_confirm_changed">"تم تغيير إعدادات الصفوف"</string>
 </resources>

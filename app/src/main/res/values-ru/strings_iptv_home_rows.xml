@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Удалить этот ряд"</string>
     <string name="home_rows_vod_continue_title">"Продолжить просмотр On Demand"</string>
     <string name="home_rows_vod_continue_hint">"Фильмы и серии от провайдера, которые вы начали и не досмотрели, сначала последние. OK продолжает с того места, где вы остановились"</string>
+    <string name="home_rows_add_pick_subtitle">"Выберите одно. Это станет отдельной строкой на главной."</string>
+    <string name="home_rows_add_position">"%1$d из %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK — выбрать · Назад — закрыть"</string>
+    <string name="home_rows_add_keys_pick">"OK — добавить · Назад — вернуться"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Группа из любого вашего плейлиста"</string>
+    <string name="home_rows_pick_my_group_hint">"Группа, которую вы создали сами"</string>
+    <string name="home_rows_pick_sports_one_hint">"Только матчи выбранного вида спорта или лиги"</string>
+    <string name="home_rows_pick_vod_group_hint">"Категория фильмов или сериалов вашего провайдера"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Начатые фильмы и серии, последние просмотренные первыми"</string>
+    <string name="home_rows_web_back">"Назад"</string>
+    <string name="home_rows_web_done">"Готово"</string>
+    <string name="home_rows_confirm_added">"Строки добавлены на главную"</string>
+    <string name="home_rows_confirm_removed">"Строки удалены с главной"</string>
+    <string name="home_rows_confirm_changed">"Настройки строк изменены"</string>
 </resources>

@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Deze rij verwijderen"</string>
     <string name="home_rows_vod_continue_title">"Verder kijken On Demand"</string>
     <string name="home_rows_vod_continue_hint">"Films en afleveringen van je provider die je begon en niet afmaakte, laatst bekeken eerst. OK gaat verder waar je was"</string>
+    <string name="home_rows_add_pick_subtitle">"Kies er één. Het wordt een eigen rij op Home."</string>
+    <string name="home_rows_add_position">"%1$d van %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK om te kiezen · Terug om te sluiten"</string>
+    <string name="home_rows_add_keys_pick">"OK om toe te voegen · Terug om terug te gaan"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Een groep uit een van je playlists"</string>
+    <string name="home_rows_pick_my_group_hint">"Een groep die je zelf hebt gemaakt"</string>
+    <string name="home_rows_pick_sports_one_hint">"Alleen de wedstrijden van de sport of competitie die je kiest"</string>
+    <string name="home_rows_pick_vod_group_hint">"Een film- of seriecategorie van je provider"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Begonnen films en afleveringen, laatst bekeken eerst"</string>
+    <string name="home_rows_web_back">"Terug"</string>
+    <string name="home_rows_web_done">"Klaar"</string>
+    <string name="home_rows_confirm_added">"Rijen toegevoegd aan Home"</string>
+    <string name="home_rows_confirm_removed">"Rijen verwijderd van Home"</string>
+    <string name="home_rows_confirm_changed">"Rij-instellingen gewijzigd"</string>
 </resources>

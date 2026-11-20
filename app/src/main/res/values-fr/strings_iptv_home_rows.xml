@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Retirer cette rangée"</string>
     <string name="home_rows_vod_continue_title">"Reprendre On Demand"</string>
     <string name="home_rows_vod_continue_hint">"Les films et épisodes de votre fournisseur commencés et non terminés, le dernier regardé d'abord. OK reprend là où vous vous êtes arrêté"</string>
+    <string name="home_rows_add_pick_subtitle">"Choisissez-en une. Elle devient sa propre rangée sur l’Accueil."</string>
+    <string name="home_rows_add_position">"%1$d sur %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK pour choisir · Retour pour fermer"</string>
+    <string name="home_rows_add_keys_pick">"OK pour ajouter · Retour pour revenir"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Un groupe de l’une de vos playlists"</string>
+    <string name="home_rows_pick_my_group_hint">"Un groupe que vous avez créé"</string>
+    <string name="home_rows_pick_sports_one_hint">"Seulement les matchs du sport ou de la ligue choisis"</string>
+    <string name="home_rows_pick_vod_group_hint">"Une catégorie de films ou de séries de votre fournisseur"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Films et épisodes commencés, le dernier regardé en premier"</string>
+    <string name="home_rows_web_back">"Retour"</string>
+    <string name="home_rows_web_done">"Terminé"</string>
+    <string name="home_rows_confirm_added">"Rangées ajoutées à l’Accueil"</string>
+    <string name="home_rows_confirm_removed">"Rangées retirées de l’Accueil"</string>
+    <string name="home_rows_confirm_changed">"Réglages des rangées modifiés"</string>
 </resources>

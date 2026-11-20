@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Diese Reihe entfernen"</string>
     <string name="home_rows_vod_continue_title">"On Demand weiterschauen"</string>
     <string name="home_rows_vod_continue_hint">"Filme und Folgen deines Anbieters, die du angefangen und nicht beendet hast, zuletzt gesehene zuerst. OK macht dort weiter, wo du aufgehört hast"</string>
+    <string name="home_rows_add_pick_subtitle">"Wähle eine aus. Sie wird eine eigene Reihe auf der Startseite."</string>
+    <string name="home_rows_add_position">"%1$d von %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK zum Auswählen · Zurück zum Schließen"</string>
+    <string name="home_rows_add_keys_pick">"OK zum Hinzufügen · Zurück geht zurück"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Eine Gruppe aus einer deiner Playlists"</string>
+    <string name="home_rows_pick_my_group_hint">"Eine Gruppe, die du selbst erstellt hast"</string>
+    <string name="home_rows_pick_sports_one_hint">"Nur die Spiele der Sportart oder Liga, die du auswählst"</string>
+    <string name="home_rows_pick_vod_group_hint">"Eine Film- oder Serienkategorie deines Anbieters"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Angefangene Filme und Folgen, zuletzt gesehene zuerst"</string>
+    <string name="home_rows_web_back">"Zurück"</string>
+    <string name="home_rows_web_done">"Fertig"</string>
+    <string name="home_rows_confirm_added">"Reihen zur Startseite hinzugefügt"</string>
+    <string name="home_rows_confirm_removed">"Reihen von der Startseite entfernt"</string>
+    <string name="home_rows_confirm_changed">"Reiheneinstellungen geändert"</string>
 </resources>

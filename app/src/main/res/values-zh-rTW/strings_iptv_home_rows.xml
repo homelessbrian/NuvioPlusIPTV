@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"移除這一列"</string>
     <string name="home_rows_vod_continue_title">"繼續觀看 On Demand"</string>
     <string name="home_rows_vod_continue_hint">"你開始看但還沒看完的供應商電影和劇集，最近觀看的在前。按 OK 從上次停下的地方繼續"</string>
+    <string name="home_rows_add_pick_subtitle">"選一個。它會成為首頁上獨立的一列。"</string>
+    <string name="home_rows_add_position">"%1$d / %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK 選擇 · 返回 關閉"</string>
+    <string name="home_rows_add_keys_pick">"OK 新增 · 返回 上一步"</string>
+    <string name="home_rows_pick_playlist_group_hint">"來自任一播放清單的群組"</string>
+    <string name="home_rows_pick_my_group_hint">"你自己建立的群組"</string>
+    <string name="home_rows_pick_sports_one_hint">"只顯示所選運動或聯賽的比賽"</string>
+    <string name="home_rows_pick_vod_group_hint">"來自供應商的電影或影集分類"</string>
+    <string name="home_rows_pick_vod_continue_hint">"已開始觀看的電影和集數，最近看的在前"</string>
+    <string name="home_rows_web_back">"返回"</string>
+    <string name="home_rows_web_done">"完成"</string>
+    <string name="home_rows_confirm_added">"已新增首頁列"</string>
+    <string name="home_rows_confirm_removed">"已移除首頁列"</string>
+    <string name="home_rows_confirm_changed">"首頁列設定已變更"</string>
 </resources>

@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"删除这一行"</string>
     <string name="home_rows_vod_continue_title">"继续观看 On Demand"</string>
     <string name="home_rows_vod_continue_hint">"你开始看但还没看完的提供商电影和剧集，最近观看的在前。按 OK 从上次停下的地方继续"</string>
+    <string name="home_rows_add_pick_subtitle">"选一个。它会成为主页上单独的一行。"</string>
+    <string name="home_rows_add_position">"%1$d / %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK 选择 · 返回 关闭"</string>
+    <string name="home_rows_add_keys_pick">"OK 添加 · 返回 上一步"</string>
+    <string name="home_rows_pick_playlist_group_hint">"来自任一播放列表的分组"</string>
+    <string name="home_rows_pick_my_group_hint">"你自己创建的分组"</string>
+    <string name="home_rows_pick_sports_one_hint">"只显示所选运动或联赛的比赛"</string>
+    <string name="home_rows_pick_vod_group_hint">"来自提供商的电影或剧集分类"</string>
+    <string name="home_rows_pick_vod_continue_hint">"已开始看的电影和剧集，最近看的在前"</string>
+    <string name="home_rows_web_back">"返回"</string>
+    <string name="home_rows_web_done">"完成"</string>
+    <string name="home_rows_confirm_added">"已添加主页行"</string>
+    <string name="home_rows_confirm_removed">"已移除主页行"</string>
+    <string name="home_rows_confirm_changed">"主页行设置已更改"</string>
 </resources>

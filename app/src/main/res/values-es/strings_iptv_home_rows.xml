@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Quitar esta fila"</string>
     <string name="home_rows_vod_continue_title">"Seguir viendo On Demand"</string>
     <string name="home_rows_vod_continue_hint">"Las películas y episodios de tu proveedor que empezaste y no terminaste, el último visto primero. OK continúa donde lo dejaste"</string>
+    <string name="home_rows_add_pick_subtitle">"Elige una. Será su propia fila en Inicio."</string>
+    <string name="home_rows_add_position">"%1$d de %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK para elegir · Atrás para cerrar"</string>
+    <string name="home_rows_add_keys_pick">"OK para añadir · Atrás para volver"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Un grupo de cualquiera de tus listas"</string>
+    <string name="home_rows_pick_my_group_hint">"Un grupo que creaste tú"</string>
+    <string name="home_rows_pick_sports_one_hint">"Solo los partidos del deporte o liga que elijas"</string>
+    <string name="home_rows_pick_vod_group_hint">"Una categoría de películas o series de tu proveedor"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Películas y episodios empezados, el último visto primero"</string>
+    <string name="home_rows_web_back">"Atrás"</string>
+    <string name="home_rows_web_done">"Listo"</string>
+    <string name="home_rows_confirm_added">"Filas añadidas a Inicio"</string>
+    <string name="home_rows_confirm_removed">"Filas quitadas de Inicio"</string>
+    <string name="home_rows_confirm_changed">"Ajustes de filas cambiados"</string>
 </resources>

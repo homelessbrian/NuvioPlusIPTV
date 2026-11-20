@@ -36,6 +36,7 @@ internal fun sanitizePendingAddonChange(
         } else {
             null
         },
+        proposedLiveRowsJson = if (mode.allowCatalogManagement) proposedChange.proposedLiveRowsJson else null,
         proposedDisabledCollectionKeys = if (mode.allowCollectionManagement) {
             proposedChange.proposedDisabledCollectionKeys
         } else {

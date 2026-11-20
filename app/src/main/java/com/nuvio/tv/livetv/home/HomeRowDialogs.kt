@@ -3,25 +3,41 @@ package com.nuvio.tv.livetv.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.NewReleases
+import androidx.compose.material.icons.filled.PlayCircleOutline
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -38,7 +54,7 @@ import com.nuvio.tv.ui.screens.settings.SettingsToggleRow
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 
-private enum class PickerOption { FAVORITES, RECENT, PLAYLIST_GROUP, MY_GROUP, SPORTS_ALL, SPORTS_ONE, VOD_GROUP, VOD_RECENT, VOD_CONTINUE }
+private enum class PickerOption { PLAYLIST_GROUP, MY_GROUP, SPORTS_ONE, VOD_GROUP, VOD_RECENT }
 
 @Composable
 private fun Heading(text: String) {
@@ -46,15 +62,17 @@ private fun Heading(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelMedium,
         color = NuvioTheme.colors.TextTertiary,
-        modifier = Modifier.padding(start = NuvioTheme.spacing.lg, top = NuvioTheme.spacing.sm, bottom = NuvioTheme.spacing.xxs)
+        modifier = Modifier.padding(start = NuvioTheme.spacing.sm, top = NuvioTheme.spacing.md, bottom = NuvioTheme.spacing.xxs)
     )
 }
 
 /**
- * Reorder Home Catalogs › Add a row: Live TV (Favorites, Recently watched, a playlist group or
- * one of your own groups), Sports (every sport, or one sport or league) or On Demand (a movie or
- * series group, or what was added last). The choices on the left; for a group or a league, the
- * list to pick from on the right.
+ * Reorder Home Catalogs › Add a row: one wide list of what a row can show, each with its full
+ * name and a line saying what it is: Live TV (Favorites, Recently watched, a playlist group or
+ * one of your own groups), Sports (every sport, or one sport or league) and On Demand (a movie or
+ * series category, what was added last, or what you're watching). Choices that need one more
+ * pick (a group, a league, a category) open that list in the same dialog; Back goes back to the
+ * first list, and Back again closes it.
  */
 @Composable
 fun AddHomeRowDialog(
@@ -65,270 +83,361 @@ fun AddHomeRowDialog(
     val favorites by viewModel.favoritesCount.collectAsStateWithLifecycle()
     val sportsChoices by viewModel.sportsChoices.collectAsStateWithLifecycle()
     val vodGroups by viewModel.vodGroups.collectAsStateWithLifecycle()
-    var shown by remember { mutableStateOf<PickerOption?>(null) }
-    val first = remember { FocusRequester() }
-    val listFirst = remember { FocusRequester() }
-    var jumpToList by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
-    LaunchedEffect(jumpToList) { if (jumpToList > 0) { delay(60); runCatching { listFirst.requestFocus() } } }
+    var step by remember { mutableStateOf<PickerOption?>(null) }
+    // Where Back from a second list puts the focus (the choice that opened it).
+    var returnTo by remember { mutableStateOf<String?>(null) }
+    var position by remember { mutableStateOf(1) }
+    var total by remember { mutableStateOf(0) }
+    val focus = remember { HashMap<String, FocusRequester>() }
+    fun requester(key: String) = focus.getOrPut(key) { FocusRequester() }
     fun add(row: HomeLiveRow) { viewModel.add(row); onDismiss() }
+    fun openList(option: PickerOption, from: String) { returnTo = from; position = 1; step = option }
 
     NuvioDialog(
-        onDismiss = onDismiss,
-        title = stringResource(R.string.home_rows_add_title),
-        subtitle = stringResource(R.string.home_rows_add_subtitle),
-        width = 980.dp
+        onDismiss = { if (step != null) step = null else onDismiss() },
+        title = when (step) {
+            null -> stringResource(R.string.home_rows_add_title)
+            PickerOption.PLAYLIST_GROUP -> stringResource(R.string.home_rows_pick_playlist_group_title)
+            PickerOption.MY_GROUP -> stringResource(R.string.home_rows_pick_my_group_title)
+            PickerOption.SPORTS_ONE -> stringResource(R.string.home_rows_pick_sports_one_title)
+            PickerOption.VOD_GROUP -> stringResource(R.string.home_rows_pick_vod_group_title)
+            PickerOption.VOD_RECENT -> stringResource(R.string.home_rows_pick_vod_recent)
+        },
+        subtitle = stringResource(if (step == null) R.string.home_rows_add_subtitle else R.string.home_rows_add_pick_subtitle),
+        width = 680.dp,
+        usePlatformDefaultWidth = false,
+        contentSpacing = NuvioTheme.spacing.md
     ) {
-        Row(Modifier.fillMaxWidth().height(440.dp)) {
-            LazyColumn(
-                modifier = Modifier.weight(0.46f).fillMaxHeight(),
-                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
-            ) {
-                item(key = "h_live") { Heading(stringResource(R.string.home_rows_section_live)) }
-                item(key = "fav") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.home_rows_pick_favorites),
-                        subtitle = null,
-                        value = pluralStringResource(R.plurals.iptv_quick_channels_count, favorites, favorites),
-                        onClick = { add(HomeLiveRow.channels(ChannelGroup.FAVORITES)) },
-                        onFocused = { shown = PickerOption.FAVORITES },
-                        modifier = Modifier.focusRequester(first)
-                    )
-                }
-                item(key = "recent") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.home_rows_pick_recent),
-                        subtitle = null,
-                        onClick = { add(HomeLiveRow.channels(ChannelGroup.RECENT)) },
-                        onFocused = { shown = PickerOption.RECENT }
-                    )
-                }
-                item(key = "group") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.home_rows_pick_playlist_group),
-                        subtitle = null,
-                        onClick = { shown = PickerOption.PLAYLIST_GROUP; jumpToList++ },
-                        onFocused = { shown = PickerOption.PLAYLIST_GROUP }
-                    )
-                }
-                item(key = "mine") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.home_rows_pick_my_group),
-                        subtitle = null,
-                        onClick = { shown = PickerOption.MY_GROUP; jumpToList++ },
-                        onFocused = { shown = PickerOption.MY_GROUP }
-                    )
-                }
-                item(key = "h_sports") { Heading(stringResource(R.string.home_rows_section_sports)) }
-                item(key = "sports_all") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.home_rows_pick_sports_all),
-                        subtitle = stringResource(R.string.home_rows_pick_sports_all_hint),
-                        onClick = { add(HomeLiveRow.sports()) },
-                        onFocused = { shown = PickerOption.SPORTS_ALL }
-                    )
-                }
-                item(key = "sports_one") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.home_rows_pick_sports_one),
-                        subtitle = null,
-                        onClick = { shown = PickerOption.SPORTS_ONE; jumpToList++ },
-                        onFocused = { shown = PickerOption.SPORTS_ONE }
-                    )
-                }
-                item(key = "h_vod") { Heading(stringResource(R.string.home_rows_section_vod)) }
-                item(key = "vod_group") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.home_rows_pick_vod_group),
-                        subtitle = null,
-                        onClick = { shown = PickerOption.VOD_GROUP; jumpToList++ },
-                        onFocused = { shown = PickerOption.VOD_GROUP }
-                    )
-                }
-                item(key = "vod_recent") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.home_rows_pick_vod_recent),
-                        subtitle = stringResource(R.string.home_rows_pick_vod_recent_hint),
-                        onClick = { shown = PickerOption.VOD_RECENT; jumpToList++ },
-                        onFocused = { shown = PickerOption.VOD_RECENT }
-                    )
-                }
-                item(key = "vod_continue") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.home_rows_vod_continue_title),
-                        subtitle = null,
-                        onClick = { add(HomeLiveRow.vod(HomeLiveRow.VOD_CONTINUE)) },
-                        onFocused = { shown = PickerOption.VOD_CONTINUE }
-                    )
-                }
-            }
-            Box(Modifier.padding(horizontal = NuvioTheme.spacing.md).width(1.dp).fillMaxHeight().background(NuvioTheme.colors.Border))
-            Column(Modifier.weight(0.54f).fillMaxHeight()) {
-                when (shown) {
-                    PickerOption.PLAYLIST_GROUP -> GroupList(
-                        title = stringResource(R.string.home_rows_pick_playlist_group_title),
-                        groups = groups.filter { it.playlist != null },
-                        firstFocus = listFirst,
-                        onPick = { add(HomeLiveRow.channels(it.id)) }
-                    )
-                    PickerOption.MY_GROUP -> GroupList(
-                        title = stringResource(R.string.home_rows_pick_my_group_title),
-                        groups = groups.filter { it.playlist == null },
-                        firstFocus = listFirst,
-                        onPick = { add(HomeLiveRow.channels(it.id)) }
-                    )
-                    PickerOption.SPORTS_ONE -> SportsList(sportsChoices, listFirst) { add(HomeLiveRow.sports(it.source)) }
-                    PickerOption.VOD_GROUP -> VodGroupList(vodGroups, listFirst) { add(HomeLiveRow.vod(it.source, it.name)) }
-                    PickerOption.VOD_RECENT -> VodRecentList(listFirst) { add(HomeLiveRow.vod(it)) }
-                    else -> Text(
-                        text = stringResource(
-                            when (shown) {
-                                PickerOption.FAVORITES -> R.string.home_rows_pick_favorites_hint
-                                PickerOption.RECENT -> R.string.home_rows_pick_recent_hint
-                                PickerOption.SPORTS_ALL -> R.string.home_rows_pick_sports_all_detail
-                                PickerOption.VOD_CONTINUE -> R.string.home_rows_vod_continue_hint
-                                else -> R.string.home_rows_add_hint
-                            }
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioTheme.colors.TextSecondary,
-                        modifier = Modifier.padding(NuvioTheme.spacing.lg)
-                    )
-                }
-            }
+        val listState = rememberLazyListState()
+        LaunchedEffect(step) {
+            // Back from a second list lands on the choice that opened it.
+            val key = if (step == null) returnTo ?: "fav" else "first"
+            listState.scrollToItem(if (step == null) (MAIN_INDEX[key] ?: 0).minus(1).coerceAtLeast(0) else 0)
+            delay(80)
+            runCatching { requester(key).requestFocus() }
         }
-    }
-}
-
-@Composable
-private fun GroupList(title: String, groups: List<RowGroupOption>, firstFocus: FocusRequester, onPick: (RowGroupOption) -> Unit) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        color = NuvioTheme.colors.TextPrimary,
-        modifier = Modifier.padding(start = NuvioTheme.spacing.lg, bottom = NuvioTheme.spacing.xs)
-    )
-    if (groups.isEmpty()) {
-        Text(
-            text = stringResource(R.string.iptv_quick_channels_no_groups),
-            style = MaterialTheme.typography.bodyMedium,
-            color = NuvioTheme.colors.TextSecondary,
-            modifier = Modifier.padding(NuvioTheme.spacing.lg)
-        )
-        return
-    }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)) {
-        var lastHeading: String? = null
-        groups.forEachIndexed { i, g ->
-            val heading = g.playlist
-            if (heading != null && heading != lastHeading) {
-                lastHeading = heading
-                item(key = "h:$i") { Heading(heading) }
+        Box(Modifier.fillMaxWidth().height(430.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                when (step) {
+                    null -> mainChoices(
+                        favorites = favorites,
+                        requester = ::requester,
+                        onFocused = { pos, count -> position = pos; total = count },
+                        onAdd = ::add,
+                        onOpen = ::openList
+                    )
+                    PickerOption.PLAYLIST_GROUP, PickerOption.MY_GROUP -> groupChoices(
+                        groups = groups.filter { (it.playlist != null) == (step == PickerOption.PLAYLIST_GROUP) },
+                        first = requester("first"),
+                        onFocused = { pos, count -> position = pos; total = count },
+                        onPick = { add(HomeLiveRow.channels(it.id)) }
+                    )
+                    PickerOption.SPORTS_ONE -> sportsChoiceItems(
+                        choices = sportsChoices,
+                        first = requester("first"),
+                        onFocused = { pos, count -> position = pos; total = count },
+                        onPick = { add(HomeLiveRow.sports(it.source)) }
+                    )
+                    PickerOption.VOD_GROUP -> vodGroupChoices(
+                        groups = vodGroups,
+                        first = requester("first"),
+                        onFocused = { pos, count -> position = pos; total = count },
+                        onPick = { add(HomeLiveRow.vod(it.source, it.name)) }
+                    )
+                    PickerOption.VOD_RECENT -> vodRecentChoices(
+                        first = requester("first"),
+                        onFocused = { pos, count -> position = pos; total = count },
+                        onPick = { add(HomeLiveRow.vod(it)) }
+                    )
+                }
             }
-            item(key = "g:" + g.id) {
-                SettingsActionRow(
-                    title = g.name,
-                    subtitle = null,
-                    value = pluralStringResource(R.plurals.iptv_quick_channels_count, g.count, g.count),
-                    onClick = { onPick(g) },
-                    modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier
+            // A soft fade at the bottom while there's more to scroll to.
+            if (listState.canScrollForward) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, NuvioTheme.colors.BackgroundElevated)))
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun VodGroupList(groups: List<VodRowChoice>, firstFocus: FocusRequester, onPick: (VodRowChoice) -> Unit) {
-    Text(
-        text = stringResource(R.string.home_rows_pick_vod_group_title),
-        style = MaterialTheme.typography.titleMedium,
-        color = NuvioTheme.colors.TextPrimary,
-        modifier = Modifier.padding(start = NuvioTheme.spacing.lg, bottom = NuvioTheme.spacing.xs)
-    )
-    if (groups.isEmpty()) {
-        Text(
-            text = stringResource(R.string.home_rows_pick_vod_none),
-            style = MaterialTheme.typography.bodyMedium,
-            color = NuvioTheme.colors.TextSecondary,
-            modifier = Modifier.padding(NuvioTheme.spacing.lg)
-        )
-        return
-    }
-    val movies = groups.filter { !it.series }
-    val series = groups.filter { it.series }
-    val moviesHeading = stringResource(R.string.home_rows_vod_movies)
-    val seriesHeading = stringResource(R.string.home_rows_vod_series)
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)) {
-        listOf(moviesHeading to movies, seriesHeading to series).forEach { (heading, list) ->
-            if (list.isEmpty()) return@forEach
-            item(key = "h:$heading") { Heading(heading) }
-            items(list, key = { it.source }) { g ->
-                SettingsActionRow(
-                    title = g.name,
-                    subtitle = g.playlist,
-                    value = pluralStringResource(R.plurals.home_rows_vod_titles_count, g.count, g.count),
-                    onClick = { onPick(g) },
-                    modifier = if (g == groups.firstOrNull { it.series == (movies.isEmpty()) }) Modifier.focusRequester(firstFocus) else Modifier
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun VodRecentList(firstFocus: FocusRequester, onPick: (String) -> Unit) {
-    Text(
-        text = stringResource(R.string.home_rows_pick_vod_recent),
-        style = MaterialTheme.typography.titleMedium,
-        color = NuvioTheme.colors.TextPrimary,
-        modifier = Modifier.padding(start = NuvioTheme.spacing.lg, bottom = NuvioTheme.spacing.xs)
-    )
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)) {
-        item(key = "movies") {
-            SettingsActionRow(
-                title = stringResource(R.string.home_rows_vod_movies),
-                subtitle = null,
-                onClick = { onPick(HomeLiveRow.VOD_RECENT_MOVIES) },
-                modifier = Modifier.focusRequester(firstFocus)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (total > 0) stringResource(R.string.home_rows_add_position, position, total) else "",
+                style = MaterialTheme.typography.labelMedium,
+                color = NuvioTheme.colors.TextTertiary,
+                modifier = Modifier.weight(1f)
             )
-        }
-        item(key = "series") {
-            SettingsActionRow(
-                title = stringResource(R.string.home_rows_vod_series),
-                subtitle = null,
-                onClick = { onPick(HomeLiveRow.VOD_RECENT_SERIES) }
+            Text(
+                text = stringResource(if (step == null) R.string.home_rows_add_keys_main else R.string.home_rows_add_keys_pick),
+                style = MaterialTheme.typography.labelMedium,
+                color = NuvioTheme.colors.TextTertiary
             )
         }
     }
 }
 
+/** One choice in the Add a row lists: icon, full name, what it is, and (for some) how many. */
 @Composable
-private fun SportsList(choices: List<SportsRowChoice>, firstFocus: FocusRequester, onPick: (SportsRowChoice) -> Unit) {
-    Text(
-        text = stringResource(R.string.home_rows_pick_sports_one_title),
-        style = MaterialTheme.typography.titleMedium,
-        color = NuvioTheme.colors.TextPrimary,
-        modifier = Modifier.padding(start = NuvioTheme.spacing.lg, bottom = NuvioTheme.spacing.xs)
+private fun Choice(
+    icon: ImageVector?,
+    title: String,
+    subtitle: String?,
+    value: String? = null,
+    opensList: Boolean = false,
+    modifier: Modifier = Modifier,
+    onFocused: () -> Unit,
+    onClick: () -> Unit
+) {
+    SettingsActionRow(
+        title = title,
+        subtitle = subtitle,
+        value = value,
+        onClick = onClick,
+        onFocused = onFocused,
+        leadingIcon = icon,
+        trailingIcon = if (opensList) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Default.Add,
+        modifier = modifier
     )
-    val sportsHeading = stringResource(R.string.home_rows_sports_heading)
-    val leaguesHeading = stringResource(R.string.home_rows_leagues_heading)
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)) {
-        sportsSection(sportsHeading, choices.filter { !it.isLeague }, firstFocus, onPick)
-        sportsSection(leaguesHeading, choices.filter { it.isLeague }, null, onPick)
+}
+
+/** Where each first-list choice sits in the list (headings included). */
+private val MAIN_INDEX = mapOf(
+    "fav" to 1, "recent" to 2, "group" to 3, "mine" to 4,
+    "sports_all" to 6, "sports_one" to 7,
+    "vod_group" to 9, "vod_recent" to 10, "vod_continue" to 11
+)
+
+private fun LazyListScope.mainChoices(
+    favorites: Int,
+    requester: (String) -> FocusRequester,
+    onFocused: (Int, Int) -> Unit,
+    onAdd: (HomeLiveRow) -> Unit,
+    onOpen: (PickerOption, String) -> Unit
+) {
+    val count = 9
+    item(key = "h_live") { Heading(stringResource(R.string.home_rows_section_live)) }
+    item(key = "fav") {
+        Choice(
+            icon = Icons.Default.Star,
+            title = stringResource(R.string.home_rows_pick_favorites),
+            subtitle = stringResource(R.string.home_rows_pick_favorites_hint),
+            value = pluralStringResource(R.plurals.iptv_quick_channels_count, favorites, favorites),
+            modifier = Modifier.focusRequester(requester("fav")),
+            onFocused = { onFocused(1, count) },
+            onClick = { onAdd(HomeLiveRow.channels(ChannelGroup.FAVORITES)) }
+        )
+    }
+    item(key = "recent") {
+        Choice(
+            icon = Icons.Default.History,
+            title = stringResource(R.string.home_rows_pick_recent),
+            subtitle = stringResource(R.string.home_rows_pick_recent_hint),
+            modifier = Modifier.focusRequester(requester("recent")),
+            onFocused = { onFocused(2, count) },
+            onClick = { onAdd(HomeLiveRow.channels(ChannelGroup.RECENT)) }
+        )
+    }
+    item(key = "group") {
+        Choice(
+            icon = Icons.AutoMirrored.Filled.List,
+            title = stringResource(R.string.home_rows_pick_playlist_group),
+            subtitle = stringResource(R.string.home_rows_pick_playlist_group_hint),
+            opensList = true,
+            modifier = Modifier.focusRequester(requester("group")),
+            onFocused = { onFocused(3, count) },
+            onClick = { onOpen(PickerOption.PLAYLIST_GROUP, "group") }
+        )
+    }
+    item(key = "mine") {
+        Choice(
+            icon = Icons.Default.Folder,
+            title = stringResource(R.string.home_rows_pick_my_group),
+            subtitle = stringResource(R.string.home_rows_pick_my_group_hint),
+            opensList = true,
+            modifier = Modifier.focusRequester(requester("mine")),
+            onFocused = { onFocused(4, count) },
+            onClick = { onOpen(PickerOption.MY_GROUP, "mine") }
+        )
+    }
+    item(key = "h_sports") { Heading(stringResource(R.string.home_rows_section_sports)) }
+    item(key = "sports_all") {
+        Choice(
+            icon = Icons.Default.LiveTv,
+            title = stringResource(R.string.home_rows_pick_sports_all),
+            subtitle = stringResource(R.string.home_rows_pick_sports_all_hint),
+            modifier = Modifier.focusRequester(requester("sports_all")),
+            onFocused = { onFocused(5, count) },
+            onClick = { onAdd(HomeLiveRow.sports()) }
+        )
+    }
+    item(key = "sports_one") {
+        Choice(
+            icon = Icons.Default.EmojiEvents,
+            title = stringResource(R.string.home_rows_pick_sports_one),
+            subtitle = stringResource(R.string.home_rows_pick_sports_one_hint),
+            opensList = true,
+            modifier = Modifier.focusRequester(requester("sports_one")),
+            onFocused = { onFocused(6, count) },
+            onClick = { onOpen(PickerOption.SPORTS_ONE, "sports_one") }
+        )
+    }
+    item(key = "h_vod") { Heading(stringResource(R.string.home_rows_section_vod)) }
+    item(key = "vod_group") {
+        Choice(
+            icon = Icons.Default.Movie,
+            title = stringResource(R.string.home_rows_pick_vod_group),
+            subtitle = stringResource(R.string.home_rows_pick_vod_group_hint),
+            opensList = true,
+            modifier = Modifier.focusRequester(requester("vod_group")),
+            onFocused = { onFocused(7, count) },
+            onClick = { onOpen(PickerOption.VOD_GROUP, "vod_group") }
+        )
+    }
+    item(key = "vod_recent") {
+        Choice(
+            icon = Icons.Default.NewReleases,
+            title = stringResource(R.string.home_rows_pick_vod_recent),
+            subtitle = stringResource(R.string.home_rows_pick_vod_recent_hint),
+            opensList = true,
+            modifier = Modifier.focusRequester(requester("vod_recent")),
+            onFocused = { onFocused(8, count) },
+            onClick = { onOpen(PickerOption.VOD_RECENT, "vod_recent") }
+        )
+    }
+    item(key = "vod_continue") {
+        Choice(
+            icon = Icons.Default.PlayCircleOutline,
+            title = stringResource(R.string.home_rows_vod_continue_title),
+            subtitle = stringResource(R.string.home_rows_pick_vod_continue_hint),
+            modifier = Modifier.focusRequester(requester("vod_continue")),
+            onFocused = { onFocused(9, count) },
+            onClick = { onAdd(HomeLiveRow.vod(HomeLiveRow.VOD_CONTINUE)) }
+        )
     }
 }
 
-private fun LazyListScope.sportsSection(heading: String, list: List<SportsRowChoice>, firstFocus: FocusRequester?, onPick: (SportsRowChoice) -> Unit) {
-    if (list.isEmpty()) return
-    item(key = "h:$heading") { Heading(heading) }
-    items(list, key = { it.source }) { c ->
-        SettingsActionRow(
-            title = "${c.icon}  ${c.name}",
+private fun LazyListScope.emptyNote(text: @Composable () -> String) {
+    item(key = "empty") {
+        Text(
+            text = text(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = NuvioTheme.colors.TextSecondary,
+            modifier = Modifier.padding(NuvioTheme.spacing.lg)
+        )
+    }
+}
+
+private fun LazyListScope.groupChoices(
+    groups: List<RowGroupOption>,
+    first: FocusRequester,
+    onFocused: (Int, Int) -> Unit,
+    onPick: (RowGroupOption) -> Unit
+) {
+    if (groups.isEmpty()) { emptyNote { stringResource(R.string.iptv_quick_channels_no_groups) }; return }
+    var lastHeading: String? = null
+    groups.forEachIndexed { i, g ->
+        val heading = g.playlist
+        if (heading != null && heading != lastHeading) {
+            lastHeading = heading
+            item(key = "h:$i") { Heading(heading) }
+        }
+        item(key = "g:" + g.id) {
+            Choice(
+                icon = null,
+                title = g.name,
+                subtitle = null,
+                value = pluralStringResource(R.plurals.iptv_quick_channels_count, g.count, g.count),
+                modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
+                onFocused = { onFocused(i + 1, groups.size) },
+                onClick = { onPick(g) }
+            )
+        }
+    }
+}
+
+private fun LazyListScope.vodGroupChoices(
+    groups: List<VodRowChoice>,
+    first: FocusRequester,
+    onFocused: (Int, Int) -> Unit,
+    onPick: (VodRowChoice) -> Unit
+) {
+    if (groups.isEmpty()) { emptyNote { stringResource(R.string.home_rows_pick_vod_none) }; return }
+    val ordered = groups.filter { !it.series } + groups.filter { it.series }
+    var lastSeries: Boolean? = null
+    ordered.forEachIndexed { i, g ->
+        if (g.series != lastSeries) {
+            lastSeries = g.series
+            item(key = "h:${g.series}") {
+                Heading(stringResource(if (g.series) R.string.home_rows_vod_series else R.string.home_rows_vod_movies))
+            }
+        }
+        item(key = g.source) {
+            Choice(
+                icon = null,
+                title = g.name,
+                subtitle = g.playlist,
+                value = pluralStringResource(R.plurals.home_rows_vod_titles_count, g.count, g.count),
+                modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
+                onFocused = { onFocused(i + 1, ordered.size) },
+                onClick = { onPick(g) }
+            )
+        }
+    }
+}
+
+private fun LazyListScope.vodRecentChoices(
+    first: FocusRequester,
+    onFocused: (Int, Int) -> Unit,
+    onPick: (String) -> Unit
+) {
+    item(key = "movies") {
+        Choice(
+            icon = Icons.Default.Movie,
+            title = stringResource(R.string.home_rows_vod_recent_movies_title),
             subtitle = null,
-            onClick = { onPick(c) },
-            modifier = if (firstFocus != null && c == list.first()) Modifier.focusRequester(firstFocus) else Modifier
+            modifier = Modifier.focusRequester(first),
+            onFocused = { onFocused(1, 2) },
+            onClick = { onPick(HomeLiveRow.VOD_RECENT_MOVIES) }
         )
+    }
+    item(key = "series") {
+        Choice(
+            icon = Icons.Default.Tv,
+            title = stringResource(R.string.home_rows_vod_recent_series_title),
+            subtitle = null,
+            onFocused = { onFocused(2, 2) },
+            onClick = { onPick(HomeLiveRow.VOD_RECENT_SERIES) }
+        )
+    }
+}
+
+private fun LazyListScope.sportsChoiceItems(
+    choices: List<SportsRowChoice>,
+    first: FocusRequester,
+    onFocused: (Int, Int) -> Unit,
+    onPick: (SportsRowChoice) -> Unit
+) {
+    val ordered = choices.filter { !it.isLeague } + choices.filter { it.isLeague }
+    var lastLeague: Boolean? = null
+    ordered.forEachIndexed { i, c ->
+        if (c.isLeague != lastLeague) {
+            lastLeague = c.isLeague
+            item(key = "h:${c.isLeague}") {
+                Heading(stringResource(if (c.isLeague) R.string.home_rows_leagues_heading else R.string.home_rows_sports_heading))
+            }
+        }
+        item(key = c.source) {
+            Choice(
+                icon = null,
+                title = "${c.icon}  ${c.name}",
+                subtitle = null,
+                modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
+                onFocused = { onFocused(i + 1, ordered.size) },
+                onClick = { onPick(c) }
+            )
+        }
     }
 }
 

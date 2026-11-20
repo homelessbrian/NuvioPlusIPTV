@@ -39,5 +39,10 @@ data class PendingChangeInfo(
     val isApplying: Boolean = false,
     val trackingAddonNames: List<String>? = null,
     val trackingConsentUrls: List<String> = emptyList(),
-    val awaitingTrackingConsent: Boolean = false
+    val awaitingTrackingConsent: Boolean = false,
+    /** Live TV fork: the Live TV, Sports and On Demand rows from the phone (null = unchanged). */
+    val proposedLiveRowsJson: String? = null,
+    val addedLiveRowNames: List<String> = emptyList(),
+    val removedLiveRowNames: List<String> = emptyList(),
+    val liveRowsEdited: Boolean = false
 )

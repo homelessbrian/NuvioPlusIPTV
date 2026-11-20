@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Видалити цей рядок"</string>
     <string name="home_rows_vod_continue_title">"Продовжити перегляд On Demand"</string>
     <string name="home_rows_vod_continue_hint">"Фільми й серії від провайдера, які ви почали й не додивилися, спершу останні. OK продовжує з того місця, де ви зупинилися"</string>
+    <string name="home_rows_add_pick_subtitle">"Виберіть одне. Це стане окремим рядком на головній."</string>
+    <string name="home_rows_add_position">"%1$d з %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK — вибрати · Назад — закрити"</string>
+    <string name="home_rows_add_keys_pick">"OK — додати · Назад — повернутися"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Група з будь-якого вашого плейлиста"</string>
+    <string name="home_rows_pick_my_group_hint">"Група, яку ви створили самі"</string>
+    <string name="home_rows_pick_sports_one_hint">"Лише матчі вибраного виду спорту чи ліги"</string>
+    <string name="home_rows_pick_vod_group_hint">"Категорія фільмів або серіалів вашого провайдера"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Розпочаті фільми й серії, останні переглянуті першими"</string>
+    <string name="home_rows_web_back">"Назад"</string>
+    <string name="home_rows_web_done">"Готово"</string>
+    <string name="home_rows_confirm_added">"Рядки додано на головну"</string>
+    <string name="home_rows_confirm_removed">"Рядки видалено з головної"</string>
+    <string name="home_rows_confirm_changed">"Налаштування рядків змінено"</string>
 </resources>

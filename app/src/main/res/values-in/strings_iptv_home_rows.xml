@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Hapus baris ini"</string>
     <string name="home_rows_vod_continue_title">"Lanjutkan Menonton On Demand"</string>
     <string name="home_rows_vod_continue_hint">"Film dan episode dari penyedia Anda yang sudah dimulai dan belum selesai, terakhir ditonton dulu. OK melanjutkan dari tempat terakhir"</string>
+    <string name="home_rows_add_pick_subtitle">"Pilih satu. Ini menjadi baris sendiri di Beranda."</string>
+    <string name="home_rows_add_position">"%1$d dari %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK untuk memilih · Kembali untuk menutup"</string>
+    <string name="home_rows_add_keys_pick">"OK untuk menambah · Kembali untuk kembali"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Grup dari playlist mana pun milik Anda"</string>
+    <string name="home_rows_pick_my_group_hint">"Grup yang Anda buat sendiri"</string>
+    <string name="home_rows_pick_sports_one_hint">"Hanya pertandingan dari olahraga atau liga yang Anda pilih"</string>
+    <string name="home_rows_pick_vod_group_hint">"Kategori film atau serial dari penyedia Anda"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Film dan episode yang sudah dimulai, terakhir ditonton duluan"</string>
+    <string name="home_rows_web_back">"Kembali"</string>
+    <string name="home_rows_web_done">"Selesai"</string>
+    <string name="home_rows_confirm_added">"Baris ditambahkan ke Beranda"</string>
+    <string name="home_rows_confirm_removed">"Baris dihapus dari Beranda"</string>
+    <string name="home_rows_confirm_changed">"Pengaturan baris diubah"</string>
 </resources>

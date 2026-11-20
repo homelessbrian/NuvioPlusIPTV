@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"この行を削除"</string>
     <string name="home_rows_vod_continue_title">"On Demandの続きを見る"</string>
     <string name="home_rows_vod_continue_hint">"見始めて最後まで見ていないプロバイダーの映画とエピソード（最近見た順）。OKで続きから再生します"</string>
+    <string name="home_rows_add_pick_subtitle">"1つ選んでください。ホームに独立した行として追加されます。"</string>
+    <string name="home_rows_add_position">"%1$d / %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK で選択 · 戻るで閉じる"</string>
+    <string name="home_rows_add_keys_pick">"OK で追加 · 戻るで前へ"</string>
+    <string name="home_rows_pick_playlist_group_hint">"いずれかのプレイリストのグループ"</string>
+    <string name="home_rows_pick_my_group_hint">"自分で作ったグループ"</string>
+    <string name="home_rows_pick_sports_one_hint">"選んだスポーツやリーグの試合だけ"</string>
+    <string name="home_rows_pick_vod_group_hint">"プロバイダーの映画またはシリーズのカテゴリ"</string>
+    <string name="home_rows_pick_vod_continue_hint">"見始めた映画とエピソード、最後に見たものから"</string>
+    <string name="home_rows_web_back">"戻る"</string>
+    <string name="home_rows_web_done">"完了"</string>
+    <string name="home_rows_confirm_added">"ホームに行を追加"</string>
+    <string name="home_rows_confirm_removed">"ホームから行を削除"</string>
+    <string name="home_rows_confirm_changed">"行の設定を変更"</string>
 </resources>

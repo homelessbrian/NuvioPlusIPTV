@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Usuń ten rząd"</string>
     <string name="home_rows_vod_continue_title">"Oglądaj dalej On Demand"</string>
     <string name="home_rows_vod_continue_hint">"Filmy i odcinki od dostawcy, które zacząłeś i nie skończyłeś, od ostatnio oglądanych. OK wznawia tam, gdzie przerwałeś"</string>
+    <string name="home_rows_add_pick_subtitle">"Wybierz jedną. Stanie się osobnym wierszem na stronie głównej."</string>
+    <string name="home_rows_add_position">"%1$d z %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK, aby wybrać · Wstecz, aby zamknąć"</string>
+    <string name="home_rows_add_keys_pick">"OK, aby dodać · Wstecz, aby wrócić"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Grupa z dowolnej z Twoich playlist"</string>
+    <string name="home_rows_pick_my_group_hint">"Grupa utworzona przez Ciebie"</string>
+    <string name="home_rows_pick_sports_one_hint">"Tylko mecze wybranej dyscypliny lub ligi"</string>
+    <string name="home_rows_pick_vod_group_hint">"Kategoria filmów lub seriali od Twojego dostawcy"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Rozpoczęte filmy i odcinki, ostatnio oglądane najpierw"</string>
+    <string name="home_rows_web_back">"Wstecz"</string>
+    <string name="home_rows_web_done">"Gotowe"</string>
+    <string name="home_rows_confirm_added">"Dodano wiersze na stronie głównej"</string>
+    <string name="home_rows_confirm_removed">"Usunięto wiersze ze strony głównej"</string>
+    <string name="home_rows_confirm_changed">"Zmieniono ustawienia wierszy"</string>
 </resources>

@@ -275,6 +275,9 @@ class HomeLiveRows @Inject constructor(
 
     suspend fun remove(id: String) = edit { list -> list.filterNot { it.id == id } }
 
+    /** Replaces every row at once (the add-ons phone page sends the whole list back). */
+    suspend fun setAll(rows: List<HomeLiveRow>) = edit { rows.distinctBy { it.id } }
+
     private suspend fun edit(transform: (List<HomeLiveRow>) -> List<HomeLiveRow>) {
         prefs.editHomeRows { HomeLiveRow.encode(transform(HomeLiveRow.decode(it))) }
     }

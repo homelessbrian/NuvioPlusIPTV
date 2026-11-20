@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Bu satırı kaldır"</string>
     <string name="home_rows_vod_continue_title">"On Demand'i izlemeye devam et"</string>
     <string name="home_rows_vod_continue_hint">"Sağlayıcınızdan başlayıp bitirmediğiniz filmler ve bölümler, son izlenen önce. OK kaldığınız yerden devam eder"</string>
+    <string name="home_rows_add_pick_subtitle">"Birini seçin. Ana sayfada kendi satırı olur."</string>
+    <string name="home_rows_add_position">"%1$d / %2$d"</string>
+    <string name="home_rows_add_keys_main">"Seçmek için OK · Kapatmak için Geri"</string>
+    <string name="home_rows_add_keys_pick">"Eklemek için OK · Geri dönmek için Geri"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Oynatma listelerinizden herhangi birinden bir grup"</string>
+    <string name="home_rows_pick_my_group_hint">"Kendi oluşturduğunuz bir grup"</string>
+    <string name="home_rows_pick_sports_one_hint">"Yalnızca seçtiğiniz spor veya ligin maçları"</string>
+    <string name="home_rows_pick_vod_group_hint">"Sağlayıcınızdan bir film veya dizi kategorisi"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Başladığınız filmler ve bölümler, son izlenen önce"</string>
+    <string name="home_rows_web_back">"Geri"</string>
+    <string name="home_rows_web_done">"Bitti"</string>
+    <string name="home_rows_confirm_added">"Ana sayfaya satır eklendi"</string>
+    <string name="home_rows_confirm_removed">"Ana sayfadan satır kaldırıldı"</string>
+    <string name="home_rows_confirm_changed">"Satır ayarları değişti"</string>
 </resources>

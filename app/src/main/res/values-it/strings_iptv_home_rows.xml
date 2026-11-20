@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Rimuovi questa riga"</string>
     <string name="home_rows_vod_continue_title">"Continua a guardare On Demand"</string>
     <string name="home_rows_vod_continue_hint">"I film e gli episodi del tuo provider che hai iniziato e non finito, dal più recente. OK riprende da dove eri rimasto"</string>
+    <string name="home_rows_add_pick_subtitle">"Scegline una. Diventa una riga a sé nella Home."</string>
+    <string name="home_rows_add_position">"%1$d di %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK per scegliere · Indietro per chiudere"</string>
+    <string name="home_rows_add_keys_pick">"OK per aggiungere · Indietro per tornare"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Un gruppo da una delle tue playlist"</string>
+    <string name="home_rows_pick_my_group_hint">"Un gruppo creato da te"</string>
+    <string name="home_rows_pick_sports_one_hint">"Solo le partite dello sport o del campionato scelto"</string>
+    <string name="home_rows_pick_vod_group_hint">"Una categoria di film o serie del tuo provider"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Film ed episodi iniziati, l’ultimo visto per primo"</string>
+    <string name="home_rows_web_back">"Indietro"</string>
+    <string name="home_rows_web_done">"Fatto"</string>
+    <string name="home_rows_confirm_added">"Righe aggiunte alla Home"</string>
+    <string name="home_rows_confirm_removed">"Righe rimosse dalla Home"</string>
+    <string name="home_rows_confirm_changed">"Impostazioni delle righe modificate"</string>
 </resources>

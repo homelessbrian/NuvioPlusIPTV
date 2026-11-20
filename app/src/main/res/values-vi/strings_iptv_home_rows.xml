@@ -63,4 +63,18 @@
     <string name="home_rows_option_remove">"Xóa hàng này"</string>
     <string name="home_rows_vod_continue_title">"Xem tiếp On Demand"</string>
     <string name="home_rows_vod_continue_hint">"Phim và tập phim từ nhà cung cấp mà bạn đã bắt đầu nhưng chưa xem xong, xem gần nhất trước. OK tiếp tục từ chỗ bạn dừng"</string>
+    <string name="home_rows_add_pick_subtitle">"Chọn một mục. Nó sẽ thành một hàng riêng trên Trang chủ."</string>
+    <string name="home_rows_add_position">"%1$d / %2$d"</string>
+    <string name="home_rows_add_keys_main">"OK để chọn · Quay lại để đóng"</string>
+    <string name="home_rows_add_keys_pick">"OK để thêm · Quay lại để trở về"</string>
+    <string name="home_rows_pick_playlist_group_hint">"Một nhóm từ bất kỳ danh sách phát nào của bạn"</string>
+    <string name="home_rows_pick_my_group_hint">"Một nhóm bạn tự tạo"</string>
+    <string name="home_rows_pick_sports_one_hint">"Chỉ các trận của môn hoặc giải bạn chọn"</string>
+    <string name="home_rows_pick_vod_group_hint">"Một danh mục phim hoặc phim bộ từ nhà cung cấp"</string>
+    <string name="home_rows_pick_vod_continue_hint">"Phim và tập bạn đã bắt đầu, xem gần nhất trước"</string>
+    <string name="home_rows_web_back">"Quay lại"</string>
+    <string name="home_rows_web_done">"Xong"</string>
+    <string name="home_rows_confirm_added">"Đã thêm hàng vào Trang chủ"</string>
+    <string name="home_rows_confirm_removed">"Đã xóa hàng khỏi Trang chủ"</string>
+    <string name="home_rows_confirm_changed">"Đã đổi cài đặt hàng"</string>
 </resources>
