@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"Оновлення плейлиста «%1$s»…"</string>
+    <string name="iptv_repository_status_reading_channels">"Читання каналів…"</string>
+    <string name="iptv_repository_status_downloading_guide">"Завантаження телегіда «%1$s»…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"Завантаження телегіда «%1$s»"</string>
+    <string name="iptv_repository_status_matching_data">"Зіставлення даних телегіда…"</string>
+    <string name="iptv_repository_status_updating_guide">"Оновлення телегіда…"</string>
+    <string name="iptv_repository_status_adding_playlist">"Додавання каналів із «%1$s»…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"Читання каналів із «%1$s»…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"Читання каналів із «%1$s» (%2$d з %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"Недостатньо пам’яті для телегіда «%1$s» — пропущено"</string>
+    <string name="iptv_repository_status_reading_guide">"Читання телегіда «%1$s»…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"Читання телегіда «%1$s» (%2$d з %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"Читання телегіда «%1$s»… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"Читання телегіда «%1$s» (%2$d з %3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"Зіставлення телегіда «%1$s»…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"Зіставлення телегіда «%1$s» (%2$d з %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"Завантаження плейлиста «%1$s»"</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s з %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"Завантаження каналів із %1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f ГБ"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f МБ"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d КБ"</string>
+    <string name="iptv_repository_status_unknown_host_short">"Не вдалося знайти сервер провайдера."</string>
+    <string name="iptv_repository_status_timeout_short">"Провайдер надто довго не відповідав."</string>
+    <string name="iptv_repository_status_generic_error">"Щось пішло не так."</string>
+    <string name="iptv_repository_status_unknown_host_address">"Не вдалося знайти сервер провайдера (%1$s). Перевірте адресу, інтернет або спробуйте пізніше."</string>
+    <string name="iptv_repository_status_provider_timeout">"Провайдер надто довго не відповідав (тайм-аут). Можливо, він перевантажений; спробуйте пізніше."</string>
+    <string name="iptv_repository_status_address">"адреса"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"Не вдалося оновити плейлист «%1$s». %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"Не вдалося оновити телегід «%1$s». %2$s"</string>
+    <string name="iptv_repository_status_expired">"Термін дії «%1$s» минув"</string>
+    <string name="iptv_repository_status_expires_today">"Термін дії «%1$s» спливає сьогодні"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"Термін дії «%1$s» спливає завтра"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">"Додавання каналів із %1$d нового плейлиста…"</item>
+        <item quantity="few">"Додавання каналів із %1$d нових плейлистів…"</item>
+        <item quantity="many">"Додавання каналів із %1$d нових плейлистів…"</item>
+        <item quantity="other">"Додавання каналів із %1$d нового плейлиста…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">"Термін дії «%1$s» спливає через %2$d день"</item>
+        <item quantity="few">"Термін дії «%1$s» спливає через %2$d дні"</item>
+        <item quantity="many">"Термін дії «%1$s» спливає через %2$d днів"</item>
+        <item quantity="other">"Термін дії «%1$s» спливає через %2$d дня"</item>
+    </plurals>
+</resources>
