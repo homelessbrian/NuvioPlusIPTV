@@ -441,13 +441,6 @@ internal fun GameCard(
 /** How an event without two teams is shown: its headline, colour, label and whether it's a big event. */
 internal class EventLook(val headline: String, val color: Color, val text: Color, val label: String?, val premium: Boolean)
 
-private val PREMIUM_EVENTS = listOf(
-    "wrestlemania", "royal rumble", "summerslam", "survivor series", "elimination chamber", "money in the bank",
-    "saturday night's main event", "saturday nights main event", "night of champions", "crown jewel", "backlash",
-    "bad blood", "clash in paris", "wrestlepalooza", "all in", "all out", "full gear", "revolution", "double or nothing",
-    "worlds end", "forbidden door", "grand slam", "bound for glory", "slammiversary", "hard to kill", "rebellion",
-    "halloween havoc", "wargames", "dynasty", "great american bash", "stand and deliver", "vengeance day"
-)
 
 
 /**
@@ -462,7 +455,9 @@ internal fun eventLook(ev: SportsEvent, league: League?): EventLook {
     if (sport == Sport.WRESTLING) {
         // "WWE Friday Night SmackDown" -> "Friday Night SmackDown": the promotion is in the logo column.
         val headline = wrestlingHeadline(ev.title)
-        val premium = PREMIUM_EVENTS.any { has(SportsCatalog.norm(it).trim()) }
+        // Not for looks back ("Greatest Moments - WrestleMania in the 80s").
+        val premium = SportsCatalog.PREMIUM_EVENTS.any { has(SportsCatalog.norm(it).trim()) } &&
+            SportsCatalog.WRESTLING_NOT_LIVE.none { has(SportsCatalog.norm(it).trim()) }
         val (color, text) = when {
             premium -> Color(0xFF5A1478) to Color.White
             has("smackdown") -> Color(0xFF0052CC) to Color.White

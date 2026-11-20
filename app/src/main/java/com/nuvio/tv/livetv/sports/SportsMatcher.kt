@@ -704,10 +704,14 @@ internal class SportsMatcher(
             // Smackdown", "The Goldbergs - WrestleMania"): the title must start with the show's
             // name, or name the promotion (WWE, AEW, TNA).
             if (league?.sport == Sport.WRESTLING && !wrestlingTitle(cleanTitle(p.title), league)) continue
+            // Looks back and talk shows ("WWE's Greatest Moments", "The Deal With…"): never live.
+            if (league?.sport == Sport.WRESTLING && SportsCatalog.WRESTLING_NOT_LIVE.any { hasWord(nt, norm(it).trim()) }) continue
             val saysLive = isLive(nt, nd)
             // Wrestling's weekly shows are live without the guide saying so, but not on a channel
-            // named after the show or league (those run old shows all day).
-            if (!saysLive && (league?.liveByDefault != true || league.guideWords.any { hasWord(nameNorm(ch.name), norm(it).trim()) })) continue
+            // named after the show or league (those run old shows all day), and only when the
+            // title names a real show or big event (Raw, SmackDown, WrestleMania…), not just "WWE".
+            if (!saysLive && (league?.liveByDefault != true || league.guideWords.any { hasWord(nameNorm(ch.name), norm(it).trim()) } ||
+                    !SportsCatalog.wrestlingLiveShow(nt))) continue
             val word = followedWords.firstOrNull { w -> hasWord(nt, norm(w).trim()) || hasWord(nd, norm(w).trim()) }
             if (league == null && word == null) continue
             val clean = cleanTitle(p.title)

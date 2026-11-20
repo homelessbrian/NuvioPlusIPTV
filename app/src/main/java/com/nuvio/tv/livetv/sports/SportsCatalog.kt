@@ -654,6 +654,38 @@ object SportsCatalog {
     private val NOT_WORD = Regex("[^a-z0-9]+")
     private val SPACES = Regex(" +")
 
+    /**
+     * Wrestling's real live programmes and big events. A WWE or AEW show the guide doesn't call
+     * live only counts as a live event when its title names one of these (so "WWE's Greatest
+     * Moments" or a talk show with a wrestler on it isn't one).
+     */
+    val WRESTLING_SHOWS = listOf(
+        "raw", "smackdown", "nxt", "evolution", "dynamite", "collision", "rampage", "battle of the belts",
+        "impact", "tna", "njpw"
+    )
+
+    /** Big wrestling events (WrestleMania, All In…): live shows, and the Premium Live Event label. */
+    val PREMIUM_EVENTS = listOf(
+        "wrestlemania", "royal rumble", "summerslam", "survivor series", "elimination chamber", "money in the bank",
+        "saturday night's main event", "saturday nights main event", "night of champions", "crown jewel", "backlash",
+        "bad blood", "clash in paris", "wrestlepalooza", "all in", "all out", "full gear", "revolution", "double or nothing",
+        "worlds end", "forbidden door", "grand slam", "bound for glory", "slammiversary", "hard to kill", "rebellion",
+        "halloween havoc", "wargames", "dynasty", "great american bash", "stand and deliver", "vengeance day"
+    )
+
+    /** Wrestling titles that are looks back, documentaries or talk shows, never the show itself. */
+    val WRESTLING_NOT_LIVE = listOf(
+        "greatest moments", "moments", "documentary", "countdown", "top 10", "top 25", "top 50", "story of",
+        "the deal with", "legends", "icons", "rivals", "chronicle", "most wanted", "in the 70s", "in the 80s",
+        "in the 90s", "in the 2000s", "ruthless aggression", "table for 3", "broken skull", "break it down",
+        "wwe 24", "behind the", "inside the", "retrospective", "anthology", "unreleased"
+    )
+
+    /** A wrestling title that's a real live show or big event, not a look back or a talk show. */
+    fun wrestlingLiveShow(normTitle: String): Boolean =
+        WRESTLING_NOT_LIVE.none { hasWord(normTitle, norm(it).trim()) } &&
+            (WRESTLING_SHOWS + PREMIUM_EVENTS).any { hasWord(normTitle, norm(it).trim()) }
+
     /** Words that make a show a replay or a highlights show rather than the game itself. */
     val NOT_LIVE_WORDS = listOf(
         "highlights", "replay", "classic", "classics", "rewind", "recap", "review", "reaction",
@@ -758,7 +790,7 @@ internal fun withoutAirDate(title: String): String {
  * -> "Fright Night Collision", "RAW #1743" -> "RAW", "WWE Friday Night SmackDown" -> "Friday Night SmackDown".
  */
 internal fun wrestlingHeadline(title: String): String {
-    val t = withoutAirDate(title).replace(Regex("""(?i)^\s*(wwe|aew|tna|njpw)\s*[:\-–]?\s*"""), "").trim()
+    val t = withoutAirDate(title).replace(Regex("""(?i)^\s*(wwe|aew|tna|njpw)(?![\w'’])\s*[:\-–]?\s*"""), "").trim()
     val m = Regex("""^(.*?)\s*#\s*\d+\s*(.*)$""").find(t)
     val out = if (m != null) m.groupValues[2].trim().ifBlank { m.groupValues[1].trim() } else t
     return out.ifBlank { title }
