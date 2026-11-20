@@ -595,6 +595,7 @@ class LiveTvRepository @Inject constructor(
         LIVE_REPORT.add(if (automatic) "Update check started" else "Update started")
         // A scheduled check works without a pill; an update you asked for (or a new playlist) shows it.
         routineRun = automatic || quiet
+        runCatching { sweepStrayTempFiles() }.onFailure { Log.w(TAG, "Temp file sweep failed", it) }
         try { refreshBody(forcePlaylists, forceEpg, forceIds, automatic) }
         finally {
             routineRun = false
@@ -631,6 +632,26 @@ class LiveTvRepository @Inject constructor(
         sweep(epgDir, { it.substringBefore(".xml").substringBefore(".tmp") }, guideIds)
         sweep(playlistDir, { it.substringBefore(".m3u").substringBefore(".tmp") }, playlistIds)
         if (count > 0) LIVE_REPORT.add("Cleanup: deleted $count saved guide/playlist files no source uses (${freed / (1024 * 1024)} MB freed)")
+    }
+
+    /**
+     * Half-written download files (".tmp") left by an update that was cut off when the app was
+     * closed or the box lost power. A big guide's can be 100 MB or more, and on a box that is
+     * nearly full that space is what the next update needs. Only ones untouched for an hour go,
+     * so nothing being written right now is touched.
+     */
+    private fun sweepStrayTempFiles() {
+        val cutoff = System.currentTimeMillis() - HOUR
+        var freed = 0L
+        var count = 0
+        listOf(epgDir, playlistDir, baseDir).forEach { dir ->
+            dir.listFiles()?.forEach { f ->
+                if (!f.isFile || !f.name.endsWith(".tmp") || f.lastModified() > cutoff) return@forEach
+                val size = f.length()
+                if (f.delete()) { freed += size; count++ }
+            }
+        }
+        if (count > 0) LIVE_REPORT.add("Cleanup: deleted $count unfinished download file(s) from an update that was cut off (${freed / (1024 * 1024)} MB freed)")
     }
 
     private suspend fun refreshBody(
@@ -1959,10 +1980,28 @@ class LiveTvRepository @Inject constructor(
     }
 
     /** What went wrong with a download, in plain words (for the pill). */
-    private fun plainDownloadError(e: Throwable): String = when (e) {
+    private fun plainDownloadError(e: Throwable): String = when {
+        isStorageFull(e) -> statusText(R.string.iptv_repository_status_storage_full_short)
+        else -> plainNetworkError(e)
+    }
+
+    private fun plainNetworkError(e: Throwable): String = when (e) {
         is java.net.UnknownHostException -> statusText(R.string.iptv_repository_status_unknown_host_short)
         is java.net.SocketTimeoutException -> statusText(R.string.iptv_repository_status_timeout_short)
         else -> e.message?.takeIf { it.isNotBlank() } ?: statusText(R.string.iptv_repository_status_generic_error)
+    }
+
+    /** The device ran out of storage (the database or a file couldn't be written). */
+    private fun isStorageFull(e: Throwable): Boolean {
+        var t: Throwable? = e
+        var depth = 0
+        while (t != null && depth++ < 8) {
+            if (t is android.database.sqlite.SQLiteFullException) return true
+            val m = t.message.orEmpty()
+            if ("ENOSPC" in m || "No space left" in m || "SQLITE_FULL" in m || "database or disk is full" in m) return true
+            t = t.cause
+        }
+        return false
     }
 
     private data class EpgTarget(
@@ -2505,6 +2544,11 @@ class LiveTvRepository @Inject constructor(
             }.onFailure {
                 writer.abort()
                 Log.w(TAG, "EPG parse ${target.name} failed", it)
+                if (isStorageFull(it)) {
+                    LIVE_REPORT.add("Guide \"${target.name}\": storage full while storing it (${runCatching { baseDir.usableSpace / 1048576 }.getOrDefault(-1)} MB free); kept the listings from before")
+                    LiveTvNotice.show(statusText(R.string.iptv_repository_status_guide_update_failed, target.name, statusText(R.string.iptv_repository_status_storage_full_short)))
+                    return fallBack()
+                }
                 val start = runCatching {
                     openMaybeGzip(file).use { inp -> String(inp.readNBytesCompat(120), Charsets.UTF_8) }
                 }.getOrDefault("").replace(Regex("\\s+"), " ").trim()
@@ -2525,8 +2569,27 @@ class LiveTvRepository @Inject constructor(
             val listedIds = entries.mapTo(HashSet()) { it.id }
             val extraIds = if (selected == null) parsed.programChannelIds.filter { it !in listedIds } else emptyList()
             val kept = selected ?: wantedUnlistedFrom(listedIds + extraIds)
+            // A guide file broken part-way (cut off, bad characters) is still used for what it has,
+            // but not when the listings stored from it before reach further ahead: a short broken
+            // copy then replaced a good one, leaving channels with empty guides for days.
+            if (parsed.error != null && before != null) {
+                val (newCount, newLast) = writer.progress()
+                val oldLast = before.meta.values.maxOfOrNull { if (it.hasRows) it.lastStop else 0L } ?: 0L
+                val oldCount = before.meta.values.sumOf { if (it.hasRows) it.count.toLong() else 0L }
+                if (oldLast > now && oldLast > newLast && newCount < oldCount) {
+                    writer.abort()
+                    LIVE_REPORT.add("Guide \"${target.name}\": the new copy is broken and has less in it ($newCount listings) than the one stored before ($oldCount); kept the stored one")
+                    return fallBack()
+                }
+            }
             val meta = runCatching { writer.finish(stamp, entries.map { Triple(it.id, it.names, it.icon) }, kept, listed, extraIds) }
-                .onFailure { writer.abort(); Log.w(TAG, "Couldn't store ${target.name}", it) }
+                .onFailure {
+                    writer.abort(); Log.w(TAG, "Couldn't store ${target.name}", it)
+                    if (isStorageFull(it)) {
+                        LIVE_REPORT.add("Guide \"${target.name}\": storage full while saving it; kept the listings from before")
+                        LiveTvNotice.show(statusText(R.string.iptv_repository_status_guide_update_failed, target.name, statusText(R.string.iptv_repository_status_storage_full_short)))
+                    }
+                }
                 .getOrNull() ?: run { LIVE_REPORT.add("Guide \"${target.name}\": couldn't be stored"); return fallBack() }
             LIVE_REPORT.add(
                 "Guide \"${target.name}\": read and stored in ${(System.currentTimeMillis() - readStart) / 1000} s " +
@@ -3019,34 +3082,41 @@ class LiveTvRepository @Inject constructor(
             val tmp = File(target.parentFile, target.name + ".tmp")
             // With a label: how much has come in so far, so a big download doesn't look frozen.
             val total = body.contentLength().takeIf { it > 0 }
-            body.byteStream().use { raw ->
-                // Saved zipped: guide files (XMLTV) and big playlists shrink to about a tenth,
-                // and plain guides of several hundred MB made the app take up close to 1 GB.
-                // Ones that already arrive zipped (.xml.gz) are kept as they are.
-                val input = BufferedInputStream(raw, 64 * 1024)
-                if (checkPlaylist) notAPlaylist(input)?.let { throw NotAPlaylistException(it) }
-                input.mark(2)
-                val alreadyZipped = input.read() == 0x1f && input.read() == 0x8b
-                input.reset()
-                val fileOut = tmp.outputStream()
-                (if (alreadyZipped) fileOut else fastGzip(fileOut)).use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    var read = 0L
-                    var shownAt = 0L
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        out.write(buf, 0, n)
-                        read += n
-                        if (progressLabel != null) {
-                            val now = System.currentTimeMillis()
-                            if (now - shownAt > 750) {
-                                shownAt = now
-                                setStatus(loading = true, message = downloadProgressMessage(progressLabel, read, total))
+            // A download cut off part-way (connection lost, storage full) must not leave its
+            // half-written file behind: guides are often 50–200 MB. The copy from before stays.
+            try {
+                body.byteStream().use { raw ->
+                    // Saved zipped: guide files (XMLTV) and big playlists shrink to about a tenth,
+                    // and plain guides of several hundred MB made the app take up close to 1 GB.
+                    // Ones that already arrive zipped (.xml.gz) are kept as they are.
+                    val input = BufferedInputStream(raw, 64 * 1024)
+                    if (checkPlaylist) notAPlaylist(input)?.let { throw NotAPlaylistException(it) }
+                    input.mark(2)
+                    val alreadyZipped = input.read() == 0x1f && input.read() == 0x8b
+                    input.reset()
+                    val fileOut = tmp.outputStream()
+                    (if (alreadyZipped) fileOut else fastGzip(fileOut)).use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        var read = 0L
+                        var shownAt = 0L
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            read += n
+                            if (progressLabel != null) {
+                                val now = System.currentTimeMillis()
+                                if (now - shownAt > 750) {
+                                    shownAt = now
+                                    setStatus(loading = true, message = downloadProgressMessage(progressLabel, read, total))
+                                }
                             }
                         }
                     }
                 }
+            } catch (e: Throwable) {
+                tmp.delete()
+                throw e
             }
             if (tmp.length() == 0L) {
                 tmp.delete()
@@ -3398,61 +3468,67 @@ class LiveTvRepository @Inject constructor(
         val pass = java.net.URLEncoder.encode(pl.xtreamPassword.trim(), "UTF-8")
         var count = 0
         val request = Request.Builder().url(url).header("User-Agent", pl.userAgent.ifBlank { DEFAULT_UA }).build()
-        http.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error(httpError(response.code))
-            val body = response.body ?: error("Empty response")
-            // Written zipped straight away (like downloads), instead of saved plain and zipped
-            // again afterwards, which read and wrote the whole list a second time.
-            fastGzip(tmp.outputStream()).bufferedWriter().use { out ->
-                out.write("#EXTM3U\n")
-                android.util.JsonReader(body.charStream()).use { reader ->
-                    // Most panels send a list; some send the channels keyed by number instead
-                    // ({"0": {...}, "1": {...}}), which failed with "Expected BEGIN_ARRAY but was
-                    // BEGIN_OBJECT". Both are read.
-                    val keyed = reader.peek() == android.util.JsonToken.BEGIN_OBJECT
-                    if (keyed) reader.beginObject() else reader.beginArray()
-                    while (reader.hasNext()) {
-                        if (keyed) {
-                            reader.nextName()
-                            if (reader.peek() != android.util.JsonToken.BEGIN_OBJECT) { reader.skipValue(); continue }
-                        }
-                        val f = HashMap<String, String>()
-                        reader.beginObject()
+        // An import cut off part-way leaves nothing half-written behind (the saved list stays).
+        try {
+            http.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) error(httpError(response.code))
+                val body = response.body ?: error("Empty response")
+                // Written zipped straight away (like downloads), instead of saved plain and zipped
+                // again afterwards, which read and wrote the whole list a second time.
+                fastGzip(tmp.outputStream()).bufferedWriter().use { out ->
+                    out.write("#EXTM3U\n")
+                    android.util.JsonReader(body.charStream()).use { reader ->
+                        // Most panels send a list; some send the channels keyed by number instead
+                        // ({"0": {...}, "1": {...}}), which failed with "Expected BEGIN_ARRAY but was
+                        // BEGIN_OBJECT". Both are read.
+                        val keyed = reader.peek() == android.util.JsonToken.BEGIN_OBJECT
+                        if (keyed) reader.beginObject() else reader.beginArray()
                         while (reader.hasNext()) {
-                            val name = reader.nextName()
-                            when (reader.peek()) {
-                                android.util.JsonToken.STRING -> f[name] = reader.nextString()
-                                android.util.JsonToken.NUMBER -> f[name] = reader.nextString()
-                                android.util.JsonToken.BOOLEAN -> f[name] = reader.nextBoolean().toString()
-                                else -> reader.skipValue()
+                            if (keyed) {
+                                reader.nextName()
+                                if (reader.peek() != android.util.JsonToken.BEGIN_OBJECT) { reader.skipValue(); continue }
                             }
+                            val f = HashMap<String, String>()
+                            reader.beginObject()
+                            while (reader.hasNext()) {
+                                val name = reader.nextName()
+                                when (reader.peek()) {
+                                    android.util.JsonToken.STRING -> f[name] = reader.nextString()
+                                    android.util.JsonToken.NUMBER -> f[name] = reader.nextString()
+                                    android.util.JsonToken.BOOLEAN -> f[name] = reader.nextBoolean().toString()
+                                    else -> reader.skipValue()
+                                }
+                            }
+                            reader.endObject()
+                            val streamId = f["stream_id"]
+                            if (streamId.isNullOrBlank()) continue
+                            val title = (f["name"] ?: "Channel $streamId").replace("\n", " ").trim()
+                            val attrs = buildString {
+                                fun attr(k: String, v: String?) {
+                                    if (!v.isNullOrBlank()) append(" $k=\"${v.replace("\"", "'")}\"")
+                                }
+                                attr("tvg-id", f["epg_channel_id"])
+                                attr("tvg-name", title)
+                                attr("tvg-logo", f["stream_icon"])
+                                attr("group-title", categories[f["category_id"]] ?: "Uncategorized")
+                                attr("tvg-chno", f["num"])
+                                if (f["tv_archive"] == "1") {
+                                    attr("catchup", "xc")
+                                    attr("catchup-days", f["tv_archive_duration"]?.takeIf { it != "0" } ?: "1")
+                                }
+                            }
+                            out.write("#EXTINF:-1$attrs,$title\n")
+                            out.write("$base/live/$user/$pass/$streamId.$ext\n")
+                            count++
+                            if (count % 500 == 0) setStatus(loading = true, message = statusText(R.string.iptv_repository_status_loading_channels, pl.name, count))
                         }
-                        reader.endObject()
-                        val streamId = f["stream_id"]
-                        if (streamId.isNullOrBlank()) continue
-                        val title = (f["name"] ?: "Channel $streamId").replace("\n", " ").trim()
-                        val attrs = buildString {
-                            fun attr(k: String, v: String?) {
-                                if (!v.isNullOrBlank()) append(" $k=\"${v.replace("\"", "'")}\"")
-                            }
-                            attr("tvg-id", f["epg_channel_id"])
-                            attr("tvg-name", title)
-                            attr("tvg-logo", f["stream_icon"])
-                            attr("group-title", categories[f["category_id"]] ?: "Uncategorized")
-                            attr("tvg-chno", f["num"])
-                            if (f["tv_archive"] == "1") {
-                                attr("catchup", "xc")
-                                attr("catchup-days", f["tv_archive_duration"]?.takeIf { it != "0" } ?: "1")
-                            }
-                        }
-                        out.write("#EXTINF:-1$attrs,$title\n")
-                        out.write("$base/live/$user/$pass/$streamId.$ext\n")
-                        count++
-                        if (count % 500 == 0) setStatus(loading = true, message = statusText(R.string.iptv_repository_status_loading_channels, pl.name, count))
+                        if (keyed) reader.endObject() else reader.endArray()
                     }
-                    if (keyed) reader.endObject() else reader.endArray()
                 }
             }
+        } catch (e: Throwable) {
+            tmp.delete()
+            throw e
         }
         if (count == 0) {
             tmp.delete()
@@ -3788,7 +3864,10 @@ class LiveTvRepository @Inject constructor(
             if (!tmp.renameTo(file)) { tmp.copyTo(file, overwrite = true); tmp.delete() }
             file.setLastModified(modified)
             LIVE_REPORT.add("Saved \"${file.name}\" zipped to save space")
-        }.onFailure { Log.w(TAG, "Couldn't zip ${file.name}", it) }
+        }.onFailure {
+            runCatching { File(file.parentFile, file.name + ".zip.tmp").delete() }
+            Log.w(TAG, "Couldn't zip ${file.name}", it)
+        }
     }
 
     private fun openMaybeGzip(file: File, onProgress: ((Long) -> Unit)? = null): InputStream {

@@ -46,4 +46,5 @@
         <item quantity="many">"„%1$s” wygasa za %2$d dni"</item>
         <item quantity="other">"„%1$s” wygasa za %2$d dnia"</item>
     </plurals>
+    <string name="iptv_repository_status_storage_full_short">"Za mało miejsca na tym urządzeniu. Poprzedni przewodnik zostaje zachowany."</string>
 </resources>

@@ -40,4 +40,5 @@
     <plurals name="iptv_repository_status_expires_days">
         <item quantity="other">"\"%1$s\" kedaluwarsa dalam %2$d hari"</item>
     </plurals>
+    <string name="iptv_repository_status_storage_full_short">"Ruang penyimpanan di perangkat ini tidak cukup. Panduan sebelumnya tetap disimpan."</string>
 </resources>

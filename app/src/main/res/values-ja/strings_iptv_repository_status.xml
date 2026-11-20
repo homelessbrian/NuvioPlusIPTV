@@ -40,4 +40,5 @@
     <plurals name="iptv_repository_status_expires_days">
         <item quantity="other">"「%1$s」はあと %2$d 日で期限切れになります"</item>
     </plurals>
+    <string name="iptv_repository_status_storage_full_short">"このデバイスの空き容量が足りません。以前の番組表はそのまま残ります。"</string>
 </resources>

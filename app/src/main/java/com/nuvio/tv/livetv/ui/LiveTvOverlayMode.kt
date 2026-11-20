@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import com.nuvio.tv.livetv.model.effectiveGuideSize
@@ -814,10 +815,11 @@ private class GroupRow(val source: String?, val group: Int)
 private fun overlayGroupRows(groups: List<ChannelGroup>, headed: Boolean, collapsed: Set<String>): List<GroupRow> {
     if (!headed) return groups.indices.map { GroupRow(groups[it].sourceId, it) }
     val out = ArrayList<GroupRow>()
-    groups.forEachIndexed { i, g -> if (g.sourceId == null) out += GroupRow(null, i) }
-    groups.mapNotNull { it.sourceId }.distinct().forEach { src ->
+    // Favorite groups first, outside their playlist's heading (as in the guide).
+    groups.forEachIndexed { i, g -> if (g.section == null) out += GroupRow(null, i) }
+    groups.mapNotNull { it.section }.distinct().forEach { src ->
         out += GroupRow(src, -1)
-        if (src !in collapsed) groups.forEachIndexed { i, g -> if (g.sourceId == src) out += GroupRow(src, i) }
+        if (src !in collapsed) groups.forEachIndexed { i, g -> if (g.section == src) out += GroupRow(src, i) }
     }
     return out
 }
@@ -845,7 +847,7 @@ private fun GroupsPanel(
                     val src = row.source.orEmpty()
                     val focused = headingAt == src
                     val isCollapsed = src in collapsed
-                    val inSource = groups.filter { it.sourceId == src }
+                    val inSource = groups.filter { it.section == src }
                     val colors = liveCellColors(focused = focused, idle = Color.Transparent, idleText = NuvioTheme.colors.Secondary)
                     Row(
                         modifier = Modifier
@@ -888,6 +890,14 @@ private fun GroupsPanel(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     LiveText(g.title, color = colors.text, size = osp(16f), modifier = Modifier.weight(1f), marquee = headingAt == null && i == index)
+                    if (g.favorite) {
+                        androidx.compose.material3.Icon(
+                            androidx.compose.material.icons.Icons.Default.Star, contentDescription = null,
+                            tint = if (headingAt == null && i == index) colors.text else NuvioTheme.colors.Secondary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        if (showCounts) Spacer(Modifier.width(6.dp))
+                    }
                     if (showCounts) LiveText(g.count.toString(), color = NuvioTheme.colors.TextSecondary, size = osp(12f))
                 }
             }

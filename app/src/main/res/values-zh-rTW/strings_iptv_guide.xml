@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_guide_add_favorite_group">"加入收藏群組"</string>
+    <string name="iptv_guide_remove_favorite_group">"從收藏群組中移除"</string>
+</resources>

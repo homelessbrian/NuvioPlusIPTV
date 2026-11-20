@@ -50,4 +50,5 @@
         <item quantity="many">"تنتهي صلاحية \"%1$s\" خلال %2$d يومًا"</item>
         <item quantity="other">"تنتهي صلاحية \"%1$s\" خلال %2$d يوم"</item>
     </plurals>
+    <string name="iptv_repository_status_storage_full_short">"لا توجد مساحة تخزين كافية على هذا الجهاز. تم الاحتفاظ بالدليل السابق."</string>
 </resources>

@@ -40,4 +40,5 @@
     <plurals name="iptv_repository_status_expires_days">
         <item quantity="other">"\"%1$s\" hết hạn sau %2$d ngày"</item>
     </plurals>
+    <string name="iptv_repository_status_storage_full_short">"Thiết bị này không đủ dung lượng lưu trữ. Lịch phát sóng trước đó vẫn được giữ."</string>
 </resources>

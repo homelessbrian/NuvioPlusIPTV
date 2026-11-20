@@ -2341,6 +2341,8 @@ private fun LiveTvGuideScreenBody(
         }
         groupMenu?.let { g ->
             val isCustom = g.id.startsWith(ChannelGroup.CUSTOM_PREFIX)
+            val favAddText = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_guide_add_favorite_group)
+            val favRemoveText = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_guide_remove_favorite_group)
             ActionMenuDialog(
                 title = g.title,
                 actions = buildList {
@@ -2352,6 +2354,11 @@ private fun LiveTvGuideScreenBody(
                             hint = if (isCustom) "Group name" else "Leave empty to use the playlist name",
                             onConfirm = { viewModel.renameGroup(g.id, it) }
                         )
+                    })
+                    if (viewModel.isGroupFavorite(g.id)) add(favRemoveText to {
+                        viewModel.setGroupFavorite(g.id, false); groupMenu = null
+                    }) else add(favAddText to {
+                        viewModel.setGroupFavorite(g.id, true); groupMenu = null
                     })
                     if (viewModel.parentalEnabled()) {
                         if (viewModel.isGroupLockSet(g.id)) add("Remove parental lock…" to {
@@ -3281,13 +3288,14 @@ private fun GroupColumn(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // The rows of the list below, in order (what Up / Down step through).
     val listed = groups.filter { it.id != ChannelGroup.SEARCH }
-    val sources = listed.mapNotNull { it.sourceId }.distinct()
-    val sectioned = showPlaylistHeadings && !reorderMode && hiddenPending == null && sources.size > 1
+    // Favorite groups sit at the top, outside their playlist's heading.
+    val sources = listed.mapNotNull { it.section }.distinct()
+    val sectioned = showPlaylistHeadings && !reorderMode && hiddenPending == null && listed.mapNotNull { it.sourceId }.distinct().size > 1
     val rowKeys: List<String> = if (!sectioned) listed.map { it.id } else buildList {
-        listed.filter { it.sourceId == null }.forEach { add(it.id) }
+        listed.filter { it.section == null }.forEach { add(it.id) }
         sources.forEach { src ->
             add("header:$src")
-            if (src !in collapsed) listed.filter { it.sourceId == src }.forEach { add(it.id) }
+            if (src !in collapsed) listed.filter { it.section == src }.forEach { add(it.id) }
         }
     }
     val hasSearch = searchFocusRequester != null && groups.any { it.id == ChannelGroup.SEARCH }
@@ -3467,9 +3475,9 @@ private fun GroupColumn(
             if (!sectioned) {
                 listed.forEach { groupItem(it) }
             } else {
-                listed.filter { it.sourceId == null }.forEach { groupItem(it) }
+                listed.filter { it.section == null }.forEach { groupItem(it) }
                 sources.forEach { src ->
-                    val inSource = listed.filter { it.sourceId == src }
+                    val inSource = listed.filter { it.section == src }
                     val isCollapsed = src in collapsed
                     item(key = "header:$src") {
                         PlaylistHeader(
@@ -3505,14 +3513,14 @@ private object NoBringIntoView : androidx.compose.foundation.gestures.BringIntoV
  */
 private fun groupListIndex(groups: List<ChannelGroup>, id: String, headings: Boolean, collapsed: Set<String>): Int {
     val listed = groups.filter { it.id != ChannelGroup.SEARCH }
-    val sources = listed.mapNotNull { it.sourceId }.distinct()
-    if (!headings || sources.size <= 1) return listed.indexOfFirst { it.id == id }
+    val sources = listed.mapNotNull { it.section }.distinct()
+    if (!headings || listed.mapNotNull { it.sourceId }.distinct().size <= 1) return listed.indexOfFirst { it.id == id }
     var i = 0
-    for (g in listed) if (g.sourceId == null) { if (g.id == id) return i; i++ }
+    for (g in listed) if (g.section == null) { if (g.id == id) return i; i++ }
     for (src in sources) {
         i++ // the playlist's heading
         if (src in collapsed) continue
-        for (g in listed) if (g.sourceId == src) { if (g.id == id) return i; i++ }
+        for (g in listed) if (g.section == src) { if (g.id == id) return i; i++ }
     }
     return -1
 }
@@ -3668,8 +3676,19 @@ private fun GroupItem(
             Icon(Icons.Default.Lock, contentDescription = "Locked", tint = focusedSecondaryTextColor(focused), modifier = Modifier.size(gdp(14f)))
         } else if (moving) {
             LiveText("⇅", color = colors.text, size = gsp(16f), weight = FontWeight.Bold)
-        } else if (showCount && group.id != ChannelGroup.SEARCH) {
-            LiveText(group.count.toString(), color = focusedSecondaryTextColor(focused), size = gsp(12f))
+        } else {
+            // A favorite group's star, beside its count.
+            if (group.favorite) {
+                Icon(
+                    Icons.Default.Star, contentDescription = null,
+                    tint = if (focused) colors.text else NuvioTheme.colors.Secondary,
+                    modifier = Modifier.size(gdp(14f))
+                )
+            }
+            if (showCount && group.id != ChannelGroup.SEARCH) {
+                if (group.favorite) Spacer(Modifier.width(6.dp))
+                LiveText(group.count.toString(), color = focusedSecondaryTextColor(focused), size = gsp(12f))
+            }
         }
     }
 }

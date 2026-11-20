@@ -317,6 +317,11 @@ class LiveTvViewModel @Inject constructor(
 
     fun setGroupLocked(groupId: String, locked: Boolean) = viewModelScope.launch { prefs.setGroupLocked(groupId, locked) }
 
+    fun isGroupFavorite(groupId: String) = groupId in userState.value.favoriteGroups
+
+    /** Stars a group so it's listed first (or takes the star off). */
+    fun setGroupFavorite(groupId: String, favorite: Boolean) = viewModelScope.launch { prefs.setGroupFavorite(groupId, favorite) }
+
     fun checkPin(pin: String) = com.nuvio.tv.livetv.parental.ParentalControls.checkPin(pin, settings.value)
 
     fun setSearchQuery(q: String) {
@@ -1691,7 +1696,7 @@ internal fun sameForLiveTvLists(a: LiveUserState, b: LiveUserState): Boolean =
         a.hiddenChannels == b.hiddenChannels && a.hiddenGroups == b.hiddenGroups &&
         a.lockedGroups == b.lockedGroups && a.customGroups == b.customGroups &&
         a.channelOrder == b.channelOrder && a.groupOrder == b.groupOrder &&
-        a.channelCopies == b.channelCopies
+        a.channelCopies == b.channelCopies && a.favoriteGroups == b.favoriteGroups
 
 /** The guide's groups and the channels of [groupIdRaw], from your saved choices (also used by Home's row). */
 internal fun buildUi(
@@ -1816,11 +1821,16 @@ internal fun buildUi(
             result
         }
     }
-    groups += orderedRegular
+    // Favorite groups (starred from the group menu) go first, in the order above.
+    val pinned = if (user.favoriteGroups.isEmpty()) orderedRegular else {
+        val (fav, rest) = orderedRegular.partition { it.id in user.favoriteGroups }
+        fav.map { it.copy(favorite = true) } + rest
+    }
+    groups += pinned
 
     val defaultGroupId = when {
         s.showAllChannelsGroup -> ChannelGroup.ALL
-        orderedRegular.isNotEmpty() -> orderedRegular.first().id
+        pinned.isNotEmpty() -> pinned.first().id
         s.showFavoritesGroup -> ChannelGroup.FAVORITES
         else -> ChannelGroup.ALL
     }
@@ -1852,7 +1862,7 @@ internal fun buildUi(
         allVisibleChannels = sortedVisible,
         hasSources = hasSrc,
         searchQuery = query,
-        orderableGroupIds = orderedRegular.map { it.id },
+        orderableGroupIds = pinned.map { it.id },
         customGroups = custom,
         defaultGroupId = defaultGroupId
     )

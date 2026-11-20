@@ -673,6 +673,8 @@ data class LiveUserState(
     val channelCopies: Map<String, List<String>> = emptyMap(),
     /** Groups (and On Demand categories, prefixed "vod:") that need the parental PIN. */
     val lockedGroups: Set<String> = emptySet(),
+    /** Groups you starred ("Add to favorite groups"): listed first, above every playlist. */
+    val favoriteGroups: Set<String> = emptySet(),
     /** Shows you asked to be reminded about. */
     val reminders: List<Reminder> = emptyList(),
     /** Channel key -> picture quality seen when it last played ("4K", "FHD", "HD", "SD"). */
@@ -747,8 +749,13 @@ data class ChannelGroup(
     /** The playlist a playlist group comes from (null for special and your own groups). */
     val sourceId: String? = null,
     /** Needs the parental PIN (and its channels are kept out of other lists). */
-    val locked: Boolean = false
+    val locked: Boolean = false,
+    /** Starred as a favorite group: listed first, above the playlist headings. */
+    val favorite: Boolean = false
 ) {
+    /** The playlist heading it's listed under (null: at the top, with your own and favorite groups). */
+    val section: String? get() = if (favorite) null else sourceId
+
     companion object {
         const val ALL = "__all__"
         const val FAVORITES = "__fav__"
@@ -951,7 +958,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-19 20:25"
+    const val KIT_STAMP = "2026-11-19 20:45"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

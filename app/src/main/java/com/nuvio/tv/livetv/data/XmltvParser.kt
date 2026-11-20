@@ -31,6 +31,9 @@ data class XmltvResult(
  */
 object XmltvParser {
 
+    /** Storing the shows failed (see `flush`): never mistaken for a broken file. */
+    private class StoreFailed(cause: Exception) : RuntimeException(cause)
+
     fun parse(
         input: InputStream,
         windowStartMs: Long,
@@ -69,7 +72,11 @@ object XmltvParser {
         var buf = ArrayList<EpgProgram>()
         fun flush() {
             val id = bufId ?: return
-            if (buf.isNotEmpty()) onPrograms?.invoke(id, orderedPrograms(buf))
+            // A failure while storing (storage full, database error) is not a broken guide file:
+            // it goes up to the caller, so the update stops and the listings from before stay.
+            if (buf.isNotEmpty()) onPrograms?.let { store ->
+                try { store(id, orderedPrograms(buf)) } catch (e: Exception) { throw StoreFailed(e) }
+            }
             buf = ArrayList()
             bufId = null
         }
@@ -117,6 +124,8 @@ object XmltvParser {
             }
             event = parser.next()
         }
+        } catch (e: StoreFailed) {
+            throw e.cause ?: e
         } catch (e: Exception) {
             // A guide broken partway (bad characters, cut off): keep everything read up to there
             // instead of throwing the whole guide away.
@@ -125,7 +134,7 @@ object XmltvParser {
             if (!wantedResolved) wanted = null
         }
         // The last channel's shows (also when the guide broke partway: what was read is kept).
-        runCatching { flush() }
+        try { flush() } catch (e: StoreFailed) { throw e.cause ?: e } catch (_: Exception) { }
         val sorted = programs.mapValues { (_, list) -> orderedPrograms(list) }
         return XmltvResult(channels, sorted, error, seenIds)
     }

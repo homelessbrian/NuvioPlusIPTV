@@ -809,7 +809,7 @@ class LiveTvDriveSync @Inject constructor(
         const val TAG = "LiveTvDriveSync"
         /** Settings that are lists of sources, merged source by source. */
         val SOURCE_LISTS = setOf("playlists", "epg_sources")
-        val SET_ITEM_KEYS = setOf("hidden_channels", "hidden_groups", "vod_hidden_categories")
+        val SET_ITEM_KEYS = setOf("hidden_channels", "hidden_groups", "vod_hidden_categories", "favorite_groups")
         val ITEM_KEYS = SET_ITEM_KEYS + setOf("favorites", "custom_groups", "channel_copies")
         val PROFILE_SUFFIX = Regex("""_p\d+$""")
         const val MODE_APPDATA = "appdata"

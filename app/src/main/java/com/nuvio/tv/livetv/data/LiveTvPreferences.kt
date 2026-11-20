@@ -224,6 +224,7 @@ class LiveTvPreferences @Inject constructor(
         val guideInfoHidden = stringPreferencesKey("guide_info_hidden")
         val launcherRows = stringPreferencesKey("launcher_rows")
         val lockedGroups = stringSetPreferencesKey("locked_groups")
+        val favoriteGroups = stringSetPreferencesKey("favorite_groups")
         val collapsedPlaylists = stringSetPreferencesKey("collapsed_playlists")
         val reminders = stringPreferencesKey("reminders")
         val channelQuality = stringPreferencesKey("channel_quality")
@@ -277,7 +278,7 @@ class LiveTvPreferences @Inject constructor(
         Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine, Keys.homeRows
     )
     private val personalSetKeys: List<Preferences.Key<Set<String>>> = listOf(
-        Keys.hiddenChannels, Keys.hiddenGroups, Keys.vodHiddenCategories
+        Keys.hiddenChannels, Keys.hiddenGroups, Keys.vodHiddenCategories, Keys.favoriteGroups
     )
 
     /**
@@ -761,6 +762,7 @@ class LiveTvPreferences @Inject constructor(
             channelOrder = decodeListMap(p[Keys.channelOrder]),
             channelCopies = decodeListMap(p[Keys.channelCopies]),
             lockedGroups = p[Keys.lockedGroups] ?: emptySet(),
+            favoriteGroups = p[Keys.favoriteGroups] ?: emptySet(),
             reminders = decodeReminders(p[Keys.reminders]),
             channelQuality = decodeStringMap(d[Keys.channelQuality] ?: p[Keys.channelQuality]),
             channelAudio = decodeStringMap(p[Keys.channelAudio]),
@@ -1379,7 +1381,7 @@ class LiveTvPreferences @Inject constructor(
                 if (value is Set<*>) {
                     val dead: ((String) -> Boolean) = when (base) {
                         "hidden_channels" -> ::deadChannel
-                        "hidden_groups", "locked_groups" -> ::deadGroup
+                        "hidden_groups", "locked_groups", "favorite_groups" -> ::deadGroup
                         "collapsed_playlists" -> ::deadOwner
                         else -> continue
                     }
@@ -1547,6 +1549,14 @@ class LiveTvPreferences @Inject constructor(
         store.edit { p ->
             val cur = p[my(Keys.hiddenGroups)] ?: emptySet()
             p[my(Keys.hiddenGroups)] = if (hidden) cur + groupId else cur - groupId
+        }
+    }
+
+    /** Stars a group (or takes the star off), for this profile. */
+    suspend fun setGroupFavorite(groupId: String, favorite: Boolean) {
+        store.edit { p ->
+            val cur = p[my(Keys.favoriteGroups)] ?: emptySet()
+            p[my(Keys.favoriteGroups)] = if (favorite) cur + groupId else cur - groupId
         }
     }
 
