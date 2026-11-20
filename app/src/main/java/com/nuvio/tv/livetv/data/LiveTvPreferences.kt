@@ -258,6 +258,8 @@ class LiveTvPreferences @Inject constructor(
         val sports = stringPreferencesKey("sports")
         /** Sports: the teams, leagues and names you follow, and game reminders (per profile), as JSON. */
         val sportsMine = stringPreferencesKey("sports_mine")
+        /** Live TV and Sports rows added to Nuvio's home screen (per profile), as JSON. */
+        val homeRows = stringPreferencesKey("home_live_rows")
     }
 
     // ---------- Nuvio profiles ----------
@@ -272,7 +274,7 @@ class LiveTvPreferences @Inject constructor(
     private val personalStringKeys: List<Preferences.Key<String>> = listOf(
         Keys.favorites, Keys.recent, Keys.recentGroups, Keys.lastChannel, Keys.previousChannel, Keys.lastGroup,
         Keys.groupOrder, Keys.customGroups, Keys.channelOrder, Keys.channelCopies, Keys.reminders,
-        Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine
+        Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine, Keys.homeRows
     )
     private val personalSetKeys: List<Preferences.Key<Set<String>>> = listOf(
         Keys.hiddenChannels, Keys.hiddenGroups, Keys.vodHiddenCategories
@@ -370,7 +372,7 @@ class LiveTvPreferences @Inject constructor(
     /** What "Copy Settings" carries from one profile to another (history and reminders stay). */
     private val copiedStringKeys: List<Preferences.Key<String>> = listOf(
         Keys.favorites, Keys.groupOrder, Keys.customGroups, Keys.channelOrder, Keys.channelCopies,
-        Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine
+        Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine, Keys.homeRows
     )
     private val copiedCalendarKeys: List<Preferences.Key<String>> = listOf(
         Keys.calendarFollows, Keys.calendarHiddenShows
@@ -1158,6 +1160,18 @@ class LiveTvPreferences @Inject constructor(
     val sportsMineJson: Flow<String?> =
         kotlinx.coroutines.flow.combine(store.data, profileManager.activeProfileId) { p, id -> profileView(p, id)[Keys.sportsMine] }
             .distinctUntilChanged()
+
+    /** This profile's Live TV and Sports rows on Nuvio's home screen (JSON). */
+    val homeRowsJson: Flow<String?> =
+        kotlinx.coroutines.flow.combine(store.data, profileManager.activeProfileId) { p, id -> profileView(p, id)[Keys.homeRows] }
+            .distinctUntilChanged()
+
+    suspend fun editHomeRows(transform: (String?) -> String) {
+        store.edit { p ->
+            val id = currentProfile
+            p[my(Keys.homeRows, id)] = transform(profileView(p, id)[Keys.homeRows])
+        }
+    }
 
     suspend fun editSportsSettings(transform: (String?) -> String) {
         store.edit { p -> p[Keys.sports] = transform(p[Keys.sports]) }

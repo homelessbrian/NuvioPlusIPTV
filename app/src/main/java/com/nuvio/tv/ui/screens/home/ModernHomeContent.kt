@@ -463,7 +463,9 @@ fun ModernHomeContent(
                 else -> null
             }
 
-            val resolvedRow = savedRowKey?.let { rowByKey.map[it] } ?: carouselRows.list.firstOrNull()
+            val resolvedRow = savedRowKey?.let { rowByKey.map[it] }
+                ?: carouselRows.list.firstOrNull { !com.nuvio.tv.livetv.home.isLiveHomeRowKey(it.key) }
+                ?: carouselRows.list.firstOrNull()
             if (resolvedRow != null) {
                 val savedItemKey = focusState.focusedItemKeyByRow[resolvedRow.key]
                 val resolvedIndex = if (savedItemKey != null) {
@@ -491,7 +493,9 @@ fun ModernHomeContent(
 
         val hadActiveRow = focusHolder.activeRowKey != null
         val existingActive = focusHolder.activeRowKey?.let { rowByKey[it] }
-        val firstRow = carouselRows.list.firstOrNull()
+        // Live TV fork: start on the first poster row, not on a Live TV row (it has no posters).
+        val firstRow = carouselRows.list.firstOrNull { !com.nuvio.tv.livetv.home.isLiveHomeRowKey(it.key) }
+            ?: carouselRows.list.firstOrNull()
 
         val resolvedActive = when {
             existingActive != null -> existingActive

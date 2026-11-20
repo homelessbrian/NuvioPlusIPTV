@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Reorder Home Catalogs: Live TV and Sports rows -->
+    <string name="home_rows_add_button">Add a row</string>
+    <string name="home_rows_add_button_hint">Live TV channels or Sports games on now</string>
+    <string name="home_rows_edit">Edit</string>
+    <string name="home_rows_type_live">Live TV</string>
+    <string name="home_rows_type_sports">Sports</string>
+    <string name="home_rows_desc_channels">%1$s · up to %2$d channels</string>
+    <string name="home_rows_desc_sports">%1$s · up to %2$d games</string>
+
+    <!-- Add a row -->
+    <string name="home_rows_add_title">Add a row</string>
+    <string name="home_rows_add_subtitle">It goes at the top of Home. Move it from this list like any other row.</string>
+    <string name="home_rows_add_hint">Pick what the row shows.</string>
+    <string name="home_rows_section_live">Live TV</string>
+    <string name="home_rows_section_sports">Sports</string>
+    <string name="home_rows_pick_favorites">Favorites</string>
+    <string name="home_rows_pick_favorites_hint">Your favorite channels with what\'s on now.</string>
+    <string name="home_rows_pick_recent">Recently watched</string>
+    <string name="home_rows_pick_recent_hint">The channels you watched last, newest first.</string>
+    <string name="home_rows_pick_playlist_group">A playlist group</string>
+    <string name="home_rows_pick_playlist_group_title">Pick a playlist group</string>
+    <string name="home_rows_pick_my_group">One of your custom groups</string>
+    <string name="home_rows_pick_my_group_title">Pick one of your groups</string>
+    <string name="home_rows_pick_sports_all">Live now: all sports</string>
+    <string name="home_rows_pick_sports_all_hint">On now, then starting soon</string>
+    <string name="home_rows_pick_sports_all_detail">Games on right now that have a channel, then games about to start. The same cards as the Sports page.</string>
+    <string name="home_rows_pick_sports_one">Live now: one league or sport</string>
+    <string name="home_rows_pick_sports_one_title">Pick a sport or league</string>
+    <string name="home_rows_sports_heading">Sports</string>
+    <string name="home_rows_leagues_heading">Leagues</string>
+
+    <!-- Row names -->
+    <string name="home_rows_favorites_title">Favorite Channels</string>
+    <string name="home_rows_recent_title">Recently Watched Channels</string>
+    <string name="home_rows_channels_title">Channels</string>
+    <string name="home_rows_sports_title">Live Sports Now</string>
+    <string name="home_rows_sports_one_title">Live Now: %1$s</string>
+    <string name="home_rows_next">Next: %1$s %2$s</string>
+
+    <!-- Row options -->
+    <string name="home_rows_options_channels_subtitle">Live TV row</string>
+    <string name="home_rows_options_sports_subtitle">Sports row</string>
+    <string name="home_rows_option_name">Row name</string>
+    <string name="home_rows_option_name_hint">Leave empty for the group\'s own name</string>
+    <string name="home_rows_option_channels">Channels from</string>
+    <string name="home_rows_option_sports">Sports &amp; leagues</string>
+    <string name="home_rows_option_sort">Order</string>
+    <string name="home_rows_sort_yours">Same as the guide</string>
+    <string name="home_rows_sort_number">Channel number</string>
+    <string name="home_rows_sort_ending">Ending soonest</string>
+    <string name="home_rows_option_next">Show what\'s on next</string>
+    <string name="home_rows_option_hide_empty">Hide channels with no guide</string>
+    <string name="home_rows_option_hide_empty_hint">Leaves out channels showing \"No information\"</string>
+    <string name="home_rows_option_ok">Pressing OK</string>
+    <string name="home_rows_option_ok_full">Plays full screen</string>
+    <string name="home_rows_option_ok_guide">Opens the guide</string>
+    <string name="home_rows_option_ok_page">Opens the game page</string>
+    <string name="home_rows_option_ok_page_hint">Hold OK to play the game straight away</string>
+    <string name="home_rows_option_ok_plays_game">Plays the game</string>
+    <string name="home_rows_option_ok_plays_game_hint">Hold OK for the game page</string>
+    <string name="home_rows_option_soon">Show games starting soon</string>
+    <string name="home_rows_option_soon_hint">After the live games, games starting in the next half hour</string>
+    <string name="home_rows_option_limit">Most cards in the row</string>
+    <string name="home_rows_option_shape">Card shape</string>
+    <string name="home_rows_shape_auto">Same as your Home layout</string>
+    <string name="home_rows_shape_portrait">Portrait</string>
+    <string name="home_rows_shape_landscape">Landscape</string>
+    <string name="home_rows_option_remove">Remove this row</string>
+</resources>

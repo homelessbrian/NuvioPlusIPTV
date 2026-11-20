@@ -320,6 +320,16 @@ internal fun buildModernHomePresentation(
                     )
                     add(placeholderRow)
                 }
+
+                // Live TV fork: drawn by the Live TV row itself (no poster items here).
+                is HomeRow.LiveRow -> add(
+                    HeroCarouselRow(
+                        key = homeRow.key,
+                        title = homeRow.title,
+                        globalRowIndex = index,
+                        items = emptyList<ModernCarouselItem>().asStable()
+                    )
+                )
             }
         }
 
@@ -351,6 +361,7 @@ private fun resolveVisibleHomeRows(input: ModernHomePresentationInput): List<Hom
                     // Keep placeholder rows as-is — they'll be rendered as shimmer skeletons
                     homeRow
                 }
+                is HomeRow.LiveRow -> homeRow
             }
         }
     }

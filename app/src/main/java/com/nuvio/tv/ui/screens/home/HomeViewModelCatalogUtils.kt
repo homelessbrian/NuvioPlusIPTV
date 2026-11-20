@@ -224,7 +224,8 @@ internal fun HomeViewModel.removeTruncatedRowCacheEntry(key: String) {
 
 internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
     val defaultOrder = buildDefaultCatalogOrder(addons)
-    val collectionKeys = collectionsCache.map { "collection_${it.id}" }
+    // Live TV fork: Live TV and Sports rows move between addons like collections.
+    val collectionKeys = collectionsCache.map { "collection_${it.id}" } + liveRowsCache.map { it.first }
     val allAvailable = (defaultOrder + collectionKeys).toSet()
 
     if (followAddonsOrderEnabled) {
@@ -394,7 +395,7 @@ private fun normalizeCollectionBoundaries(
         var i = 0
         while (i < result.size) {
             val key = result[i]
-            if (!key.startsWith("collection_")) {
+            if (!key.isMovableHomeKey()) {
                 i++
                 continue
             }
@@ -405,7 +406,7 @@ private fun normalizeCollectionBoundaries(
                 result.removeAt(i)
                 var insertPos = i
                 while (insertPos < result.size &&
-                    !result[insertPos].startsWith("collection_") &&
+                    !result[insertPos].isMovableHomeKey() &&
                     addonKeyToOwner[result[insertPos]] == prevOwner
                 ) {
                     insertPos++
@@ -423,14 +424,18 @@ private fun normalizeCollectionBoundaries(
 
 private fun findOwnerBefore(order: List<String>, index: Int, owners: Map<String, String>): String? {
     for (j in index - 1 downTo 0) {
-        if (!order[j].startsWith("collection_")) return owners[order[j]]
+        if (!order[j].isMovableHomeKey()) return owners[order[j]]
     }
     return null
 }
 
 private fun findOwnerAfter(order: List<String>, index: Int, owners: Map<String, String>): String? {
     for (j in index + 1 until order.size) {
-        if (!order[j].startsWith("collection_")) return owners[order[j]]
+        if (!order[j].isMovableHomeKey()) return owners[order[j]]
     }
     return null
 }
+
+/** Live TV fork: collections, Live TV rows and Sports rows sit between addons' catalogs. */
+private fun String.isMovableHomeKey(): Boolean =
+    startsWith("collection_") || com.nuvio.tv.livetv.home.isLiveHomeRowKey(this)

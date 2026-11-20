@@ -336,7 +336,18 @@ private fun PlaybackNavHost(
                         openLiveTv()
                         navController.navigate(Screen.LiveTvPlayer.route) { launchSingleTop = true }
                     },
-                    openGuide = { openLiveTv() }
+                    openGuide = { openLiveTv() },
+                    openGame = { id ->
+                        // Back on the game comes back to Home.
+                        com.nuvio.tv.livetv.sports.SportsLaunch.openEvent(
+                            id, com.nuvio.tv.livetv.sports.SportsLaunch.Origin(Screen.Home.route, "Home")
+                        )
+                        navController.navigate(Screen.Sports.route) {
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
                 )
             ) {
             HomeScreen(

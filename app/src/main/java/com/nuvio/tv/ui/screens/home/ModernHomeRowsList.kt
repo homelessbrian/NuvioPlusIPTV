@@ -355,7 +355,13 @@ internal fun ModernHomeRowsList(
                                     ?: visibleItems.firstOrNull()?.index
                                     ?: verticalRowListState.firstVisibleItemIndex
                         }
-                        val targetRow = carouselRows.list.getOrNull(targetRowIndex)
+                        // Live TV fork: land on the next poster row, not on a Live TV row.
+                        val targetRow = carouselRows.list.getOrNull(targetRowIndex)?.let { r ->
+                            if (!com.nuvio.tv.livetv.home.isLiveHomeRowKey(r.key)) r
+                            else (if (sign < 0) carouselRows.list.subList(0, targetRowIndex).lastOrNull { !com.nuvio.tv.livetv.home.isLiveHomeRowKey(it.key) }
+                                else carouselRows.list.drop(targetRowIndex + 1).firstOrNull { !com.nuvio.tv.livetv.home.isLiveHomeRowKey(it.key) })
+                                ?: carouselRows.list.firstOrNull { !com.nuvio.tv.livetv.home.isLiveHomeRowKey(it.key) }
+                        }
                         if (targetRow == null) null
                         else {
                             val savedIdx = (focusedItemByRowMap[targetRow.key] ?: 0)
@@ -439,6 +445,23 @@ internal fun ModernHomeRowsList(
                     com.nuvio.tv.livetv.home.LiveTvHomeRow(hideUnlessFocused = true, above = liveTvRowAbove == true, startPadding = 52.dp, titleStyle = androidx.tv.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold))
                 }
                 androidx.compose.runtime.CompositionLocalProvider(com.nuvio.tv.livetv.home.LocalLiveTvHintHere provides (liveTvHere && liveTvRowAbove == true)) {
+                // Live TV fork: a Live TV or Sports row, sized like this layout's cards.
+                if (com.nuvio.tv.livetv.home.isLiveHomeRowKey(row.key)) {
+                    com.nuvio.tv.livetv.home.HomeLiveRowSection(
+                        rowKey = row.key,
+                        style = com.nuvio.tv.livetv.home.HomeLiveRowStyle(
+                            landscape = useLandscapePosters,
+                            portraitWidth = portraitCatalogCardWidth,
+                            portraitHeight = portraitCatalogCardHeight,
+                            landscapeWidth = landscapeCatalogCardWidth,
+                            landscapeHeight = landscapeCatalogCardHeight,
+                            startPadding = 52.dp,
+                            cornerRadius = posterCardCornerRadius,
+                            titleStyle = androidx.tv.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+                            titleBottom = 14.dp
+                        )
+                    )
+                } else
                 ModernRowSection(
                     row = row,
                     isActiveRow = isActiveRowLambda,

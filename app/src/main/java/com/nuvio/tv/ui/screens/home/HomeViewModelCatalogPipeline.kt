@@ -59,6 +59,24 @@ internal fun HomeViewModel.observeCollectionsPipeline() {
     }
 }
 
+/** Live TV fork: Live TV and Sports rows added from Reorder Home Catalogs. */
+@OptIn(FlowPreview::class)
+internal fun HomeViewModel.observeLiveRowsPipeline() {
+    homeLiveRows.keepPlaces()
+    viewModelScope.launch {
+        kotlinx.coroutines.flow.combine(homeLiveRows.shownRows, homeLiveRows.names) { rows, names ->
+            rows.map { it.key to (names[it.id] ?: it.title) }
+        }
+            .distinctUntilChanged()
+            .debounce(300)
+            .collectLatest { rows ->
+                liveRowsCache = rows
+                rebuildCatalogOrder(addonsCache)
+                scheduleUpdateCatalogRows()
+            }
+    }
+}
+
 internal fun HomeViewModel.loadHomeCatalogOrderPreferencePipeline() {
     viewModelScope.launch {
         layoutPreferenceDataStore.homeCatalogOrderKeys.collectLatest { keys ->
@@ -731,8 +749,14 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 add(HomeRow.CollectionRow(collection))
             }
         }
+        val liveRowsSnapshot = liveRowsCache.toMap()
         for (key in orderedKeys) {
             if (key in disabledHomeCatalogKeys) continue
+            val liveTitle = liveRowsSnapshot[key]
+            if (liveTitle != null) {
+                add(HomeRow.LiveRow(key, liveTitle))
+                continue
+            }
             val collectionEntry = collectionsSnapshot[key]
             if (collectionEntry != null) {
                 if (!collectionEntry.pinToTop && addedCollectionIds.add(collectionEntry.id)) {
@@ -866,6 +890,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                     is HomeRow.PlaceholderCatalog -> {
                         // Grid layout: skip placeholders (grid loads all at once)
                     }
+                    is HomeRow.LiveRow -> add(GridItem.LiveRow(homeRow.key, homeRow.title))
                 }
             }
         }.let { replaceGridHeroItemsPipeline(it, baseHeroItems) }

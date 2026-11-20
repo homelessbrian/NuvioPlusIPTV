@@ -89,6 +89,8 @@ class HomeViewModel @Inject constructor(
     internal val profileManager: com.nuvio.tv.core.profile.ProfileManager,
     internal val tvRecommendationManager: TvRecommendationManager,
     internal val serverCatalog: ServerCatalog,
+    // Live TV fork: Live TV and Sports rows added to Home.
+    internal val homeLiveRows: com.nuvio.tv.livetv.home.HomeLiveRows,
     internal val metaPreviewEnricher: MetaPreviewEnricher = MetaPreviewEnricher(
         tmdbService,
         tmdbMetadataService,
@@ -231,6 +233,8 @@ class HomeViewModel @Inject constructor(
     internal val catalogOrder = mutableListOf<String>()
     internal var addonsCache: List<Addon> = emptyList()
     internal var collectionsCache: List<Collection> = emptyList()
+    /** Live TV fork: the Live TV and Sports rows (key to name), in no particular order. */
+    internal var liveRowsCache: List<Pair<String, String>> = emptyList()
     internal var homeCatalogOrderKeys: List<String> = emptyList()
     internal var disabledHomeCatalogKeys: Set<String> = emptySet()
     internal var followAddonsOrderEnabled: Boolean = false
@@ -850,7 +854,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun observeCollections() = observeCollectionsPipeline()
+    private fun observeCollections() {
+        observeCollectionsPipeline()
+        observeLiveRowsPipeline()
+    }
 
     private fun observeInstalledAddons() = observeInstalledAddonsPipeline()
 
