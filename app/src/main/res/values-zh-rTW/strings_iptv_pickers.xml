@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"快捷頻道"</string>
+    <string name="iptv_quick_channels_subtitle">"藏在播放欄下方的快捷方式。在播放欄上按“下”即可開啟。"</string>
+    <string name="iptv_quick_channels_show">"顯示快捷頻道"</string>
+    <string name="iptv_quick_channels_opens_on">"開啟時顯示"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"首先顯示的列表"</string>
+    <string name="iptv_quick_channels_first_list">"第一個列表"</string>
+    <string name="iptv_quick_channels_last_used">"上次使用的"</string>
+    <string name="iptv_quick_channels_lists_hint">"行中的列表 · OK 開啟或關閉，方向鍵移動位置"</string>
+    <string name="iptv_quick_channels_recent">"最近觀看"</string>
+    <string name="iptv_quick_channels_favorites">"收藏"</string>
+    <string name="iptv_quick_channels_built_in">"內建"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · 播放清單分組"</string>
+    <string name="iptv_quick_channels_your_group">"你的分組"</string>
+    <string name="iptv_quick_channels_group_missing">"未找到分組"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"當前不在你的播放清單中"</string>
+    <string name="iptv_quick_channels_add_group">"新增播放清單分組…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"任意播放清單中的任意分組，也包括你自己的分組"</string>
+    <string name="iptv_quick_channels_add_groups_title">"新增播放清單分組"</string>
+    <string name="iptv_quick_channels_no_groups">"還沒有分組。請先新增播放清單。"</string>
+    <string name="iptv_quick_channels_add_groups_hint">"每個勾選的分組都會成為快捷頻道中的一個列表。"</string>
+    <string name="iptv_quick_channels_my_groups">"我的分組"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="other">"%1$d 個頻道"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"供應商順序"</string>
+    <string name="iptv_vod_sort_name_az">"A–Z"</string>
+    <string name="iptv_vod_sort_name_za">"Z–A"</string>
+    <string name="iptv_vod_sort_newest">"最新上映"</string>
+    <string name="iptv_vod_sort_oldest">"最早上映"</string>
+    <string name="iptv_vod_sort_recently_added">"最近新增"</string>
+    <string name="iptv_vod_sort_highest_rated">"評分最高"</string>
+    <string name="iptv_vod_sort_shuffle">"隨機"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"按供應商傳送的順序"</string>
+    <string name="iptv_vod_sort_name_az_hint">"數字和符號在前，然後 A 到 Z"</string>
+    <string name="iptv_vod_sort_name_za_hint">"Z 到 A，然後數字和符號"</string>
+    <string name="iptv_vod_sort_newest_hint">"按上映年份，最新在前"</string>
+    <string name="iptv_vod_sort_oldest_hint">"按上映年份，最早在前"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"供應商最近新增的內容"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"按供應商評分，最高在前"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"每次選擇時隨機重新排序"</string>
+    <string name="iptv_vod_sort_default_hint">"跟隨設定中的預設排序方式"</string>
+</resources>

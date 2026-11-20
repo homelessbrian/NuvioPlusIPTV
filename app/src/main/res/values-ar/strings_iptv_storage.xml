@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"هذا الجهاز"</string>
+    <string name="iptv_storage_usb_drive">"وحدة USB"</string>
+    <string name="iptv_storage_read_only">"للقراءة فقط. يستطيع هذا الجهاز قراءة الوحدة لكن لا يكتب عليها (غالبًا وحدة NTFS). تهيئتها بصيغة exFAT تتيح التسجيل عليها."</string>
+    <string name="iptv_storage_unsupported_format">"لا يستطيع هذا الجهاز قراءة صيغة الوحدة. تهيئتها بصيغة exFAT تحل ذلك عادة."</string>
+    <string name="iptv_storage_not_ready">"غير جاهزة بعد. انتظر لحظة وافتح هذه القائمة مجددًا."</string>
+    <string name="iptv_storage_no_app_folder">"لم يمنح Android التطبيق مجلدًا عليها. افصل الوحدة وأعد توصيلها، أو أعد تشغيل الجهاز."</string>
+    <string name="iptv_storage_unusable_state">"غير قابلة للاستخدام الآن (%1$s)."</string>
+</resources>

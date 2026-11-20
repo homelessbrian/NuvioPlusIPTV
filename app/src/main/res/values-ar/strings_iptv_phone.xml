@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"إضافة إلى Nuvio + IPTV"</string>
+    <string name="iptv_phone_connected_to">"متصل بـ %1$s"</string>
+    <string name="iptv_phone_heading">"أضف إلى التلفاز"</string>
+    <string name="iptv_phone_instructions">"املأ هذا واضغط إرسال إلى التلفاز. سيظهر على التلفاز فورًا."</string>
+    <string name="iptv_phone_what_to_add">"ماذا تريد أن تضيف"</string>
+    <string name="iptv_phone_m3u_tab">"رابط M3U"</string>
+    <string name="iptv_phone_epg_tab">"EPG فقط"</string>
+    <string name="iptv_phone_name_label">"الاسم (اختياري)"</string>
+    <string name="iptv_phone_provider_placeholder">"مزوّدي"</string>
+    <string name="iptv_phone_playlist_label">"رابط قائمة التشغيل"</string>
+    <string name="iptv_phone_epg_optional_label">"رابط EPG (اختياري)"</string>
+    <string name="iptv_phone_user_agent_label">"وكيل المستخدم (اختياري)"</string>
+    <string name="iptv_phone_user_agent_placeholder">"اتركه فارغًا للافتراضي"</string>
+    <string name="iptv_phone_server_label">"الخادم"</string>
+    <string name="iptv_phone_username_label">"اسم المستخدم"</string>
+    <string name="iptv_phone_password_label">"كلمة المرور"</string>
+    <string name="iptv_phone_include_live">"تضمين القنوات التلفزيونية"</string>
+    <string name="iptv_phone_include_vod">"تضمين الأفلام والمسلسلات (On Demand)"</string>
+    <string name="iptv_phone_epg_label">"رابط EPG"</string>
+    <string name="iptv_phone_send">"إرسال إلى التلفاز"</string>
+    <string name="iptv_phone_network_note">"يعمل فقط على نفس شبكة Wi‑Fi التي يتصل بها التلفاز. تتوقف هذه الصفحة عن العمل عند إغلاق الشاشة على التلفاز."</string>
+    <string name="iptv_phone_guide_placeholder">"الدليل"</string>
+    <string name="iptv_phone_sending">"جارٍ الإرسال…"</string>
+    <string name="iptv_phone_unreachable">"تعذّر الوصول إلى التلفاز. تأكد أن شاشة الإضافة من الهاتف ما زالت مفتوحة وأنك على نفس شبكة Wi‑Fi."</string>
+    <string name="iptv_phone_not_found">"غير موجود"</string>
+    <string name="iptv_phone_nothing_to_send">"لا شيء للإرسال."</string>
+    <string name="iptv_phone_missing">"هناك شيء ناقص."</string>
+    <string name="iptv_phone_could_not_add">"تعذّر على التلفاز إضافة ذلك. حاول مرة أخرى."</string>
+    <string name="iptv_phone_playlist_missing">"الصق رابط قائمة التشغيل."</string>
+    <string name="iptv_phone_playlist_scheme">"يجب أن يبدأ رابط قائمة التشغيل بـ http:// أو https://."</string>
+    <string name="iptv_phone_epg_scheme">"يجب أن يبدأ رابط EPG بـ http:// أو https://."</string>
+    <string name="iptv_phone_server_missing">"أدخل عنوان الخادم."</string>
+    <string name="iptv_phone_server_invalid">"هذا لا يبدو عنوان خادم."</string>
+    <string name="iptv_phone_credentials_missing">"أدخل اسم المستخدم وكلمة المرور."</string>
+    <string name="iptv_phone_inclusion_missing">"فعّل القنوات التلفزيونية أو الأفلام والمسلسلات."</string>
+    <string name="iptv_phone_epg_missing">"الصق رابط EPG."</string>
+    <string name="iptv_phone_kind_missing">"اختر ما تريد إضافته."</string>
+</resources>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"جارٍ تحديث قائمة التشغيل \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels">"جارٍ قراءة القنوات…"</string>
+    <string name="iptv_repository_status_downloading_guide">"جارٍ تنزيل الدليل \"%1$s\"…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"جارٍ تنزيل الدليل \"%1$s\""</string>
+    <string name="iptv_repository_status_matching_data">"جارٍ مطابقة بيانات الدليل…"</string>
+    <string name="iptv_repository_status_updating_guide">"جارٍ تحديث الدليل…"</string>
+    <string name="iptv_repository_status_adding_playlist">"جارٍ إضافة القنوات من \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"جارٍ قراءة القنوات من \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"جارٍ قراءة القنوات من \"%1$s\" (%2$d من %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"لا توجد ذاكرة كافية للدليل \"%1$s\" — تم تخطيه"</string>
+    <string name="iptv_repository_status_reading_guide">"جارٍ قراءة الدليل \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"جارٍ قراءة الدليل \"%1$s\" (%2$d من %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"جارٍ قراءة الدليل \"%1$s\"… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"جارٍ قراءة الدليل \"%1$s\" (%2$d من %3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"جارٍ مطابقة الدليل \"%1$s\"…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"جارٍ مطابقة الدليل \"%1$s\" (%2$d من %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"جارٍ تنزيل قائمة التشغيل \"%1$s\""</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s من %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"جارٍ تحميل القنوات من %1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f غ.ب"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f م.ب"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d ك.ب"</string>
+    <string name="iptv_repository_status_unknown_host_short">"تعذّر العثور على خادم المزوّد."</string>
+    <string name="iptv_repository_status_timeout_short">"استغرق المزوّد وقتًا طويلًا للرد."</string>
+    <string name="iptv_repository_status_generic_error">"حدث خطأ ما."</string>
+    <string name="iptv_repository_status_unknown_host_address">"تعذّر العثور على خادم المزوّد (%1$s). تحقق من العنوان أو الإنترنت، أو حاول لاحقًا."</string>
+    <string name="iptv_repository_status_provider_timeout">"استغرق المزوّد وقتًا طويلًا للرد (انتهت المهلة). قد يكون مشغولًا؛ حاول لاحقًا."</string>
+    <string name="iptv_repository_status_address">"العنوان"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"تعذّر تحديث قائمة التشغيل \"%1$s\". %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"تعذّر تحديث الدليل \"%1$s\". %2$s"</string>
+    <string name="iptv_repository_status_expired">"انتهت صلاحية \"%1$s\""</string>
+    <string name="iptv_repository_status_expires_today">"تنتهي صلاحية \"%1$s\" اليوم"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"تنتهي صلاحية \"%1$s\" غدًا"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="zero">"جارٍ إضافة القنوات من %1$d قائمة تشغيل جديدة…"</item>
+        <item quantity="one">"جارٍ إضافة القنوات من قائمة تشغيل جديدة (%1$d)…"</item>
+        <item quantity="two">"جارٍ إضافة القنوات من قائمتي تشغيل جديدتين (%1$d)…"</item>
+        <item quantity="few">"جارٍ إضافة القنوات من %1$d قوائم تشغيل جديدة…"</item>
+        <item quantity="many">"جارٍ إضافة القنوات من %1$d قائمة تشغيل جديدة…"</item>
+        <item quantity="other">"جارٍ إضافة القنوات من %1$d قائمة تشغيل جديدة…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="zero">"تنتهي صلاحية \"%1$s\" خلال %2$d يوم"</item>
+        <item quantity="one">"تنتهي صلاحية \"%1$s\" خلال يوم (%2$d)"</item>
+        <item quantity="two">"تنتهي صلاحية \"%1$s\" خلال يومين (%2$d)"</item>
+        <item quantity="few">"تنتهي صلاحية \"%1$s\" خلال %2$d أيام"</item>
+        <item quantity="many">"تنتهي صلاحية \"%1$s\" خلال %2$d يومًا"</item>
+        <item quantity="other">"تنتهي صلاحية \"%1$s\" خلال %2$d يوم"</item>
+    </plurals>
+</resources>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"جارٍ البحث…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"فشل الاختبار: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"قائمة تشغيل"</string>
+    <string name="iptv_settings_support_remote_title">"مختبر أزرار جهاز التحكم"</string>
+    <string name="iptv_settings_support_remote_instructions">"اضغط أي زر. الأحدث في الأعلى؛ الأسطر الملوّنة زر مختلف خلال 250 م.ث من الذي قبله (مثل OK المرسل مع أعلى/أسفل). اضغط رجوع 3 مرات متتالية للإغلاق."</string>
+    <string name="iptv_settings_support_remote_waiting">"بانتظار زر…"</string>
+    <string name="iptv_settings_support_remote_action_down">"ضغط"</string>
+    <string name="iptv_settings_support_remote_action_up">"رفع"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"متعدد"</string>
+    <string name="iptv_settings_support_remote_repeat">"تكرار %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"ضغطة مطولة"</string>
+    <string name="iptv_settings_support_remote_canceled">"أُلغي"</string>
+    <string name="iptv_settings_support_remote_held">"مضغوط %1$d م.ث"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"تقرير بدء تشغيل Live TV"</string>
+    <string name="iptv_settings_support_report_subtitle">"منذ بدء التطبيق. ▲ ▼ للتمرير."</string>
+    <string name="iptv_settings_support_report_empty">"لا شيء بعد: افتح Live TV أولًا."</string>
+    <string name="iptv_settings_support_report_send">"إرسال التقرير كاملًا"</string>
+    <string name="iptv_settings_support_report_no_network">"وصّل هذا التلفاز بشبكة Wi-Fi لإرسال التقرير من هاتفك."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. ضع هاتفك على نفس شبكة Wi-Fi التي يتصل بها هذا التلفاز.\n2. امسح هذا الرمز بكاميرا هاتفك، أو اكتب العنوان أدناه.\n3. اضغط نسخ التقرير المختصر (يتسع في رسالة Discord واحدة)، ثم الصقه في رسالتك."</string>
+</resources>

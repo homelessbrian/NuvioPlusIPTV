@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"本裝置"</string>
+    <string name="iptv_storage_usb_drive">"USB 儲存裝置"</string>
+    <string name="iptv_storage_read_only">"只讀。此盒子可以讀取但不能寫入該儲存裝置（通常是 NTFS 格式）。格式化為 exFAT 後即可錄製到上面。"</string>
+    <string name="iptv_storage_unsupported_format">"此盒子無法讀取該儲存裝置的格式。格式化為 exFAT 通常可以解決。"</string>
+    <string name="iptv_storage_not_ready">"尚未就緒。請稍等片刻後重新開啟此列表。"</string>
+    <string name="iptv_storage_no_app_folder">"Android 沒有在其上為應用提供資料夾。請拔下儲存裝置再插回，或重啟盒子。"</string>
+    <string name="iptv_storage_unusable_state">"暫時無法使用（%1$s）。"</string>
+</resources>

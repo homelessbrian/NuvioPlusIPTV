@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"正在搜索…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"测试失败：%1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"播放列表"</string>
+    <string name="iptv_settings_support_remote_title">"遥控器按键测试"</string>
+    <string name="iptv_settings_support_remote_instructions">"按任意键。最新的在最上方；彩色行表示与上一个按键相隔 250 毫秒内的不同按键（例如与上/下一起发送的 OK）。连续按返回 3 次关闭。"</string>
+    <string name="iptv_settings_support_remote_waiting">"正在等待按键…"</string>
+    <string name="iptv_settings_support_remote_action_down">"按下"</string>
+    <string name="iptv_settings_support_remote_action_up">"抬起"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"多次"</string>
+    <string name="iptv_settings_support_remote_repeat">"重复 %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"长按"</string>
+    <string name="iptv_settings_support_remote_canceled">"已取消"</string>
+    <string name="iptv_settings_support_remote_held">"按住 %1$d 毫秒"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Live TV 启动报告"</string>
+    <string name="iptv_settings_support_report_subtitle">"自应用启动以来。▲ ▼ 滚动。"</string>
+    <string name="iptv_settings_support_report_empty">"暂无内容：请先打开 Live TV。"</string>
+    <string name="iptv_settings_support_report_send">"发送完整报告"</string>
+    <string name="iptv_settings_support_report_no_network">"将这台电视连接到 Wi-Fi，即可从手机发送报告。"</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. 让手机连接与这台电视相同的 Wi-Fi。\n2. 用手机相机扫描此二维码，或输入下方地址。\n3. 点击“复制简短报告”（一条 Discord 消息即可容纳），然后粘贴到你的消息中。"</string>
+</resources>

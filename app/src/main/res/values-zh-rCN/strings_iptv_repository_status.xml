@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"正在更新播放列表“%1$s”…"</string>
+    <string name="iptv_repository_status_reading_channels">"正在读取频道…"</string>
+    <string name="iptv_repository_status_downloading_guide">"正在下载节目指南“%1$s”…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"正在下载节目指南“%1$s”"</string>
+    <string name="iptv_repository_status_matching_data">"正在匹配节目指南数据…"</string>
+    <string name="iptv_repository_status_updating_guide">"正在更新节目指南…"</string>
+    <string name="iptv_repository_status_adding_playlist">"正在从“%1$s”添加频道…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"正在从“%1$s”读取频道…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"正在从“%1$s”读取频道（%2$d/%3$d）…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"内存不足，已跳过节目指南“%1$s”"</string>
+    <string name="iptv_repository_status_reading_guide">"正在读取节目指南“%1$s”…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"正在读取节目指南“%1$s”（%2$d/%3$d）…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"正在读取节目指南“%1$s”… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"正在读取节目指南“%1$s”（%2$d/%3$d）… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"正在匹配节目指南“%1$s”…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"正在匹配节目指南“%1$s”（%2$d/%3$d）…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"正在下载播放列表“%1$s”"</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s / %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"正在从 %1$s 加载频道… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"找不到提供商的服务器。"</string>
+    <string name="iptv_repository_status_timeout_short">"提供商响应超时。"</string>
+    <string name="iptv_repository_status_generic_error">"出错了。"</string>
+    <string name="iptv_repository_status_unknown_host_address">"找不到提供商的服务器（%1$s）。请检查地址或网络，或稍后再试。"</string>
+    <string name="iptv_repository_status_provider_timeout">"提供商响应时间过长（超时）。可能正忙，请稍后再试。"</string>
+    <string name="iptv_repository_status_address">"地址"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"播放列表“%1$s”无法更新。%2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"节目指南“%1$s”无法更新。%2$s"</string>
+    <string name="iptv_repository_status_expired">"“%1$s”已过期"</string>
+    <string name="iptv_repository_status_expires_today">"“%1$s”今天到期"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"“%1$s”明天到期"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="other">"正在从 %1$d 个新播放列表添加频道…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="other">"“%1$s”将在 %2$d 天后到期"</item>
+    </plurals>
+</resources>
