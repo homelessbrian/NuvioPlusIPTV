@@ -59,19 +59,38 @@ internal fun HomeViewModel.observeCollectionsPipeline() {
     }
 }
 
-/** Live TV fork: Live TV and Sports rows added from Reorder Home Catalogs. */
+private data class LiveRowsInput(
+    val rows: List<Pair<String, String>>,
+    val vodKeys: Set<String>,
+    val empty: Set<String>,
+    val vod: Map<String, CatalogRow>
+)
+
+/** Live TV fork: Live TV, Sports and On Demand rows added from Reorder Home Catalogs. */
 @OptIn(FlowPreview::class)
 internal fun HomeViewModel.observeLiveRowsPipeline() {
     homeLiveRows.keepPlaces()
     viewModelScope.launch {
-        kotlinx.coroutines.flow.combine(homeLiveRows.shownRows, homeLiveRows.names) { rows, names ->
-            rows.map { it.key to (names[it.id] ?: it.title) }
+        kotlinx.coroutines.flow.combine(
+            homeLiveRows.shownRows, homeLiveRows.names, homeLiveRows.emptyRowIds, homeLiveRows.vodRows
+        ) { rows, names, empty, vod ->
+            LiveRowsInput(
+                rows = rows.map { it.key to (names[it.id] ?: it.title) },
+                vodKeys = rows.filter { it.kind == com.nuvio.tv.livetv.home.HomeLiveRow.KIND_VOD }.mapTo(HashSet()) { it.key },
+                empty = rows.filter { it.id in empty }.mapTo(HashSet()) { it.key },
+                // On Demand rows under the row's own name (renaming it on Home renames it here).
+                vod = rows.mapNotNull { r -> vod[r.id]?.let { r.key to it.copy(catalogName = names[r.id] ?: it.catalogName) } }.toMap()
+            )
         }
             .distinctUntilChanged()
             .debounce(300)
-            .collectLatest { rows ->
-                liveRowsCache = rows
-                rebuildCatalogOrder(addonsCache)
+            .collectLatest { input ->
+                val orderChanged = input.rows.map { it.first } != liveRowsCache.map { it.first }
+                liveRowsCache = input.rows
+                vodRowKeys = input.vodKeys
+                emptyLiveRowKeys = input.empty
+                vodRowsCache = input.vod
+                if (orderChanged) rebuildCatalogOrder(addonsCache)
                 scheduleUpdateCatalogRows()
             }
     }
@@ -750,11 +769,20 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             }
         }
         val liveRowsSnapshot = liveRowsCache.toMap()
+        val vodSnapshot = vodRowsCache
+        val vodKeysSnapshot = vodRowKeys
+        val emptySnapshot = emptyLiveRowKeys
         for (key in orderedKeys) {
             if (key in disabledHomeCatalogKeys) continue
             val liveTitle = liveRowsSnapshot[key]
             if (liveTitle != null) {
-                add(HomeRow.LiveRow(key, liveTitle))
+                // On Demand: a normal catalog row of posters. A row with nothing to show is left
+                // out altogether (no empty gap where it would be).
+                if (key in vodKeysSnapshot) {
+                    vodSnapshot[key]?.takeIf { it.items.isNotEmpty() }?.let { add(HomeRow.Catalog(it)) }
+                } else if (key !in emptySnapshot) {
+                    add(HomeRow.LiveRow(key, liveTitle))
+                }
                 continue
             }
             val collectionEntry = collectionsSnapshot[key]

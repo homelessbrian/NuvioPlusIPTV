@@ -68,6 +68,7 @@ fun CatalogOrderScreen(
     var addingRow by remember { mutableStateOf(false) }
     var editingRowId by remember { mutableStateOf<String?>(null) }
     val liveRows by rowsSetup.rows.collectAsState()
+    val emptyRowIds by rowsSetup.emptyRowIds.collectAsState()
     if (addingRow) {
         com.nuvio.tv.livetv.home.AddHomeRowDialog(viewModel = rowsSetup, onDismiss = { addingRow = false })
     }
@@ -184,7 +185,8 @@ fun CatalogOrderScreen(
                                 }
                             },
                             onToggleEnabled = { viewModel.toggleCatalogEnabled(item.disableKey) },
-                            onEdit = item.liveRow?.let { r -> { editingRowId = r.id } }
+                            onEdit = item.liveRow?.let { r -> { editingRowId = r.id } },
+                            hiddenEmpty = item.liveRow?.id?.let { it in emptyRowIds } == true
                         )
                     }
                 }
@@ -199,7 +201,9 @@ private fun CatalogOrderCard(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onToggleEnabled: () -> Unit,
-    onEdit: (() -> Unit)? = null
+    onEdit: (() -> Unit)? = null,
+    /** Live TV fork: a row left off Home for now, having nothing to show. */
+    hiddenEmpty: Boolean = false
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -218,6 +222,7 @@ private fun CatalogOrderCard(
                 val typeText = when (live?.kind) {
                     com.nuvio.tv.livetv.home.HomeLiveRow.KIND_SPORTS -> stringResource(R.string.home_rows_type_sports)
                     com.nuvio.tv.livetv.home.HomeLiveRow.KIND_CHANNELS -> stringResource(R.string.home_rows_type_live)
+                    com.nuvio.tv.livetv.home.HomeLiveRow.KIND_VOD -> stringResource(R.string.home_rows_type_vod)
                     else -> item.typeLabel.toDisplayTypeLabel()
                 }
                 Text(
@@ -236,11 +241,22 @@ private fun CatalogOrderCard(
                         com.nuvio.tv.livetv.home.HomeLiveRow.KIND_CHANNELS -> stringResource(
                             R.string.home_rows_desc_channels, stringResource(R.string.home_rows_type_live), live.limit
                         )
+                        com.nuvio.tv.livetv.home.HomeLiveRow.KIND_VOD -> stringResource(
+                            R.string.home_rows_desc_vod, stringResource(R.string.home_rows_type_vod), live.limit
+                        )
                         else -> item.addonName
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioTheme.colors.TextSecondary
                 )
+                if (hiddenEmpty && !item.isDisabled) {
+                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                    Text(
+                        text = stringResource(R.string.home_rows_hidden_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioTheme.colors.TextTertiary
+                    )
+                }
                 if (item.isDisabled) {
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
                     Text(

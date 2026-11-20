@@ -25,18 +25,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * A Live TV or Sports row on Nuvio's home screen, added from Reorder Home Catalogs (Add a row).
+ * A Live TV, Sports or On Demand row on Nuvio's home screen, added from Reorder Home Catalogs (Add a row).
  * Each row sits in Nuvio's own row order under the key [key], so it moves, turns off and on like
  * an addon catalog or a collection. Kept per Nuvio profile (like favorites).
  */
 @Immutable
 data class HomeLiveRow(
     val id: String,
-    /** [KIND_CHANNELS] or [KIND_SPORTS]. */
+    /** [KIND_CHANNELS], [KIND_SPORTS] or [KIND_VOD]. */
     val kind: String,
     /**
      * Channels: the group (Favorites, Recently watched, a playlist group or one of your own).
      * Sports: "" for every sport, "sport:<SPORT>" or "league:<league id>".
+     * On Demand: "recent:movie", "recent:series" or "group:<category uid>".
      */
     val source: String,
     /** Your name for the row; blank = the group's or league's own name. */
@@ -61,7 +62,9 @@ data class HomeLiveRow(
      * The row it sits under on Home ("" = the top), so another TV the rows sync to puts it in
      * the same place. Home's own row order isn't part of Live TV's sync.
      */
-    val after: String = ""
+    val after: String = "",
+    /** On Demand: the category's own name when it was added (shown until you rename the row). */
+    val label: String = ""
 ) {
     val key: String get() = KEY_PREFIX + id
 
@@ -69,6 +72,10 @@ data class HomeLiveRow(
         const val KEY_PREFIX = "livetv_"
         const val KIND_CHANNELS = "channels"
         const val KIND_SPORTS = "sports"
+        const val KIND_VOD = "ondemand"
+        const val VOD_RECENT_MOVIES = "recent:movie"
+        const val VOD_RECENT_SERIES = "recent:series"
+        const val VOD_GROUP_PREFIX = "group:"
         const val SHAPE_AUTO = "auto"
         const val SHAPE_PORTRAIT = "portrait"
         const val SHAPE_LANDSCAPE = "landscape"
@@ -79,6 +86,7 @@ data class HomeLiveRow(
 
         fun channels(group: String) = HomeLiveRow(newId(), KIND_CHANNELS, group)
         fun sports(source: String = "") = HomeLiveRow(newId(), KIND_SPORTS, source)
+        fun vod(source: String, label: String = "") = HomeLiveRow(newId(), KIND_VOD, source, limit = 30, label = label)
 
         private fun newId(): String =
             java.lang.Long.toString(System.currentTimeMillis(), 36) +
@@ -91,7 +99,7 @@ data class HomeLiveRow(
                 (0 until arr.length()).mapNotNull { i ->
                     val o = arr.optJSONObject(i) ?: return@mapNotNull null
                     val id = o.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                    val kind = o.optString("kind").takeIf { it == KIND_CHANNELS || it == KIND_SPORTS }
+                    val kind = o.optString("kind").takeIf { it == KIND_CHANNELS || it == KIND_SPORTS || it == KIND_VOD }
                         ?: return@mapNotNull null
                     HomeLiveRow(
                         id = id,
@@ -106,7 +114,8 @@ data class HomeLiveRow(
                         playsGame = o.optBoolean("playsGame", false),
                         startingSoon = o.optBoolean("startingSoon", true),
                         shape = o.optString("shape", SHAPE_AUTO),
-                        after = o.optString("after")
+                        after = o.optString("after"),
+                        label = o.optString("label")
                     )
                 }.distinctBy { it.id }
             }.getOrDefault(emptyList())
@@ -128,13 +137,14 @@ data class HomeLiveRow(
                     put("startingSoon", r.startingSoon)
                     put("shape", r.shape)
                     put("after", r.after)
+                    put("label", r.label)
                 })
             }
         }.toString()
     }
 }
 
-/** True for a home row key that belongs to a Live TV or Sports row. */
+/** True for a home row key that belongs to a Live TV, Sports or On Demand row. */
 fun isLiveHomeRowKey(key: String): Boolean = HomeLiveRow.isKey(key)
 
 /** The rows this profile has added, their names, and changes to them. */
@@ -162,9 +172,9 @@ class HomeLiveRows @Inject constructor(
     /** Each row's name as shown on Home and in Reorder Home Catalogs, by row id. */
     val names: StateFlow<Map<String, String>> = combine(
         rows,
-        prefs.userState.map { it.customGroups to it.groupNames }.distinctUntilChanged(),
+        prefs.userState.map { Triple(it.customGroups, it.groupNames, it.vodGroupNames) }.distinctUntilChanged(),
         channelStore.displayChannels
-    ) { list, (custom, renamed), channels ->
+    ) { list, (custom, renamed, vodRenamed), channels ->
         if (list.isEmpty()) return@combine emptyMap()
         val wanted = list.filter { it.kind == HomeLiveRow.KIND_CHANNELS }.mapTo(HashSet()) { it.source }
         val found = HashMap<String, String>()
@@ -176,6 +186,12 @@ class HomeLiveRows @Inject constructor(
             row.id to row.title.ifBlank {
                 when (row.kind) {
                     HomeLiveRow.KIND_SPORTS -> sportsTitle(ctx, row.source)
+                    HomeLiveRow.KIND_VOD -> when (row.source) {
+                        HomeLiveRow.VOD_RECENT_MOVIES -> ctx.getString(R.string.home_rows_vod_recent_movies_title)
+                        HomeLiveRow.VOD_RECENT_SERIES -> ctx.getString(R.string.home_rows_vod_recent_series_title)
+                        else -> vodRenamed[row.source.removePrefix(HomeLiveRow.VOD_GROUP_PREFIX)]?.takeIf { it.isNotBlank() }
+                            ?: row.label.ifBlank { ctx.getString(R.string.home_rows_type_vod) }
+                    }
                     else -> when (row.source) {
                         ChannelGroup.FAVORITES -> ctx.getString(R.string.home_rows_favorites_title)
                         ChannelGroup.RECENT -> ctx.getString(R.string.home_rows_recent_title)
@@ -187,6 +203,29 @@ class HomeLiveRows @Inject constructor(
             }
         }
     }.flowOn(Dispatchers.Default).stateIn(scope, SharingStarted.Eagerly, emptyMap())
+
+    // ------------------------------------------------------------------ what Home can show
+
+    private val _emptyLive = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet())
+    private val _vodRows = kotlinx.coroutines.flow.MutableStateFlow<Map<String, com.nuvio.tv.domain.model.CatalogRow>>(emptyMap())
+
+    /** Each On Demand row's titles, as Nuvio's own catalog row (by row id; missing = nothing yet). */
+    val vodRows: StateFlow<Map<String, com.nuvio.tv.domain.model.CatalogRow>> = _vodRows
+
+    /**
+     * Rows with nothing to show right now (by row id): Home leaves them out altogether, and
+     * Reorder Home Catalogs says so under them.
+     */
+    val emptyRowIds: StateFlow<Set<String>> = combine(rows, _emptyLive, _vodRows) { list, live, vod ->
+        list.filter { r ->
+            if (r.kind == HomeLiveRow.KIND_VOD) vod[r.id]?.items.isNullOrEmpty() else r.id in live
+        }.mapTo(HashSet()) { it.id } as Set<String>
+    }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, emptySet())
+
+    /** Live TV and Sports rows that have nothing to show (worked out by Home's row model). */
+    fun setEmptyLiveRows(ids: Set<String>) { _emptyLive.value = ids }
+
+    fun setVodRows(rows: Map<String, com.nuvio.tv.domain.model.CatalogRow>) { _vodRows.value = rows }
 
     @Volatile private var placesStarted = false
 

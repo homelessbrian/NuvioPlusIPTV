@@ -235,6 +235,10 @@ class HomeViewModel @Inject constructor(
     internal var collectionsCache: List<Collection> = emptyList()
     /** Live TV fork: the Live TV and Sports rows (key to name), in no particular order. */
     internal var liveRowsCache: List<Pair<String, String>> = emptyList()
+    /** Live TV fork: On Demand rows' titles (by row key), and Live TV/Sports rows with nothing to show. */
+    internal var vodRowsCache: Map<String, CatalogRow> = emptyMap()
+    internal var vodRowKeys: Set<String> = emptySet()
+    internal var emptyLiveRowKeys: Set<String> = emptySet()
     internal var homeCatalogOrderKeys: List<String> = emptyList()
     internal var disabledHomeCatalogKeys: Set<String> = emptySet()
     internal var followAddonsOrderEnabled: Boolean = false

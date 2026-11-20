@@ -44,7 +44,8 @@ class HomeLiveRowsViewModel @Inject constructor(
     private val session: LiveTvSession,
     channelStore: com.nuvio.tv.livetv.data.LiveTvChannelStore,
     private val recorder: com.nuvio.tv.livetv.record.LiveTvRecorder,
-    homeRows: HomeLiveRows
+    private val homeRows: HomeLiveRows,
+    sportsRepo: com.nuvio.tv.livetv.sports.SportsRepository
 ) : ViewModel() {
 
     /** Each row's name, by row id. */
@@ -121,7 +122,36 @@ class HomeLiveRowsViewModel @Inject constructor(
         }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    private val sportsClock = kotlinx.coroutines.flow.flow {
+        while (true) { emit(System.currentTimeMillis()); delay(60_000) }
+    }
+
+    /**
+     * Each Sports row's games when none with a channel is on now or about to start: its games
+     * on now (channel or not) and the ones coming up in the next week, soonest first. Empty =
+     * nothing at all to show (the row is left off Home).
+     */
+    internal val sportsFallback: StateFlow<Map<String, List<com.nuvio.tv.livetv.sports.SportsEvent>>> = combine(
+        rows.map { list -> list.filter { it.kind == HomeLiveRow.KIND_SPORTS } }.distinctUntilChanged(),
+        sportsRepo.events, sportsRepo.settings, sportsClock
+    ) { list, events, sportsSettings, nowMs ->
+        if (list.isEmpty()) return@combine emptyMap()
+        list.associate { row -> row.id to homeRowFallbackEvents(events, sportsSettings, row, nowMs) }
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
     init {
+        // Rows with nothing to show are left off Home (no empty gap where they'd be).
+        viewModelScope.launch {
+            combine(rows, channelEntries, sportsFallback) { list, channels, sports ->
+                list.filter { r ->
+                    when (r.kind) {
+                        HomeLiveRow.KIND_CHANNELS -> channels[r.id].isNullOrEmpty()
+                        HomeLiveRow.KIND_SPORTS -> sports[r.id].isNullOrEmpty()
+                        else -> false
+                    }
+                }.mapTo(HashSet()) { it.id } as Set<String>
+            }.distinctUntilChanged().collect { homeRows.setEmptyLiveRows(it) }
+        }
         viewModelScope.launch {
             // Nothing to do until a row is added.
             rows.first { list -> list.any { it.kind == HomeLiveRow.KIND_CHANNELS } }
@@ -162,6 +192,9 @@ class HomeLiveRowsViewModel @Inject constructor(
             if (groupId != null && channelInGroup(channel, groupId, prefs.userState.first())) prefs.setLastGroup(groupId)
         }
     }
+
+    /** Home's On Demand rows, as Nuvio catalog rows (by row id). */
+    fun setVodRows(rows: Map<String, com.nuvio.tv.domain.model.CatalogRow>) = homeRows.setVodRows(rows)
 
     fun markFullscreenOpened() {
         session.returningFromFullscreen = true

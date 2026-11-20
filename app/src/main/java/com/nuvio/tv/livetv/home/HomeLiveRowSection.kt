@@ -129,6 +129,8 @@ fun HomeLiveRowSection(
     val height = if (landscape) style.landscapeHeight else style.portraitHeight
     when (row.kind) {
         HomeLiveRow.KIND_SPORTS -> SportsRow(row, title, style, landscape, width, height, modifier, viewModel)
+        // On Demand rows are drawn by Home itself, as poster rows.
+        HomeLiveRow.KIND_VOD -> Unit
         else -> ChannelsRow(row, title, style, landscape, width, height, modifier, viewModel)
     }
 }
@@ -345,7 +347,13 @@ private fun SportsRow(
     }
     val all by sports.games.collectAsStateWithLifecycle()
     val sportsSettings by sports.settings.collectAsStateWithLifecycle()
-    val games = remember(all, row) { homeRowGames(all, row) }
+    val fallbackAll by viewModel.sportsFallback.collectAsStateWithLifecycle()
+    val live = remember(all, row) { homeRowGames(all, row) }
+    // Nothing with a channel on now or about to start: what's on and what's coming up next.
+    val fallback = live.isEmpty()
+    val games = if (!fallback) live else remember(fallbackAll, row.id) {
+        fallbackAll[row.id].orEmpty().map { SportsWatchGame(it, emptyList()) }
+    }
     if (games.isEmpty()) return
     val now by viewModel.now.collectAsStateWithLifecycle()
     val use24h by viewModel.use24h.collectAsStateWithLifecycle()
@@ -371,9 +379,14 @@ private fun SportsRow(
             horizontalArrangement = Arrangement.spacedBy(style.cardSpacing)
         ) {
             items(games, key = { it.event.id }) { game ->
-                val onClick = { if (row.playsGame) playBest(game) else openPage(game) }
-                val onLongClick = { if (row.playsGame) openPage(game) else playBest(game) }
+                // Coming-up games have nothing to play yet: OK and hold OK both open the game page.
+                val onClick = { if (row.playsGame && !fallback) playBest(game) else openPage(game) }
+                val onLongClick = { if (row.playsGame || fallback) openPage(game) else playBest(game) }
                 val playingHere = playback.channelKey != null && game.channels.any { it.channel.key == playback.channelKey }
+                val clockNow = System.currentTimeMillis()
+                val upcoming = if (game.event.state == GameState.PRE && game.event.startMs > clockNow + com.nuvio.tv.livetv.sports.SportsWatchPolicy.STARTING_SOON_MS) {
+                    upcomingLabel(game.event.startMs, clockNow, use24h)
+                } else null
                 if (landscape) {
                     // The same card as the Sports page's game strip and Multiview.
                     StripGameCard(
@@ -385,10 +398,11 @@ private fun SportsRow(
                         onClick = onClick,
                         onLongClick = onLongClick,
                         modifier = Modifier.width(width),
-                        cardHeight = height
+                        cardHeight = height,
+                        upcoming = upcoming
                     )
                 } else {
-                    TallGameCard(game, width, height, now, use24h, sportsSettings.hideScores, playingHere, onClick, onLongClick)
+                    TallGameCard(game, width, height, now, use24h, sportsSettings.hideScores, playingHere, onClick, onLongClick, upcoming)
                 }
             }
         }
@@ -413,6 +427,64 @@ internal fun homeRowGames(all: List<SportsWatchGame>, row: HomeLiveRow): List<Sp
 }
 
 /**
+ * A Sports row's games for when none with a channel is on now or about to start: its sport or
+ * league's games on now (with a channel or not) and those starting in the next week, live first
+ * and then soonest first. Empty only when there's nothing at all coming up.
+ */
+internal fun homeRowFallbackEvents(
+    events: List<com.nuvio.tv.livetv.sports.SportsEvent>,
+    settings: com.nuvio.tv.livetv.sports.SportsSettings,
+    row: HomeLiveRow,
+    now: Long
+): List<com.nuvio.tv.livetv.sports.SportsEvent> {
+    if (!settings.showInSidebar) return emptyList()
+    val source = row.source
+    val until = now + UPCOMING_DAYS * 24 * 3_600_000L
+    return events.asSequence()
+        .filter { it.leagueId !in settings.hiddenLeagues }
+        .filter { ev ->
+            when {
+                source.startsWith("league:") -> ev.leagueId == source.removePrefix("league:")
+                source.startsWith("sport:") -> SportsCatalog.league(ev.leagueId)?.sport?.name == source.removePrefix("sport:")
+                else -> true
+            }
+        }
+        .filter { ev ->
+            com.nuvio.tv.livetv.sports.SportsWatchPolicy.liveEvent(ev, now) ||
+                (ev.state == GameState.PRE && ev.hasTime && ev.startMs > now && ev.startMs <= until)
+        }
+        .distinctBy { it.id }
+        .sortedWith(compareBy<com.nuvio.tv.livetv.sports.SportsEvent> { if (it.state == GameState.LIVE) 0 else 1 }.thenBy { it.startMs }.thenBy { it.id })
+        .take(row.limit)
+        .toList()
+}
+
+/** How far ahead a Sports row looks for its next games. */
+private const val UPCOMING_DAYS = 7
+
+/** When a coming-up game starts: "Today 8:00 PM", "Tomorrow 1:00 PM", "Sat 3:00 PM". */
+@Composable
+internal fun upcomingLabel(startMs: Long, now: Long, use24h: Boolean): String {
+    val clock = formatClock(startMs, use24h)
+    val cal = java.util.Calendar.getInstance()
+    cal.timeInMillis = now
+    val today = cal.get(java.util.Calendar.YEAR) * 1000 + cal.get(java.util.Calendar.DAY_OF_YEAR)
+    cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+    val tomorrow = cal.get(java.util.Calendar.YEAR) * 1000 + cal.get(java.util.Calendar.DAY_OF_YEAR)
+    cal.timeInMillis = startMs
+    val day = cal.get(java.util.Calendar.YEAR) * 1000 + cal.get(java.util.Calendar.DAY_OF_YEAR)
+    return when (day) {
+        today -> stringResource(R.string.home_rows_upcoming_today, clock)
+        tomorrow -> stringResource(R.string.home_rows_upcoming_tomorrow, clock)
+        else -> {
+            val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+            val weekday = java.text.SimpleDateFormat("EEE", locale).format(java.util.Date(startMs))
+            stringResource(R.string.home_rows_upcoming_day, weekday, clock)
+        }
+    }
+}
+
+/**
  * A Sports card as tall as a poster: the league and the game's state on top, each team on its
  * own band in its colours (logo, name, record, score), then the clock, the channel and how many
  * other streams there are, with the game's progress bar. Built from the Sports page's own parts.
@@ -428,7 +500,9 @@ private fun TallGameCard(
     hideScores: Boolean,
     playing: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    /** A game coming up later (not soon): when it starts, shown in place of the clock. */
+    upcoming: String? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     val ev = game.event
@@ -457,7 +531,8 @@ private fun TallGameCard(
         ) {
             EventMark(ev, league, 17.dp)
             LiveText(league?.short ?: sport.label, Modifier.weight(1f), color = Color.White.copy(alpha = 0.78f), size = 10.sp, weight = FontWeight.SemiBold)
-            StateBadge(ev, playing, use24h)
+            if (upcoming != null) SportsBadge(upcoming, Color.White.copy(alpha = 0.10f), Color.White)
+            else StateBadge(ev, playing, use24h)
         }
         val bandHeight = ((height - 28.dp) * 0.27f).coerceAtLeast(36.dp)
         if (sides.size == 2) {
@@ -483,13 +558,15 @@ private fun TallGameCard(
             Modifier.fillMaxWidth().weight(1f).padding(horizontal = 9.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            val clock = when (ev.state) {
-                GameState.LIVE -> cornerStatus(ev, use24h, hideScores)
-                GameState.PRE -> if (ev.hasTime) formatClock(ev.startMs, use24h) else ""
+            val clock = when {
+                upcoming != null -> ""
+                ev.state == GameState.LIVE -> cornerStatus(ev, use24h, hideScores)
+                ev.state == GameState.PRE -> if (ev.hasTime) formatClock(ev.startMs, use24h) else ""
                 else -> ev.status.orEmpty()
             }
             if (clock.isNotBlank()) LiveText(clock, color = Color.White, size = 11.sp, weight = FontWeight.Black)
-            LiveText(channel?.name ?: "", color = NuvioTheme.colors.TextPrimary, size = 11.sp, weight = FontWeight.SemiBold, marquee = focused)
+            // No channel yet (a game coming up): the TV networks showing it, when known.
+            LiveText(channel?.name ?: ev.broadcasts.take(3).joinToString(" · "), color = NuvioTheme.colors.TextPrimary, size = 11.sp, weight = FontWeight.SemiBold, marquee = focused)
             if (others > 0) {
                 SportsBadge(
                     if (others == 1) "+1 stream" else "+$others streams",

@@ -624,6 +624,93 @@ class OnDemandViewModel @Inject constructor(
     private suspend fun updateHomeRows() {
         val rows = buildHomeRows()
         _home.value = _home.value.copy(rows = rows)
+        if (homeRowSpecs.isNotEmpty()) publishHomeScreenRows()
+    }
+
+    // ============================================== On Demand rows on Nuvio's home screen
+
+    /** One On Demand row added to Home: what it shows (see HomeLiveRow.source) and how many titles. */
+    data class HomeScreenRowSpec(val rowId: String, val source: String, val limit: Int, val name: String)
+
+    @Volatile private var homeRowSpecs: List<HomeScreenRowSpec> = emptyList()
+    private val homeRowKinds = ConcurrentHashMap<String, VodKind>()
+    private var homeRowsJob: Job? = null
+    private val _homeScreenRows = MutableStateFlow<Map<String, com.nuvio.tv.domain.model.CatalogRow>>(emptyMap())
+
+    /** Home's On Demand rows as Nuvio catalog rows, by row id (a row with no titles is left out). */
+    val homeScreenRows: StateFlow<Map<String, com.nuvio.tv.domain.model.CatalogRow>> = _homeScreenRows
+
+    /** The catalog's version: changes when a playlist's movies and series are read again. */
+    val catalogVersion: StateFlow<Int> = repository.version
+
+    private fun homeRowKey(rowId: String) = "homerow:$rowId"
+
+    /**
+     * Loads Home's On Demand rows: each one's first titles (a group, or the newest movies or
+     * series), with posters found the same way as on the On Demand page. Hidden and locked
+     * groups show nothing (their row is left off Home).
+     */
+    fun loadHomeScreenRows(specs: List<HomeScreenRowSpec>) {
+        homeRowsJob?.cancel()
+        homeRowsJob = viewModelScope.launch {
+            val user = prefs.userState.first()
+            val s = prefs.settings.first()
+            val cats = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
+            val excluded = user.vodHiddenCategories + cats.filter { c ->
+                ParentalControls.isLocked("vod:${c.uid}", c.name, s, user.lockedGroups)
+            }.map { it.uid }
+            val merge = s.vodMergeDuplicates
+            homeItems.keys.filter { it.startsWith("homerow:") && specs.none { sp -> homeRowKey(sp.rowId) == it } }
+                .forEach { homeItems.remove(it) }
+            for (spec in specs) {
+                val recentKind = when (spec.source) {
+                    "recent:movie" -> VodKind.MOVIE
+                    "recent:series" -> VodKind.SERIES
+                    else -> null
+                }
+                val (kind, raw) = if (recentKind != null) {
+                    recentKind to repository.items(recentKind, null, excluded, true, spec.limit, 0, VodSort.DEFAULT, merge = merge)
+                } else {
+                    val uid = spec.source.removePrefix("group:")
+                    val c = cats.firstOrNull { it.uid == uid }
+                    if (c == null || c.uid in excluded) null to emptyList()
+                    else {
+                        val (sort, seed) = VodSort.parse(user.vodSorts[c.uid]) ?: VodSort.parse(s.vodDefaultSort) ?: (VodSort.DEFAULT to 1L)
+                        c.kind to repository.items(c.kind, c, emptySet(), false, spec.limit, 0, sort, merge = merge, seed = seed)
+                    }
+                }
+                val page = dedupe(emptyList(), raw)
+                primePosters(page)
+                homeItems[homeRowKey(spec.rowId)] = page
+                if (kind != null) homeRowKinds[spec.rowId] = kind else homeRowKinds.remove(spec.rowId)
+            }
+            homeRowSpecs = specs
+            publishHomeScreenRows()
+            // Posters and names from your addons, the titles still showing the provider's picture first.
+            val queue = specs.flatMap { homeItems[homeRowKey(it.rowId)].orEmpty() }
+            enrichAll(queue.filter { posters[it.uid] == null } + queue.filter { posters[it.uid] != null })
+        }
+    }
+
+    private suspend fun publishHomeScreenRows() {
+        val specs = homeRowSpecs
+        _homeScreenRows.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            specs.mapNotNull { spec ->
+                val items = homeItems[homeRowKey(spec.rowId)].orEmpty()
+                val kind = homeRowKinds[spec.rowId]
+                if (items.isEmpty() || kind == null) return@mapNotNull null
+                spec.rowId to VodHomeIds.row(
+                    uid = "home:${spec.rowId}",
+                    name = spec.name,
+                    kind = kind,
+                    items = items.map { item ->
+                        VodHomeIds.toMeta(item, homeMatched[item.uid], posters[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name))
+                    },
+                    hasMore = false,
+                    page = 1
+                ).copy(supportsSkip = false)
+            }.toMap()
+        }
     }
 
     /**

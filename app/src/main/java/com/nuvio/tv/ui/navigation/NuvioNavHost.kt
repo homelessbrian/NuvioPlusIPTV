@@ -350,6 +350,39 @@ private fun PlaybackNavHost(
                     }
                 )
             ) {
+            // Live TV fork: On Demand rows on Home (their cards open like on the On Demand page).
+            com.nuvio.tv.livetv.home.HomeVodRowsHost(
+                onOpenDetail = { itemId, itemType, addonBaseUrl, onDemandUid ->
+                    navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                    navController.currentBackStackEntry?.savedStateHandle?.set(
+                        com.nuvio.tv.livetv.ondemand.OnDemandPlay.KEY, onDemandUid
+                    )
+                },
+                onPlay = { url, title, type, poster, contentId, contentName, season, episode, episodeName ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            streamUrl = url,
+                            title = title,
+                            contentId = contentId,
+                            contentType = type,
+                            contentName = contentName,
+                            poster = poster,
+                            videoId = if (type == "series" && season != null && episode != null) "$contentId:$season:$episode" else contentId,
+                            season = season,
+                            episode = episode,
+                            episodeTitle = episodeName,
+                            addonName = com.nuvio.tv.livetv.ondemand.OnDemandStreams.GROUP_NAME
+                        )
+                    )
+                },
+                onOpenOnDemand = {
+                    navController.navigate(Screen.OnDemand.route) {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            ) {
             HomeScreen(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     val heroBackdrop = HeroBackdropState.consumeAndClear()
@@ -394,6 +427,7 @@ private fun PlaybackNavHost(
                     navController.navigate(Screen.FolderDetail.createRoute(collectionId, folderId))
                 }
             )
+            }
             }
         }
 

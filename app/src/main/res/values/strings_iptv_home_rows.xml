@@ -2,12 +2,15 @@
 <resources>
     <!-- Reorder Home Catalogs: Live TV and Sports rows -->
     <string name="home_rows_add_button">Add a row</string>
-    <string name="home_rows_add_button_hint">Live TV channels or Sports games on now</string>
+    <string name="home_rows_add_button_hint">Live TV channels, Sports games or On Demand titles</string>
     <string name="home_rows_edit">Edit</string>
     <string name="home_rows_type_live">Live TV</string>
     <string name="home_rows_type_sports">Sports</string>
     <string name="home_rows_desc_channels">%1$s · up to %2$d channels</string>
     <string name="home_rows_desc_sports">%1$s · up to %2$d games</string>
+    <string name="home_rows_type_vod">On Demand</string>
+    <string name="home_rows_desc_vod">%1$s · up to %2$d titles</string>
+    <string name="home_rows_hidden_empty">Nothing to show right now – hidden on Home</string>
 
     <!-- Add a row -->
     <string name="home_rows_add_title">Add a row</string>
@@ -25,11 +28,23 @@
     <string name="home_rows_pick_my_group_title">Pick one of your groups</string>
     <string name="home_rows_pick_sports_all">Live now: all sports</string>
     <string name="home_rows_pick_sports_all_hint">On now, then starting soon</string>
-    <string name="home_rows_pick_sports_all_detail">Games on right now that have a channel, then games about to start. The same cards as the Sports page.</string>
+    <string name="home_rows_pick_sports_all_detail">Games on right now that have a channel, then games about to start. When nothing is on, the next games coming up. The same cards as the Sports page.</string>
     <string name="home_rows_pick_sports_one">Live now: one league or sport</string>
     <string name="home_rows_pick_sports_one_title">Pick a sport or league</string>
     <string name="home_rows_sports_heading">Sports</string>
     <string name="home_rows_leagues_heading">Leagues</string>
+    <string name="home_rows_section_vod">On Demand</string>
+    <string name="home_rows_pick_vod_group">A movie or series category</string>
+    <string name="home_rows_pick_vod_group_title">Pick a category</string>
+    <string name="home_rows_pick_vod_none">No On Demand categories yet. Turn on On Demand for a playlist in Settings → Live TV, or show some groups in Manage VOD Groups.</string>
+    <string name="home_rows_pick_vod_recent">Recently added</string>
+    <string name="home_rows_pick_vod_recent_hint">Movies or series</string>
+    <string name="home_rows_vod_movies">Movies</string>
+    <string name="home_rows_vod_series">Series</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="one">%1$d title</item>
+        <item quantity="other">%1$d titles</item>
+    </plurals>
 
     <!-- Row names -->
     <string name="home_rows_favorites_title">Favorite Channels</string>
@@ -38,10 +53,17 @@
     <string name="home_rows_sports_title">Live Sports Now</string>
     <string name="home_rows_sports_one_title">Live Now: %1$s</string>
     <string name="home_rows_next">Next: %1$s %2$s</string>
+    <string name="home_rows_vod_recent_movies_title">Recently Added Movies</string>
+    <string name="home_rows_vod_recent_series_title">Recently Added Series</string>
+    <string name="home_rows_upcoming_today">Today %1$s</string>
+    <string name="home_rows_upcoming_tomorrow">Tomorrow %1$s</string>
+    <string name="home_rows_upcoming_day">%1$s %2$s</string>
 
     <!-- Row options -->
     <string name="home_rows_options_channels_subtitle">Live TV row</string>
     <string name="home_rows_options_sports_subtitle">Sports row</string>
+    <string name="home_rows_options_vod_subtitle">On Demand row</string>
+    <string name="home_rows_option_vod">Titles from</string>
     <string name="home_rows_option_name">Row name</string>
     <string name="home_rows_option_name_hint">Leave empty for the group\'s own name</string>
     <string name="home_rows_option_channels">Channels from</string>

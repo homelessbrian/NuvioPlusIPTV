@@ -38,7 +38,7 @@ import com.nuvio.tv.ui.screens.settings.SettingsToggleRow
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 
-private enum class PickerOption { FAVORITES, RECENT, PLAYLIST_GROUP, MY_GROUP, SPORTS_ALL, SPORTS_ONE }
+private enum class PickerOption { FAVORITES, RECENT, PLAYLIST_GROUP, MY_GROUP, SPORTS_ALL, SPORTS_ONE, VOD_GROUP, VOD_RECENT }
 
 @Composable
 private fun Heading(text: String) {
@@ -52,8 +52,9 @@ private fun Heading(text: String) {
 
 /**
  * Reorder Home Catalogs › Add a row: Live TV (Favorites, Recently watched, a playlist group or
- * one of your own groups) or Sports (every sport, or one sport or league). The choices on the
- * left; for a group or a league, the list to pick from on the right.
+ * one of your own groups), Sports (every sport, or one sport or league) or On Demand (a movie or
+ * series group, or what was added last). The choices on the left; for a group or a league, the
+ * list to pick from on the right.
  */
 @Composable
 fun AddHomeRowDialog(
@@ -63,6 +64,7 @@ fun AddHomeRowDialog(
     val groups by viewModel.groups.collectAsStateWithLifecycle()
     val favorites by viewModel.favoritesCount.collectAsStateWithLifecycle()
     val sportsChoices by viewModel.sportsChoices.collectAsStateWithLifecycle()
+    val vodGroups by viewModel.vodGroups.collectAsStateWithLifecycle()
     var shown by remember { mutableStateOf<PickerOption?>(null) }
     val first = remember { FocusRequester() }
     val listFirst = remember { FocusRequester() }
@@ -134,6 +136,23 @@ fun AddHomeRowDialog(
                         onFocused = { shown = PickerOption.SPORTS_ONE }
                     )
                 }
+                item(key = "h_vod") { Heading(stringResource(R.string.home_rows_section_vod)) }
+                item(key = "vod_group") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.home_rows_pick_vod_group),
+                        subtitle = null,
+                        onClick = { shown = PickerOption.VOD_GROUP; jumpToList++ },
+                        onFocused = { shown = PickerOption.VOD_GROUP }
+                    )
+                }
+                item(key = "vod_recent") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.home_rows_pick_vod_recent),
+                        subtitle = stringResource(R.string.home_rows_pick_vod_recent_hint),
+                        onClick = { shown = PickerOption.VOD_RECENT; jumpToList++ },
+                        onFocused = { shown = PickerOption.VOD_RECENT }
+                    )
+                }
             }
             Box(Modifier.padding(horizontal = NuvioTheme.spacing.md).width(1.dp).fillMaxHeight().background(NuvioTheme.colors.Border))
             Column(Modifier.weight(0.54f).fillMaxHeight()) {
@@ -151,6 +170,8 @@ fun AddHomeRowDialog(
                         onPick = { add(HomeLiveRow.channels(it.id)) }
                     )
                     PickerOption.SPORTS_ONE -> SportsList(sportsChoices, listFirst) { add(HomeLiveRow.sports(it.source)) }
+                    PickerOption.VOD_GROUP -> VodGroupList(vodGroups, listFirst) { add(HomeLiveRow.vod(it.source, it.name)) }
+                    PickerOption.VOD_RECENT -> VodRecentList(listFirst) { add(HomeLiveRow.vod(it)) }
                     else -> Text(
                         text = stringResource(
                             when (shown) {
@@ -204,6 +225,71 @@ private fun GroupList(title: String, groups: List<RowGroupOption>, firstFocus: F
                     modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun VodGroupList(groups: List<VodRowChoice>, firstFocus: FocusRequester, onPick: (VodRowChoice) -> Unit) {
+    Text(
+        text = stringResource(R.string.home_rows_pick_vod_group_title),
+        style = MaterialTheme.typography.titleMedium,
+        color = NuvioTheme.colors.TextPrimary,
+        modifier = Modifier.padding(start = NuvioTheme.spacing.lg, bottom = NuvioTheme.spacing.xs)
+    )
+    if (groups.isEmpty()) {
+        Text(
+            text = stringResource(R.string.home_rows_pick_vod_none),
+            style = MaterialTheme.typography.bodyMedium,
+            color = NuvioTheme.colors.TextSecondary,
+            modifier = Modifier.padding(NuvioTheme.spacing.lg)
+        )
+        return
+    }
+    val movies = groups.filter { !it.series }
+    val series = groups.filter { it.series }
+    val moviesHeading = stringResource(R.string.home_rows_vod_movies)
+    val seriesHeading = stringResource(R.string.home_rows_vod_series)
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)) {
+        listOf(moviesHeading to movies, seriesHeading to series).forEach { (heading, list) ->
+            if (list.isEmpty()) return@forEach
+            item(key = "h:$heading") { Heading(heading) }
+            items(list, key = { it.source }) { g ->
+                SettingsActionRow(
+                    title = g.name,
+                    subtitle = g.playlist,
+                    value = pluralStringResource(R.plurals.home_rows_vod_titles_count, g.count, g.count),
+                    onClick = { onPick(g) },
+                    modifier = if (g == groups.firstOrNull { it.series == (movies.isEmpty()) }) Modifier.focusRequester(firstFocus) else Modifier
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VodRecentList(firstFocus: FocusRequester, onPick: (String) -> Unit) {
+    Text(
+        text = stringResource(R.string.home_rows_pick_vod_recent),
+        style = MaterialTheme.typography.titleMedium,
+        color = NuvioTheme.colors.TextPrimary,
+        modifier = Modifier.padding(start = NuvioTheme.spacing.lg, bottom = NuvioTheme.spacing.xs)
+    )
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)) {
+        item(key = "movies") {
+            SettingsActionRow(
+                title = stringResource(R.string.home_rows_vod_movies),
+                subtitle = null,
+                onClick = { onPick(HomeLiveRow.VOD_RECENT_MOVIES) },
+                modifier = Modifier.focusRequester(firstFocus)
+            )
+        }
+        item(key = "series") {
+            SettingsActionRow(
+                title = stringResource(R.string.home_rows_vod_series),
+                subtitle = null,
+                onClick = { onPick(HomeLiveRow.VOD_RECENT_SERIES) }
+            )
         }
     }
 }
@@ -270,12 +356,14 @@ fun HomeRowOptionsDialog(
     val names by viewModel.names.collectAsStateWithLifecycle()
     val groups by viewModel.groups.collectAsStateWithLifecycle()
     val sportsChoices by viewModel.sportsChoices.collectAsStateWithLifecycle()
+    val vodGroups by viewModel.vodGroups.collectAsStateWithLifecycle()
     var renaming by remember { mutableStateOf(false) }
     var choosing by remember { mutableStateOf<String?>(null) }
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
     fun save(r: HomeLiveRow) = viewModel.update(r)
     val sports = row.kind == HomeLiveRow.KIND_SPORTS
+    val vod = row.kind == HomeLiveRow.KIND_VOD
     val name = names[row.id] ?: row.title
 
     if (renaming) {
@@ -307,7 +395,14 @@ fun HomeRowOptionsDialog(
     val limitLabels = listOf(10, 20, 30, 50).map { it.toString() to it.toString() }
     when (choosing) {
         "source" -> {
-            val choices = if (sports) {
+            val choices = if (vod) {
+                listOf(
+                    HomeLiveRow.VOD_RECENT_MOVIES to stringResource(R.string.home_rows_vod_recent_movies_title),
+                    HomeLiveRow.VOD_RECENT_SERIES to stringResource(R.string.home_rows_vod_recent_series_title)
+                ) + vodGroups.map { g ->
+                    g.source to listOfNotNull(g.name, stringResource(if (g.series) R.string.home_rows_vod_series else R.string.home_rows_vod_movies), g.playlist).joinToString(" · ")
+                }
+            } else if (sports) {
                 listOf("" to stringResource(R.string.home_rows_pick_sports_all)) + sportsChoices.map { it.source to "${it.icon}  ${it.name}" }
             } else {
                 listOf(
@@ -316,9 +411,12 @@ fun HomeRowOptionsDialog(
                 ) + groups.map { g -> g.id to (g.playlist?.let { "${g.name} · $it" } ?: g.name) }
             }
             ChoiceDialog(
-                title = stringResource(if (sports) R.string.home_rows_option_sports else R.string.home_rows_option_channels),
+                title = stringResource(if (vod) R.string.home_rows_option_vod else if (sports) R.string.home_rows_option_sports else R.string.home_rows_option_channels),
                 choices = choices, current = row.source,
-                onPick = { save(row.copy(source = it)) }, onDismiss = { choosing = null }
+                onPick = { picked ->
+                    // A group's own name goes with it (shown until you rename the row).
+                    save(row.copy(source = picked, label = vodGroups.firstOrNull { it.source == picked }?.name.orEmpty()))
+                }, onDismiss = { choosing = null }
             )
             return
         }
@@ -327,7 +425,13 @@ fun HomeRowOptionsDialog(
         "limit" -> { ChoiceDialog(stringResource(R.string.home_rows_option_limit), limitLabels, row.limit.toString(), { save(row.copy(limit = it.toInt())) }, { choosing = null }); return }
     }
 
-    val sourceName = if (sports) {
+    val sourceName = if (vod) {
+        when (row.source) {
+            HomeLiveRow.VOD_RECENT_MOVIES -> stringResource(R.string.home_rows_vod_recent_movies_title)
+            HomeLiveRow.VOD_RECENT_SERIES -> stringResource(R.string.home_rows_vod_recent_series_title)
+            else -> vodGroups.firstOrNull { it.source == row.source }?.name ?: row.label
+        }
+    } else if (sports) {
         if (row.source.isBlank()) stringResource(R.string.home_rows_pick_sports_all)
         else sportsChoices.firstOrNull { it.source == row.source }?.name ?: row.source.substringAfter(':')
     } else when (row.source) {
@@ -339,7 +443,7 @@ fun HomeRowOptionsDialog(
     NuvioDialog(
         onDismiss = onDismiss,
         title = name,
-        subtitle = stringResource(if (sports) R.string.home_rows_options_sports_subtitle else R.string.home_rows_options_channels_subtitle),
+        subtitle = stringResource(if (vod) R.string.home_rows_options_vod_subtitle else if (sports) R.string.home_rows_options_sports_subtitle else R.string.home_rows_options_channels_subtitle),
         width = 640.dp
     ) {
         LazyColumn(
@@ -357,13 +461,15 @@ fun HomeRowOptionsDialog(
             }
             item(key = "source") {
                 SettingsActionRow(
-                    title = stringResource(if (sports) R.string.home_rows_option_sports else R.string.home_rows_option_channels),
+                    title = stringResource(if (vod) R.string.home_rows_option_vod else if (sports) R.string.home_rows_option_sports else R.string.home_rows_option_channels),
                     subtitle = null,
                     value = sourceName,
                     onClick = { choosing = "source" }
                 )
             }
-            if (sports) {
+            if (vod) {
+                // On Demand rows are Nuvio's own poster rows: OK and the card shape work as on Home.
+            } else if (sports) {
                 item(key = "soon") {
                     SettingsToggleRow(
                         title = stringResource(R.string.home_rows_option_soon),
@@ -422,7 +528,7 @@ fun HomeRowOptionsDialog(
                     onClick = { choosing = "limit" }
                 )
             }
-            item(key = "shape") {
+            if (!vod) item(key = "shape") {
                 SettingsActionRow(
                     title = stringResource(R.string.home_rows_option_shape),
                     subtitle = null,

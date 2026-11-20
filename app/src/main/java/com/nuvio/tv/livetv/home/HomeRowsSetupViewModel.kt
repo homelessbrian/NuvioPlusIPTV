@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** One On Demand group an On Demand row can show (with its playlist's name, when you have several). */
+data class VodRowChoice(val source: String, val name: String, val playlist: String?, val count: Int, val series: Boolean)
+
 /** One sport or league a Sports row can show. */
 data class SportsRowChoice(val source: String, val name: String, val icon: String, val isLeague: Boolean)
 
@@ -36,12 +39,15 @@ class HomeRowsSetupViewModel @Inject constructor(
     private val syncService: HomeCatalogSettingsSyncService,
     prefs: LiveTvPreferences,
     channelStore: com.nuvio.tv.livetv.data.LiveTvChannelStore,
-    sports: SportsRepository
+    sports: SportsRepository,
+    private val onDemand: com.nuvio.tv.livetv.ondemand.OnDemandRepository
 ) : ViewModel() {
 
     val rows: StateFlow<List<HomeLiveRow>> = homeRows.rows
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val names: StateFlow<Map<String, String>> = homeRows.names
+    /** Rows left off Home for now, having nothing to show (Reorder Home Catalogs says so). */
+    val emptyRowIds: StateFlow<Set<String>> = homeRows.emptyRowIds
 
     private val user: StateFlow<LiveUserState> = prefs.userState
         .stateIn(viewModelScope, SharingStarted.Eagerly, LiveUserState())
@@ -60,6 +66,42 @@ class HomeRowsSetupViewModel @Inject constructor(
         val sportList = leagues.map { it.sport }.distinct().map { SportsRowChoice("sport:${it.name}", it.label, it.icon, false) }
         sportList + leagues.map { SportsRowChoice("league:${it.id}", it.name, it.sport.icon, true) }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val _vodGroups = kotlinx.coroutines.flow.MutableStateFlow<List<VodRowChoice>>(emptyList())
+
+    /**
+     * On Demand: each playlist's movie groups, then its series groups (your names, your order;
+     * hidden and locked groups aren't listed).
+     */
+    val vodGroups: StateFlow<List<VodRowChoice>> = _vodGroups
+
+    init {
+        viewModelScope.launch {
+            combine(onDemand.version, user, prefs.playlists, prefs.settings) { _, u, lists, s -> Triple(u, lists, s) }
+                .collect { (u, lists, s) ->
+                    val names = lists.associate { it.id to it.name }
+                    val cats = onDemand.categories(com.nuvio.tv.livetv.ondemand.VodKind.MOVIE) +
+                        onDemand.categories(com.nuvio.tv.livetv.ondemand.VodKind.SERIES)
+                    val multi = cats.map { it.playlistId }.distinct().size > 1
+                    val order = u.vodGroupOrder.withIndex().associate { (i, uid) -> uid to i }
+                    _vodGroups.value = cats.withIndex()
+                        .filter { (_, c) ->
+                            c.uid !in u.vodHiddenCategories &&
+                                !com.nuvio.tv.livetv.parental.ParentalControls.isLocked("vod:${c.uid}", c.name, s, u.lockedGroups)
+                        }
+                        .sortedWith(compareBy({ order[it.value.uid] ?: Int.MAX_VALUE }, { it.index }))
+                        .map { (_, c) ->
+                            VodRowChoice(
+                                source = HomeLiveRow.VOD_GROUP_PREFIX + c.uid,
+                                name = u.vodGroupNames[c.uid]?.takeIf { it.isNotBlank() } ?: c.name,
+                                playlist = if (multi) names[c.playlistId] else null,
+                                count = c.count,
+                                series = c.kind == com.nuvio.tv.livetv.ondemand.VodKind.SERIES
+                            )
+                        }
+                }
+        }
+    }
 
     /** Adds [row] at the top of Home (where you'll see it), ready to be moved. */
     fun add(row: HomeLiveRow) {
