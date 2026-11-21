@@ -114,9 +114,15 @@ internal object SportsRows {
             val l = SportsCatalog.league(id) ?: continue
             val all = leagueGames[id].orEmpty()
             // The last week's results (a weekly league like the NFL keeps its whole last round,
-            // midweek too), then every game ahead we have (up to five weeks; capped so a busy
-            // league like MLB stays a row you can get through).
-            val recent = all.filter { it.startMs >= now - 7 * DAY && (it.state == GameState.POST || it.state == GameState.OFF) }
+            // midweek too), or the last round when there were none this week; then every game
+            // ahead we have (up to five weeks; capped so a busy league like MLB stays a row you can get through).
+            val done = all.filter { (it.state == GameState.POST || it.state == GameState.OFF) && it.startMs < now }
+            // A league that hasn't played this week (Formula 1, the Champions League): its last
+            // race or round instead (the last results within a few days of the newest).
+            val recent = done.filter { it.startMs >= now - 7 * DAY }.ifEmpty {
+                val newest = done.maxOfOrNull { it.startMs } ?: 0L
+                done.filter { it.startMs >= now - SportsRepository.LEAGUE_BACK_DAYS * DAY && it.startMs >= newest - 4 * DAY }
+            }
             val ahead = all.filter { it.state == GameState.LIVE || ((it.state == GameState.PRE || it.state == GameState.OFF) && it.startMs >= now - 3 * HOUR) }
                 .sortedBy { it.startMs }.take(60)
             val games = recent + ahead

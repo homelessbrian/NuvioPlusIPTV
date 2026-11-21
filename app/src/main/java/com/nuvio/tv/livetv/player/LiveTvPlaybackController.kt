@@ -342,6 +342,37 @@ class LiveTvPlaybackController @Inject constructor(
      * through: a fixed length, and never live. A live game that drops (even one whose provider
      * closes its list) keeps retrying as before.
      */
+    /** A sports addon replay or official highlight (a fixed-length video, never live) is playing. */
+    private fun playingClip(): Boolean {
+        val p = _player ?: return false
+        val ch = currentChannel ?: return false
+        if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
+            ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) return false
+        return !sawLive && !p.isCurrentMediaItemDynamic
+    }
+
+    /** The clip [setPictureHidden] paused, by channel key (it plays on when the picture is back). */
+    @Volatile private var pausedWhileHidden: String? = null
+
+    /**
+     * The Sports page's video window has nowhere to go (Follow Teams & Leagues and the like): a
+     * replay or highlight waits paused until it's back, rather than playing on unseen (some boxes
+     * lost their picture altogether doing that). A live channel keeps playing; only its picture stops.
+     */
+    fun setPictureHidden(hidden: Boolean) {
+        val p = _player ?: return
+        if (hidden) {
+            if (playingClip() && p.playWhenReady) {
+                pausedWhileHidden = currentChannel?.key
+                p.playWhenReady = false
+            }
+        } else {
+            val key = pausedWhileHidden ?: return
+            pausedWhileHidden = null
+            if (currentChannel?.key == key) p.playWhenReady = true
+        }
+    }
+
     private fun clipFinished(): Boolean {
         val p = _player ?: return false
         val ch = currentChannel ?: return false
@@ -1277,6 +1308,7 @@ class LiveTvPlaybackController @Inject constructor(
         val title = _state.value.catchupTitle
         val start = archiveStartWallMs
         val pos = p.currentPosition
+        val clip = playingClip()
         resumeAfterBackground = {
             if (title != null) {
                 // Catch-up: the same replay, back where you were.
@@ -1289,6 +1321,15 @@ class LiveTvPlaybackController @Inject constructor(
             } else {
                 currentUrl = null
                 play(ch, overrideUrl = url.takeIf { it != ch.url })
+                // A replay or highlight: back where it was, and still paused if it was.
+                if (clip) {
+                    if (!wasPlaying) _player?.playWhenReady = false
+                    scope.launch {
+                        var waited = 0
+                        while (waited < 15_000 && _player?.playbackState != Player.STATE_READY) { delay(200); waited += 200 }
+                        _player?.let { pl -> if (pos > 0) pl.seekTo(pos); if (!wasPlaying) pl.pause() }
+                    }
+                }
             }
         }
         stopShift()
@@ -1765,10 +1806,12 @@ class LiveTvPlaybackController @Inject constructor(
             Log.w(TAG, "No picture after moving the video; restarting the stream")
             val archive = _state.value.catchupTitle != null
             val pos = p.currentPosition
+            // A replay or highlight carries on where it was, as catch-up does.
+            val ownAt = ownReplayResumeAt(p)
             p.stop()
             archiveStartPending = false
             p.prepare()
-            if (archive && pos > 0) p.seekTo(pos)
+            if (archive && pos > 0) p.seekTo(pos) else if (ownAt != C_TIME_UNSET && ownAt > 0) p.seekTo(ownAt)
             p.playWhenReady = true
         }
     }

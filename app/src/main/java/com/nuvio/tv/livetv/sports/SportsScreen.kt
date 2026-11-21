@@ -462,10 +462,17 @@ fun SportsScreen(
         }
         // The picture, on top of the page where its slot is (one view for every page, so it
         // never restarts), then the rounded corners and the "nothing playing" note over it.
-        if (videoOn) VideoLayer(slot, root, playerRef ?: viewModel.player, playing = playingKey != null, backdrop = backdrop, onAttached = { viewModel.onSurfaceAttached() })
+        if (videoOn) VideoLayer(
+            slot, root, playerRef ?: viewModel.player, playing = playingKey != null, backdrop = backdrop,
+            onAttached = { viewModel.onSurfaceAttached() },
+            onHidden = { viewModel.setPictureHidden(it) }
+        )
     }
     fixFor?.let { ev -> FixChannelDialog(ev, matches[ev.id].orEmpty(), settings.hideScores, viewModel) { fixFor = null } }
 }
+
+/** How long the video window can have no spot on the page before its picture is let go. */
+private const val HIDE_PICTURE_AFTER_MS = 600L
 
 /** How far down the theme glow reaches (as in the guide). */
 private val SPORTS_GLOW_HEIGHT = 220.dp
@@ -483,15 +490,33 @@ private fun VideoSlot(modifier: Modifier, onBounds: (Rect?) -> Unit) {
 }
 
 @Composable
-private fun VideoLayer(slot: Rect?, root: Rect?, player: androidx.media3.common.Player?, playing: Boolean, backdrop: String, onAttached: () -> Unit) {
+private fun VideoLayer(
+    slot: Rect?, root: Rect?, player: androidx.media3.common.Player?, playing: Boolean, backdrop: String,
+    onAttached: () -> Unit, onHidden: (Boolean) -> Unit
+) {
     val density = LocalDensity.current
     val placed = slot != null && root != null && slot.width > 1f
+    // A page with no spot for the video (Follow Teams & Leagues…): after a moment, no picture at
+    // all rather than one squeezed into a single pixel (some boxes lost their whole picture
+    // playing a YouTube highlight that way), and a replay or highlight waits paused. Moving
+    // between pages leaves the slot empty only for an instant: the picture stays on through that.
+    var hidden by remember { mutableStateOf(false) }
+    val hiddenNow = androidx.compose.runtime.rememberUpdatedState(onHidden)
+    LaunchedEffect(placed) {
+        if (placed) {
+            if (hidden) { hidden = false; hiddenNow.value(false) }
+        } else {
+            delay(HIDE_PICTURE_AFTER_MS)
+            hidden = true
+            hiddenNow.value(true)
+        }
+    }
     val place = if (placed) with(density) {
         Modifier
             .offset { IntOffset((slot!!.left - root!!.left).toInt(), (slot.top - root.top).toInt()) }
             .size(slot!!.width.toDp(), slot.height.toDp())
     } else Modifier.size(1.dp)
-    LivePlayerSurface(player = player, useSurfaceView = true, modifier = place, onAttached = onAttached)
+    if (!hidden || placed) LivePlayerSurface(player = player, useSurfaceView = true, modifier = place, onAttached = onAttached)
     if (!placed) return
     val bg = NuvioTheme.colors.Background
     val backdropResolved = com.nuvio.tv.livetv.ui.resolveBackdrop(backdrop)

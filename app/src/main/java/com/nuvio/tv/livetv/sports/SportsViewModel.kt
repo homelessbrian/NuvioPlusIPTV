@@ -140,6 +140,8 @@ class SportsViewModel @Inject constructor(
     fun attachPlayer(): androidx.media3.common.Player = playback.attach()
     fun detachPlayer() { playback.detach() }
     fun onSurfaceAttached() = playback.onSurfaceAttached()
+    /** The page has no spot for the video window (see LiveTvPlaybackController.setPictureHidden). */
+    fun setPictureHidden(hidden: Boolean) = playback.setPictureHidden(hidden)
 
     /** Plays the channel in the Sports page's window (no full screen), remembered as last watched. */
     fun playHere(m: ChannelMatch) {

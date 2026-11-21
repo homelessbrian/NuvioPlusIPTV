@@ -127,7 +127,9 @@ class SportsRepository @Inject constructor(
     private val fixtureData = MutableStateFlow<Map<String, LeagueData>>(emptyMap())
     /**
      * Leagues you follow or show on My Teams: their games from a week ahead to five weeks ahead
-     * (the week before that is in [weekData]), so a league's row runs well past this week.
+     * (the week before that is in [weekData]), so a league's row runs well past this week; and
+     * their results from the last [LEAGUE_BACK_DAYS] days, so a league that doesn't play every
+     * week (Formula 1, the Champions League) still has its last race or round in its row.
      */
     private val aheadData = MutableStateFlow<Map<String, LeagueData>>(emptyMap())
     /** Followed teams' whole seasons from ESPN, by followed team key. */
@@ -1195,11 +1197,14 @@ class SportsRepository @Inject constructor(
         }
         if (due.isEmpty()) return
         // ESPN takes a whole month ("202611") though not a range of days: the months the next
-        // five weeks touch, kept from a week ahead on (the week before is in [weekData]).
+        // five weeks touch, kept from a week ahead on (the week before is in [weekData]), and the
+        // months the last [LEAGUE_BACK_DAYS] days touch, for their results.
         val months = SimpleDateFormat("yyyyMM", Locale.US).apply { timeZone = TimeZone.getTimeZone("America/New_York") }
-        val wanted = listOf(now + (DAYS_AHEAD + 1) * DAY, now + 35 * DAY).map { months.format(java.util.Date(it)) }.distinct()
+        val wanted = listOf(now - LEAGUE_BACK_DAYS * DAY, now, now + (DAYS_AHEAD + 1) * DAY, now + 35 * DAY).map { months.format(java.util.Date(it)) }.distinct()
         val keepFrom = dayStart(DAYS_AHEAD + 1)
         val keepTo = now + 36 * DAY
+        val backFrom = now - LEAGUE_BACK_DAYS * DAY
+        val backTo = now - DAY
         for (l in due) {
             val raws = wanted.mapNotNull { m ->
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
@@ -1212,7 +1217,14 @@ class SportsRepository @Inject constructor(
             }
             val parsed = withContext(com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
                 raws.flatMap { raw -> sportsCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrDefault(emptyList()) }
-                    .filter { it.startMs in keepFrom until keepTo }.distinctBy { it.id }
+                    .filter { it.startMs in keepFrom until keepTo || (it.startMs in backFrom until backTo && it.state != GameState.PRE) }
+                    .distinctBy { it.id }
+                    .let { list ->
+                        // Of the results, only the last race or round (a few days): a busy league
+                        // like the NBA would otherwise keep hundreds of games no row shows.
+                        val newest = list.filter { it.startMs < backTo }.maxOfOrNull { it.startMs } ?: 0L
+                        list.filter { it.startMs >= keepFrom || it.startMs >= newest - 4 * DAY }
+                    }
             }
             aheadData.update { it + (l.id to LeagueData(parsed, at, null)) }
         }
@@ -2755,6 +2767,8 @@ class SportsRepository @Inject constructor(
         private const val ALERT_GAME_KEEP = 12 * HOUR
         /** The page's days run from this many days back to [DAYS_AHEAD] ahead. */
         const val DAYS_AHEAD = 7
+        /** How far back followed leagues keep results (for leagues that play every few weeks). */
+        const val LEAGUE_BACK_DAYS = 45
         const val DAYS_BACK = 7
         /** Between saved answers when a league was asked one day at a time. */
         private const val RAW_SEP = "\n\u0001\n"
