@@ -741,10 +741,10 @@ fun ModernHomeContent(
                                 HeroPreview(
                                     title = live.title,
                                     logo = null,
-                                    description = live.description,
-                                    contentTypeText = live.badge,
+                                    description = null,
+                                    contentTypeText = null,
                                     yearText = null,
-                                    secondaryHighlightText = live.extra,
+                                    secondaryHighlightText = null,
                                     imdbText = null,
                                     genres = StableList(emptyList()),
                                     poster = null,
@@ -1160,14 +1160,26 @@ fun ModernHomeContent(
                     .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
             }
 
+            // Live TV fork: a highlighted Live TV or Sports card gets its own text block (LiveHeroTitle).
+            val liveHeroShownState = remember {
+                derivedStateOf {
+                    val liveKey = activeRowKey.value?.takeIf { com.nuvio.tv.livetv.home.isLiveHomeRowKey(it) }
+                    liveRowHeroState.value?.takeIf { liveKey != null && it.rowKey == liveKey }
+                }
+            }
+            IsolatedReadScope {
+                liveHeroShownState.value?.let { com.nuvio.tv.livetv.home.LiveHeroTitle(it, heroMetadataModifier) }
+            }
             HeroTitleBlock(
                 previewProvider = {
                     val state = heroSceneStateLambda()
-                    if (isRapidHorizontalNav.value || state.enrichmentActive) null
+                    if (isRapidHorizontalNav.value || state.enrichmentActive || liveHeroShownState.value != null) null
                     else state.preview
                 },
                 enrichmentActive = {
-                    if (isRapidHorizontalNav.value) false
+                    // A Live TV or Sports card's block is showing: drop the movie text kept underneath.
+                    if (liveHeroShownState.value != null) true
+                    else if (isRapidHorizontalNav.value) false
                     else heroSceneStateLambda().enrichmentActive
                 },
                 portraitMode = !useLandscapePosters,
@@ -1188,6 +1200,12 @@ fun ModernHomeContent(
             val latestOnFocusedRowKeyChanged by rememberUpdatedState(onFocusedRowKeyChanged)
             val onActiveRowKeyChangeLambda = remember {
                 { key: String? ->
+                    // Live TV fork: Live TV and Sports cards aren't movies, so the last movie
+                    // highlighted (and its trailer) lets go when you move onto one of their rows.
+                    if (key != null && com.nuvio.tv.livetv.home.isLiveHomeRowKey(key)) {
+                        focusedCatalogSelection.value = null
+                        expandedCatalogFocusKey.value = null
+                    }
                     focusHolder.activeRowKey = key
                     activeRowKey.value = key
                     // saveFocusState only runs on dispose, which a system Home press never

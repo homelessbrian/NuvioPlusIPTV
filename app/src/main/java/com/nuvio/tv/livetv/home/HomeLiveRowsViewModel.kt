@@ -59,9 +59,9 @@ class HomeLiveRowsViewModel @Inject constructor(
     }
 
     /**
-     * A channel card was highlighted: Home's hero shows what's on (title, until when, what's
-     * next) over the show's own backdrop from your addons when there is one, else the channel's
-     * logo on its colour (drawn on the device, so there's always a picture).
+     * A channel card was highlighted: Home's hero shows the channel, what's on (until when, how
+     * long is left, what's next) over the show's own backdrop from your addons when there is
+     * one, else the channel's logo on its colour (drawn on the device, so there's always a picture).
      */
     fun focusChannel(rowKey: String, entry: LiveTvViewModel.HomeRowEntry) {
         val ch = entry.channel
@@ -71,21 +71,31 @@ class HomeLiveRowsViewModel @Inject constructor(
         heroJob?.cancel()
         heroJob = viewModelScope.launch {
             val clock24 = use24h.value
-            val badge = listOfNotNull(
-                ch.name,
-                if (p != null) "Live" else null,
-                p?.let { "until " + com.nuvio.tv.livetv.ui.formatClock(it.stopMs, clock24) }
-            ).joinToString(" · ")
-            val next = entry.next?.title?.takeIf { it.isNotBlank() }?.let { "Next: $it" }
+            val now = System.currentTimeMillis()
+            val status = if (p != null) listOfNotNull(
+                com.nuvio.tv.livetv.ui.formatClock(p.startMs, clock24) + " – " + com.nuvio.tv.livetv.ui.formatClock(p.stopMs, clock24),
+                ((p.stopMs - now) / 60_000L).toInt().takeIf { it > 0 }?.let { appContext.getString(com.nuvio.tv.R.string.home_hero_min_left, it) }
+            ) else emptyList()
+            val progress = p?.let { ((now - it.startMs).toFloat() / (it.stopMs - it.startMs).coerceAtLeast(1L)).coerceIn(0f, 1f) }
+            val next = entry.next?.takeIf { it.title.isNotBlank() }
             fun hero(backdrop: String, description: String?) = LiveHero(
                 rowKey = rowKey, cardKey = cardKey,
                 title = p?.title?.takeIf { it.isNotBlank() } ?: ch.name,
-                badge = badge, description = description ?: p?.description, extra = next, backdrop = backdrop
+                channelLogo = ch.logo?.takeIf { it.isNotBlank() },
+                channelNumber = ch.number.takeIf { it > 0 }?.toString(),
+                channelName = ch.name,
+                live = p != null,
+                status = status,
+                progress = progress,
+                description = (description ?: p?.description)?.takeIf { it.isNotBlank() },
+                nextTime = next?.let { com.nuvio.tv.livetv.ui.formatClock(it.startMs, clock24) },
+                nextTitle = next?.title,
+                backdrop = backdrop
             )
             // Straight away: the channel's own picture (drawn once, then kept).
             val drawn = LiveHeroArt.channel(appContext, ch.logo, ch.name, null)
             drawn?.let { LiveHomeHero.show(hero(it, null)) }
-            // Then the show's backdrop, when your addons know the show.
+            // Then the show's own backdrop, when your addons know the show.
             val title = p?.title?.takeIf { it.isNotBlank() } ?: return@launch
             delay(250) // only for a card you stay on
             val hit = runCatching { posterResolver.titleFor(title) }.getOrNull() ?: return@launch
@@ -95,10 +105,10 @@ class HomeLiveRowsViewModel @Inject constructor(
     }
 
     /**
-     * A Sports card was highlighted: the hero shows the matchup (the score unless scores are
-     * hidden), the league and state, and the channels, over both teams' colours and logos. For
-     * events without two teams (golf, tennis draws, races, fight cards), the league's colour
-     * and the channel's logo.
+     * A Sports card was highlighted: the hero shows the league, both teams (never the score),
+     * whether it's live or when it starts, and the channels it's on, over both teams' colours
+     * and logos. For events without two teams (golf, tennis draws, races, fight cards), the
+     * event's name over the league's colour and the channel's logo.
      */
     internal fun focusGame(rowKey: String, game: com.nuvio.tv.livetv.sports.SportsWatchGame, hideScores: Boolean) {
         val ev = game.event
@@ -107,22 +117,41 @@ class HomeLiveRowsViewModel @Inject constructor(
         heroJob?.cancel()
         heroJob = viewModelScope.launch {
             val clock24 = use24h.value
+            val now = System.currentTimeMillis()
             val league = com.nuvio.tv.livetv.sports.SportsCatalog.league(ev.leagueId)
             val sport = league?.sport
             val sides = if (sport != null) ev.ordered(sport) else ev.sides
             val title = if (sides.size == 2) {
                 val (a, b) = sides
-                val an = a.team.name.ifBlank { a.team.fullName }
-                val bn = b.team.name.ifBlank { b.team.fullName }
-                if (!hideScores && ev.hasScore) "$an ${a.score} – ${b.score} $bn" else ev.title.ifBlank { "$an v $bn" }
+                ev.title.ifBlank { a.team.name.ifBlank { a.team.fullName } + " v " + b.team.name.ifBlank { b.team.fullName } }
             } else ev.title
-            val badge = listOfNotNull(
-                league?.short?.takeIf { it.isNotBlank() } ?: league?.name,
-                com.nuvio.tv.livetv.sports.cornerStatus(ev, clock24, hideScores)
-            ).joinToString(" · ")
-            val channels = game.channels.map { it.channel.name }.distinct().take(3)
-            val extra = channels.takeIf { it.isNotEmpty() }?.let { "On " + it.joinToString(", ") }
-            val description = listOfNotNull(ev.subtitle, ev.note, ev.about).firstOrNull { it.isNotBlank() }
+            val live = ev.state == com.nuvio.tv.livetv.sports.GameState.LIVE
+            val pre = ev.state == com.nuvio.tv.livetv.sports.GameState.PRE
+            val tag = when {
+                live -> null
+                pre && ev.hasTime -> dayAndTime(ev.startMs, now, clock24)
+                else -> com.nuvio.tv.livetv.sports.cornerStatus(ev, clock24, hideScores)
+            }
+            val status = when {
+                live -> listOf(com.nuvio.tv.livetv.sports.cornerStatus(ev, clock24, hideScores))
+                pre && ev.hasTime -> {
+                    val m = ((ev.startMs - now) / 60_000L).toInt()
+                    listOfNotNull(when {
+                        m <= 0 -> appContext.getString(com.nuvio.tv.R.string.home_hero_starting)
+                        m < 60 -> appContext.getString(com.nuvio.tv.R.string.home_hero_starts_in_min, m)
+                        m < 6 * 60 -> appContext.getString(com.nuvio.tv.R.string.home_hero_starts_in_hours, m / 60, m % 60)
+                        else -> null
+                    })
+                }
+                else -> emptyList()
+            }
+            val overline = listOfNotNull(
+                league?.name?.takeIf { it.isNotBlank() } ?: league?.short,
+                ev.note?.takeIf { it.isNotBlank() }
+            ).distinct().joinToString(" · ").takeIf { it.isNotBlank() }
+            val watchOn = game.channels.map { it.channel.name }.distinct().take(3)
+                .ifEmpty { ev.broadcasts.distinct().take(3) }
+            val description = listOfNotNull(ev.subtitle, ev.about).firstOrNull { it.isNotBlank() }
             val away = ev.away
             val home = ev.home
             val art = if (away != null && home != null) {
@@ -144,7 +173,35 @@ class HomeLiveRowsViewModel @Inject constructor(
                 LiveHeroArt.channel(appContext, ch?.logo, ch?.name ?: league?.name ?: ev.title, tint)
             }
             art?.let {
-                LiveHomeHero.show(LiveHero(rowKey, cardKey, title, badge, description, extra, it))
+                LiveHomeHero.show(LiveHero(
+                    rowKey = rowKey, cardKey = cardKey, title = title,
+                    overline = overline,
+                    teams = if (sides.size == 2) sides.map { s -> s.team } else emptyList(),
+                    live = live, tag = tag, status = status,
+                    progress = if (live) com.nuvio.tv.livetv.sports.progressOf(ev, now) else null,
+                    description = description, watchOn = watchOn, backdrop = it
+                ))
+            }
+        }
+    }
+
+    /** "Today 7:30 PM", "Tomorrow 1:00 PM", "Sat 3:00 PM". */
+    private fun dayAndTime(startMs: Long, now: Long, use24h: Boolean): String {
+        val clock = com.nuvio.tv.livetv.ui.formatClock(startMs, use24h)
+        val cal = java.util.Calendar.getInstance()
+        cal.timeInMillis = now
+        val today = cal.get(java.util.Calendar.YEAR) * 1000 + cal.get(java.util.Calendar.DAY_OF_YEAR)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        val tomorrow = cal.get(java.util.Calendar.YEAR) * 1000 + cal.get(java.util.Calendar.DAY_OF_YEAR)
+        cal.timeInMillis = startMs
+        val day = cal.get(java.util.Calendar.YEAR) * 1000 + cal.get(java.util.Calendar.DAY_OF_YEAR)
+        return when (day) {
+            today -> appContext.getString(com.nuvio.tv.R.string.home_rows_upcoming_today, clock)
+            tomorrow -> appContext.getString(com.nuvio.tv.R.string.home_rows_upcoming_tomorrow, clock)
+            else -> {
+                val locale = appContext.resources.configuration.locales[0]
+                val weekday = java.text.SimpleDateFormat("EEE", locale).format(java.util.Date(startMs))
+                appContext.getString(com.nuvio.tv.R.string.home_rows_upcoming_day, weekday, clock)
             }
         }
     }

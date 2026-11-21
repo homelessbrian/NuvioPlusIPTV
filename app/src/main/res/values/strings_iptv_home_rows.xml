@@ -116,4 +116,12 @@
     <string name="home_rows_playlist_names">"Playlist name in row titles"</string>
     <string name="home_rows_playlist_names_hint">"Live TV and On Demand rows from a playlist\'s group show which playlist it is (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"All"</string>
+    <!-- Home's hero for a highlighted Live TV or Sports card -->
+    <string name="home_hero_live">LIVE</string>
+    <string name="home_hero_min_left">%1$d min left</string>
+    <string name="home_hero_starting">Starting now</string>
+    <string name="home_hero_starts_in_min">Starts in %1$d min</string>
+    <string name="home_hero_starts_in_hours">Starts in %1$d h %2$d min</string>
+    <string name="home_hero_watch_on">Watch on</string>
+    <string name="home_hero_next">NEXT</string>
 </resources>
