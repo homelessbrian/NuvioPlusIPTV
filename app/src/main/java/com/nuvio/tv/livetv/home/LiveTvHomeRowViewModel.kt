@@ -86,7 +86,7 @@ class LiveTvHomeRowViewModel @Inject constructor(
             "ending" -> entries.sortedBy { it.now?.stopMs ?: Long.MAX_VALUE }
             else -> entries
         }
-        if (s.homeRowLimit > 0) entries.take(s.homeRowLimit) else entries
+        entries
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
@@ -106,7 +106,7 @@ class LiveTvHomeRowViewModel @Inject constructor(
         }
         // The row's channels: their listings straight away, if they aren't loaded yet.
         viewModelScope.launch {
-            rowChannels.map { (list, s) -> list.take(if (s.homeRowLimit > 0) s.homeRowLimit * 3 else 200).map { it.key } }
+            rowChannels.map { (list, s) -> list.take(200).map { it.key } }
                 .distinctUntilChanged()
                 .collectLatest { keys -> if (keys.isNotEmpty()) { delay(1_500); repository.loadChannelsNow(keys) } }
         }

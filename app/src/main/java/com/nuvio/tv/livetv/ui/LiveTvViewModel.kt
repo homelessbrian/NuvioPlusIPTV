@@ -987,7 +987,8 @@ class LiveTvViewModel @Inject constructor(
                     "recent" -> ChannelGroup.RECENT
                     else -> s.homeRowSource
                 }
-                val limit = if (s.homeRowLimit > 0) s.homeRowLimit * 3 else 200
+                // Every channel in the group (no limit setting any more), up to a sane maximum.
+                val limit = 200
                 buildUi(channels, user, s, groupId, "", true, exactGroup = true).channels.take(limit).map { it.key }
             }
         }.flowOn(Dispatchers.Default).distinctUntilChanged()

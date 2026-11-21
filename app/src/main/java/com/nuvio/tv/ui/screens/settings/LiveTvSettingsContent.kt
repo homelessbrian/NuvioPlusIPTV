@@ -1443,7 +1443,6 @@ internal fun LiveTvSettingsContent(
                         "number" to context.getString(R.string.iptv_settings_channel_number),
                         "ending" to context.getString(R.string.iptv_settings_ending_soonest)
                     )
-                    val countChoices = listOf(10, 20, 40, 0).map { it to (if (it == 0) context.getString(R.string.iptv_settings_all) else it.toString()) }
                     when (picking) {
                         "launcher_shape" -> SettingsSingleChoiceDialog(
                             title = context.getString(R.string.iptv_settings_card_shape),
@@ -1461,13 +1460,6 @@ internal fun LiveTvSettingsContent(
                             options = orderChoices.map { (v, t) -> SettingsPickerOption(v, t) },
                             selectedValue = s.homeRowSort.ifBlank { "yours" },
                             onOptionSelected = { v -> picking = null; update { st -> st.copy(homeRowSort = v) } },
-                            onDismiss = { picking = null }
-                        )
-                        "row_count" -> SettingsSingleChoiceDialog(
-                            title = context.getString(R.string.iptv_settings_number_of_channels),
-                            options = countChoices.map { (v, t) -> SettingsPickerOption(v, t) },
-                            selectedValue = s.homeRowLimit,
-                            onOptionSelected = { v -> picking = null; update { st -> st.copy(homeRowLimit = v) } },
                             onDismiss = { picking = null }
                         )
                     }
@@ -1514,12 +1506,6 @@ internal fun LiveTvSettingsContent(
                             subtitle = context.getString(R.string.iptv_settings_your_order_channel_number_or_the_shows_ending),
                             value = when (s.homeRowSort) { "number" -> context.getString(R.string.iptv_settings_channel_number); "ending" -> context.getString(R.string.iptv_settings_ending_soonest); else -> context.getString(R.string.iptv_settings_your_order) },
                             onClick = { picking = "row_order" }
-                        )
-                        SettingsActionRow(
-                            title = context.getString(R.string.iptv_settings_number_of_channels),
-                            subtitle = context.getString(R.string.iptv_settings_how_many_channels_the_row_shows),
-                            value = if (s.homeRowLimit == 0) context.getString(R.string.iptv_settings_all) else "${s.homeRowLimit}",
-                            onClick = { picking = "row_count" }
                         )
                         SettingsToggleRow(
                             context.getString(R.string.iptv_settings_hide_channels_with_no_listings),

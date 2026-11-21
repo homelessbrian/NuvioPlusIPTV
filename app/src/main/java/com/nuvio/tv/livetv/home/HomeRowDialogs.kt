@@ -561,8 +561,6 @@ fun HomeRowOptionsDialog(
         HomeLiveRow.SHAPE_PORTRAIT to stringResource(R.string.home_rows_shape_portrait),
         HomeLiveRow.SHAPE_LANDSCAPE to stringResource(R.string.home_rows_shape_landscape)
     )
-    val allLabel = stringResource(R.string.home_rows_limit_all)
-    val limitLabels = listOf(10, 20, 30, 50, 100).map { it.toString() to it.toString() } + (HomeLiveRow.ALL.toString() to allLabel)
     when (choosing) {
         "source" -> {
             val choices = if (vod) {
@@ -593,7 +591,6 @@ fun HomeRowOptionsDialog(
         }
         "sort" -> { ChoiceDialog(stringResource(R.string.home_rows_option_sort), sortLabels, row.sort, { save(row.copy(sort = it)) }, { choosing = null }); return }
         "shape" -> { ChoiceDialog(stringResource(R.string.home_rows_option_shape), shapeLabels, row.shape, { save(row.copy(shape = it)) }, { choosing = null }); return }
-        "limit" -> { ChoiceDialog(stringResource(R.string.home_rows_option_limit), limitLabels, row.limit.toString(), { save(row.copy(limit = it.toInt())) }, { choosing = null }); return }
         "ok_game" -> {
             ChoiceDialog(
                 stringResource(R.string.home_rows_option_ok),
@@ -715,14 +712,6 @@ fun HomeRowOptionsDialog(
                         onClick = { choosing = "ok_channel" }
                     )
                 }
-            }
-            item(key = "limit") {
-                SettingsActionRow(
-                    title = stringResource(R.string.home_rows_option_limit),
-                    subtitle = null,
-                    value = if (row.limit == HomeLiveRow.ALL) allLabel else row.limit.toString(),
-                    onClick = { choosing = "limit" }
-                )
             }
             item(key = "shape") {
                 SettingsActionRow(

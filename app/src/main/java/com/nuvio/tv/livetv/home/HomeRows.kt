@@ -44,8 +44,8 @@ data class HomeLiveRow(
     val title: String = "",
     /** Channels: "yours" (the group's order), "number" or "ending" (ending soonest first). */
     val sort: String = "yours",
-    /** Most cards in the row. */
-    val limit: Int = 20,
+    /** Most cards in the row: [ALL] (rows show everything, like your addons' rows). */
+    val limit: Int = ALL,
     /** Channels: what's on next under what's on now. */
     val showNext: Boolean = false,
     /** Channels: leave out channels with no real listing ("No information"). */
@@ -93,7 +93,7 @@ data class HomeLiveRow(
 
         fun channels(group: String) = HomeLiveRow(newId(), KIND_CHANNELS, group)
         fun sports(source: String = "") = HomeLiveRow(newId(), KIND_SPORTS, source)
-        fun vod(source: String, label: String = "") = HomeLiveRow(newId(), KIND_VOD, source, limit = 30, label = label)
+        fun vod(source: String, label: String = "") = HomeLiveRow(newId(), KIND_VOD, source, label = label)
 
         private fun newId(): String =
             java.lang.Long.toString(System.currentTimeMillis(), 36) +
@@ -114,7 +114,8 @@ data class HomeLiveRow(
                         source = o.optString("source"),
                         title = o.optString("title"),
                         sort = o.optString("sort", "yours"),
-                        limit = o.optInt("limit", 20).let { if (it == ALL) ALL else it.coerceIn(1, MAX_LIMIT) },
+                        // Rows show everything now (like your addons' rows); an old saved number is ignored.
+                        limit = ALL,
                         showNext = o.optBoolean("showNext", false),
                         hidePlaceholders = o.optBoolean("hidePlaceholders", false),
                         opensGuide = o.optBoolean("opensGuide", false),
