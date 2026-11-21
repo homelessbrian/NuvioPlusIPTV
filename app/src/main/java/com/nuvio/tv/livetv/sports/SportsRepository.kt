@@ -560,7 +560,20 @@ class SportsRepository @Inject constructor(
     }
 
     /** A live game and the other channels showing it (see [gameChannelsFor]). */
-    data class GameChannels(val title: String, val channels: List<LiveChannel>)
+    data class GameChannels(
+        val title: String,
+        val channels: List<LiveChannel>,
+        /** The game, and how each channel was matched to it (for what its guide says). */
+        val event: SportsEvent? = null,
+        val matched: Map<String, ChannelMatch> = emptyMap()
+    ) {
+        /** What [ch]'s guide says about the game ([onNow]: what's on it now), for the backup lists. */
+        internal fun guideFor(ch: LiveChannel, onNow: com.nuvio.tv.livetv.model.EpgProgram?, now: Long, use24h: Boolean): GuideLine? {
+            val ev = event ?: return null
+            val m = matched[ch.key] ?: return null
+            return guideLine(ev, m, onNow, now, use24h)
+        }
+    }
 
     /**
      * The player's backup lists (Right twice, the bar's Backups button): the live game (or one
@@ -582,19 +595,19 @@ class SportsRepository @Inject constructor(
         val ev = game ?: return null
         val playing = list.first { it.channel.key == channelKey }
         val copyKey = SportsMatcher.copyKey(playing.channel)
-        val others = list.asSequence()
+        val picked = list.asSequence()
             .filter { it.channel.key != channelKey && it.channel.key !in exclude }
             // Your own channels only: addon streams and videos stay on the game page.
             .filter { it.channel.sourceId != SportsAddonSource.SOURCE_ID && it.channel.sourceId != SportsVideos.SOURCE_ID }
             .filter { it.sure || it.score >= 150 || SportsMatcher.copyKey(it.channel) == copyKey }
-            .map { it.channel }
-            .distinctBy { it.key }
+            .distinctBy { it.channel.key }
             .toList()
+        val others = picked.map { it.channel }
         if (others.isEmpty()) return null
         val league = SportsCatalog.league(ev.leagueId)
         val sides = if (league != null) ev.ordered(league.sport) else ev.sides
         val title = if (sides.size == 2) sides.joinToString(" vs ") { it.team.name } else ev.title
-        return GameChannels(title, others)
+        return GameChannels(title, others, ev, picked.associateBy { it.channel.key })
     }
 
     private val _loading = MutableStateFlow(false)

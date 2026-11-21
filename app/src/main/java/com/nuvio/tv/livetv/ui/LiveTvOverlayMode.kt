@@ -1117,7 +1117,9 @@ internal fun LiveTvBackupFlyout(
     onLongPress: (LiveChannel) -> Unit = {},
     menuOpen: Boolean = false,
     gameTitle: String = "",
-    gameChannels: List<LiveChannel> = emptyList()
+    gameChannels: List<LiveChannel> = emptyList(),
+    /** What a game channel's guide says about the game ([EpgProgram]: what's on it now), for its row. */
+    gameGuide: (LiveChannel, EpgProgram?) -> com.nuvio.tv.livetv.sports.GuideLine? = { _, _ -> null }
 ) {
     val sizeSettings by viewModel.settings.collectAsStateWithLifecycle()
     val (textScale, rowScale) = when (sizeSettings.effectiveGuideSize) {
@@ -1130,7 +1132,7 @@ internal fun LiveTvBackupFlyout(
         LocalOverlayScale provides textScale,
         LocalOverlayRowScale provides rowScale
     ) {
-        BackupFlyoutContent(viewModel, channels, gameTitle, gameChannels, playingKey, onPick, onClose, modifier, onLongPress, menuOpen)
+        BackupFlyoutContent(viewModel, channels, gameTitle, gameChannels, playingKey, onPick, onClose, modifier, onLongPress, menuOpen, gameGuide)
     }
 }
 
@@ -1145,17 +1147,19 @@ private fun BackupFlyoutContent(
     onClose: () -> Unit,
     modifier: Modifier,
     onLongPress: (LiveChannel) -> Unit,
-    menuOpen: Boolean
+    menuOpen: Boolean,
+    gameGuide: (LiveChannel, EpgProgram?) -> com.nuvio.tv.livetv.sports.GuideLine?
 ) {
     val programs by viewModel.programs.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()
-    // This channel's copies, then the other channels showing the game on it (if any), one list
-    // to move through; the two get a heading each when both show.
-    val channels = remember(copies, gameChannels) { copies + gameChannels }
+    // Watching a game: the other channels showing it first (they're what people want when a game's
+    // stream drops), then this channel's own copies; one list to move through, each part under a
+    // heading. Otherwise just the copies.
+    val channels = remember(copies, gameChannels) { gameChannels + copies }
     val headed = gameChannels.isNotEmpty()
-    fun rowAt(i: Int): Int = i + (if (headed && copies.isNotEmpty()) 1 else 0) + (if (headed && i >= copies.size) 1 else 0)
+    fun rowAt(i: Int): Int = i + (if (headed) 1 else 0) + (if (headed && copies.isNotEmpty() && i >= gameChannels.size) 1 else 0)
     // Opens on the first copy that isn't the one playing.
     var index by remember { mutableIntStateOf(channels.indexOfFirst { it.key != playingKey }.coerceAtLeast(0)) }
     var activity by remember { mutableIntStateOf(0) }
@@ -1238,17 +1242,17 @@ private fun BackupFlyoutContent(
             }
         }
         LazyColumn(state = state, modifier = Modifier.fillMaxSize()) {
-            if (headed && copies.isNotEmpty()) item(key = "head:copies") {
-                FlyoutSection(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_other_copies, copies.firstOrNull { it.key == playingKey }?.name ?: copies.first().name))
-            }
-            itemsIndexed(copies, key = { _, c -> c.key }) { i, ch ->
-                FlyoutRow(viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames)
-            }
             if (headed) item(key = "head:game") {
                 FlyoutSection(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle))
             }
-            itemsIndexed(gameChannels, key = { _, c -> "game:" + c.key }) { j, ch ->
-                val i = copies.size + j
+            itemsIndexed(gameChannels, key = { _, c -> "game:" + c.key }) { i, ch ->
+                FlyoutRow(viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames, gameGuide = gameGuide)
+            }
+            if (headed && copies.isNotEmpty()) item(key = "head:copies") {
+                FlyoutSection(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_other_copies, copies.firstOrNull { it.key == playingKey }?.name ?: copies.first().name))
+            }
+            itemsIndexed(copies, key = { _, c -> c.key }) { j, ch ->
+                val i = gameChannels.size + j
                 FlyoutRow(viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames)
             }
         }
@@ -1278,10 +1282,13 @@ private fun FlyoutRow(
     programs: Map<String, List<EpgProgram>>,
     now: Long,
     showLogos: Boolean,
-    playlistNames: Map<String, String>
+    playlistNames: Map<String, String>,
+    /** A game channel: what its guide says about the game, coloured, before what's on. */
+    gameGuide: ((LiveChannel, EpgProgram?) -> com.nuvio.tv.livetv.sports.GuideLine?)? = null
 ) {
     val p = programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
         ?: viewModel.currentProgram(ch.key)
+    val guide = gameGuide?.invoke(ch, p)
     val colors = liveCellColors(focused = isFocused, idle = if (ch.key == playingKey) Color.White.copy(alpha = 0.08f) else Color.Transparent)
     // On a solid highlight the accent-colored bits would disappear: make them white.
     val onSolid = isFocused && LocalLiveSolidHighlight.current
@@ -1319,7 +1326,20 @@ private fun FlyoutRow(
                 color = dim, size = osp(12f), maxLines = 1,
                 marquee = isFocused && resting
             )
-            LiveText(
+            if (guide != null) {
+                // "● Showing it now · Man City v Fulham", in the guide's colour (white on a solid highlight).
+                val gc = if (onSolid) Color.White else com.nuvio.tv.livetv.sports.guideColor(guide.kind, NuvioTheme.colors.Secondary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).clip(androidx.compose.foundation.shape.CircleShape).background(gc))
+                    Spacer(Modifier.width(5.dp))
+                    LiveText(
+                        guide.text + (p?.title?.let { " · " + titleMarks(it).title } ?: ""),
+                        color = gc, size = osp(13f), weight = FontWeight.SemiBold,
+                        marquee = isFocused && resting,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
+            } else LiveText(
                 p?.title?.let { titleMarks(it).title } ?: "No program information",
                 color = if (p == null) (if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextTertiary) else accent,
                 size = osp(13f),

@@ -1539,6 +1539,18 @@ private fun PlaybackNavHost(
                         restoreState = true
                     }
                 },
+                // Full screen, the Games list: the game you're watching on its Sports page (the
+                // picture carries on in the page's window); Back there goes back to full screen.
+                onOpenSportsGame = { id ->
+                    com.nuvio.tv.livetv.sports.SportsLaunch.openEvent(
+                        id, com.nuvio.tv.livetv.sports.SportsLaunch.Origin(com.nuvio.tv.livetv.sports.SportsLaunch.LIVE_FULLSCREEN, "Live TV")
+                    )
+                    navController.navigate(Screen.Sports.route) {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
                 // A recording played full screen: Back goes to the screen it was picked on.
                 onReturnTo = { route ->
                     if (!navController.popBackStack(route, inclusive = false)) {
@@ -1642,7 +1654,10 @@ private fun PlaybackNavHost(
                 // Back on a game opened from another page: that page again, as it was (like
                 // picking it in the side menu).
                 onReturnTo = { route ->
-                    if (route == Screen.LiveTvMultiview.route || route == Screen.SportsMultiview.route) {
+                    if (route == com.nuvio.tv.livetv.sports.SportsLaunch.LIVE_FULLSCREEN) {
+                        // Opened from full screen (the Games list): back to full screen.
+                        com.nuvio.tv.livetv.sports.openLiveTvFullscreen(navController)
+                    } else if (route == Screen.LiveTvMultiview.route || route == Screen.SportsMultiview.route) {
                         // Multiview is still under this page: go back to it, the pages beneath stay as they were.
                         if (!navController.popBackStack(route, inclusive = false)) {
                             runCatching { navController.navigate(route) { launchSingleTop = true } }

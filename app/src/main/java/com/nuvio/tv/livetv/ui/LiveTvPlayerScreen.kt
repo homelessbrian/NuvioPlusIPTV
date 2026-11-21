@@ -101,7 +101,9 @@ fun LiveTvPlayerScreen(
     viewModel: LiveTvViewModel = hiltViewModel(),
     onOpenSportsMultiview: (Int) -> Unit = {},
     /** The play bar's Multiview button: the normal Multiview, starting with this channel. */
-    onOpenMultiview: () -> Unit = {}
+    onOpenMultiview: () -> Unit = {},
+    /** The Games list in the Channel Row: OK on the game you're watching opens its Sports game page. */
+    onOpenSportsGame: (String) -> Unit = {}
 ) {
     // Full screen from the guide's search: the keyboard doesn't stay over the video.
     HideKeyboardOn(onOpen = true)
@@ -208,9 +210,15 @@ fun LiveTvPlayerScreen(
         if (dialog == PlayerDialog.NONE && gearShowedBar) { gearShowedBar = false; closeFull(); bannerVisible = false }
     }
 
+    // Watching a game (one we're sure this channel shows, live): a Games list joins the Channel
+    // Row's lists, last, with that league's games on now. It's only there while the game is.
+    val liveGameHere = com.nuvio.tv.livetv.sports.rememberLiveGameOn(current?.key)
+        ?.takeIf { playback.catchupTitle == null && sportsSettings.showInSidebar }
+    val gamesTabTitle = liveGameHere?.let { g -> com.nuvio.tv.livetv.sports.SportsCatalog.league(g.leagueId)?.name ?: "Games" }
+
     // ---- the Channel Row under the full bar: its lists (switched on and still there), the one
     // showing, and that list's channels (only worked out while the full bar is up).
-    val rowTabs: List<PanelRowTab> = remember(settings.panelRowLists, settings.panelRow, ui.groups) {
+    val rowTabs: List<PanelRowTab> = remember(settings.panelRowLists, settings.panelRow, ui.groups, gamesTabTitle) {
         PanelRowLists.parse(settings).filter { it.on }.mapNotNull { l ->
             when (l.id) {
                 PanelRowLists.RECENT -> PanelRowTab(l.id, "Recently Watched", PanelRowTab.Kind.RECENT)
@@ -218,7 +226,7 @@ fun LiveTvPlayerScreen(
                 else -> ui.groups.firstOrNull { it.id == l.id && !it.special && !it.locked }
                     ?.let { PanelRowTab(it.id, it.title, PanelRowTab.Kind.GROUP) }
             }
-        }
+        } + listOfNotNull(gamesTabTitle?.let { PanelRowTab(GAMES_ROW, it, PanelRowTab.Kind.GAMES) })
     }
     // A recording from Recordings plays here as its own show: no channel switching, no Quick Channels.
     val playingRecording = viewModel.catchup.collectAsStateWithLifecycle().value?.recordingId != null
@@ -228,8 +236,32 @@ fun LiveTvPlayerScreen(
         ?: rowTabs.firstOrNull()?.id
     val rowShowing = rowOn && (panelFull || playback.userPaused)
     val rowChannels: List<LiveChannel> = remember(rowShowing, rowId, playback.channelKey, user, displayList) {
-        if (rowShowing && rowId != null) viewModel.rowListChannels(rowId, playback.channelKey) else emptyList()
+        if (rowShowing && rowId != null && rowId != GAMES_ROW) viewModel.rowListChannels(rowId, playback.channelKey) else emptyList()
     }
+    // The Games list: the game you're watching first, then the league's other games on now (the
+    // sport's, when the league has no other). Kept up to date only while the full bar is up.
+    val rowIsGames = rowId == GAMES_ROW
+    var gamesNow: List<com.nuvio.tv.livetv.sports.SportsWatchGame> = emptyList()
+    if (rowShowing && liveGameHere != null) {
+        DisposableEffect(sports) {
+            val lease = sports.acquireViewing()
+            onDispose { lease.close() }
+        }
+        gamesNow = sports.games.collectAsStateWithLifecycle().value
+    }
+    val rowGames: List<PanelGame> = remember(gamesNow, liveGameHere) {
+        val here = liveGameHere ?: return@remember emptyList()
+        val sport = com.nuvio.tv.livetv.sports.SportsCatalog.league(here.leagueId)?.sport
+        val league = gamesNow.filter { it.event.leagueId == here.leagueId && it.event.id != here.id }
+        val others = league.ifEmpty {
+            gamesNow.filter { it.event.id != here.id && sport != null && com.nuvio.tv.livetv.sports.SportsCatalog.league(it.event.leagueId)?.sport == sport }
+        }.map { it.event }
+            .sortedWith(compareBy<com.nuvio.tv.livetv.sports.SportsEvent> { if (it.state == com.nuvio.tv.livetv.sports.GameState.LIVE) 0 else 1 }.thenBy { it.startMs })
+        val fresh = gamesNow.firstOrNull { it.event.id == here.id }?.event ?: here
+        (listOf(PanelGame(fresh, watching = true)) + others.take(20).map { PanelGame(it, watching = false) })
+    }
+    // Another game picked in the Games list: its channels to choose from.
+    var gamePick by remember { mutableStateOf<com.nuvio.tv.livetv.sports.SportsWatchGame?>(null) }
     // Remember the list used last, so the row opens there next time (once you've settled on one).
     LaunchedEffect(rowListId) {
         val id = rowListId ?: return@LaunchedEffect
@@ -238,6 +270,7 @@ fun LiveTvPlayerScreen(
     }
     /** Where the highlight lands in the row: on the channel playing if it's listed, else the first channel (else TV Guide). */
     fun rowStart(): Int {
+        if (rowIsGames) return if (rowGames.isNotEmpty()) 1 else 0
         val i = rowChannels.indexOfFirst { it.key == playback.channelKey }
         return when { i >= 0 -> i + 1; rowChannels.isNotEmpty() -> 1; else -> 0 }
     }
@@ -595,7 +628,7 @@ fun LiveTvPlayerScreen(
                     showBanner()
                     // Clear is only in Recently watched (favorites and groups are changed in the guide).
                     val hasClear = rowId == PanelRowLists.RECENT
-                    val lastTile = rowChannels.size + if (hasClear) 1 else 0
+                    val lastTile = if (rowIsGames) rowGames.size else rowChannels.size + if (hasClear) 1 else 0
                     when {
                         e.key == Key.DirectionLeft -> recentFocus = (rf - 1).coerceAtLeast(0)
                         e.key == Key.DirectionRight -> recentFocus = (rf + 1).coerceAtMost(lastTile)
@@ -609,16 +642,33 @@ fun LiveTvPlayerScreen(
                         e.key == Key.DirectionDown -> if (rowTabs.size > 1 && e.nativeKeyEvent.repeatCount == 0) {
                             val i = rowTabs.indexOfFirst { it.id == rowId }.coerceAtLeast(0)
                             val next = rowTabs[(i + 1) % rowTabs.size]
-                            val chs = viewModel.rowListChannels(next.id, playback.channelKey)
-                            val at = chs.indexOfFirst { it.key == playback.channelKey }
-                            rowListId = next.id
-                            recentFocus = when { at >= 0 -> at + 1; chs.isNotEmpty() -> 1; else -> 0 }
+                            if (next.id == GAMES_ROW) {
+                                rowListId = next.id
+                                recentFocus = if (rowGames.isNotEmpty()) 1 else 0
+                            } else {
+                                val chs = viewModel.rowListChannels(next.id, playback.channelKey)
+                                val at = chs.indexOfFirst { it.key == playback.channelKey }
+                                rowListId = next.id
+                                recentFocus = when { at >= 0 -> at + 1; chs.isNotEmpty() -> 1; else -> 0 }
+                            }
                         }
                         // Back: the row tucks away; the bar stays (Back again closes it).
                         e.key == Key.Back -> recentFocus = null
                         isOk && e.nativeKeyEvent.repeatCount == 0 -> when {
                             // TV Guide: back to the guide.
                             rf == 0 -> guideOnOkUp = true
+                            // Games: the one you're watching opens its game page; another, its channels.
+                            rowIsGames -> rowGames.getOrNull(rf - 1)?.let { g ->
+                                if (g.watching) {
+                                    closeFull(); bannerVisible = false
+                                    onOpenSportsGame(g.event.id)
+                                } else {
+                                    val pick = gamesNow.firstOrNull { it.event.id == g.event.id }
+                                    if (pick == null || pick.channels.isEmpty()) toast = "None of your channels show ${g.event.title} right now"
+                                    else gamePick = pick
+                                }
+                                Unit
+                            }
                             hasClear && rf >= lastTile -> {
                                 viewModel.clearRecent()
                                 recentFocus = 0
@@ -1225,6 +1275,9 @@ fun LiveTvPlayerScreen(
                         }
                     } else null,
                     recentFocus = recentFocus,
+                    games = if (rowIsGames) rowGames else null,
+                    hideScores = sportsSettings.hideScores,
+                    use24h = settings.use24HourClock,
                     hidden = BarPart.hiddenOf(settings.barHidden),
                     bellOn = liveBell?.on == true,
                     pinOn = pinGame != null && pinGame.id in pinList
@@ -1239,6 +1292,7 @@ fun LiveTvPlayerScreen(
                 channels = backups,
                 gameTitle = gameBackups?.title.orEmpty(),
                 gameChannels = gameBackups?.channels.orEmpty(),
+                gameGuide = { ch, onNow -> gameBackups?.guideFor(ch, onNow, System.currentTimeMillis(), settings.use24HourClock) },
                 playingKey = playback.channelKey,
                 modifier = Modifier.align(Alignment.CenterEnd),
                 onLongPress = { ch -> backupMenuFor = ch },
@@ -1307,6 +1361,31 @@ fun LiveTvPlayerScreen(
                     .clip(RoundedCornerShape(10.dp))
                     .background(Color.Black.copy(alpha = 0.7f))
                     .padding(horizontal = 18.dp, vertical = 8.dp)
+            )
+        }
+        gamePick?.let { pick ->
+            com.nuvio.tv.livetv.sports.GameChannelsDialog(
+                game = pick,
+                now = now,
+                use24h = settings.use24HourClock,
+                onNow = { key -> viewModel.currentProgram(key) },
+                onWatch = { m ->
+                    gamePick = null
+                    closeFull()
+                    if (!playSportsGame(pick.event.id, m.channel.key)) toast = "${m.channel.name} can't be played right now"
+                    else showBanner()
+                },
+                onMultiview = { m ->
+                    gamePick = null
+                    if (!sports.mayPlay(m.channel)) toast = "${m.channel.name} can't be played right now"
+                    else {
+                        // This channel and that one, side by side.
+                        current?.key?.let { com.nuvio.tv.livetv.multiview.MultiviewQueue.add(it) }
+                        com.nuvio.tv.livetv.multiview.MultiviewQueue.add(m.channel.key)
+                        openMultiview()
+                    }
+                },
+                onDismiss = { gamePick = null }
             )
         }
         // This channel is being recorded: a small REC mark in the corner.
@@ -1516,6 +1595,7 @@ fun LiveTvPlayerScreen(
             channels = backups,
             gameTitle = gameBackups?.title.orEmpty(),
             gameChannels = gameBackups?.channels.orEmpty(),
+            gameGuide = { ch -> gameBackups?.guideFor(ch, viewModel.currentProgram(ch.key), System.currentTimeMillis(), settings.use24HourClock) },
             playingKey = playback.channelKey,
             startKey = backupMenuLastKey,
             onLongPress = { ch -> backupMenuFor = ch; backupMenuLastKey = ch.key },
@@ -1658,6 +1738,8 @@ private fun BackupChannelsDialog(
     playingKey: String?,
     gameTitle: String = "",
     gameChannels: List<LiveChannel> = emptyList(),
+    /** What a game channel's guide says about the game, for its line. */
+    gameGuide: (LiveChannel) -> com.nuvio.tv.livetv.sports.GuideLine? = { null },
     nowTitle: (String) -> String?,
     onPick: (LiveChannel) -> Unit,
     onDismiss: () -> Unit,
@@ -1668,10 +1750,10 @@ private fun BackupChannelsDialog(
 ) {
     val first = remember { FocusRequester() }
     val colors = NuvioTheme.colors
-    // This channel's copies, then the other channels showing the game on it, each under a heading
-    // when both show.
+    // Watching a game: the other channels showing it first, then this channel's own copies, each
+    // under a heading. Otherwise just the copies.
     val copies = channels
-    val all = copies + gameChannels
+    val all = gameChannels + copies
     val headed = gameChannels.isNotEmpty()
     val focusKey = startKey?.takeIf { k -> all.any { it.key == k } }
         ?: all.firstOrNull { it.key != playingKey }?.key ?: all.first().key
@@ -1683,13 +1765,14 @@ private fun BackupChannelsDialog(
             Modifier.fillMaxWidth().heightIn(max = 190.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            if (headed && copies.isNotEmpty()) item(key = "head:copies") {
-                BackupsHeading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_other_copies, copies.firstOrNull { it.key == playingKey }?.name ?: copies.first().name))
+            if (headed) item(key = "head:game") {
+                BackupsHeading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle))
             }
-            items(all.size, key = { (if (it >= copies.size) "game:" else "") + all[it].key }) { i ->
+            items(all.size, key = { (if (it < gameChannels.size) "game:" else "") + all[it].key }) { i ->
                 Column(Modifier.fillMaxWidth()) {
-                    if (headed && i == copies.size) BackupsHeading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle))
+                    if (headed && copies.isNotEmpty() && i == gameChannels.size) BackupsHeading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_other_copies, copies.firstOrNull { it.key == playingKey }?.name ?: copies.first().name))
                     val ch = all[i]
+                    val guide = if (i < gameChannels.size) gameGuide(ch) else null
                     val playing = ch.key == playingKey
                     LiveFocusRow(
                         modifier = Modifier.fillMaxWidth().then(if (ch.key == focusKey) Modifier.focusRequester(first) else Modifier),
@@ -1710,6 +1793,11 @@ private fun BackupChannelsDialog(
                                     Spacer(Modifier.width(6.dp))
                                     LiveText("Watching", size = 9.sp, color = focusedTextColor(f))
                                 }
+                            }
+                            // A game channel: what its guide says about the game, coloured.
+                            if (guide != null) {
+                                val gc = if (f) focusedTextColor(f) else com.nuvio.tv.livetv.sports.guideColor(guide.kind, colors.Secondary)
+                                LiveText("● " + guide.text, size = 9.sp, color = gc, weight = FontWeight.Bold, maxLines = 1)
                             }
                             // Only the highlighted copy shows where it comes from and what's on.
                             if (f) {
@@ -1991,3 +2079,5 @@ private fun MatchFrameRate(
     }
 }
 
+/** The Channel Row's Games list (only while the channel is showing a game). */
+private const val GAMES_ROW = "sports:games"

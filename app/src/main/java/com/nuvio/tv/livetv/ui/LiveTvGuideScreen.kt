@@ -177,7 +177,9 @@ fun LiveTvGuideScreen(
     onReturnTo: (String) -> Unit = {},
     viewModel: LiveTvViewModel = hiltViewModel(),
     onOpenMultiview: () -> Unit = {},
-    onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() }
+    onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() },
+    /** Full screen, the Channel Row's Games list: the game you're watching, on the Sports page. */
+    onOpenSportsGame: (String) -> Unit = {}
 ) {
     // Hold the first draw until the saved settings and menu look are read. Before that the guide
     // only has the built-in defaults, and it drew one frame of the old look, then redrew.
@@ -197,6 +199,7 @@ fun LiveTvGuideScreen(
         onOpenNuvioSearch = onOpenNuvioSearch,
         onReturnToSports = onReturnToSports,
         onReturnTo = onReturnTo,
+        onOpenSportsGame = onOpenSportsGame,
         viewModel = viewModel
     )
 }
@@ -214,6 +217,7 @@ private fun LiveTvGuideScreenBody(
     /** Full screen was opened from the Sports page: Back goes back there. */
     onReturnToSports: () -> Unit = {},
     onReturnTo: (String) -> Unit = {},
+    onOpenSportsGame: (String) -> Unit = {},
     viewModel: LiveTvViewModel = hiltViewModel()
 ) {
     // Full screen happens right here, TiviMate style: the same video view grows from the
@@ -2499,6 +2503,13 @@ private fun LiveTvGuideScreenBody(
                 onOpenSettings = onOpenSettings,
                 onOpenSportsMultiview = { panes -> onOpenSportsMultiview(panes, playback.channelKey) },
                 onOpenMultiview = onOpenMultiview,
+                onOpenSportsGame = { id ->
+                    // Leaving full screen for the Sports page: Back there comes back to full screen.
+                    com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn()
+                    com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn()
+                    fullscreenComing = false
+                    onOpenSportsGame(id)
+                },
                 viewModel = viewModel
             )
         }

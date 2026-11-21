@@ -130,6 +130,15 @@ class SportsViewModel @Inject constructor(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /**
+     * Anything in the window at all (a channel, a replay, a highlight, playing or paused): the
+     * Sports page shows the window; with nothing, the highlighted game and its table instead.
+     */
+    val windowInUse: StateFlow<Boolean> = playback.state
+        .map { it.channelKey != null }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     /** Something is playing (or starting) in the window, not paused: the TV stays awake. */
     val playingNow: StateFlow<Boolean> = playback.state
         .map { it.channelKey != null && (it.isPlaying || it.isBuffering) && !it.userPaused }

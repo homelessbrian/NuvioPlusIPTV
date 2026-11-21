@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FilterNone
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GridView
@@ -221,6 +222,10 @@ internal fun LiveTvPlayerPanel(
     recent: List<PanelRecent>? = null,
     /** The highlighted tile in the Channel Row: 0 TV Guide, 1… the channels, then Clear. */
     recentFocus: Int? = null,
+    /** The row's Games list is showing (watching a game): its games, in place of channels. */
+    games: List<PanelGame>? = null,
+    hideScores: Boolean = false,
+    use24h: Boolean = false,
     /** A Clear tile at the end of the row (Recently watched only). */
     recentClear: Boolean = true,
     /** The Channel Row's lists that are switched on (empty: no row). */
@@ -448,11 +453,13 @@ internal fun LiveTvPlayerPanel(
                 Spacer(Modifier.height(8.dp))
                 RowHeader(rowLists, selectedTab, rowPillsFocused)
                 Spacer(Modifier.height(6.dp))
-                RecentRow(recent.orEmpty(), recentFocus, recentClear, playingKey, showNumber)
+                if (games != null && selectedTab.kind == PanelRowTab.Kind.GAMES) GamesRow(games, recentFocus, hideScores, use24h)
+                else RecentRow(recent.orEmpty(), recentFocus, recentClear, playingKey, showNumber)
             }
         }
         if (withRow && !rowOpen && selectedTab != null) {
-            RowTab(selectedTab, recent.orEmpty().size, rowLists.size, rowLists.indexOf(selectedTab), background)
+            val isGames = selectedTab.kind == PanelRowTab.Kind.GAMES
+            RowTab(selectedTab, if (isGames) games.orEmpty().size else recent.orEmpty().size, rowLists.size, rowLists.indexOf(selectedTab), background)
         }
       }
     }
@@ -575,14 +582,18 @@ internal data class PanelRecent(
 
 /** One of the Channel Row's lists, as its button shows it. */
 internal data class PanelRowTab(val id: String, val title: String, val kind: Kind) {
-    enum class Kind { RECENT, FAVORITES, GROUP }
+    enum class Kind { RECENT, FAVORITES, GROUP, GAMES }
 }
+
+/** A game in the Channel Row's Games list (only while the channel is showing a game). */
+internal data class PanelGame(val event: com.nuvio.tv.livetv.sports.SportsEvent, val watching: Boolean)
 
 @Composable
 private fun rowIcon(kind: PanelRowTab.Kind): ImageVector = when (kind) {
     PanelRowTab.Kind.RECENT -> Icons.Default.History
     PanelRowTab.Kind.FAVORITES -> Icons.Default.Star
     PanelRowTab.Kind.GROUP -> Icons.Outlined.Folder
+    PanelRowTab.Kind.GAMES -> Icons.Default.EmojiEvents
 }
 
 /**
@@ -608,7 +619,8 @@ private fun RowTab(tab: PanelRowTab, count: Int, lists: Int, index: Int, backgro
         Spacer(Modifier.width(5.dp))
         LiveText(tab.title, size = 11.sp, weight = FontWeight.SemiBold, color = colors.TextPrimary, modifier = Modifier.widthIn(max = 260.dp))
         LiveText(
-            "  ·  " + if (count == 1) "1 channel" else "$count channels",
+            "  ·  " + if (tab.kind == PanelRowTab.Kind.GAMES) (if (count == 1) "1 game" else "$count games")
+            else if (count == 1) "1 channel" else "$count channels",
             size = 11.sp, color = colors.TextTertiary
         )
         if (lists > 1) {
@@ -684,11 +696,14 @@ private fun RowHeader(lists: List<PanelRowTab>, selected: PanelRowTab, pillsFocu
             }
         }
         Spacer(Modifier.width(10.dp))
-        val keys = if (pillsFocused) listOf("◀ ▶" to "switch list", "▼" to "channels", "BACK" to "close row")
+        val games = selected.kind == PanelRowTab.Kind.GAMES
+        val keys = if (pillsFocused) listOf("◀ ▶" to "switch list", "▼" to if (games) "games" else "channels", "BACK" to "close row")
         else listOfNotNull(
             if (lists.size > 1) "▲" to "pick a list" else null,
             if (lists.size > 1) "▼" to "next list" else null,
-            "◀ ▶" to "channels", "OK" to "watch", "BACK" to "close row"
+            "◀ ▶" to if (games) "games" else "channels",
+            "OK" to if (games) "game info or pick a channel" else "watch",
+            "BACK" to "close row"
         )
         keys.forEach { (k, what) ->
             LiveText(
@@ -776,6 +791,85 @@ private fun RecentRow(recent: List<PanelRecent>, focus: Int?, showClear: Boolean
 }
 
 private val TILE_H = 60.dp
+
+/**
+ * The Games list: TV Guide, then the games (the one you're watching first, marked), each with
+ * both teams, the score (unless scores are hidden) and the clock or start time.
+ */
+@Composable
+private fun GamesRow(games: List<PanelGame>, focus: Int?, hideScores: Boolean, use24h: Boolean) {
+    val colors = NuvioTheme.colors
+    val state = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(focus, games.size) {
+        val f = focus ?: return@LaunchedEffect
+        val info = state.layoutInfo
+        val fully = info.visibleItemsInfo.filter { it.offset >= info.viewportStartOffset && it.offset + it.size <= info.viewportEndOffset }
+        val first = fully.firstOrNull()?.index ?: 0
+        val last = fully.lastOrNull()?.index ?: 0
+        when {
+            fully.isEmpty() -> state.scrollToItem(f)
+            f < first -> state.animateScrollToItem(f)
+            f > last -> state.animateScrollToItem((f - (fully.size - 1).coerceAtLeast(0)).coerceAtLeast(0))
+        }
+    }
+    androidx.compose.foundation.lazy.LazyRow(
+        state = state,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+        userScrollEnabled = false
+    ) {
+        item(key = "guide") {
+            val f = focus == 0
+            val fg = focusedTextColor(f)
+            RecentTile(focused = f, width = 64.dp) {
+                Icon(Icons.Default.GridView, contentDescription = null, tint = fg, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.height(3.dp))
+                LiveText("TV Guide", size = 10.sp, weight = FontWeight.SemiBold, color = fg)
+            }
+        }
+        games.forEachIndexed { i, g ->
+            item(key = "game:" + g.event.id) {
+                val f = focus == i + 1
+                val fg = focusedTextColor(f)
+                val fgDim = focusedSecondaryTextColor(f)
+                val ev = g.event
+                val league = com.nuvio.tv.livetv.sports.SportsCatalog.league(ev.leagueId)
+                val sides = ev.ordered(league?.sport ?: com.nuvio.tv.livetv.sports.Sport.OTHER)
+                val live = ev.state == com.nuvio.tv.livetv.sports.GameState.LIVE
+                val showScore = ev.hasScore && !hideScores && ev.state != com.nuvio.tv.livetv.sports.GameState.PRE
+                RecentTile(
+                    focused = f, width = 150.dp,
+                    corner = {
+                        LiveText(
+                            (if (live) "● " else "") + com.nuvio.tv.livetv.sports.cornerStatus(ev, use24h, hideScores),
+                            size = 8.sp, weight = FontWeight.Bold, color = if (f) fg else if (live) LIVE_RED else fgDim
+                        )
+                        Spacer(Modifier.weight(1f))
+                        if (g.watching) LiveText("WATCHING", size = 8.sp, weight = FontWeight.Bold, color = if (f) fg else colors.Secondary)
+                    }
+                ) {
+                    Spacer(Modifier.height(8.dp))
+                    if (sides.size == 2) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            com.nuvio.tv.livetv.sports.TeamLogo(sides[0].team, 16.dp)
+                            Spacer(Modifier.width(4.dp))
+                            LiveText(sides[0].team.abbr.ifBlank { sides[0].team.name }, size = 11.sp, weight = FontWeight.Bold, color = fg)
+                            LiveText(
+                                if (showScore) "  ${sides[0].score.orEmpty()}–${sides[1].score.orEmpty()}  " else "  v  ",
+                                size = 11.sp, weight = if (showScore) FontWeight.Black else FontWeight.Normal, color = if (showScore) fg else fgDim
+                            )
+                            LiveText(sides[1].team.abbr.ifBlank { sides[1].team.name }, size = 11.sp, weight = FontWeight.Bold, color = fg)
+                            Spacer(Modifier.width(4.dp))
+                            com.nuvio.tv.livetv.sports.TeamLogo(sides[1].team, 16.dp)
+                        }
+                    } else {
+                        LiveText(ev.title, size = 11.sp, weight = FontWeight.Bold, color = fg, marquee = f)
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun RecentTile(

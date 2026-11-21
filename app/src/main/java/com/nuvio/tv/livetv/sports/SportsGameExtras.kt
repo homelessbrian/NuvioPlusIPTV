@@ -103,6 +103,37 @@ internal fun gameExtrasPanels(
     return out.take(3)
 }
 
+/**
+ * Every panel this game has, as the game page's tabs (name and panel), most useful first. The
+ * same panels as [gameExtrasPanels] with none left out; the Table tab's OK is the page's own.
+ */
+@Composable
+internal fun gameExtrasTabs(ev: SportsEvent, x: GameExtras?, settings: SportsSettings): List<Pair<String, ExtrasPanel>> {
+    if (x == null) return emptyList()
+    val sport = SportsCatalog.league(ev.leagueId)?.sport ?: Sport.OTHER
+    val sides = ev.ordered(sport)
+    val awayColor = teamColor(ev.away, Color(0xFF5B8DEF))
+    val homeColor = teamColor(ev.home, Color(0xFFE5484D))
+    val us = SportsCatalog.regionOf(settings) == "US"
+    val form = if (x.form.isNotEmpty() || x.meetings.isNotEmpty())
+        (if (x.meetings.isNotEmpty()) "Head to Head" else "Form") to ExtrasPanel("form") { FormPanel(x) } else null
+    val info = if (x.hasMatchInfo || (x.hasOdds && !settings.hideScores))
+        "Match Info" to ExtrasPanel("info") { InfoPanel(ev, x, us, showOdds = !settings.hideScores, awayColor, homeColor) } else null
+    val table = if (x.table.isNotEmpty()) "Table" to ExtrasPanel("table") { TablePanel(x, opens = true) } else null
+    if (ev.state == GameState.PRE || settings.hideScores) {
+        // Before it starts (or with scores hidden: nothing that gives the result away).
+        return listOfNotNull(form, table, info)
+    }
+    val out = ArrayList<Pair<String, ExtrasPanel>>()
+    if (x.stats.isNotEmpty()) out += "Stats" to ExtrasPanel("stats") { StatsPanel(x, sides, awayColor, homeColor) }
+    if (x.lineups.isNotEmpty()) out += "Line-ups" to ExtrasPanel("lineups") { LineupsPanel(x) }
+    if (x.performers.isNotEmpty()) out += "Top Players" to ExtrasPanel("leaders") { LeadersPanel(x, ev, awayColor, homeColor) }
+    listOfNotNull(table).forEach { out += it }
+    if (x.winHistory.size >= 2 || x.hasOdds) out += "Win Chance" to ExtrasPanel("chance") { ChancePanel(ev, x, awayColor, homeColor) }
+    listOfNotNull(info, form).forEach { out += it }
+    return out
+}
+
 private fun teamColor(side: Side?, fallback: Color): Color =
     side?.team?.takeIf { it.color != null || it.altColor != null }?.let { bandColor(teamColor(it)) }?.takeIf { it.alpha > 0f } ?: fallback
 

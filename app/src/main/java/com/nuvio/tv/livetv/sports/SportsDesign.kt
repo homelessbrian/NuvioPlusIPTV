@@ -552,7 +552,7 @@ internal fun UpcomingRow(
             .fillMaxWidth()
             .height(50.dp)
             .sportsFrame(focused, false, accent, radius = 12.dp)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { focused = it.isFocused; if (it.isFocused) GameFocus.onGame?.invoke(ev) }
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -838,16 +838,19 @@ internal fun SportsChannelRow(
     use24h: Boolean = false,
     /** The same channel's other copies folded into this row (ESPN HD, ESPN SD): kept as backups. */
     copies: List<ChannelMatch> = emptyList(),
+    /** What the channel's guide says (on now, later, something else on): a coloured line of its own. */
+    guide: GuideLine? = null,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
     val accent = NuvioTheme.colors.Secondary
     val ink = Color.White
     val sub = SportsLook.Dim
+    val withGuide = guide != null && !finished
     Box(
         modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(if (withGuide) 66.dp else 56.dp)
             .sportsFrame(focused, false, accent, radius = 12.dp)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
@@ -883,11 +886,16 @@ internal fun SportsChannelRow(
                     if (p != null && eventStartMs != null && kotlin.math.abs(p.startMs - eventStartMs) > 20 * 60_000L)
                         "Airs ${com.nuvio.tv.livetv.ui.formatClock(p.startMs, use24h)} · $base" else base
                 }
-                LiveText(line, color = sub, size = 10.sp, maxLines = 1)
+                if (withGuide && guide != null) {
+                    GuideLineText(guide, modifier = Modifier.padding(vertical = 1.dp))
+                    LiveText(if (focused && !m.sure) line else guide.detail ?: line, color = sub, size = 10.sp, maxLines = 1)
+                } else LiveText(line, color = sub, size = 10.sp, maxLines = 1)
             }
             Spacer(Modifier.width(8.dp))
             when {
                 playing -> SportsBadge("▶ PLAYING", accent, NuvioTheme.colors.OnSecondary)
+                // The guide line already says whether it's on: the badge only flags a guess.
+                m.sure && withGuide -> Unit
                 m.sure -> SportsBadge("SHOWING IT", accent, NuvioTheme.colors.OnSecondary)
                 else -> LiveText(
                     "MAYBE",

@@ -71,11 +71,11 @@ import java.util.Locale
 /** What the Tables page opens on: a league (null: the first of yours) and teams to mark. */
 data class TableRequest(val leagueId: String?, val mark: Set<String> = emptySet())
 
-private val POS_W = 34.dp
+internal val POS_W = 34.dp
 private val FORM_W = 70.dp
 
 /** A column's width: small counts narrow, so the team names have room. */
-private fun cellWidth(key: String) = when (key) {
+internal fun cellWidth(key: String) = when (key) {
     "gamesPlayed", "wins", "ties", "losses", "otLosses" -> 28.dp
     "pointDifferential", "points", "gamesBehind" -> 38.dp
     "winPercent", "conf" -> 44.dp
@@ -445,7 +445,7 @@ private fun TableView(
 
 /** One team's line: place (and how it moved), its colour edge, logo and name, the numbers, form. */
 @Composable
-private fun StandingsLine(
+internal fun StandingsLine(
     table: Standings,
     columns: List<StandingsColumn>,
     row: StandingsRow,
@@ -455,7 +455,10 @@ private fun StandingsLine(
     showForm: Boolean,
     modifier: Modifier,
     onFocus: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    /** False: shown only (the Sports page's small table beside the games), never highlighted. */
+    selectable: Boolean = true,
+    height: androidx.compose.ui.unit.Dp = 32.dp
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
@@ -467,7 +470,7 @@ private fun StandingsLine(
     Row(
         modifier
             .fillMaxWidth()
-            .height(32.dp)
+            .height(height)
             .clip(shape)
             .background(SportsLook.Card)
             .background(
@@ -488,8 +491,12 @@ private fun StandingsLine(
                 },
                 shape
             )
-            .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocus() }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
+            .then(
+                if (selectable) Modifier
+                    .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocus() }
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+                else Modifier
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // The zone's colour down the left edge (Champions League, relegation…), or the division leader's.
