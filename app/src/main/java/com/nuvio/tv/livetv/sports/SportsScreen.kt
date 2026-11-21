@@ -187,6 +187,21 @@ fun SportsScreen(
     val loading by viewModel.loading.collectAsStateWithLifecycle()
     val matching by viewModel.matching.collectAsStateWithLifecycle()
     val problem by viewModel.problem.collectAsStateWithLifecycle()
+    val extrasBusy by viewModel.extrasBusy.collectAsStateWithLifecycle()
+    val updatedAt by viewModel.updatedAt.collectAsStateWithLifecycle()
+    // Scores refresh quietly, but a refresh that takes a moment (after the app starts, or a slow
+    // connection) says so, and scores that have not been updated for a while say how old they are.
+    val busy = loading || extrasBusy
+    var showBusy by remember { mutableStateOf(false) }
+    LaunchedEffect(busy) {
+        if (busy) { delay(1_200); showBusy = true } else showBusy = false
+    }
+    val updateNote: String? = when {
+        showBusy -> "Updating scores…"
+        updatedAt <= 0L -> "Showing saved scores"
+        now - updatedAt > 10 * 60_000L -> "Scores updated " + SportsStale.ageText(now - updatedAt) + " ago"
+        else -> null
+    }
     val hasChannels by viewModel.hasChannels.collectAsStateWithLifecycle()
     val playingKey by viewModel.playingKey.collectAsStateWithLifecycle()
     val backdrop by viewModel.backdrop.collectAsStateWithLifecycle()
@@ -464,6 +479,8 @@ fun SportsScreen(
                 loading = loading,
                 matching = matching,
                 problem = problem,
+                updateNote = updateNote,
+                updateBusy = showBusy,
                 hasChannels = hasChannels,
                 videoOn = videoOn,
                 playingKey = playingKey,
@@ -610,6 +627,8 @@ private fun SportsHub(
     loading: Boolean,
     matching: Boolean,
     problem: String?,
+    updateNote: String?,
+    updateBusy: Boolean,
     hasChannels: Boolean,
     videoOn: Boolean,
     playingKey: String?,
@@ -759,6 +778,19 @@ private fun SportsHub(
                 com.nuvio.tv.livetv.ui.LoadingSpinner()
                 Spacer(Modifier.width(8.dp))
                 LiveText("Finding channels for today's games…", color = SportsLook.Dim, size = 11.sp, weight = FontWeight.Bold)
+            }
+        }
+        // Not while channels are being searched for (that line is in the same corner).
+        if (!matching && updateNote != null) {
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(end = 32.dp, top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (updateBusy) {
+                    com.nuvio.tv.livetv.ui.LoadingSpinner()
+                    Spacer(Modifier.width(8.dp))
+                }
+                LiveText(updateNote, color = SportsLook.Dim, size = 11.sp, weight = FontWeight.Bold)
             }
         }
         status?.let {

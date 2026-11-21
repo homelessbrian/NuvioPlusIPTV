@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -264,7 +265,8 @@ class SportsRepository @Inject constructor(
             return false
         }
         timedCopies = copies
-        (espn + (fixtures + guide.filterNot { it.id in replacedGuide }).filterNot(::coveredByEspn) + tsdb).distinctBy { it.id }
+        // A game the feed last saw live that started long ago is over, whatever the saved copy says.
+        SportsStale.fixAll((espn + (fixtures + guide.filterNot { it.id in replacedGuide }).filterNot(::coveredByEspn) + tsdb).distinctBy { it.id }, now)
     }.flowOn(Dispatchers.Default).stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /**
@@ -292,16 +294,24 @@ class SportsRepository @Inject constructor(
      * Everything we know, for My Teams: the page's days plus your teams' whole seasons and the
      * non-league seasons. A game in both counts once (the fresher copy, from the page's days).
      */
+    /** Moves on every minute, so games that are over by the clock stop showing as live without new data. */
+    private val minuteTick: StateFlow<Long> = flow { while (true) { emit(System.currentTimeMillis() / 60_000L); delay(60_000L) } }
+        .stateIn(scope, SharingStarted.Eagerly, System.currentTimeMillis() / 60_000L)
+
     val known: StateFlow<List<SportsEvent>> = combine(
         combine(events, scheduleData, tsdbData, aheadData, lookedUp) { ev, s, t, a, lu ->
             val seen = HashSet<String>(ev.size * 2)
             ev.forEach { seen += dedupeKey(it) }
             val extra = (a.values.flatMap { it.events } + s.values.flatMap { it.events } + t.values.flatMap { it.events } + lu.values.flatMap { it.events })
                 .filter { seen.add(dedupeKey(it)) }
-            ev + extra
+            // Saved schedules can be days old: a game they still call live is over, and one they
+            // still call upcoming that started hours ago is left out (the scoreboard, in `ev`,
+            // has the real result for recent days).
+            ev + SportsStale.fixSaved(extra, System.currentTimeMillis())
         },
-        TeamColors.version
-    ) { all, _ ->
+        TeamColors.version,
+        minuteTick
+    ) { all, _, _ ->
         // Games further ahead come from team schedules and season files, which often have no
         // colours: the same ones as the page's own days and the rest of the app.
         TeamColors.learnAll(all)
@@ -618,6 +628,9 @@ class SportsRepository @Inject constructor(
     private val _problem = MutableStateFlow<String?>(null)
     /** Something went wrong getting scores (shown quietly on the page). */
     val problem: StateFlow<String?> = _problem.asStateFlow()
+    /** The slower background work (the week ahead, team schedules, past days) is running: Sports shows an "Updating" note while it is. */
+    private val _extrasBusy = MutableStateFlow(false)
+    val extrasBusy: StateFlow<Boolean> = _extrasBusy.asStateFlow()
     private val _updatedAt = MutableStateFlow(0L)
     val updatedAt: StateFlow<Long> = _updatedAt.asStateFlow()
 
@@ -787,6 +800,8 @@ class SportsRepository @Inject constructor(
             // Week, past, and non-league requests can take minutes. Keep the live-score
             // round on its own clock even while those requests are still in progress.
             if (active && !com.nuvio.tv.livetv.data.BackgroundWork.onDemandPlaying.value && extrasJob?.isActive != true) extrasJob = scope.launch {
+                _extrasBusy.value = true
+                try {
                 val force = forceExtras.also { forceExtras = false }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
                 sportsCatching { updateWeek(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Sports week update failed", it) }
@@ -813,6 +828,7 @@ class SportsRepository @Inject constructor(
                     lastFixtures = System.currentTimeMillis()
                     sportsCatching { updateFixtures() }
                 }
+                } finally { _extrasBusy.value = false }
             }
             val wait = if (viewers.value > 0) 10_000L else 30_000L
             lastKick = kick.value
@@ -1334,7 +1350,8 @@ class SportsRepository @Inject constructor(
             val l = SportsCatalog.league(t.leagueId) ?: continue
             val path = l.espnPath ?: continue
             val cur = scheduleData.value[t.key]
-            if (cur != null && now - cur.fetchedAt < (if (force) HOUR else 6 * HOUR)) continue
+            // A saved schedule that still holds a game gone stale (live for days, or never started) is fetched again now.
+            if (cur != null && now - cur.fetchedAt < (if (force) HOUR else 6 * HOUR) && cur.events.none { SportsStale.isStale(it, now) }) continue
             val raws = ArrayList<Pair<League, String>>()
             sportsCatching { feeds.teamScheduleRaw(path, t.teamId, fixtures = false) }.getOrNull()?.let { raws += l to it }
             if (path.startsWith("soccer/") || l.national) {
