@@ -180,8 +180,13 @@ class HomeLiveRows @Inject constructor(
         if (list.isEmpty()) return@combine emptyMap()
         val wanted = list.filter { it.kind == HomeLiveRow.KIND_CHANNELS }.mapTo(HashSet()) { it.source }
         val found = HashMap<String, String>()
+        // The playlist each group comes from ("UK: Entertainment - HBStrong").
+        val playlistOf = HashMap<String, String>()
         if (wanted.isNotEmpty()) for (c in channels) {
-            if (c.groupId in wanted && c.groupId !in found) found[c.groupId] = c.group
+            if (c.groupId in wanted && c.groupId !in found) {
+                found[c.groupId] = c.group
+                c.sourceName.takeIf { it.isNotBlank() }?.let { playlistOf[c.groupId] = it }
+            }
         }
         val ctx = context.withAppLocale()
         list.associate { row ->
@@ -199,7 +204,10 @@ class HomeLiveRows @Inject constructor(
                         ChannelGroup.FAVORITES -> ctx.getString(R.string.home_rows_favorites_title)
                         ChannelGroup.RECENT -> ctx.getString(R.string.home_rows_recent_title)
                         else -> custom.firstOrNull { it.id == row.source }?.name
-                            ?: renamed[row.source] ?: found[row.source]
+                            ?: (renamed[row.source]?.takeIf { it.isNotBlank() } ?: found[row.source])
+                                // A playlist group: with the playlist's name, so the same group from two
+                                // playlists (or a group you'd only know by its playlist) is clear.
+                                ?.let { name -> playlistOf[row.source]?.let { "$name - $it" } ?: name }
                             ?: row.source.substringAfter("::").ifBlank { ctx.getString(R.string.home_rows_channels_title) }
                     }
                 }
