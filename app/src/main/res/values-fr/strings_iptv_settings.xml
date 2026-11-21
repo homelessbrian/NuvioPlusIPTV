@@ -704,4 +704,7 @@
     <string name="iptv_settings_hide_non_english_titles">"Masquer les titres non anglais"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Masque les films et séries tournés dans une autre langue (vérifié avec TMDB et les groupes et étiquettes de langue de votre fournisseur). Les titres masqués ne sont jamais chargés ni recherchés."</string>
     <string name="iptv_settings_number_of_channels">"Nombre de chaînes"</string>
+    <string name="iptv_settings_lock_playlist_logins">"Verrouiller les identifiants des playlists"</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"Modifier les playlists et les guides, et créer des sauvegardes, demande le code PIN. Les mots de passe s\'affichent en points."</string>
+    <string name="iptv_settings_enter_pin_for_logins">"Saisissez votre code PIN pour voir les identifiants des playlists"</string>
 </resources>

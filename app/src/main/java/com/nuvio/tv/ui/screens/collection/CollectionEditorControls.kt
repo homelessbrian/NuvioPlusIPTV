@@ -99,7 +99,9 @@ fun NuvioTextField(
     placeholder: String = "",
     focusRequester: FocusRequester? = null,
     /** Optional URL prefix outside the editable value; an empty string keeps the same input layout. */
-    prefixText: String? = null
+    prefixText: String? = null,
+    /** Show the text as dots (passwords). */
+    secret: Boolean = false
 ) {
     var isEditing by remember { mutableStateOf(false) }
     val textFieldFocusRequester = remember { FocusRequester() }
@@ -147,6 +149,8 @@ fun NuvioTextField(
                         }
                     },
                 singleLine = true,
+                visualTransformation = if (secret) androidx.compose.ui.text.input.PasswordVisualTransformation()
+                    else androidx.compose.ui.text.input.VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(
                     onDone = {

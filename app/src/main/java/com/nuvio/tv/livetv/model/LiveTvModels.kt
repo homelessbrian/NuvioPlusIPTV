@@ -502,6 +502,8 @@ data class LiveTvSettings(
     val parentalPin: String = "",
     /** With a PIN set, lock adult groups and categories automatically. */
     val lockAdultContent: Boolean = true,
+    /** With a PIN set, playlist logins and backups need the PIN. Off by default. */
+    val lockLogins: Boolean = false,
     /** Small 4K / FHD / HD / SD badges next to channels you've watched. */
     val showQualityBadges: Boolean = true,
     /** The frame rate ("50 FPS") next to the picture size on the info bar. */

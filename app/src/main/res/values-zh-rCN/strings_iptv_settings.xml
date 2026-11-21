@@ -704,4 +704,7 @@
     <string name="iptv_settings_hide_non_english_titles">"隐藏非英语影片"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"不显示以其他语言制作的电影和剧集（通过 TMDB 以及提供商自己的语言分组和标签判断）。隐藏的影片不会被加载或查找。"</string>
     <string name="iptv_settings_number_of_channels">"频道数量"</string>
+    <string name="iptv_settings_lock_playlist_logins">"锁定播放列表登录信息"</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"编辑播放列表和节目指南以及创建备份时需要输入 PIN。密码以圆点显示。"</string>
+    <string name="iptv_settings_enter_pin_for_logins">"输入 PIN 以查看播放列表登录信息"</string>
 </resources>

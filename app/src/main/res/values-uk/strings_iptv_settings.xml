@@ -704,4 +704,7 @@
     <string name="iptv_settings_hide_non_english_titles">"Приховати неангломовні фільми"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Приховує фільми й серіали, зняті іншою мовою (перевірка за TMDB і за мовними групами та мітками провайдера). Приховані фільми ніколи не завантажуються і не шукаються."</string>
     <string name="iptv_settings_number_of_channels">"Кількість каналів"</string>
+    <string name="iptv_settings_lock_playlist_logins">"Блокувати дані входу плейлистів"</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"Для редагування плейлистів і телегідів, а також для створення резервних копій потрібен PIN-код. Паролі показуються крапками."</string>
+    <string name="iptv_settings_enter_pin_for_logins">"Введіть PIN-код, щоб побачити дані входу плейлистів"</string>
 </resources>

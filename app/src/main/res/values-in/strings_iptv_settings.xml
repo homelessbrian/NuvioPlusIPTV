@@ -704,4 +704,7 @@
     <string name="iptv_settings_hide_non_english_titles">"Sembunyikan judul non-Inggris"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Menyembunyikan film dan serial yang dibuat dalam bahasa lain (dicek dengan TMDB serta grup dan label bahasa dari penyedia Anda). Judul yang disembunyikan tidak pernah dimuat atau dicari."</string>
     <string name="iptv_settings_number_of_channels">"Jumlah saluran"</string>
+    <string name="iptv_settings_lock_playlist_logins">"Kunci Info Login Playlist"</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"Mengedit playlist dan panduan, serta membuat cadangan, memerlukan PIN. Kata sandi ditampilkan sebagai titik."</string>
+    <string name="iptv_settings_enter_pin_for_logins">"Masukkan PIN untuk melihat info login playlist"</string>
 </resources>

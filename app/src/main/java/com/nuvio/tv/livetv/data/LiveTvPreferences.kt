@@ -132,6 +132,7 @@ class LiveTvPreferences @Inject constructor(
         val catchupShift = intPreferencesKey("catchup_shift_minutes")
         val parentalPin = stringPreferencesKey("parental_pin")
         val lockAdultContent = booleanPreferencesKey("lock_adult_content")
+        val lockLogins = booleanPreferencesKey("lock_logins")
         val showQualityBadges = booleanPreferencesKey("show_quality_badges")
         val showFrameRate = booleanPreferencesKey("show_frame_rate")
         val matchFrameRate = booleanPreferencesKey("match_frame_rate")
@@ -626,6 +627,7 @@ class LiveTvPreferences @Inject constructor(
             catchupShiftMinutes = p[Keys.catchupShift] ?: d.catchupShiftMinutes,
             parentalPin = p[Keys.parentalPin] ?: d.parentalPin,
             lockAdultContent = p[Keys.lockAdultContent] ?: d.lockAdultContent,
+            lockLogins = p[Keys.lockLogins] ?: d.lockLogins,
             showQualityBadges = p[Keys.showQualityBadges] ?: d.showQualityBadges,
             showFrameRate = p[Keys.showFrameRate] ?: d.showFrameRate,
             // Before the three choices it was on or off; on worked like "On start/stop".
@@ -964,6 +966,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.catchupShift] = s.catchupShiftMinutes
         p[Keys.parentalPin] = s.parentalPin
         p[Keys.lockAdultContent] = s.lockAdultContent
+        p[Keys.lockLogins] = s.lockLogins
         p[Keys.showQualityBadges] = s.showQualityBadges
         p[Keys.showFrameRate] = s.showFrameRate
         p[Keys.frameRateMode] = s.frameRateMode

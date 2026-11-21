@@ -704,4 +704,7 @@
     <string name="iptv_settings_hide_non_english_titles">"İngilizce olmayan yapımları gizle"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Başka bir dilde çekilmiş filmleri ve dizileri gizler (TMDB ile ve sağlayıcınızın dil grupları ve etiketleriyle kontrol edilir). Gizlenen yapımlar hiçbir zaman yüklenmez veya aranmaz."</string>
     <string name="iptv_settings_number_of_channels">"Kanal sayısı"</string>
+    <string name="iptv_settings_lock_playlist_logins">"Oynatma listesi giriş bilgilerini kilitle"</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"Oynatma listelerini ve rehberleri düzenlemek ve yedek almak için PIN gerekir. Şifreler nokta olarak gösterilir."</string>
+    <string name="iptv_settings_enter_pin_for_logins">"Giriş bilgilerini görmek için PIN\'inizi girin"</string>
 </resources>

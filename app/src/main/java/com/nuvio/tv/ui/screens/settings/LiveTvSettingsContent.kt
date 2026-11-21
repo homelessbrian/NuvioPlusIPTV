@@ -238,6 +238,8 @@ private sealed interface LiveDialog {
     data object PinCheck : LiveDialog
     data object PinNew : LiveDialog
     data object PinRemove : LiveDialog
+    /** The PIN before playlist logins are shown or handed out; [then] runs once it's right. */
+    data class LoginPin(val then: () -> Unit) : LiveDialog
     data object Reminders : LiveDialog
     data object StartPage : LiveDialog
     data object NameEditor : LiveDialog
@@ -382,6 +384,10 @@ internal fun LiveTvSettingsContent(
         dialog = LiveDialog.Confirm(title, message, label, action)
     }
     val hasPin = s.parentalPin.length >= 4
+    /** Runs [go] now, or after the PIN when playlist logins are locked. */
+    fun withLogins(go: () -> Unit) {
+        if (com.nuvio.tv.livetv.parental.ParentalControls.loginsLocked(s)) { pinWrong = false; dialog = LiveDialog.LoginPin(go) } else go()
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -510,16 +516,18 @@ internal fun LiveTvSettingsContent(
                     SettingsActionRow(
                         context.getString(R.string.iptv_backup_with_phone),
                         context.getString(R.string.iptv_backup_with_phone_description),
-                        onClick = { dialog = LiveDialog.BackupPhone }
+                        onClick = { withLogins { dialog = LiveDialog.BackupPhone } }
                     )
                     SettingsActionRow(
                         context.getString(R.string.iptv_backup_save_on_tv),
                         context.getString(R.string.iptv_backup_save_on_tv_description),
                         onClick = {
-                            backupMessage = context.getString(R.string.iptv_backup_saving)
-                            viewModel.saveBackupOnTv { where ->
-                                backupMessage = if (where != null) context.getString(R.string.iptv_backup_saved_to, where)
-                                    else context.getString(R.string.iptv_backup_save_failed)
+                            withLogins {
+                                backupMessage = context.getString(R.string.iptv_backup_saving)
+                                viewModel.saveBackupOnTv { where ->
+                                    backupMessage = if (where != null) context.getString(R.string.iptv_backup_saved_to, where)
+                                        else context.getString(R.string.iptv_backup_save_failed)
+                                }
                             }
                         }
                     )
@@ -1652,6 +1660,16 @@ internal fun LiveTvSettingsContent(
                             s.lockAdultContent,
                             { update { it.copy(lockAdultContent = !it.lockAdultContent) } }
                         )
+                        // Turning it on is free; turning it off needs the PIN (unless already entered).
+                        SettingsToggleRow(
+                            context.getString(R.string.iptv_settings_lock_playlist_logins),
+                            context.getString(R.string.iptv_settings_lock_playlist_logins_description),
+                            s.lockLogins,
+                            {
+                                if (!s.lockLogins) update { it.copy(lockLogins = true) }
+                                else withLogins { update { it.copy(lockLogins = false) } }
+                            }
+                        )
                         SettingsActionRow(
                             context.getString(R.string.iptv_settings_turn_off_parental_controls), context.getString(R.string.iptv_settings_removes_the_pin_your_locked_groups_are_remembered),
                             context.getString(R.string.iptv_settings_1_s_locked, user.lockedGroups.size),
@@ -1864,7 +1882,7 @@ internal fun LiveTvSettingsContent(
                 context.getString(R.string.iptv_settings_account_details, parts.joinToString(" · "))
             },
             actions = listOfNotNull(
-                context.getString(R.string.iptv_settings_edit) to { dialog = LiveDialog.EditPlaylist(d.source) },
+                context.getString(R.string.iptv_settings_edit) to { withLogins { dialog = LiveDialog.EditPlaylist(d.source) } },
                 context.getString(R.string.iptv_settings_update_now) to { viewModel.updatePlaylistNow(d.source); close() },
                 (if (d.source.enabled) context.getString(R.string.iptv_settings_disable) else context.getString(R.string.iptv_settings_enable)) to { viewModel.setPlaylistEnabled(d.source.id, !d.source.enabled); close() },
                 context.getString(R.string.iptv_settings_delete_playlist) to { dialog = LiveDialog.ConfirmDeletePlaylist(d.source) },
@@ -1929,7 +1947,7 @@ internal fun LiveTvSettingsContent(
         is LiveDialog.EditPlaylist -> {
             val src = d.source
             if (src.isStalker) {
-                StalkerSourceDialog(src, onDismiss = close, onSave = { name, config, guide, vod, live, _ ->
+                StalkerSourceDialog(src, hidePassword = com.nuvio.tv.livetv.parental.ParentalControls.hideLogins(s), onDismiss = close, onSave = { name, config, guide, vod, live, _ ->
                     viewModel.savePlaylist(src.copy(name = name, sourceType = "stalker", stalkerConfig = config,
                         useEmbeddedEpg = guide, importVod = vod, importLive = live))
                     close()
@@ -1941,7 +1959,7 @@ internal fun LiveTvSettingsContent(
                         FormField(context.getString(R.string.iptv_settings_name), "", src.name),
                         FormField(context.getString(R.string.iptv_settings_server), "", src.xtreamServer, defaultHttp = true),
                         FormField(context.getString(R.string.iptv_settings_username), "", src.xtreamUsername),
-                        FormField(context.getString(R.string.iptv_settings_password), "", src.xtreamPassword),
+                        FormField(context.getString(R.string.iptv_settings_password), "", src.xtreamPassword, secret = com.nuvio.tv.livetv.parental.ParentalControls.hideLogins(s)),
                         FormField(context.getString(R.string.iptv_settings_user_agent_optional), "", src.userAgent)
                     ),
                     toggle = context.getString(R.string.iptv_settings_load_built_in_guide) to src.useEmbeddedEpg,
@@ -1982,7 +2000,7 @@ internal fun LiveTvSettingsContent(
         is LiveDialog.EpgActions -> ActionListDialog(
             title = d.source.name,
             actions = listOf(
-                context.getString(R.string.iptv_settings_edit) to { dialog = LiveDialog.EditEpg(d.source) },
+                context.getString(R.string.iptv_settings_edit) to { withLogins { dialog = LiveDialog.EditEpg(d.source) } },
                 context.getString(R.string.iptv_settings_update_now) to { viewModel.saveEpg(d.source); close() },
                 (context.getString(R.string.iptv_settings_time_shift_value, offsetLabel(context, d.source.shiftMinutes))) to { dialog = LiveDialog.EpgSourceShift(d.source) },
                 (if (d.source.enabled) context.getString(R.string.iptv_settings_disable) else context.getString(R.string.iptv_settings_enable)) to { viewModel.setEpgEnabled(d.source.id, !d.source.enabled); close() },
@@ -2010,6 +2028,15 @@ internal fun LiveTvSettingsContent(
             initial = "", hint = "PIN", confirmLabel = context.getString(R.string.iptv_settings_turn_off), numeric = true,
             onDismiss = close,
             onConfirm = { if (it.trim() == s.parentalPin) { update { st -> st.copy(parentalPin = "") }; close() } else pinWrong = true }
+        )
+        is LiveDialog.LoginPin -> TextInputDialog(
+            title = if (pinWrong) context.getString(R.string.iptv_settings_wrong_pin_try_again) else context.getString(R.string.iptv_settings_enter_pin_for_logins),
+            initial = "", hint = "PIN", confirmLabel = context.getString(R.string.iptv_settings_next), numeric = true,
+            onDismiss = close,
+            onConfirm = {
+                if (com.nuvio.tv.livetv.parental.ParentalControls.unlockLogins(it, s)) { pinWrong = false; close(); d.then() }
+                else pinWrong = true
+            }
         )
         LiveDialog.HomeRowSource -> SettingsSingleChoiceDialog(
             title = context.getString(R.string.iptv_settings_channels_in_the_row_2),
@@ -3027,6 +3054,7 @@ private fun PlaylistGuidesDialog(
 @Composable
 private fun StalkerSourceDialog(
     source: PlaylistSource? = null,
+    hidePassword: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (String, com.nuvio.stalker.StalkerConfig, Boolean, Boolean, Boolean, String) -> Unit
 ) {
@@ -3044,7 +3072,7 @@ private fun StalkerSourceDialog(
             FormField(context.getString(R.string.iptv_settings_guide_link_optional), "http://…/epg.xml.gz").takeIf { source == null }
         ) + listOf(
             FormField(context.getString(R.string.iptv_settings_username_optional), "", config?.username.orEmpty()),
-            FormField(context.getString(R.string.iptv_settings_password_optional), "", config?.password.orEmpty()),
+            FormField(context.getString(R.string.iptv_settings_password_optional), "", config?.password.orEmpty(), secret = hidePassword),
             FormField(context.getString(R.string.iptv_settings_serial_number_optional), "", config?.serialNumber.orEmpty()),
             FormField(context.getString(R.string.iptv_settings_device_id_optional), "", config?.deviceId.orEmpty()),
             FormField(context.getString(R.string.iptv_settings_device_id_2_optional), "", config?.deviceId2.orEmpty()),
@@ -3079,7 +3107,9 @@ private data class FormField(
     val label: String,
     val hint: String,
     val initial: String = "",
-    val defaultHttp: Boolean = false
+    val defaultHttp: Boolean = false,
+    /** Shown as dots (passwords, when playlist logins are locked). */
+    val secret: Boolean = false
 )
 
 @Composable
@@ -3137,7 +3167,8 @@ private fun SourceFormDialog(
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = field.hint,
                     prefixText = if (field.defaultHttp) playlistAddressPrefix(values[i].value) else null,
-                    focusRequester = if (i == 0) firstField else null
+                    focusRequester = if (i == 0) firstField else null,
+                    secret = field.secret
                 )
             }
         }
