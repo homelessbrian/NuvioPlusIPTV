@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.QueuePlayNext
 import androidx.compose.material.icons.filled.SmartDisplay
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VideoSettings
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -25,6 +26,8 @@ internal enum class PlaybackSection(
     @param:StringRes val description: Int,
     val icon: ImageVector
 ) {
+    // Live TV fork: checks this TV and suggests settings (own version of Nuvio Arc's device assessment).
+    TV_SETUP(R.string.tv_setup_title, R.string.tv_setup_desc, Icons.Default.Tv),
     PLAYER(R.string.playback_section_player_title, R.string.playback_section_player_title_desc, Icons.Default.SmartDisplay),
     STREAM_SELECTION(R.string.playback_section_stream_selection, R.string.playback_section_stream_selection_desc, Icons.AutoMirrored.Filled.PlaylistPlay),
     UP_NEXT(R.string.playback_section_up_next, R.string.playback_section_up_next_desc, Icons.Default.QueuePlayNext),
