@@ -83,4 +83,5 @@
     <string name="home_rows_shape_portrait_hint">"כרטיסים גבוהים, כמו כרזות של סרטים"</string>
     <string name="home_rows_shape_auto_hint">"כמו שאר השורות במסך הבית"</string>
     <string name="home_rows_shape_recommended">"מומלץ"</string>
+    <string name="home_rows_until">"עד %1$s"</string>
 </resources>

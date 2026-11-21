@@ -83,4 +83,5 @@
     <string name="home_rows_shape_portrait_hint">"Wysokie karty, jak plakaty filmowe"</string>
     <string name="home_rows_shape_auto_hint">"Tak jak pozostałe rzędy ekranu głównego"</string>
     <string name="home_rows_shape_recommended">"Zalecane"</string>
+    <string name="home_rows_until">"Do %1$s"</string>
 </resources>

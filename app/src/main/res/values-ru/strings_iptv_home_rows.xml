@@ -83,4 +83,5 @@
     <string name="home_rows_shape_portrait_hint">"Высокие карточки, как постеры фильмов"</string>
     <string name="home_rows_shape_auto_hint">"Как остальные ряды главного экрана"</string>
     <string name="home_rows_shape_recommended">"Рекомендуется"</string>
+    <string name="home_rows_until">"До %1$s"</string>
 </resources>

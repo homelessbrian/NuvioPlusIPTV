@@ -112,4 +112,5 @@
     <string name="home_rows_shape_portrait_hint">"Tall cards, like movie posters"</string>
     <string name="home_rows_shape_auto_hint">"Matches the rest of your Home rows"</string>
     <string name="home_rows_shape_recommended">"Recommended"</string>
+    <string name="home_rows_until">"Until %1$s"</string>
 </resources>

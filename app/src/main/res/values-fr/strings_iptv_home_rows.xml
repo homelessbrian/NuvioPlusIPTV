@@ -83,4 +83,5 @@
     <string name="home_rows_shape_portrait_hint">"Cartes hautes, comme des affiches de films"</string>
     <string name="home_rows_shape_auto_hint">"Comme les autres rangées de votre accueil"</string>
     <string name="home_rows_shape_recommended">"Recommandé"</string>
+    <string name="home_rows_until">"Jusqu\'à %1$s"</string>
 </resources>

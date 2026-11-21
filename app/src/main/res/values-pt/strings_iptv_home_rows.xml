@@ -83,4 +83,5 @@
     <string name="home_rows_shape_portrait_hint">"Cartões altos, como cartazes de filmes"</string>
     <string name="home_rows_shape_auto_hint">"Igual às restantes filas do início"</string>
     <string name="home_rows_shape_recommended">"Recomendado"</string>
+    <string name="home_rows_until">"Até às %1$s"</string>
 </resources>

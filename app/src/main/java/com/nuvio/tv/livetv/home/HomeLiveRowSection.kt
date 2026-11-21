@@ -273,6 +273,24 @@ private fun ChannelCard(
     var focused by remember { mutableStateOf(false) }
     val p = entry.now
     val bg = if (focused) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard
+    // The same card as the launcher rows: the channel's logo on its own colour, the show's name,
+    // its episode, and until when it's on (or what's next). Drawn once per show and kept; no
+    // LIVE tag (everything in this row is live). The old card shows until the picture is ready.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val line = when {
+        showNext && entry.next != null -> stringResource(R.string.home_rows_next, formatClock(entry.next.startMs, use24h), entry.next.title)
+        p != null -> stringResource(R.string.home_rows_until, formatClock(p.stopMs, use24h))
+        else -> null
+    }
+    val spec = remember(entry.channel.key, entry.channel.logo, entry.channel.name, p?.title, p?.startMs, line) {
+        val text = p?.let { LauncherText.forShow(it, entry.channel.name) }
+        if (p == null || text == null) CardSpec.Channel(entry.channel.logo, entry.channel.name, emptyList())
+        else CardSpec.Show(entry.channel.logo, entry.channel.name, text.title, text.detail, line, emptyList())
+    }
+    val shape = if (landscape) CardShape.WIDE else CardShape.TALL
+    val picture by androidx.compose.runtime.produceState<android.net.Uri?>(null, spec.signature(), shape) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { LauncherImages.cardUri(context, spec, shape) }
+    }
     Box(
         modifier = Modifier
             .width(width)
@@ -285,6 +303,21 @@ private fun ChannelCard(
                 onClick = onClick
             )
     ) {
+        val drawn = picture
+        if (drawn != null) {
+            AsyncImage(
+                model = drawn,
+                contentDescription = p?.title ?: entry.channel.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            if (playing) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp).size(8.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape).background(NuvioTheme.colors.Error)
+                )
+            }
+        } else
         Column(Modifier.fillMaxSize()) {
             // The channel's logo on a soft light spot (dark logos still show), its name when it has none.
             Box(
@@ -317,7 +350,8 @@ private fun ChannelCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(if (landscape) 0.42f else 0.5f)
-                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 8.dp),
+                    // Clear of the progress line along the bottom (it cut off "Next…").
+                    .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 LiveText(
