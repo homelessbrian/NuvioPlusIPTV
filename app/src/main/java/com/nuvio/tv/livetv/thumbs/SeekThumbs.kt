@@ -103,6 +103,8 @@ object SeekThumbs {
     private const val APP_HEADROOM_BYTES = 24L * MB
     private const val SEEK_ACTIVE_MS = 8_000L
     private const val FOUR_K = "4k|"
+    /** Every COARSE-th picture is made first, so the whole bar soon has pictures to show. */
+    private const val COARSE = 6
 
     /** Goes up whenever a picture is ready, so the preview redraws. */
     private val _version = MutableStateFlow(0)
@@ -155,7 +157,8 @@ object SeekThumbs {
                 setMessage(owner, MSG_4K_OFF)
                 return
             }
-            playingFormats[owner]?.let { (mime, w, h) ->
+            // The fast reader decodes on the CPU, so it never takes the playing video's decoder.
+            if (!NativeThumbs.available) playingFormats[owner]?.let { (mime, w, h) ->
                 if (!SeekThumbDecoders.safe(mime, w, h)) {
                     sessions.remove(owner)?.stop()
                     setMessage(owner, MSG_ONE_DECODER)
@@ -297,6 +300,11 @@ object SeekThumbs {
         @Volatile private var target = -1
         @Volatile private var lastSeekAt = 0L
         private var retriever: MediaMetadataRetriever? = null
+        /** The fast reader (NativeThumbs); dropped for Android's reader if it can't read this video. */
+        @Volatile private var native: NativeThumbs.Reader? = null
+        private var nativeOff = !NativeThumbs.available
+        private var nativeMade = 0
+        private var nativeMisses = 0
         private var made = 0
         private var misses = 0
         private var failures = 0
@@ -312,6 +320,7 @@ object SeekThumbs {
 
         fun stop() {
             alive = false
+            native?.abort()
             synchronized(lock) { lock.notifyAll() }
         }
 
@@ -335,9 +344,13 @@ object SeekThumbs {
             memory.get(memKey(i))?.let { return it }
             if (state[i] == 1.toByte()) load(i)
             // A neighbour that's already in memory, while this one loads or is made.
-            for (d in 1..2) {
+            for (d in 1..4) {
                 memory.get(memKey(i - d))?.let { return it }
                 memory.get(memKey(i + d))?.let { return it }
+                if (d <= 2) {
+                    if (i - d >= 0 && state[i - d] == 1.toByte()) load(i - d)
+                    if (i + d < count && state[i + d] == 1.toByte()) load(i + d)
+                }
             }
             return null
         }
@@ -378,7 +391,8 @@ object SeekThumbs {
                     is Source.Hls -> "streamed link"
                     is Source.Buffer -> "rewind buffer"
                 }
-                LiveTvLoadReport.add("Seek thumbnails: on for this $kind (one every ${intervalMs / 1000} s, $saved of $count already saved, ${mode.label.lowercase()})")
+                val reader = if (NativeThumbs.available) "fast reader" else "Android's reader (${NativeThumbs.problem})"
+                LiveTvLoadReport.add("Seek thumbnails: on for this $kind (one every ${intervalMs / 1000} s, $saved of $count already saved, ${mode.label.lowercase()}, $reader)")
                 if (saved > 0) setMessage(owner, MSG_MAKING)
                 while (alive) {
                     val next = pick()
@@ -396,6 +410,9 @@ object SeekThumbs {
                 val r = retriever
                 retriever = null
                 runCatching { r?.release() }
+                val n = native
+                native = null
+                runCatching { n?.close() }
                 if (made > 0) runCatching { trim(context, dir) }
             }
         }
@@ -424,8 +441,16 @@ object SeekThumbs {
                 for (i in 0 until count) if (state[i] == 0.toByte()) return i
                 return -1
             }
-            // Outwards from where you are (or were seeking), nearer first.
+            // Outwards from where you are (or were seeking), nearer first: first one in every
+            // COARSE (so the whole bar soon has something near), then the rest.
             val from = if (seeking() && t >= 0) t else index(p.positionMs())
+            for (d in 0 until count) {
+                val a = from + d
+                val b = from - d
+                if (a < count && a % COARSE == 0 && state[a] == 0.toByte()) return a
+                if (d > 0 && b >= 0 && b % COARSE == 0 && state[b] == 0.toByte()) return b
+                if (a >= count && b < 0) break
+            }
             for (d in 0 until count) {
                 val a = from + d
                 val b = from - d
@@ -536,6 +561,40 @@ object SeekThumbs {
             }
 
         private fun remoteFrame(s: Source.Remote, atMs: Long): Bitmap? {
+            if (!nativeOff) {
+                val reader = native ?: NativeThumbs.Reader.open(s.url, s.headers)?.also { r ->
+                    native = r
+                    if (!include4k && (r.height > 1088 || r.width > 1920)) {
+                        fail(MSG_4K_OFF, FOUR_K + source.key)
+                        return null
+                    }
+                }
+                if (reader == null) {
+                    if (!alive) return null
+                    nativeOff = true
+                    LiveTvLoadReport.add("Seek thumbnails: the fast reader couldn't open this video, using Android's")
+                } else {
+                    val bmp = reader.frameAt(atMs, THUMB_W, THUMB_H)
+                    if (bmp != null) { nativeMade++; return bmp }
+                    if (!alive) return null
+                    nativeMisses++
+                    if (nativeMade == 0 && nativeMisses >= 3) {
+                        nativeOff = true
+                        native = null
+                        runCatching { reader.close() }
+                        LiveTvLoadReport.add("Seek thumbnails: the fast reader got no pictures from this video, using Android's")
+                    } else {
+                        return null
+                    }
+                }
+            }
+            // Android's reader may need the TV's video decoder: not when the playing video needs the only one.
+            playingFormats[owner]?.let { (mime, w, h) ->
+                if (!SeekThumbDecoders.safe(mime, w, h)) {
+                    fail(MSG_ONE_DECODER)
+                    return null
+                }
+            }
             val r = retriever ?: try {
                 MediaMetadataRetriever().also { it.setDataSource(s.url, s.headers) }.also { retriever = it }
             } catch (e: Exception) {
@@ -571,13 +630,7 @@ object SeekThumbs {
             return try {
                 val within = (if (s.programStartMs != null) reader.pieceAt(null, s.programStartMs + srcMs, tmp)
                     else reader.pieceAt(srcMs, null, tmp)) ?: return null
-                val r = MediaMetadataRetriever()
-                try {
-                    r.setDataSource(tmp.path)
-                    grab(r, within.coerceAtLeast(0L) * 1000L) ?: grab(r, 0L) ?: r.frameAtTime
-                } finally {
-                    runCatching { r.release() }
-                }
+                pieceFrame(tmp, within.coerceAtLeast(0L))
             } catch (e: SeekThumbsHls.Unsupported) {
                 fail(e.message ?: MSG_PROTECTED)
                 null
@@ -647,14 +700,30 @@ object SeekThumbs {
                     }
                 }
             } ?: file
+            return try {
+                pieceFrame(readFrom, (atMs - piece.startMs).coerceAtLeast(0L))
+            } finally {
+                if (readFrom !== file) readFrom.delete()
+            }
+        }
+
+        /** A picture from one saved piece: the fast reader first (CPU), then Android's. */
+        private fun pieceFrame(file: File, withinMs: Long): Bitmap? {
+            if (NativeThumbs.available) {
+                NativeThumbs.Reader.open(file.path)?.let { reader ->
+                    try {
+                        (reader.frameAt(withinMs, THUMB_W, THUMB_H) ?: reader.frameAt(0L, THUMB_W, THUMB_H))?.let { return it }
+                    } finally {
+                        reader.close()
+                    }
+                }
+            }
             val r = MediaMetadataRetriever()
             return try {
-                r.setDataSource(readFrom.path)
-                val within = (atMs - piece.startMs).coerceAtLeast(0L) * 1000L
-                grab(r, within) ?: grab(r, 0L) ?: r.frameAtTime
+                r.setDataSource(file.path)
+                grab(r, withinMs * 1000L) ?: grab(r, 0L) ?: r.frameAtTime
             } finally {
                 runCatching { r.release() }
-                if (readFrom !== file) readFrom.delete()
             }
         }
     }

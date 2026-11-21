@@ -5,6 +5,12 @@ option(DOVI_ENABLE_LIBDOVI "Link against a real libdovi static library" OFF)
 set(DOVI_LIBDOVI_STATIC_LIB "" CACHE FILEPATH "Path to libdovi static archive (.a)")
 set(DOVI_LIBDOVI_INCLUDE_DIR "" CACHE PATH "Path to libdovi C headers")
 set(DOVI_LIBDOVI_PREBUILT_ROOT "" CACHE PATH "Root path containing ABI folders for prebuilt libdovi artifacts")
+# Gradle passes OFF when Dolby Vision native is off; libnuvioseekthumb (end of file) is always built.
+option(NUVIO_BUILD_DOVI "Build the Dolby Vision bridge (dovi_bridge)" ON)
+
+find_library(log-lib log)
+
+if (NUVIO_BUILD_DOVI)
 
 add_library(
     dovi_bridge
@@ -12,7 +18,6 @@ add_library(
     dovi_bridge.cpp
 )
 
-find_library(log-lib log)
 
 target_compile_features(dovi_bridge PRIVATE cxx_std_17)
 target_compile_options(dovi_bridge PRIVATE -Wall -Wextra -Wno-unused-parameter)
@@ -75,3 +80,13 @@ else()
     endif()
     target_link_libraries(dovi_bridge ${log-lib})
 endif()
+endif()
+
+# Seek thumbnails: keyframe reader over the FFmpeg MPV already ships (opened with dlopen, nothing linked).
+# seekthumb/ffmpeg holds only the matching public headers (LGPL 2.1), see seekthumb/ffmpeg/README.md.
+add_library(nuvioseekthumb SHARED seekthumb/seekthumb.cpp)
+target_include_directories(nuvioseekthumb PRIVATE "${CMAKE_CURRENT_LIST_DIR}/seekthumb/ffmpeg")
+target_compile_features(nuvioseekthumb PRIVATE cxx_std_17)
+target_compile_options(nuvioseekthumb PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-deprecated-declarations)
+target_link_options(nuvioseekthumb PRIVATE "-Wl,-z,max-page-size=16384")
+target_link_libraries(nuvioseekthumb ${log-lib} dl m)
