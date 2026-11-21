@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -468,26 +469,121 @@ private fun SportsRow(
                 } else null
                 // Highlighted: Home's hero shows this game (not the last movie's picture).
                 Box(Modifier.onFocusChanged { if (it.hasFocus) viewModel.focusGame(row.key, game, sportsSettings.hideScores) }) {
-                if (landscape) {
-                    // The same card as the Sports page's game strip and Multiview.
-                    StripGameCard(
-                        game = game,
-                        selected = playingHere,
-                        paneChannelKeys = emptyList(),
-                        focusedPane = 0,
-                        hideScores = sportsSettings.hideScores,
-                        onClick = onClick,
-                        onLongClick = onLongClick,
-                        modifier = Modifier.width(width),
-                        cardHeight = height,
-                        upcoming = upcoming
+                    // The same card as the launcher rows (both teams on their colours), with the
+                    // live score and clock, redrawn as they change.
+                    DrawnGameCard(
+                        game = game, landscape = landscape, width = width, height = height, corner = style.cornerRadius,
+                        use24h = use24h, hideScores = sportsSettings.hideScores, playing = playingHere,
+                        upcoming = upcoming, onClick = onClick, onLongClick = onLongClick
                     )
-                } else {
-                    TallGameCard(game, width, height, now, use24h, sportsSettings.hideScores, playingHere, onClick, onLongClick, upcoming)
-                }
                 }
             }
         }
+        }
+    }
+}
+
+/**
+ * A game card drawn like the launcher's: each team's badge and name on its colour, the score
+ * (unless scores are hidden) where "vs" goes, the channel on top, and the league with the clock
+ * or start time at the bottom (LIVE on games that are on). Events without two teams (races, golf,
+ * fight cards) get the launcher's show card: the channel's logo, the event and the league.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DrawnGameCard(
+    game: SportsWatchGame,
+    landscape: Boolean,
+    width: Dp,
+    height: Dp,
+    corner: Dp,
+    use24h: Boolean,
+    hideScores: Boolean,
+    playing: Boolean,
+    upcoming: String?,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val ev = game.event
+    val league = SportsCatalog.league(ev.leagueId)
+    val channel = game.channels.firstOrNull()?.channel
+    val status = listOfNotNull(
+        league?.short?.takeIf { it.isNotBlank() } ?: league?.name,
+        upcoming ?: cornerStatus(ev, use24h, hideScores)
+    ).joinToString("  ·  ").ifBlank { null }
+    val tags = when (ev.state) {
+        GameState.LIVE -> listOf(Tags.LIVE)
+        GameState.PRE -> listOf(Tags.SOON)
+        else -> emptyList()
+    }
+    val spec = remember(ev, channel?.key, status, hideScores) {
+        val sides = league?.sport?.let { ev.ordered(it) } ?: ev.sides
+        if (sides.size == 2) {
+            fun team(side: com.nuvio.tv.livetv.sports.Side) = CardSpec.Team(
+                name = side.team.name.ifBlank { side.team.fullName },
+                abbr = side.team.abbr,
+                color = side.team.takeIf { it.color != null || it.altColor != null }
+                    ?.let { com.nuvio.tv.livetv.sports.teamColor(it).copy(alpha = 1f).toArgb() },
+                logo = side.team.logo
+            )
+            val score = if (!hideScores && ev.hasScore) "${sides[0].score} – ${sides[1].score}" else null
+            CardSpec.Game(channel?.name, team(sides[0]), team(sides[1]), status, tags, score)
+        } else {
+            CardSpec.Show(channel?.logo, channel?.name ?: ev.title, ev.title, listOfNotNull(league?.name), status, tags)
+        }
+    }
+    val shape = if (landscape) CardShape.WIDE else CardShape.TALL
+    // The last picture stays up while a new score is drawn (no blank flash on every goal).
+    var picture by remember(ev.id, shape) { mutableStateOf<android.net.Uri?>(null) }
+    var previous by remember(ev.id, shape) { mutableStateOf<android.net.Uri?>(null) }
+    androidx.compose.runtime.LaunchedEffect(spec.signature(), shape) {
+        val drawn = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { LauncherImages.cardUri(context, spec, shape) }
+        if (drawn != null && drawn != picture) { previous = picture; picture = drawn }
+    }
+    var focused by remember { mutableStateOf(false) }
+    val bg = if (focused) NuvioTheme.colors.FocusBackground else NuvioTheme.colors.BackgroundCard
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(height)
+            .onFocusChanged { focused = it.isFocused }
+            .homeCardFrame(focused, corner, bg)
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+    ) {
+        val shown = picture
+        if (shown != null) {
+            val request = remember(shown, previous) {
+                coil3.request.ImageRequest.Builder(context)
+                    .data(shown)
+                    .memoryCacheKey(shown.toString())
+                    .apply { previous?.let { placeholderMemoryCacheKey(it.toString()) } }
+                    .build()
+            }
+            AsyncImage(
+                model = request,
+                contentDescription = ev.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            // A moment before the first picture is ready: the game's name.
+            LiveText(
+                ev.title, color = NuvioTheme.colors.TextPrimary, size = 13.sp, weight = FontWeight.SemiBold,
+                maxLines = 3, align = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center).padding(12.dp)
+            )
+        }
+        if (playing) {
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp).size(8.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape).background(NuvioTheme.colors.Error)
+            )
         }
     }
 }
