@@ -86,4 +86,5 @@
     <string name="home_rows_until">"Tot %1$s"</string>
     <string name="home_rows_playlist_names">"Playlistnaam in rijtitels"</string>
     <string name="home_rows_playlist_names_hint">"Live-tv- en On Demand-rijen uit een groep van een playlist tonen welke playlist het is (UK: Entertainment - HBStrong)."</string>
+    <string name="home_rows_limit_all">"Alle"</string>
 </resources>

@@ -86,4 +86,5 @@
     <string name="home_rows_until">"Sampai %1$s"</string>
     <string name="home_rows_playlist_names">"Nama playlist di judul baris"</string>
     <string name="home_rows_playlist_names_hint">"Baris TV Langsung dan On Demand dari grup playlist menampilkan nama playlist-nya (UK: Entertainment - HBStrong)."</string>
+    <string name="home_rows_limit_all">"Semua"</string>
 </resources>

@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -210,14 +212,24 @@ private fun ChannelsRow(
     // One stop for focus: coming back to the row (from the side menu) lands on the card you were on.
     Column(modifier = modifier.focusRestorer().focusGroup().fillMaxWidth()) {
         RowTitle(title, style)
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
         HomeRowScroll(style.startPadding) {
         LazyRow(
+            state = listState,
             contentPadding = PaddingValues(start = style.startPadding, end = maxOf(style.startPadding, 24.dp), top = 4.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(style.cardSpacing)
         ) {
-            items(entries, key = { it.channel.key }) { e ->
-                // Highlighted: Home's hero shows this channel (not the last movie's picture).
-                Box(Modifier.onFocusChanged { if (it.hasFocus) viewModel.focusChannel(row.key, e) }) {
+            itemsIndexed(entries, key = { _, it -> it.channel.key }) { index, e ->
+                // Highlighted: Home's hero shows this channel (not the last movie's picture), and
+                // the card moves to the start of the row, as on your addons' rows (only the end
+                // of the row lets the highlight move along).
+                Box(Modifier.onFocusChanged {
+                    if (it.hasFocus) {
+                        viewModel.focusChannel(row.key, e)
+                        scope.launch { runCatching { listState.animateScrollToItem(index) } }
+                    }
+                }) {
                 ChannelCard(
                     entry = e,
                     landscape = landscape,
@@ -453,12 +465,15 @@ private fun SportsRow(
     // One stop for focus: coming back to the row (from the side menu) lands on the card you were on.
     Column(modifier = modifier.focusRestorer().focusGroup().fillMaxWidth()) {
         RowTitle(title, style)
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
         HomeRowScroll(style.startPadding) {
         LazyRow(
+            state = listState,
             contentPadding = PaddingValues(start = style.startPadding, end = maxOf(style.startPadding, 24.dp), top = 4.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(style.cardSpacing)
         ) {
-            items(games, key = { it.event.id }) { game ->
+            itemsIndexed(games, key = { _, it -> it.event.id }) { index, game ->
                 // Coming-up games have nothing to play yet: OK and hold OK both open the game page.
                 val onClick = { if (row.playsGame && !fallback) playBest(game) else openPage(game) }
                 val onLongClick = { if (row.playsGame || fallback) openPage(game) else playBest(game) }
@@ -468,7 +483,12 @@ private fun SportsRow(
                     upcomingLabel(game.event.startMs, clockNow, use24h)
                 } else null
                 // Highlighted: Home's hero shows this game (not the last movie's picture).
-                Box(Modifier.onFocusChanged { if (it.hasFocus) viewModel.focusGame(row.key, game, sportsSettings.hideScores) }) {
+                Box(Modifier.onFocusChanged {
+                    if (it.hasFocus) {
+                        viewModel.focusGame(row.key, game, sportsSettings.hideScores)
+                        scope.launch { runCatching { listState.animateScrollToItem(index) } }
+                    }
+                }) {
                     // The same card as the launcher rows (both teams on their colours), with the
                     // live score and clock, redrawn as they change.
                     DrawnGameCard(
@@ -601,7 +621,7 @@ internal fun homeRowGames(all: List<SportsWatchGame>, row: HomeLiveRow): List<Sp
             }
         }
         .filter { row.startingSoon || it.event.state == GameState.LIVE }
-        .take(row.limit)
+        .let { if (row.limit == HomeLiveRow.ALL) it else it.take(row.limit) }
         .toList()
 }
 
@@ -634,7 +654,7 @@ internal fun homeRowFallbackEvents(
         }
         .distinctBy { it.id }
         .sortedWith(compareBy<com.nuvio.tv.livetv.sports.SportsEvent> { if (it.state == GameState.LIVE) 0 else 1 }.thenBy { it.startMs }.thenBy { it.id })
-        .take(row.limit)
+        .let { if (row.limit == HomeLiveRow.ALL) it else it.take(row.limit) }
         .toList()
 }
 

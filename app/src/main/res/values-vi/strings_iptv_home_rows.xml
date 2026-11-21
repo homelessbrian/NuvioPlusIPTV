@@ -86,4 +86,5 @@
     <string name="home_rows_until">"Đến %1$s"</string>
     <string name="home_rows_playlist_names">"Tên danh sách phát trong tiêu đề hàng"</string>
     <string name="home_rows_playlist_names_hint">"Các hàng TV trực tiếp và Theo yêu cầu từ một nhóm của danh sách phát sẽ hiện tên danh sách đó (UK: Entertainment - HBStrong)."</string>
+    <string name="home_rows_limit_all">"Tất cả"</string>
 </resources>

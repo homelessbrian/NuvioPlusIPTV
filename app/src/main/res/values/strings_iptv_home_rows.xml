@@ -115,4 +115,5 @@
     <string name="home_rows_until">"Until %1$s"</string>
     <string name="home_rows_playlist_names">"Playlist name in row titles"</string>
     <string name="home_rows_playlist_names_hint">"Live TV and On Demand rows from a playlist\'s group show which playlist it is (UK: Entertainment - HBStrong)."</string>
+    <string name="home_rows_limit_all">"All"</string>
 </resources>

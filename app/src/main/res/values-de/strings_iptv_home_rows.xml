@@ -86,4 +86,5 @@
     <string name="home_rows_until">"Bis %1$s"</string>
     <string name="home_rows_playlist_names">"Playlist-Name in Zeilentiteln"</string>
     <string name="home_rows_playlist_names_hint">"Live-TV- und On-Demand-Zeilen aus der Gruppe einer Playlist zeigen, welche Playlist es ist (UK: Entertainment - HBStrong)."</string>
+    <string name="home_rows_limit_all">"Alle"</string>
 </resources>

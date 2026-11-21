@@ -86,4 +86,5 @@
     <string name="home_rows_until">"Até às %1$s"</string>
     <string name="home_rows_playlist_names">"Nome da playlist nos títulos das filas"</string>
     <string name="home_rows_playlist_names_hint">"As filas de TV em direto e On Demand de um grupo de uma playlist mostram de que playlist são (UK: Entertainment - HBStrong)."</string>
+    <string name="home_rows_limit_all">"Todos"</string>
 </resources>

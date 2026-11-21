@@ -561,7 +561,8 @@ fun HomeRowOptionsDialog(
         HomeLiveRow.SHAPE_PORTRAIT to stringResource(R.string.home_rows_shape_portrait),
         HomeLiveRow.SHAPE_LANDSCAPE to stringResource(R.string.home_rows_shape_landscape)
     )
-    val limitLabels = listOf(10, 20, 30, 50).map { it.toString() to it.toString() }
+    val allLabel = stringResource(R.string.home_rows_limit_all)
+    val limitLabels = listOf(10, 20, 30, 50, 100).map { it.toString() to it.toString() } + (HomeLiveRow.ALL.toString() to allLabel)
     when (choosing) {
         "source" -> {
             val choices = if (vod) {
@@ -719,7 +720,7 @@ fun HomeRowOptionsDialog(
                 SettingsActionRow(
                     title = stringResource(R.string.home_rows_option_limit),
                     subtitle = null,
-                    value = row.limit.toString(),
+                    value = if (row.limit == HomeLiveRow.ALL) allLabel else row.limit.toString(),
                     onClick = { choosing = "limit" }
                 )
             }

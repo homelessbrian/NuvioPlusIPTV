@@ -86,4 +86,5 @@
     <string name="home_rows_until">"Do %1$s"</string>
     <string name="home_rows_playlist_names">"Nazwa playlisty w tytułach rzędów"</string>
     <string name="home_rows_playlist_names_hint">"Rzędy TV na żywo i na żądanie z grupy playlisty pokazują, z której to playlisty (UK: Entertainment - HBStrong)."</string>
+    <string name="home_rows_limit_all">"Wszystkie"</string>
 </resources>

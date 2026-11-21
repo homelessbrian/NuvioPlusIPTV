@@ -86,4 +86,5 @@
     <string name="home_rows_until">"До %1$s"</string>
     <string name="home_rows_playlist_names">"Назва плейлиста в заголовках рядів"</string>
     <string name="home_rows_playlist_names_hint">"Ряди ТБ і відео за запитом із групи плейлиста показують, з якого він плейлиста (UK: Entertainment - HBStrong)."</string>
+    <string name="home_rows_limit_all">"Усі"</string>
 </resources>

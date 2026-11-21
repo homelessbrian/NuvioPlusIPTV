@@ -190,7 +190,7 @@ class HomeLiveRowsViewModel @Inject constructor(
             input.rows.associate { row ->
                 val list = buildUi(input.channels, input.user, input.settings, row.source, "", true, exactGroup = true).channels
                 // Room for channels left out for having no listing.
-                row.id to list.take(row.limit * 3)
+                row.id to (if (row.limit == HomeLiveRow.ALL) list else list.take(row.limit * 3))
             }
         }
         .flowOn(Dispatchers.Default)
@@ -219,7 +219,7 @@ class HomeLiveRowsViewModel @Inject constructor(
                 "ending" -> entries.sortedBy { it.now?.stopMs ?: Long.MAX_VALUE }
                 else -> entries
             }
-            row.id to entries.take(row.limit)
+            row.id to row.capped(entries)
         }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 

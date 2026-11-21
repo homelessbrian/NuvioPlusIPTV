@@ -319,6 +319,8 @@ class HomeViewModel @Inject constructor(
     internal var cwPipelineJob: Job? = null
     internal val fullyWatchedSeriesIds get() = watchedSeriesStateHolder
     internal var tmdbEnrichFocusJob: Job? = null
+    /** Live TV fork: waiting for a highlighted On Demand card's match (see onItemFocusPipeline). */
+    internal var vodMatchWaitJob: Job? = null
     internal var pendingTmdbEnrichItemId: String? = null
     /** Item that was focused during startup grace period — will be enriched once grace ends. */
     internal var deferredEnrichItem: MetaPreview? = null

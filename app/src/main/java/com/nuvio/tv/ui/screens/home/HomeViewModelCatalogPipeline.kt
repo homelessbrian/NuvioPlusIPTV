@@ -552,6 +552,11 @@ internal fun HomeViewModel.loadCatalogPipeline(
 }
 
 internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addonId: String, type: String) {
+    // Live TV fork: an On Demand row set to show all its titles pages in from On Demand itself.
+    if (addonId == com.nuvio.tv.livetv.ondemand.VodHomeIds.ADDON_ID) {
+        com.nuvio.tv.livetv.ondemand.VodHomeIds.loadMore(catalogId)
+        return
+    }
     val key = catalogKey(addonId = addonId, type = type, catalogId = catalogId)
     val currentRow = readCatalogRow(key)
 

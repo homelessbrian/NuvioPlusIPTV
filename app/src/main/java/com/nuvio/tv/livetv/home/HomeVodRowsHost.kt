@@ -70,6 +70,15 @@ fun HomeVodRowsHost(
     val watchedFlow = remember(vod, hasContinue) { if (hasContinue) vod.continueChanges else kotlinx.coroutines.flow.flowOf(0) }
     val watched by watchedFlow.collectAsStateWithLifecycle(0)
     LaunchedEffect(specs, version, watched) { vod.loadHomeScreenRows(specs) }
+    // Home tells On Demand which card is highlighted (matched first) and when a row wants more.
+    androidx.compose.runtime.DisposableEffect(vod) {
+        val hooks = VodHomeIds.HomeHooks(
+            focused = { id -> vod.focusHome(id) },
+            loadMore = { catalogId -> vod.loadMoreHomeScreenRow(catalogId) }
+        )
+        VodHomeIds.homeHooks = hooks
+        onDispose { if (VodHomeIds.homeHooks === hooks) VodHomeIds.homeHooks = null }
+    }
     LaunchedEffect(vod) { vod.homeScreenRows.collect { rowsModel.setVodRows(it) } }
 
     val scope = rememberCoroutineScope()

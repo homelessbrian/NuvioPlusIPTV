@@ -63,6 +63,21 @@ object VodHomeIds {
         return r.tmdb?.let { "tmdb:$it" } ?: r.match
     }
 
+    /** Home's On Demand rows, set while they're on Home: match a highlighted card now, and load more of a row. */
+    @Volatile var homeHooks: HomeHooks? = null
+
+    class HomeHooks(val focused: (metaId: String) -> Unit, val loadMore: (catalogId: String) -> Unit)
+
+    /** A card on Home was highlighted (its match and full details are fetched first). */
+    fun focused(metaId: String) { homeHooks?.focused?.invoke(metaId) }
+
+    /** Home asked an On Demand row for more titles (rows set to show all of them). */
+    fun loadMore(catalogId: String): Boolean {
+        val hooks = homeHooks ?: return false
+        hooks.loadMore(catalogId)
+        return true
+    }
+
     /** For Home's details look-ups in your addons: the matched title's id (not a TMDB-only match). */
     fun addonId(cardId: String): String? =
         uidOf(cardId)?.let { realIds[it] }?.match?.takeIf { !it.startsWith("tmdb:") }

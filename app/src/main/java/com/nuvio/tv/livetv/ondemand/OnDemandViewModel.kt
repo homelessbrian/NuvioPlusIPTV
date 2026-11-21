@@ -790,29 +790,15 @@ class OnDemandViewModel @Inject constructor(
             homeItems.keys.filter { it.startsWith("homerow:") && specs.none { sp -> homeRowKey(sp.rowId) == it } }
                 .forEach { homeItems.remove(it) }
             for (spec in specs) {
-                val recentKind = when (spec.source) {
-                    "recent:movie" -> VodKind.MOVIE
-                    "recent:series" -> VodKind.SERIES
-                    else -> null
-                }
-                val (kind, raw) = if (spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) {
-                    val started = continueWatching(user, spec.limit)
-                    // A mix of movies and series: the row's own kind follows its first title.
-                    (started.firstOrNull()?.kind ?: VodKind.MOVIE) to started
-                } else if (recentKind != null) {
-                    recentKind to repository.items(recentKind, null, excluded, true, spec.limit, 0, VodSort.DEFAULT, merge = merge)
-                } else {
-                    val uid = spec.source.removePrefix("group:")
-                    val c = cats.firstOrNull { it.uid == uid }
-                    if (c == null || c.uid in excluded) null to emptyList()
-                    else {
-                        val (sort, seed) = VodSort.parse(user.vodSorts[c.uid]) ?: VodSort.parse(s.vodDefaultSort) ?: (VodSort.DEFAULT to 1L)
-                        c.kind to repository.items(c.kind, c, emptySet(), false, spec.limit, 0, sort, merge = merge, seed = seed)
-                    }
-                }
+                // A row set to show all its titles reads a page now and more as you scroll along it.
+                val size = if (spec.limit == 0) HOME_PAGE else spec.limit
+                val (kind, raw) = readHomeRow(spec, 0, size, user, s, cats, excluded, merge)
                 val page = dedupe(emptyList(), raw)
                 primePosters(page)
                 homeItems[homeRowKey(spec.rowId)] = page
+                homeRowRead[spec.rowId] = raw.size
+                if (spec.limit != 0 || raw.size < size || spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) homeRowEnded += spec.rowId
+                else homeRowEnded -= spec.rowId
                 if (kind != null) homeRowKinds[spec.rowId] = kind else homeRowKinds.remove(spec.rowId)
             }
             homeRowSpecs = specs
@@ -836,6 +822,83 @@ class OnDemandViewModel @Inject constructor(
         }
     }
 
+    /** One page of a Home row's titles: a group, the newest movies or series, or what you're watching. */
+    private suspend fun readHomeRow(
+        spec: HomeScreenRowSpec, offset: Int, size: Int,
+        user: LiveUserState, s: LiveTvSettings, cats: List<VodCategory>, excluded: Set<String>, merge: Boolean
+    ): Pair<VodKind?, List<VodItem>> {
+        val recentKind = when (spec.source) {
+            "recent:movie" -> VodKind.MOVIE
+            "recent:series" -> VodKind.SERIES
+            else -> null
+        }
+        return if (spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) {
+            if (offset > 0) null to emptyList()
+            else {
+                val started = continueWatching(user, if (spec.limit == 0) CONTINUE_ALL else spec.limit)
+                // A mix of movies and series: the row's own kind follows its first title.
+                (started.firstOrNull()?.kind ?: VodKind.MOVIE) to started
+            }
+        } else if (recentKind != null) {
+            recentKind to repository.items(recentKind, null, excluded, true, size, offset, VodSort.DEFAULT, merge = merge)
+        } else {
+            val uid = spec.source.removePrefix("group:")
+            val c = cats.firstOrNull { it.uid == uid }
+            if (c == null || c.uid in excluded) null to emptyList()
+            else {
+                val (sort, seed) = VodSort.parse(user.vodSorts[c.uid]) ?: VodSort.parse(s.vodDefaultSort) ?: (VodSort.DEFAULT to 1L)
+                c.kind to repository.items(c.kind, c, emptySet(), false, size, offset, sort, merge = merge, seed = seed)
+            }
+        }
+    }
+
+    /** How far each Home row has read, which rows have no more, and which are loading more. */
+    private val homeRowRead = ConcurrentHashMap<String, Int>()
+    private val homeRowEnded = ConcurrentHashMap.newKeySet<String>()
+    private val homeRowLoading = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * More titles for a Home row set to show all of them, as you scroll along it (like your
+     * addons' rows): the next page, read on from where the last one ended.
+     */
+    fun loadMoreHomeScreenRow(catalogId: String) {
+        val rowId = catalogId.removePrefix("home:")
+        val spec = homeRowSpecs.firstOrNull { it.rowId == rowId } ?: return
+        if (spec.limit != 0 || rowId in homeRowEnded || !homeRowLoading.add(rowId)) return
+        viewModelScope.launch {
+            try {
+                val user = prefs.userState.first()
+                val s = prefs.settings.first()
+                val cats = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
+                val excluded = user.vodHiddenCategories + cats.filter { c ->
+                    c.playlistId in user.hiddenPlaylists ||
+                        ParentalControls.isLocked("vod:${c.uid}", c.name, s, user.lockedGroups)
+                }.map { it.uid }
+                val key = homeRowKey(rowId)
+                val have = homeItems[key].orEmpty()
+                var offset = homeRowRead[rowId] ?: have.size
+                var more: List<VodItem>
+                var pages = 0
+                // A page of copies of titles already shown adds nothing: keep reading until
+                // there's something new or the row has ended.
+                while (true) {
+                    val (_, raw) = readHomeRow(spec, offset, HOME_PAGE, user, s, cats, excluded, s.vodMergeDuplicates)
+                    offset += raw.size
+                    if (raw.size < HOME_PAGE) homeRowEnded += rowId
+                    more = dedupe(have, raw)
+                    if (more.isNotEmpty() || rowId in homeRowEnded || ++pages >= 20) break
+                }
+                homeRowRead[rowId] = offset
+                primePosters(more)
+                homeItems[key] = have + more
+                publishHomeScreenRows()
+                enrichAll(more)
+            } finally {
+                homeRowLoading.remove(rowId)
+            }
+        }
+    }
+
     private suspend fun publishHomeScreenRows() {
         val specs = homeRowSpecs
         _homeScreenRows.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
@@ -851,9 +914,9 @@ class OnDemandViewModel @Inject constructor(
                         VodHomeIds.toMeta(item, homeMatched[item.uid], posters[item.uid] ?: icons[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name), posterPattern, spec.wide)
                             .let { if (spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) it.copy(id = VodHomeIds.continueMetaId(item.uid)) else it }
                     },
-                    hasMore = false,
-                    page = 1
-                ).copy(supportsSkip = false)
+                    hasMore = spec.limit == 0 && spec.rowId !in homeRowEnded,
+                    page = (items.size + HOME_PAGE - 1) / HOME_PAGE
+                ).let { it.copy(supportsSkip = it.hasMore) }
             }.toMap()
         }
     }
@@ -1209,6 +1272,8 @@ class OnDemandViewModel @Inject constructor(
         const val RETRY_AFTER_MS = 75_000L
         /** Titles per Home row given full details (backdrop, logo) ahead of being highlighted. */
         const val HOME_ROW_DETAILS = 10
+        /** Continue Watching On Demand set to show all: everything you've started, up to this many. */
+        const val CONTINUE_ALL = 200
     }
 }
 

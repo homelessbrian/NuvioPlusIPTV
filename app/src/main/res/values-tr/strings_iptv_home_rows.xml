@@ -86,4 +86,5 @@
     <string name="home_rows_until">"%1$s\'e kadar"</string>
     <string name="home_rows_playlist_names">"Satır başlıklarında liste adı"</string>
     <string name="home_rows_playlist_names_hint">"Bir listenin grubundan gelen Canlı TV ve İsteğe Bağlı satırlar hangi liste olduğunu gösterir (UK: Entertainment - HBStrong)."</string>
+    <string name="home_rows_limit_all">"Tümü"</string>
 </resources>

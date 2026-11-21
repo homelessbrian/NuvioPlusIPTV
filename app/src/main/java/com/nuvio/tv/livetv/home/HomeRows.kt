@@ -68,6 +68,9 @@ data class HomeLiveRow(
 ) {
     val key: String get() = KEY_PREFIX + id
 
+    /** [list] cut to this row's number of cards (all of it when the row shows all). */
+    fun <T> capped(list: List<T>): List<T> = if (limit == ALL) list else list.take(limit)
+
     companion object {
         const val KEY_PREFIX = "livetv_"
         const val KIND_CHANNELS = "channels"
@@ -81,7 +84,9 @@ data class HomeLiveRow(
         const val SHAPE_AUTO = "auto"
         const val SHAPE_PORTRAIT = "portrait"
         const val SHAPE_LANDSCAPE = "landscape"
-        const val MAX_LIMIT = 50
+        /** The most cards a row can be set to; [limit] 0 means all of them (like your addons' rows). */
+        const val MAX_LIMIT = 500
+        const val ALL = 0
 
         fun isKey(key: String): Boolean = key.startsWith(KEY_PREFIX)
         fun idOf(key: String): String? = key.takeIf(::isKey)?.removePrefix(KEY_PREFIX)
@@ -109,7 +114,7 @@ data class HomeLiveRow(
                         source = o.optString("source"),
                         title = o.optString("title"),
                         sort = o.optString("sort", "yours"),
-                        limit = o.optInt("limit", 20).coerceIn(1, MAX_LIMIT),
+                        limit = o.optInt("limit", 20).let { if (it == ALL) ALL else it.coerceIn(1, MAX_LIMIT) },
                         showNext = o.optBoolean("showNext", false),
                         hidePlaceholders = o.optBoolean("hidePlaceholders", false),
                         opensGuide = o.optBoolean("opensGuide", false),
