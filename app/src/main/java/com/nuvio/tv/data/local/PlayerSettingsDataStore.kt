@@ -372,6 +372,10 @@ data class PlayerSettings(
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = "",
+    // Best quality auto-play and the source list order (Quality rules apply to every source).
+    val streamListSort: StreamListSort = StreamListSort.SOURCE_ORDER,
+    val streamQualityRules: com.nuvio.tv.domain.model.DebridStreamPreferences = com.nuvio.tv.core.player.QualityRules.DEFAULT,
+    val streamLowQualityGroups: com.nuvio.tv.core.player.LowQualityGroups = com.nuvio.tv.core.player.LowQualityGroups.PUSH_DOWN,
     val postPlayRecommendationsEnabled: Boolean = true,
     val postPlayMovieThresholdPercent: Int = DEFAULT_POST_PLAY_MOVIE_THRESHOLD_PERCENT,
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
@@ -499,7 +503,12 @@ data class PlayerSettings(
 }
 
 enum class StreamAutoPlayMode {
-    MANUAL, FIRST_STREAM, REGEX_MATCH
+    MANUAL, FIRST_STREAM, REGEX_MATCH, QUALITY_RANK
+}
+
+/** Source list order: as the sources send them, or best quality first (Quality rules). */
+enum class StreamListSort {
+    SOURCE_ORDER, BEST_QUALITY_FIRST
 }
 
 enum class StreamAutoPlaySource {
@@ -720,6 +729,9 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlaySelectedAddonsKey = stringSetPreferencesKey("stream_auto_play_selected_addons")
     private val streamAutoPlaySelectedPluginsKey = stringSetPreferencesKey("stream_auto_play_selected_plugins")
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
+    private val streamListSortKey = stringPreferencesKey("stream_list_sort")
+    private val streamQualityRulesKey = stringPreferencesKey("stream_quality_rules")
+    private val streamLowQualityGroupsKey = stringPreferencesKey("stream_low_quality_groups")
     private val postPlayRecommendationsEnabledKey = booleanPreferencesKey("post_play_recommendations_enabled")
     private val postPlayMovieThresholdPercentKey = intPreferencesKey("post_play_movie_threshold_percent")
     private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
@@ -1131,6 +1143,13 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
                 streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
                 streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
+                streamListSort = prefs[streamListSortKey]?.let {
+                    runCatching { StreamListSort.valueOf(it) }.getOrNull()
+                } ?: StreamListSort.SOURCE_ORDER,
+                streamQualityRules = com.nuvio.tv.core.player.QualityRulesJson.decode(prefs[streamQualityRulesKey]),
+                streamLowQualityGroups = prefs[streamLowQualityGroupsKey]?.let {
+                    runCatching { com.nuvio.tv.core.player.LowQualityGroups.valueOf(it) }.getOrNull()
+                } ?: com.nuvio.tv.core.player.LowQualityGroups.PUSH_DOWN,
                 postPlayRecommendationsEnabled = prefs[postPlayRecommendationsEnabledKey] ?: true,
                 postPlayMovieThresholdPercent = (prefs[postPlayMovieThresholdPercentKey]
                     ?: PlayerSettings.DEFAULT_POST_PLAY_MOVIE_THRESHOLD_PERCENT).coerceIn(
@@ -1512,6 +1531,26 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
         store().edit { prefs ->
             prefs[streamAutoPlayModeKey] = mode.name
+        }
+    }
+
+    suspend fun setStreamListSort(sort: StreamListSort) {
+        store().edit { prefs -> prefs[streamListSortKey] = sort.name }
+    }
+
+    suspend fun setStreamQualityRules(rules: com.nuvio.tv.domain.model.DebridStreamPreferences) {
+        store().edit { prefs -> prefs[streamQualityRulesKey] = com.nuvio.tv.core.player.QualityRulesJson.encode(rules) }
+    }
+
+    suspend fun setStreamLowQualityGroups(value: com.nuvio.tv.core.player.LowQualityGroups) {
+        store().edit { prefs -> prefs[streamLowQualityGroupsKey] = value.name }
+    }
+
+    /** Back to the recommended Quality rules. */
+    suspend fun resetStreamQualityRules() {
+        store().edit { prefs ->
+            prefs.remove(streamQualityRulesKey)
+            prefs.remove(streamLowQualityGroupsKey)
         }
     }
 

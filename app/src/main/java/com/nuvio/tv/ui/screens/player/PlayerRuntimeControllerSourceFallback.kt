@@ -179,7 +179,9 @@ internal fun nextSourceFallbackCandidate(
         source = settings.streamAutoPlaySource,
         installedAddonNames = installedAddonNames,
         selectedAddons = settings.streamAutoPlaySelectedAddons,
-        selectedPlugins = settings.streamAutoPlaySelectedPlugins
+        selectedPlugins = settings.streamAutoPlaySelectedPlugins,
+        qualityRules = settings.streamQualityRules,
+        lowQualityGroups = settings.streamLowQualityGroups
     )
 }
 

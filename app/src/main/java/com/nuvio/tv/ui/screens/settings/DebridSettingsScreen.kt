@@ -845,7 +845,7 @@ private fun DebridSortModeDialog(
 }
 
 @Composable
-private fun DebridSizeRangeDialog(
+internal fun DebridSizeRangeDialog(
     selectedValue: Pair<Int, Int>,
     onSelected: (Pair<Int, Int>) -> Unit,
     onDismiss: () -> Unit
@@ -874,7 +874,7 @@ private fun DebridSizeRangeDialog(
 }
 
 @Composable
-private fun <T> DebridMultiChoiceDialog(
+internal fun <T> DebridMultiChoiceDialog(
     title: String,
     selectedValues: List<T>,
     values: List<T>,
@@ -894,7 +894,7 @@ private fun <T> DebridMultiChoiceDialog(
 }
 
 @Composable
-private fun DebridTextListDialog(
+internal fun DebridTextListDialog(
     title: String,
     selectedValues: List<String>,
     onSelected: (List<String>) -> Unit,
@@ -1139,7 +1139,7 @@ private fun LazyListScope.debridRuleRows(
     )
 }
 
-private fun selectionCountLabel(values: List<*>, context: Context): String {
+internal fun selectionCountLabel(values: List<*>, context: Context): String {
     return if (values.isEmpty()) {
         context.getString(R.string.debrid_selection_count_any)
     } else {
@@ -1155,7 +1155,7 @@ private fun sizeRangeLabel(preferences: DebridStreamPreferences, context: Contex
     return sizeRangeLabel(preferences.sizeMinGb, preferences.sizeMaxGb, context)
 }
 
-private fun sizeRangeLabel(minGb: Int, maxGb: Int, context: Context): String {
+internal fun sizeRangeLabel(minGb: Int, maxGb: Int, context: Context): String {
     return when {
         minGb <= 0 && maxGb <= 0 -> context.getString(R.string.debrid_size_range_any)
         minGb <= 0 -> context.getString(R.string.debrid_size_range_up_to, maxGb)
@@ -1614,7 +1614,7 @@ private fun providerCredentialStatus(
         DebridProviderAuthMethod.ApiKey -> maskDebridApiKey(credential, notSetLabel)
     }
 
-private enum class DebridStreamPicker {
+internal enum class DebridStreamPicker {
     MAX_RESULTS,
     MAX_PER_RESOLUTION,
     MAX_PER_QUALITY,

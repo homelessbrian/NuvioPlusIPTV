@@ -116,7 +116,9 @@ data class DebridStreamPreferences(
     val excludedLanguages: List<DebridStreamLanguage> = emptyList(),
     val requiredReleaseGroups: List<String> = emptyList(),
     val excludedReleaseGroups: List<String> = emptyList(),
-    val sortCriteria: List<DebridStreamSortCriterion> = DebridStreamSortCriterion.originalOrder
+    val sortCriteria: List<DebridStreamSortCriterion> = DebridStreamSortCriterion.originalOrder,
+    /** Trusted release groups, best first. Empty keeps groups out of the order (the debrid list default). */
+    val preferredReleaseGroups: List<String> = emptyList()
 )
 
 enum class DebridStreamResolution(val label: String, val value: Int) {

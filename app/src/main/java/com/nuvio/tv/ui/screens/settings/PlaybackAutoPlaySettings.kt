@@ -94,9 +94,13 @@ internal fun PlaybackStreamSelectionSection(
             StreamAutoPlayMode.MANUAL -> stringResource(R.string.autoplay_mode_manual)
             StreamAutoPlayMode.FIRST_STREAM -> stringResource(R.string.autoplay_mode_first)
             StreamAutoPlayMode.REGEX_MATCH -> stringResource(R.string.autoplay_mode_regex)
+            StreamAutoPlayMode.QUALITY_RANK -> stringResource(R.string.autoplay_mode_quality)
         },
         onClick = { onOpenDialog(PlaybackDialog.STREAM_AUTO_PLAY_MODE) }
     )
+
+    // Live TV fork: Best quality (Quality rules for every source) and the source list order.
+    QualityRulesRows(settings = settings, onUpdate = onUpdate)
 
     if (settings.streamAutoPlayMode == StreamAutoPlayMode.REGEX_MATCH) {
         SettingsActionRow(
@@ -493,6 +497,7 @@ private fun StreamAutoPlayModeDialog(
     val options = listOf(
         SettingsPickerOption(StreamAutoPlayMode.MANUAL, stringResource(R.string.autoplay_mode_manual), stringResource(R.string.autoplay_mode_manual_desc)),
         SettingsPickerOption(StreamAutoPlayMode.FIRST_STREAM, stringResource(R.string.autoplay_mode_first), stringResource(R.string.autoplay_mode_first_desc)),
+        SettingsPickerOption(StreamAutoPlayMode.QUALITY_RANK, stringResource(R.string.autoplay_mode_quality), stringResource(R.string.autoplay_mode_quality_desc)),
         SettingsPickerOption(StreamAutoPlayMode.REGEX_MATCH, stringResource(R.string.autoplay_mode_regex), stringResource(R.string.autoplay_mode_regex_desc))
     )
 
@@ -503,7 +508,7 @@ private fun StreamAutoPlayModeDialog(
         onOptionSelected = onModeSelected,
         onDismiss = onDismiss,
         width = 460.dp,
-        maxHeight = 320.dp
+        maxHeight = 380.dp
     )
 }
 

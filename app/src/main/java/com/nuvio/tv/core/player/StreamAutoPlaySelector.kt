@@ -110,7 +110,9 @@ object StreamAutoPlaySelector {
         selectedPlugins: Set<String>,
         preferredBingeGroup: String? = null,
         preferBingeGroupInSelection: Boolean = false,
-        bingeGroupOnly: Boolean = false
+        bingeGroupOnly: Boolean = false,
+        qualityRules: com.nuvio.tv.domain.model.DebridStreamPreferences? = null,
+        lowQualityGroups: LowQualityGroups = LowQualityGroups.PUSH_DOWN
     ): Stream? {
         if (streams.isEmpty()) return null
 
@@ -149,7 +151,17 @@ object StreamAutoPlaySelector {
         // filter would otherwise drop a plugin result set and open the sidebar.
         val targetBingeGroup = preferredBingeGroup?.trim().orEmpty()
         if (preferBingeGroupInSelection && targetBingeGroup.isNotEmpty()) {
-            val bingeGroupMatch = selectBingeGroupMatch(streams, targetBingeGroup)
+            // Best quality: when several links share the binge group, take the best of them.
+            val sameGroup = if (mode == StreamAutoPlayMode.QUALITY_RANK) {
+                streams.filter { !it.isExternal() && it.behaviorHints?.bingeGroup == targetBingeGroup && isPlayable(it) }
+            } else {
+                emptyList()
+            }
+            val bingeGroupMatch = if (sameGroup.size > 1) {
+                StreamQualityRank.rank(sameGroup, qualityRules, lowQualityGroups).firstOrNull()
+            } else {
+                selectBingeGroupMatch(streams, targetBingeGroup)
+            }
             if (bingeGroupMatch != null) return bingeGroupMatch
             // When bingeGroupOnly is set (MANUAL mode with only binge-group
             // preference enabled), don't fall back to a non-matching stream —
@@ -166,6 +178,8 @@ object StreamAutoPlaySelector {
         return when (mode) {
             StreamAutoPlayMode.MANUAL -> null
             StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.firstOrNull { isPlayable(it) }
+            StreamAutoPlayMode.QUALITY_RANK ->
+                StreamQualityRank.rank(candidateStreams.filter { isPlayable(it) }, qualityRules, lowQualityGroups).firstOrNull()
             StreamAutoPlayMode.REGEX_MATCH -> {
                 val pattern = regexPattern.trim()
 
