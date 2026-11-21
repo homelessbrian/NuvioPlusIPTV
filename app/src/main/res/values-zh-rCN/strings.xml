@@ -3220,4 +3220,6 @@
     <string name="stream_test_video_bitrate">平均视频比特率：%1$s</string>
     <string name="stream_test_error_connection">连接失败。上次播放的流链接可能已过期或无法访问。请重新播放视频并重试。</string>
 
+    <string name="settings_home_screen_rows">主屏幕行</string>
+    <string name="settings_home_screen_rows_subtitle">选择主屏幕上各行的顺序</string>
 </resources>

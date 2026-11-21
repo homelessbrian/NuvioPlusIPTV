@@ -2165,4 +2165,6 @@
     <string name="trakt_comments_error_request_failed">Zahteva za komentarje Trakt ni uspela</string>
     <string name="trakt_library_error_fetch_list_items">Pridobivanje elementov seznama ni uspelo</string>
 
+    <string name="settings_home_screen_rows">Vrstice začetnega zaslona</string>
+    <string name="settings_home_screen_rows_subtitle">Izberite vrstni red vrstic na začetnem zaslonu</string>
 </resources>

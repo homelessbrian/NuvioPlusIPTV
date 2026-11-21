@@ -1114,4 +1114,6 @@
     <string name="watchlist_removed">Fjernet fra ønskelisten</string>
     <string name="playback_player_auto">Automatisk (Best for innhold)</string>
     <string name="playback_player_auto_desc">ExoPlayer for filmer og serier · MPV for anime</string>
+    <string name="settings_home_screen_rows">Rader på startskjermen</string>
+    <string name="settings_home_screen_rows_subtitle">Velg rekkefølgen på radene på startskjermen</string>
 </resources>

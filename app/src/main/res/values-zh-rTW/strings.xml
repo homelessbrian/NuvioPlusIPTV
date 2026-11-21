@@ -3220,4 +3220,6 @@
     <string name="stream_test_video_bitrate">平均影片位元率：%1$s</string>
     <string name="stream_test_error_connection">連線失敗。上次播放的串流連結可能已過期或無法存取。請重新播放影片並重試。</string>
 
+    <string name="settings_home_screen_rows">主畫面列</string>
+    <string name="settings_home_screen_rows_subtitle">選擇主畫面上各列的順序</string>
 </resources>

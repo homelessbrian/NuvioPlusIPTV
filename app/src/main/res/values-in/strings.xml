@@ -3472,4 +3472,6 @@
         <item quantity="other">Masih memuat setelah %1$d detik</item>
     </plurals>
 
+    <string name="settings_home_screen_rows">Baris Layar Beranda</string>
+    <string name="settings_home_screen_rows_subtitle">Pilih urutan baris di layar beranda Anda</string>
 </resources>

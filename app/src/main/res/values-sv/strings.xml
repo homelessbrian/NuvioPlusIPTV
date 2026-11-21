@@ -1756,4 +1756,6 @@
     <string name="servers_subtitle_switch_failed">Det gick inte att byta undertextspår.</string>
     <string name="party_phone_chat_note">Öppna Watch Party på din telefon med den här profilen för att chatta.</string>
 
+    <string name="settings_home_screen_rows">Rader på startskärmen</string>
+    <string name="settings_home_screen_rows_subtitle">Välj ordningen på raderna på startskärmen</string>
 </resources>

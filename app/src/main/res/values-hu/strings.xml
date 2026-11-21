@@ -3411,4 +3411,6 @@ Próbálj meg egy másik forrást. [%1$s]</string>
     <string name="stream_resume_from_time">Folytatás innen: %1$s</string>
     <string name="stream_resume_from_percent">Folytatás innen: %1$d%%</string>
 
+    <string name="settings_home_screen_rows">Kezdőképernyő sorai</string>
+    <string name="settings_home_screen_rows_subtitle">Válaszd ki a sorok sorrendjét a kezdőképernyőn</string>
 </resources>

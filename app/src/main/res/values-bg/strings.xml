@@ -3395,4 +3395,6 @@
     <string name="autosync_label_synced">Автоматично синхронизирано</string>
     <string name="stream_resume_from_time">Възобновяване от %1$s</string>
     <string name="stream_resume_from_percent">Възобновяване от %1$d%%</string>
+    <string name="settings_home_screen_rows">Редове на началния екран</string>
+    <string name="settings_home_screen_rows_subtitle">Изберете реда на редовете на началния екран</string>
 </resources>

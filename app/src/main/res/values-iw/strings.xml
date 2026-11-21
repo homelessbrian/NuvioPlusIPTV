@@ -3481,4 +3481,6 @@
     <string name="autosync_label_synced">מסונכרן אוטומטית</string>
     <string name="stream_resume_from_time">המשך מ-%1$s</string>
     <string name="stream_resume_from_percent">המשך מ-%1$d%%</string>
+    <string name="settings_home_screen_rows">שורות במסך הבית</string>
+    <string name="settings_home_screen_rows_subtitle">בחרו את סדר השורות במסך הבית</string>
 </resources>

@@ -3421,4 +3421,6 @@ Utilizas esta función bajo tu entera responsabilidad. P2P se puede desactivar e
     <string name="stream_resume_from_time">Reanudar desde %1$s</string>
     <string name="stream_resume_from_percent">Reanudar desde %1$d%%</string>
 
+    <string name="settings_home_screen_rows">Filas de la pantalla de inicio</string>
+    <string name="settings_home_screen_rows_subtitle">Elige el orden de las filas en tu pantalla de inicio</string>
 </resources>

@@ -2691,4 +2691,6 @@
     <string name="profile_default_name">Profil %1$d</string>
     <string name="detail_tmdb_fallback_title">TMDB %1$d</string>
     <string name="collections_editor_tmdb_collection_fallback">TMDB Collection %1$d</string>
+    <string name="settings_home_screen_rows">Rækker på startskærmen</string>
+    <string name="settings_home_screen_rows_subtitle">Vælg rækkefølgen af rækker på din startskærm</string>
 </resources>

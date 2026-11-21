@@ -3355,4 +3355,6 @@
     <string name="autosync_label_synced">Sincronizzato automaticamente</string>
     <string name="stream_resume_from_time">Riprendi da %1$s</string>
     <string name="stream_resume_from_percent">Riprendi dal %1$d%%</string>
+    <string name="settings_home_screen_rows">Righe della schermata Home</string>
+    <string name="settings_home_screen_rows_subtitle">Scegli l\'ordine delle righe nella schermata Home</string>
 </resources>

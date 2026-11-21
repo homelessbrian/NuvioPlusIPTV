@@ -2569,4 +2569,6 @@
     <string name="profile_default_name">Perfil %1$d</string>
     <string name="detail_tmdb_fallback_title">TMDB %1$d</string>
     <string name="collections_editor_tmdb_collection_fallback">Coleção TMDB %1$d</string>
+    <string name="settings_home_screen_rows">Linhas do ecrã inicial</string>
+    <string name="settings_home_screen_rows_subtitle">Escolha a ordem das linhas no ecrã inicial</string>
 </resources>

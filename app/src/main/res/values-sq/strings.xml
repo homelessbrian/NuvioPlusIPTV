@@ -2882,4 +2882,6 @@
     <string name="stream_test_error_prefix">Gabim: %1$s</string>
     <string name="stream_test_video_bitrate">Bitrate mesatar i videos: %1$s</string>
     <string name="stream_test_error_connection">Lidhja dështoi. Lidhja e transmetimit të luajtur së fundi mund të ketë skaduar ose të jetë e paarritshme. Ju lutemi luajeni videon përsëri dhe provoni sërish.</string>
+    <string name="settings_home_screen_rows">Rreshtat e ekranit kryesor</string>
+    <string name="settings_home_screen_rows_subtitle">Zgjidhni renditjen e rreshtave në ekranin kryesor</string>
 </resources>

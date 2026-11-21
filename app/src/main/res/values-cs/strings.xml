@@ -2826,4 +2826,6 @@
     <string name="stream_test_video_bitrate">Průměrný datový tok videa: %1$s</string>
     <string name="stream_test_error_connection">Připojení selhalo. Platnost posledního přehraného odkazu na stream mohla vypršet, nebo je nedostupný. Přehrajte prosím video znovu a zkuste to opět.</string>
 
+    <string name="settings_home_screen_rows">Řádky domovské obrazovky</string>
+    <string name="settings_home_screen_rows_subtitle">Vyberte pořadí řádků na domovské obrazovce</string>
 </resources>

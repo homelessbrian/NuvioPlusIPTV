@@ -3492,4 +3492,6 @@
     <string name="autosync_label_synced">Synchronisé automatiquement</string>
     <string name="stream_resume_from_time">Reprendre à %1$s</string>
     <string name="stream_resume_from_percent">Reprendre à %1$d&#160;%%</string>
+    <string name="settings_home_screen_rows">Rangées de l\'écran d\'accueil</string>
+    <string name="settings_home_screen_rows_subtitle">Choisissez l\'ordre des rangées sur votre écran d\'accueil</string>
 </resources>

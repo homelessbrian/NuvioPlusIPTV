@@ -3441,4 +3441,6 @@
     <string name="autosync_label_synced">Otomatik eşitlendi</string>
     <string name="stream_resume_from_time">%1$s konumundan devam et</string>
     <string name="stream_resume_from_percent">%1$d%% konumundan devam et</string>
+    <string name="settings_home_screen_rows">Ana Ekran Satırları</string>
+    <string name="settings_home_screen_rows_subtitle">Ana ekranınızdaki satırların sırasını seçin</string>
 </resources>

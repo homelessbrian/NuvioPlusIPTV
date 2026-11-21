@@ -3568,4 +3568,6 @@
     <string name="cd_emoji_option">Emoji %1$s</string>
     <string name="cd_trailer_controls">Sterowanie zwiastunem</string>
     <string name="cd_seek_bar">Pasek przewijania</string>
+    <string name="settings_home_screen_rows">Rzędy ekranu głównego</string>
+    <string name="settings_home_screen_rows_subtitle">Wybierz kolejność rzędów na ekranie głównym</string>
 </resources>

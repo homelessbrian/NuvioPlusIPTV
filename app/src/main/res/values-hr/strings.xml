@@ -3290,4 +3290,6 @@
     <string name="shuffle_save_failed">Nije moguće ažurirati nasumičnu reprodukciju. Pokušaj ponovno.</string>
     <string name="shuffle_change_selection">Odaberi epizode</string>
     <string name="shuffle_badge">Nasumična reprodukcija epizoda uključena</string>
+    <string name="settings_home_screen_rows">Retci početnog zaslona</string>
+    <string name="settings_home_screen_rows_subtitle">Odaberite redoslijed redaka na početnom zaslonu</string>
 </resources>

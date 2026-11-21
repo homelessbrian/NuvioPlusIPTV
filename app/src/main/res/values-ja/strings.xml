@@ -3425,4 +3425,6 @@
     <string name="autosync_label_synced">自動同期済み</string>
     <string name="stream_resume_from_time">%1$s から再開</string>
     <string name="stream_resume_from_percent">%1$d%% から再開</string>
+    <string name="settings_home_screen_rows">ホーム画面の行</string>
+    <string name="settings_home_screen_rows_subtitle">ホーム画面の行の並び順を選択します</string>
 </resources>

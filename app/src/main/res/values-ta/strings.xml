@@ -2250,4 +2250,6 @@
     <string name="trakt_comments_error_request_failed">ட்ராக்ட் கருத்துகள் கோரிக்கை தோல்வியடைந்தது</string>
     <string name="trakt_library_error_fetch_list_items">பட்டியல் உருப்படிகளைப் பெற முடியவில்லை</string>
 
+    <string name="settings_home_screen_rows">முகப்புத் திரை வரிசைகள்</string>
+    <string name="settings_home_screen_rows_subtitle">உங்கள் முகப்புத் திரையில் வரிசைகளின் வரிசையைத் தேர்ந்தெடுக்கவும்</string>
 </resources>

@@ -2723,4 +2723,6 @@
     <string name="profile_default_name">Профіль %1$d</string>
     <string name="detail_tmdb_fallback_title">TMDB %1$d</string>
     <string name="collections_editor_tmdb_collection_fallback">Колекція TMDB %1$d</string>
+    <string name="settings_home_screen_rows">Ряди головного екрана</string>
+    <string name="settings_home_screen_rows_subtitle">Виберіть порядок рядів на головному екрані</string>
 </resources>

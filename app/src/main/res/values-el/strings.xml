@@ -3334,4 +3334,6 @@
   <string name="autosync_label_synced">Αυτόματα συγχρονισμένος</string>
   <string name="stream_resume_from_time">Συνέχεια από %1$s</string>
   <string name="stream_resume_from_percent">Συνέχεια από %1$d%%</string>
+    <string name="settings_home_screen_rows">Σειρές αρχικής οθόνης</string>
+    <string name="settings_home_screen_rows_subtitle">Επιλέξτε τη σειρά των σειρών στην αρχική οθόνη</string>
 </resources>

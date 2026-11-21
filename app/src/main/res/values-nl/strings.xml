@@ -3403,4 +3403,6 @@
     <string name="stream_resume_from_time">Hervatten vanaf %1$s</string>
     <string name="stream_resume_from_percent">Hervatten vanaf %1$d%%</string>
 
+    <string name="settings_home_screen_rows">Rijen op startscherm</string>
+    <string name="settings_home_screen_rows_subtitle">Kies de volgorde van de rijen op je startscherm</string>
 </resources>

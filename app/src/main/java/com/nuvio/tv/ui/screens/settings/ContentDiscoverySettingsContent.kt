@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Power
+import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,11 +31,13 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 internal fun ContentDiscoverySettingsContent(
     onNavigateToAddons: () -> Unit,
     onNavigateToPlugins: () -> Unit,
+    onNavigateToHomeRows: () -> Unit,
     showPlugins: Boolean,
+    showHomeRows: Boolean,
     initialFocusRequester: FocusRequester?
 ) {
     var serverPage by rememberSaveable { mutableStateOf<String?>(null) }
-    var focusPluginsOnReturn by rememberSaveable { mutableStateOf(false) }
+    var returnFocus by rememberSaveable { mutableStateOf(FOCUS_TOP) }
     val hubServersRequester = remember { FocusRequester() }
     val serversRequester = remember { FocusRequester() }
     val serverRequester = remember { FocusRequester() }
@@ -58,17 +61,25 @@ internal fun ContentDiscoverySettingsContent(
     when (val page = serverPage) {
         null -> ContentDiscoveryHub(
             onNavigateToAddons = {
-                focusPluginsOnReturn = false
+                returnFocus = FOCUS_ADDONS
                 onNavigateToAddons()
             },
             onNavigateToPlugins = {
-                focusPluginsOnReturn = true
+                returnFocus = FOCUS_PLUGINS
                 onNavigateToPlugins()
+            },
+            onNavigateToHomeRows = {
+                returnFocus = FOCUS_TOP
+                onNavigateToHomeRows()
             },
             onNavigateToServers = { serverPage = SERVERS_PAGE },
             showPlugins = showPlugins,
+            showHomeRows = showHomeRows,
             initialFocusRequester = initialFocusRequester,
-            focusPluginsOnReturn = focusPluginsOnReturn && showPlugins,
+            returnFocus = when {
+                returnFocus == FOCUS_PLUGINS && !showPlugins -> FOCUS_TOP
+                else -> returnFocus
+            },
             serversFocusRequester = hubServersRequester
         )
         SERVERS_PAGE -> MediaServersSettingsContent(
@@ -88,12 +99,19 @@ internal fun ContentDiscoverySettingsContent(
 private fun ContentDiscoveryHub(
     onNavigateToAddons: () -> Unit,
     onNavigateToPlugins: () -> Unit,
+    onNavigateToHomeRows: () -> Unit,
     onNavigateToServers: () -> Unit,
     showPlugins: Boolean,
+    showHomeRows: Boolean,
     initialFocusRequester: FocusRequester?,
-    focusPluginsOnReturn: Boolean,
+    returnFocus: String,
     serversFocusRequester: FocusRequester
 ) {
+    // The first row takes focus on entry unless we're coming back from another row's screen.
+    val focusAddons = returnFocus == FOCUS_ADDONS || (returnFocus == FOCUS_TOP && !showHomeRows)
+    fun focusModifier(target: Boolean): Modifier =
+        if (initialFocusRequester != null && target) Modifier.focusRequester(initialFocusRequester) else Modifier
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
@@ -103,16 +121,21 @@ private fun ContentDiscoveryHub(
             subtitle = stringResource(R.string.settings_content_discovery_subtitle)
         )
         SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+            if (showHomeRows) {
+                SettingsActionRow(
+                    title = stringResource(R.string.settings_home_screen_rows),
+                    subtitle = stringResource(R.string.settings_home_screen_rows_subtitle),
+                    onClick = onNavigateToHomeRows,
+                    leadingIcon = Icons.Default.Reorder,
+                    modifier = focusModifier(returnFocus == FOCUS_TOP)
+                )
+            }
             SettingsActionRow(
                 title = stringResource(R.string.addon_title),
                 subtitle = stringResource(R.string.settings_content_discovery_addons_subtitle),
                 onClick = onNavigateToAddons,
                 leadingIcon = Icons.Default.Extension,
-                modifier = if (initialFocusRequester != null && !focusPluginsOnReturn) {
-                    Modifier.focusRequester(initialFocusRequester)
-                } else {
-                    Modifier
-                }
+                modifier = focusModifier(focusAddons)
             )
             SettingsActionRow(
                 title = stringResource(R.string.settings_media_servers),
@@ -127,11 +150,7 @@ private fun ContentDiscoveryHub(
                     subtitle = stringResource(R.string.settings_content_discovery_plugins_subtitle),
                     onClick = onNavigateToPlugins,
                     leadingIcon = Icons.Default.Power,
-                    modifier = if (initialFocusRequester != null && focusPluginsOnReturn) {
-                        Modifier.focusRequester(initialFocusRequester)
-                    } else {
-                        Modifier
-                    }
+                    modifier = focusModifier(returnFocus == FOCUS_PLUGINS)
                 )
             }
         }
@@ -139,3 +158,6 @@ private fun ContentDiscoveryHub(
 }
 
 private const val SERVERS_PAGE = "servers"
+private const val FOCUS_TOP = "top"
+private const val FOCUS_ADDONS = "addons"
+private const val FOCUS_PLUGINS = "plugins"

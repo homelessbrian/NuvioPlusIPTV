@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.domain.model.UserProfile
+import com.nuvio.tv.ui.screens.addon.AddonManagementAccess
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -26,6 +28,12 @@ class ProfileSettingsViewModel @Inject constructor(
     val isPrimaryProfileActive: StateFlow<Boolean> = profileManager.activeProfileId
         .map { it == 1 }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /** Profiles that use the main profile's add-ons can't change home row order (same rule as the Add-ons screen). */
+    val isAddonManagementReadOnly: StateFlow<Boolean> =
+        combine(profileManager.profiles, profileManager.activeProfileId) { list, id ->
+            AddonManagementAccess.isReadOnly(list.find { it.id == id })
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val canAddProfile: Boolean
         get() = profileManager.canCreateProfile

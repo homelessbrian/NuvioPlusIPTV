@@ -3217,4 +3217,6 @@
         <item quantity="one">%1$d মিনিট</item>
         <item quantity="other">%1$d মিনিট</item>
     </plurals>
-    </resources>
+    <string name="settings_home_screen_rows">হোম স্ক্রিনের সারি</string>
+    <string name="settings_home_screen_rows_subtitle">আপনার হোম স্ক্রিনে সারিগুলোর ক্রম বেছে নিন</string>
+</resources>
