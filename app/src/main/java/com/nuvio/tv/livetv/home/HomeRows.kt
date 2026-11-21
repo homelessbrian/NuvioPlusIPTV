@@ -175,8 +175,9 @@ class HomeLiveRows @Inject constructor(
     val names: StateFlow<Map<String, String>> = combine(
         rows,
         prefs.userState.map { Triple(it.customGroups, it.groupNames, it.vodGroupNames) }.distinctUntilChanged(),
-        channelStore.displayChannels
-    ) { list, (custom, renamed, vodRenamed), channels ->
+        channelStore.displayChannels,
+        prefs.playlists.map { l -> l.associate { it.id to it.name } }.distinctUntilChanged()
+    ) { list, (custom, renamed, vodRenamed), channels, playlistNames ->
         if (list.isEmpty()) return@combine emptyMap()
         val wanted = list.filter { it.kind == HomeLiveRow.KIND_CHANNELS }.mapTo(HashSet()) { it.source }
         val found = HashMap<String, String>()
@@ -197,8 +198,15 @@ class HomeLiveRows @Inject constructor(
                         HomeLiveRow.VOD_RECENT_MOVIES -> ctx.getString(R.string.home_rows_vod_recent_movies_title)
                         HomeLiveRow.VOD_RECENT_SERIES -> ctx.getString(R.string.home_rows_vod_recent_series_title)
                         HomeLiveRow.VOD_CONTINUE -> ctx.getString(R.string.home_rows_vod_continue_title)
-                        else -> vodRenamed[row.source.removePrefix(HomeLiveRow.VOD_GROUP_PREFIX)]?.takeIf { it.isNotBlank() }
-                            ?: row.label.ifBlank { ctx.getString(R.string.home_rows_type_vod) }
+                        else -> {
+                            val uid = row.source.removePrefix(HomeLiveRow.VOD_GROUP_PREFIX)
+                            val name = vodRenamed[uid]?.takeIf { it.isNotBlank() }
+                                ?: row.label.ifBlank { ctx.getString(R.string.home_rows_type_vod) }
+                            // With the playlist's name ("NETFLIX MOVIES - HBStrong"); the category's
+                            // uid is "<movie|series>:<playlist id>:<category id>".
+                            val playlist = uid.split(':', limit = 3).getOrNull(1)?.let { playlistNames[it] }?.takeIf { it.isNotBlank() }
+                            if (playlist != null) "$name - $playlist" else name
+                        }
                     }
                     else -> when (row.source) {
                         ChannelGroup.FAVORITES -> ctx.getString(R.string.home_rows_favorites_title)
