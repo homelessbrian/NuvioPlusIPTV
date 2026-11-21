@@ -84,4 +84,6 @@
     <string name="home_rows_shape_auto_hint">"Come le altre righe della Home"</string>
     <string name="home_rows_shape_recommended">"Consigliato"</string>
     <string name="home_rows_until">"Fino alle %1$s"</string>
+    <string name="home_rows_playlist_names">"Nome della playlist nei titoli delle righe"</string>
+    <string name="home_rows_playlist_names_hint">"Le righe TV in diretta e On Demand da un gruppo di una playlist mostrano di quale playlist si tratta (UK: Entertainment - HBStrong)."</string>
 </resources>

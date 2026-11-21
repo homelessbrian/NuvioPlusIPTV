@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -22,8 +23,17 @@ class HomeRowsSetupViewModel @Inject constructor(
     private val homeRows: HomeLiveRows,
     private val layoutPrefs: LayoutPreferenceDataStore,
     private val syncService: HomeCatalogSettingsSyncService,
-    choices: HomeRowChoices
+    choices: HomeRowChoices,
+    private val prefs: com.nuvio.tv.livetv.data.LiveTvPreferences
 ) : ViewModel() {
+
+    /** Rows from a playlist's group or category are named with the playlist (a switch in Reorder Home Catalogs). */
+    val playlistNames: StateFlow<Boolean> = prefs.settings.map { it.homeRowPlaylistNames }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun setPlaylistNames(on: Boolean) {
+        viewModelScope.launch { prefs.updateSettings { it.copy(homeRowPlaylistNames = on) } }
+    }
 
     val rows: StateFlow<List<HomeLiveRow>> = homeRows.rows
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())

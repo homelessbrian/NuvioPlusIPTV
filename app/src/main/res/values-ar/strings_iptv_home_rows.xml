@@ -84,4 +84,6 @@
     <string name="home_rows_shape_auto_hint">"مثل بقية صفوف الشاشة الرئيسية"</string>
     <string name="home_rows_shape_recommended">"موصى به"</string>
     <string name="home_rows_until">"حتى %1$s"</string>
+    <string name="home_rows_playlist_names">"اسم قائمة التشغيل في عناوين الصفوف"</string>
+    <string name="home_rows_playlist_names_hint">"تُظهر صفوف البث المباشر وحسب الطلب المأخوذة من مجموعة قائمة تشغيل اسم تلك القائمة (UK: Entertainment - HBStrong)."</string>
 </resources>

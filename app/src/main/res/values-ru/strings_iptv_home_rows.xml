@@ -84,4 +84,6 @@
     <string name="home_rows_shape_auto_hint">"Как остальные ряды главного экрана"</string>
     <string name="home_rows_shape_recommended">"Рекомендуется"</string>
     <string name="home_rows_until">"До %1$s"</string>
+    <string name="home_rows_playlist_names">"Название плейлиста в заголовках рядов"</string>
+    <string name="home_rows_playlist_names_hint">"Ряды ТВ и видео по запросу из группы плейлиста показывают, из какого он плейлиста (UK: Entertainment - HBStrong)."</string>
 </resources>

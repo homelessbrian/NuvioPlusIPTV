@@ -703,4 +703,5 @@
     <string name="iptv_settings_hide_stray_entries_desc">"排除部分提供商加入播放列表的奇怪残留项，例如单独放在一个分组里的一集节目。真正的频道永远不会被隐藏"</string>
     <string name="iptv_settings_hide_non_english_titles">"隐藏非英语影片"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"不显示以其他语言制作的电影和剧集（通过 TMDB 以及提供商自己的语言分组和标签判断）。隐藏的影片不会被加载或查找。"</string>
+    <string name="iptv_settings_number_of_channels">"频道数量"</string>
 </resources>

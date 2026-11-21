@@ -1430,15 +1430,53 @@ internal fun LiveTvSettingsContent(
                         ).profileManager()
                     }.activeProfileId.collectAsStateWithLifecycle()
                     val homeRowOn = homeProfileId !in s.homeRowHiddenProfiles
+                    // Options with several choices open a list to pick from (they used to change
+                    // to the next choice on every press, like a switch).
+                    var picking by remember { mutableStateOf<String?>(null) }
+                    val shapeChoices = listOf(
+                        "WIDE" to context.getString(R.string.iptv_settings_wide),
+                        "TALL" to context.getString(R.string.iptv_settings_tall),
+                        "SQUARE" to context.getString(R.string.iptv_settings_square)
+                    )
+                    val orderChoices = listOf(
+                        "yours" to context.getString(R.string.iptv_settings_your_order),
+                        "number" to context.getString(R.string.iptv_settings_channel_number),
+                        "ending" to context.getString(R.string.iptv_settings_ending_soonest)
+                    )
+                    val countChoices = listOf(10, 20, 40, 0).map { it to (if (it == 0) context.getString(R.string.iptv_settings_all) else it.toString()) }
+                    when (picking) {
+                        "launcher_shape" -> SettingsSingleChoiceDialog(
+                            title = context.getString(R.string.iptv_settings_card_shape),
+                            options = shapeChoices.map { (v, t) -> SettingsPickerOption(v, t) },
+                            selectedValue = s.launcherCardShape.ifBlank { "WIDE" },
+                            onOptionSelected = { v ->
+                                picking = null
+                                update { st -> st.copy(launcherCardShape = v) }
+                                com.nuvio.tv.livetv.home.LiveTvLauncherRows.refresh(homeProfileContext, afterMs = 1_500)
+                            },
+                            onDismiss = { picking = null }
+                        )
+                        "row_order" -> SettingsSingleChoiceDialog(
+                            title = context.getString(R.string.iptv_settings_row_order),
+                            options = orderChoices.map { (v, t) -> SettingsPickerOption(v, t) },
+                            selectedValue = s.homeRowSort.ifBlank { "yours" },
+                            onOptionSelected = { v -> picking = null; update { st -> st.copy(homeRowSort = v) } },
+                            onDismiss = { picking = null }
+                        )
+                        "row_count" -> SettingsSingleChoiceDialog(
+                            title = context.getString(R.string.iptv_settings_number_of_channels),
+                            options = countChoices.map { (v, t) -> SettingsPickerOption(v, t) },
+                            selectedValue = s.homeRowLimit,
+                            onOptionSelected = { v -> picking = null; update { st -> st.copy(homeRowLimit = v) } },
+                            onDismiss = { picking = null }
+                        )
+                    }
                     SubHeading(context.getString(R.string.iptv_settings_rows_on_your_tv_s_home_screen))
                     SettingsActionRow(
                         title = context.getString(R.string.iptv_settings_card_shape),
                         subtitle = context.getString(R.string.iptv_settings_match_your_launcher_s_row_wide_for_google),
                         value = when (s.launcherCardShape) { "TALL" -> context.getString(R.string.iptv_settings_tall); "SQUARE" -> context.getString(R.string.iptv_settings_square); else -> context.getString(R.string.iptv_settings_wide) },
-                        onClick = {
-                            update { st -> st.copy(launcherCardShape = when (st.launcherCardShape) { "WIDE" -> "TALL"; "TALL" -> "SQUARE"; else -> "WIDE" }) }
-                            com.nuvio.tv.livetv.home.LiveTvLauncherRows.refresh(homeProfileContext, afterMs = 1_500)
-                        }
+                        onClick = { picking = "launcher_shape" }
                     )
                     SubHeading(context.getString(R.string.iptv_settings_row_inside_nuvio_s_home_page))
                     SettingsToggleRow(
@@ -1475,17 +1513,13 @@ internal fun LiveTvSettingsContent(
                             title = context.getString(R.string.iptv_settings_row_order),
                             subtitle = context.getString(R.string.iptv_settings_your_order_channel_number_or_the_shows_ending),
                             value = when (s.homeRowSort) { "number" -> context.getString(R.string.iptv_settings_channel_number); "ending" -> context.getString(R.string.iptv_settings_ending_soonest); else -> context.getString(R.string.iptv_settings_your_order) },
-                            onClick = {
-                                update { st -> st.copy(homeRowSort = when (st.homeRowSort) { "yours" -> "number"; "number" -> "ending"; else -> "yours" }) }
-                            }
+                            onClick = { picking = "row_order" }
                         )
                         SettingsActionRow(
-                            title = context.getString(R.string.iptv_settings_channels_in_the_row),
+                            title = context.getString(R.string.iptv_settings_number_of_channels),
                             subtitle = context.getString(R.string.iptv_settings_how_many_channels_the_row_shows),
                             value = if (s.homeRowLimit == 0) context.getString(R.string.iptv_settings_all) else "${s.homeRowLimit}",
-                            onClick = {
-                                update { st -> st.copy(homeRowLimit = when (st.homeRowLimit) { 10 -> 20; 20 -> 40; 40 -> 0; else -> 10 }) }
-                            }
+                            onClick = { picking = "row_count" }
                         )
                         SettingsToggleRow(
                             context.getString(R.string.iptv_settings_hide_channels_with_no_listings),

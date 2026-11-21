@@ -758,7 +758,6 @@ internal fun SettingsToggleRow(
         },
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 62.dp)
             .focusProperties { canFocus = enabled }
             .semantics {
                 if (!enabled) disabled()
@@ -778,8 +777,11 @@ internal fun SettingsToggleRow(
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Row(
+            // The minimum height on the row itself (as on action rows), so a title with no line
+            // under it sits in the middle instead of at the top of a taller card.
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 62.dp)
                 .padding(horizontal = 18.dp, vertical = NuvioTheme.spacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween

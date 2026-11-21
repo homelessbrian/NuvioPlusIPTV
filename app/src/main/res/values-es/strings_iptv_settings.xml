@@ -703,4 +703,5 @@
     <string name="iptv_settings_hide_stray_entries_desc">"Omite restos extraños que algunos proveedores añaden a sus listas, como un episodio suelto en su propio grupo de un elemento. Los canales reales nunca se ocultan"</string>
     <string name="iptv_settings_hide_non_english_titles">"Ocultar títulos no ingleses"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Oculta las películas y series hechas en otro idioma (comprobado con TMDB y con los grupos y etiquetas de idioma de tu proveedor). Los títulos ocultos nunca se cargan ni se buscan."</string>
+    <string name="iptv_settings_number_of_channels">"Número de canales"</string>
 </resources>

@@ -84,4 +84,6 @@
     <string name="home_rows_shape_auto_hint">"Igual que el resto de filas de tu inicio"</string>
     <string name="home_rows_shape_recommended">"Recomendado"</string>
     <string name="home_rows_until">"Hasta las %1$s"</string>
+    <string name="home_rows_playlist_names">"Nombre de la lista en los títulos de fila"</string>
+    <string name="home_rows_playlist_names_hint">"Las filas de TV en directo y bajo demanda de un grupo de una lista muestran de qué lista son (UK: Entertainment - HBStrong)."</string>
 </resources>

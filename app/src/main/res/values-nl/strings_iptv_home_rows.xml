@@ -84,4 +84,6 @@
     <string name="home_rows_shape_auto_hint">"Zoals de andere rijen op je startscherm"</string>
     <string name="home_rows_shape_recommended">"Aanbevolen"</string>
     <string name="home_rows_until">"Tot %1$s"</string>
+    <string name="home_rows_playlist_names">"Playlistnaam in rijtitels"</string>
+    <string name="home_rows_playlist_names_hint">"Live-tv- en On Demand-rijen uit een groep van een playlist tonen welke playlist het is (UK: Entertainment - HBStrong)."</string>
 </resources>

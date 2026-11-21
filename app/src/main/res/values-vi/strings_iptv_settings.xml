@@ -703,4 +703,5 @@
     <string name="iptv_settings_hide_stray_entries_desc">"Bỏ những mục thừa kỳ lạ mà một số nhà cung cấp thêm vào danh sách phát, như một tập phim nằm riêng trong nhóm một mục. Kênh thật không bao giờ bị ẩn"</string>
     <string name="iptv_settings_hide_non_english_titles">"Ẩn phim không phải tiếng Anh"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Ẩn phim và series làm bằng ngôn ngữ khác (kiểm tra qua TMDB và các nhóm, nhãn ngôn ngữ của nhà cung cấp). Phim bị ẩn sẽ không bao giờ được tải hay tra cứu."</string>
+    <string name="iptv_settings_number_of_channels">"Số kênh"</string>
 </resources>

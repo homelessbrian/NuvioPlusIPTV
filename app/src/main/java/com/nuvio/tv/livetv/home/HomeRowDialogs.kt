@@ -500,21 +500,16 @@ private fun LazyListScope.sportsChoiceItems(
 /** One choice out of a few (sort, card shape…), as a list to pick from. */
 @Composable
 private fun ChoiceDialog(title: String, choices: List<Pair<String, String>>, current: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
-    NuvioDialog(onDismiss = onDismiss, title = title, width = 560.dp) {
-        LazyColumn(Modifier.height(400.dp), verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)) {
-            items(choices, key = { it.first }) { (id, label) ->
-                SettingsToggleRow(
-                    title = label,
-                    subtitle = null,
-                    checked = id == current,
-                    onToggle = { onPick(id); onDismiss() },
-                    modifier = if (id == current || (choices.none { it.first == current } && id == choices.first().first)) Modifier.focusRequester(first) else Modifier
-                )
-            }
-        }
-    }
+    // Pick one: Nuvio's own one-of-a-list dialog (a tick on the current one), not on/off switches.
+    com.nuvio.tv.ui.screens.settings.SettingsSingleChoiceDialog(
+        title = title,
+        options = choices.map { (id, label) -> com.nuvio.tv.ui.screens.settings.SettingsPickerOption(value = id, title = label) },
+        selectedValue = current,
+        onOptionSelected = { onPick(it); onDismiss() },
+        onDismiss = onDismiss,
+        width = 560.dp,
+        maxHeight = 420.dp
+    )
 }
 
 /**
@@ -598,6 +593,30 @@ fun HomeRowOptionsDialog(
         "sort" -> { ChoiceDialog(stringResource(R.string.home_rows_option_sort), sortLabels, row.sort, { save(row.copy(sort = it)) }, { choosing = null }); return }
         "shape" -> { ChoiceDialog(stringResource(R.string.home_rows_option_shape), shapeLabels, row.shape, { save(row.copy(shape = it)) }, { choosing = null }); return }
         "limit" -> { ChoiceDialog(stringResource(R.string.home_rows_option_limit), limitLabels, row.limit.toString(), { save(row.copy(limit = it.toInt())) }, { choosing = null }); return }
+        "ok_game" -> {
+            ChoiceDialog(
+                stringResource(R.string.home_rows_option_ok),
+                listOf(
+                    "page" to stringResource(R.string.home_rows_option_ok_page),
+                    "play" to stringResource(R.string.home_rows_option_ok_plays_game)
+                ),
+                if (row.playsGame) "play" else "page",
+                { save(row.copy(playsGame = it == "play")) }, { choosing = null }
+            )
+            return
+        }
+        "ok_channel" -> {
+            ChoiceDialog(
+                stringResource(R.string.home_rows_option_ok),
+                listOf(
+                    "full" to stringResource(R.string.home_rows_option_ok_full),
+                    "guide" to stringResource(R.string.home_rows_option_ok_guide)
+                ),
+                if (row.opensGuide) "guide" else "full",
+                { save(row.copy(opensGuide = it == "guide")) }, { choosing = null }
+            )
+            return
+        }
     }
 
     val sourceName = if (vod) {
@@ -659,7 +678,7 @@ fun HomeRowOptionsDialog(
                         title = stringResource(R.string.home_rows_option_ok),
                         subtitle = stringResource(if (row.playsGame) R.string.home_rows_option_ok_plays_game_hint else R.string.home_rows_option_ok_page_hint),
                         value = stringResource(if (row.playsGame) R.string.home_rows_option_ok_plays_game else R.string.home_rows_option_ok_page),
-                        onClick = { save(row.copy(playsGame = !row.playsGame)) }
+                        onClick = { choosing = "ok_game" }
                     )
                 }
             } else {
@@ -692,7 +711,7 @@ fun HomeRowOptionsDialog(
                         title = stringResource(R.string.home_rows_option_ok),
                         subtitle = null,
                         value = stringResource(if (row.opensGuide) R.string.home_rows_option_ok_guide else R.string.home_rows_option_ok_full),
-                        onClick = { save(row.copy(opensGuide = !row.opensGuide)) }
+                        onClick = { choosing = "ok_channel" }
                     )
                 }
             }

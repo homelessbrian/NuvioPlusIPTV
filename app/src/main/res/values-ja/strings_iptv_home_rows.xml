@@ -84,4 +84,6 @@
     <string name="home_rows_shape_auto_hint">"ホームのほかの行と同じ"</string>
     <string name="home_rows_shape_recommended">"おすすめ"</string>
     <string name="home_rows_until">"%1$sまで"</string>
+    <string name="home_rows_playlist_names">"行タイトルにプレイリスト名"</string>
+    <string name="home_rows_playlist_names_hint">"プレイリストのグループから作ったライブTVとオンデマンドの行に、どのプレイリストかを表示します（UK: Entertainment - HBStrong）。"</string>
 </resources>

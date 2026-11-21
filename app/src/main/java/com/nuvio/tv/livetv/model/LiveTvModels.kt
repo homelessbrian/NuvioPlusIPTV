@@ -588,6 +588,8 @@ data class LiveTvSettings(
     val vodMergeDuplicates: Boolean = true,
     /** On Demand: leave out movies and series made in another language than English (TMDB's original language, or the provider's own language labels). */
     val vodHideNonEnglish: Boolean = false,
+    /** Home rows from a playlist's group or category are named with the playlist ("UK: Entertainment - HBStrong"). */
+    val homeRowPlaylistNames: Boolean = true,
     /** On Demand: how categories are sorted unless you picked one for that category (VodSort name). */
     val vodDefaultSort: String = "DEFAULT",
     /** Recordings: where new ones are saved ("" = this device, else a storage volume's id). */

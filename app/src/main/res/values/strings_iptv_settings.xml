@@ -703,4 +703,5 @@
     <string name="iptv_settings_hide_stray_entries_desc">"Leaves out odd leftovers some providers add to their playlists, like a show episode sitting in its own one-item group. Real channels are never hidden"</string>
     <string name="iptv_settings_hide_non_english_titles">"Hide Non-English Titles"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Leaves out movies and series made in another language (checked with TMDB, plus your provider\'s own language groups and labels). Hidden titles are never loaded or looked up."</string>
+    <string name="iptv_settings_number_of_channels">"Number of channels"</string>
 </resources>

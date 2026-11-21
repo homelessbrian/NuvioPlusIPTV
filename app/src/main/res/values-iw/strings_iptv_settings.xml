@@ -703,4 +703,5 @@
     <string name="iptv_settings_hide_stray_entries_desc">"משמיט שאריות מוזרות שחלק מהספקים מוסיפים לרשימות, כמו פרק בודד בקבוצה משלו. ערוצים אמיתיים אף פעם לא מוסתרים"</string>
     <string name="iptv_settings_hide_non_english_titles">"הסתר כותרים שאינם באנגלית"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"משמיט סרטים וסדרות שנעשו בשפה אחרת (נבדק מול TMDB ומול קבוצות ותוויות השפה של הספק שלך). כותרים מוסתרים לעולם לא נטענים או נבדקים."</string>
+    <string name="iptv_settings_number_of_channels">"מספר ערוצים"</string>
 </resources>

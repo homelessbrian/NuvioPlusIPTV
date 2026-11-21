@@ -84,4 +84,6 @@
     <string name="home_rows_shape_auto_hint">"與首頁其他列一致"</string>
     <string name="home_rows_shape_recommended">"推薦"</string>
     <string name="home_rows_until">"播到 %1$s"</string>
+    <string name="home_rows_playlist_names">"列標題中顯示播放清單名稱"</string>
+    <string name="home_rows_playlist_names_hint">"來自播放清單分組的直播和點播列會顯示所屬播放清單（UK: Entertainment - HBStrong）。"</string>
 </resources>

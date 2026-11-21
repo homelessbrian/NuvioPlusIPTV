@@ -703,4 +703,5 @@
     <string name="iptv_settings_hide_stray_entries_desc">"Deixa de fora sobras estranhas que alguns provedores colocam nas playlists, como um episódio sozinho em um grupo próprio. Canais de verdade nunca são ocultados"</string>
     <string name="iptv_settings_hide_non_english_titles">"Ocultar títulos não ingleses"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Oculta filmes e séries feitos noutra língua (verificado com o TMDB e com os grupos e etiquetas de idioma do seu fornecedor). Os títulos ocultos nunca são carregados nem pesquisados."</string>
+    <string name="iptv_settings_number_of_channels">"Número de canais"</string>
 </resources>

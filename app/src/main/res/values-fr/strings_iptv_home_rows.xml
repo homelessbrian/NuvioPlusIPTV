@@ -84,4 +84,6 @@
     <string name="home_rows_shape_auto_hint">"Comme les autres rangées de votre accueil"</string>
     <string name="home_rows_shape_recommended">"Recommandé"</string>
     <string name="home_rows_until">"Jusqu\'à %1$s"</string>
+    <string name="home_rows_playlist_names">"Nom de la playlist dans les titres"</string>
+    <string name="home_rows_playlist_names_hint">"Les rangées TV en direct et à la demande issues d\'un groupe de playlist indiquent de quelle playlist il s\'agit (UK: Entertainment - HBStrong)."</string>
 </resources>

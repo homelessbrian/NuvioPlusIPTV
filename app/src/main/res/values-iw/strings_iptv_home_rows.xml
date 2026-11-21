@@ -84,4 +84,6 @@
     <string name="home_rows_shape_auto_hint">"כמו שאר השורות במסך הבית"</string>
     <string name="home_rows_shape_recommended">"מומלץ"</string>
     <string name="home_rows_until">"עד %1$s"</string>
+    <string name="home_rows_playlist_names">"שם הפלייליסט בכותרות השורות"</string>
+    <string name="home_rows_playlist_names_hint">"שורות של שידור חי ו-VOD מקבוצה של פלייליסט מציגות מאיזה פלייליסט הן (UK: Entertainment - HBStrong)."</string>
 </resources>

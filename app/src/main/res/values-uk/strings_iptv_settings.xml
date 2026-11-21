@@ -703,4 +703,5 @@
     <string name="iptv_settings_hide_stray_entries_desc">"Не показує дивні залишки, які деякі провайдери додають у плейлисти, як-от окремий епізод у власній групі з одного елемента. Справжні канали ніколи не приховуються"</string>
     <string name="iptv_settings_hide_non_english_titles">"Приховати неангломовні фільми"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Приховує фільми й серіали, зняті іншою мовою (перевірка за TMDB і за мовними групами та мітками провайдера). Приховані фільми ніколи не завантажуються і не шукаються."</string>
+    <string name="iptv_settings_number_of_channels">"Кількість каналів"</string>
 </resources>

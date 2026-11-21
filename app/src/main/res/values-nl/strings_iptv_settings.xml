@@ -703,4 +703,5 @@
     <string name="iptv_settings_hide_stray_entries_desc">"Laat rare restjes weg die sommige providers in hun playlists zetten, zoals één aflevering in een eigen groepje. Echte zenders worden nooit verborgen"</string>
     <string name="iptv_settings_hide_non_english_titles">"Niet-Engelstalige titels verbergen"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Laat films en series weg die in een andere taal zijn gemaakt (gecontroleerd met TMDB en de taalgroepen en -labels van je provider). Verborgen titels worden nooit geladen of opgezocht."</string>
+    <string name="iptv_settings_number_of_channels">"Aantal zenders"</string>
 </resources>

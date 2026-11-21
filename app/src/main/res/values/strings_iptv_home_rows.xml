@@ -113,4 +113,6 @@
     <string name="home_rows_shape_auto_hint">"Matches the rest of your Home rows"</string>
     <string name="home_rows_shape_recommended">"Recommended"</string>
     <string name="home_rows_until">"Until %1$s"</string>
+    <string name="home_rows_playlist_names">"Playlist name in row titles"</string>
+    <string name="home_rows_playlist_names_hint">"Live TV and On Demand rows from a playlist\'s group show which playlist it is (UK: Entertainment - HBStrong)."</string>
 </resources>

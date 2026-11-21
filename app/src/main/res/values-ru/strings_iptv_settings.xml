@@ -703,4 +703,5 @@
     <string name="iptv_settings_hide_stray_entries_desc">"Убирает странные остатки, которые некоторые провайдеры добавляют в плейлисты, например отдельную серию в собственной группе. Настоящие каналы никогда не скрываются"</string>
     <string name="iptv_settings_hide_non_english_titles">"Скрыть неанглоязычные фильмы"</string>
     <string name="iptv_settings_hide_non_english_titles_sub">"Скрывает фильмы и сериалы, снятые на другом языке (проверка по TMDB и по языковым группам и меткам провайдера). Скрытые фильмы никогда не загружаются и не ищутся."</string>
+    <string name="iptv_settings_number_of_channels">"Количество каналов"</string>
 </resources>

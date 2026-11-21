@@ -137,6 +137,15 @@ fun CatalogOrderScreen(
                 // Live TV fork: add a Live TV or Sports row.
                 Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
                 AddLiveRowCard(onClick = { addingRow = true })
+                // Live TV fork: rows from a playlist's group or category, named with the playlist.
+                Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+                val playlistNames by rowsSetup.playlistNames.collectAsState()
+                com.nuvio.tv.ui.screens.settings.SettingsToggleRow(
+                    title = stringResource(R.string.home_rows_playlist_names),
+                    subtitle = stringResource(R.string.home_rows_playlist_names_hint),
+                    checked = playlistNames,
+                    onToggle = { rowsSetup.setPlaylistNames(!playlistNames) }
+                )
             }
 
             when {

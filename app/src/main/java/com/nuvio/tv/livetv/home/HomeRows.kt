@@ -176,8 +176,9 @@ class HomeLiveRows @Inject constructor(
         rows,
         prefs.userState.map { Triple(it.customGroups, it.groupNames, it.vodGroupNames) }.distinctUntilChanged(),
         channelStore.displayChannels,
-        prefs.playlists.map { l -> l.associate { it.id to it.name } }.distinctUntilChanged()
-    ) { list, (custom, renamed, vodRenamed), channels, playlistNames ->
+        prefs.playlists.map { l -> l.associate { it.id to it.name } }.distinctUntilChanged(),
+        prefs.settings.map { it.homeRowPlaylistNames }.distinctUntilChanged()
+    ) { list, (custom, renamed, vodRenamed), channels, playlistNames, withPlaylist ->
         if (list.isEmpty()) return@combine emptyMap()
         val wanted = list.filter { it.kind == HomeLiveRow.KIND_CHANNELS }.mapTo(HashSet()) { it.source }
         val found = HashMap<String, String>()
@@ -204,7 +205,7 @@ class HomeLiveRows @Inject constructor(
                                 ?: row.label.ifBlank { ctx.getString(R.string.home_rows_type_vod) }
                             // With the playlist's name ("NETFLIX MOVIES - HBStrong"); the category's
                             // uid is "<movie|series>:<playlist id>:<category id>".
-                            val playlist = uid.split(':', limit = 3).getOrNull(1)?.let { playlistNames[it] }?.takeIf { it.isNotBlank() }
+                            val playlist = uid.split(':', limit = 3).getOrNull(1)?.let { playlistNames[it] }?.takeIf { it.isNotBlank() && withPlaylist }
                             if (playlist != null) "$name - $playlist" else name
                         }
                     }
@@ -215,7 +216,7 @@ class HomeLiveRows @Inject constructor(
                             ?: (renamed[row.source]?.takeIf { it.isNotBlank() } ?: found[row.source])
                                 // A playlist group: with the playlist's name, so the same group from two
                                 // playlists (or a group you'd only know by its playlist) is clear.
-                                ?.let { name -> playlistOf[row.source]?.let { "$name - $it" } ?: name }
+                                ?.let { name -> playlistOf[row.source]?.takeIf { withPlaylist }?.let { "$name - $it" } ?: name }
                             ?: row.source.substringAfter("::").ifBlank { ctx.getString(R.string.home_rows_channels_title) }
                     }
                 }
