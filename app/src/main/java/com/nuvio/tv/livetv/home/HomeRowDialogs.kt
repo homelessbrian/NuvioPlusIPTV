@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,7 +38,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -219,9 +222,9 @@ private fun LazyListScope.shapeChoices(
         item(key = "shape_$shape") {
             Choice(
                 icon = when (shape) {
-                    HomeLiveRow.SHAPE_LANDSCAPE -> Icons.Default.Tv
-                    HomeLiveRow.SHAPE_PORTRAIT -> Icons.Default.Movie
-                    else -> Icons.AutoMirrored.Filled.List
+                    HomeLiveRow.SHAPE_LANDSCAPE -> LandscapeCardIcon
+                    HomeLiveRow.SHAPE_PORTRAIT -> PortraitCardIcon
+                    else -> Icons.Outlined.Home
                 },
                 title = stringResource(title),
                 subtitle = stringResource(hint),
@@ -232,6 +235,28 @@ private fun LazyListScope.shapeChoices(
             )
         }
     }
+}
+
+/** Card shape icons: the outline is the card's own shape (wide or tall). */
+private val LandscapeCardIcon: ImageVector by lazy { cardOutlineIcon("LandscapeCard", 2f, 6.5f, 22f, 17.5f) }
+private val PortraitCardIcon: ImageVector by lazy { cardOutlineIcon("PortraitCard", 6.5f, 2f, 17.5f, 22f) }
+
+private fun cardOutlineIcon(name: String, left: Float, top: Float, right: Float, bottom: Float): ImageVector {
+    val r = 2f
+    return ImageVector.Builder(name = name, defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .path(fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 2.2f) {
+            moveTo(left + r, top)
+            lineTo(right - r, top)
+            arcTo(r, r, 0f, false, true, right, top + r)
+            lineTo(right, bottom - r)
+            arcTo(r, r, 0f, false, true, right - r, bottom)
+            lineTo(left + r, bottom)
+            arcTo(r, r, 0f, false, true, left, bottom - r)
+            lineTo(left, top + r)
+            arcTo(r, r, 0f, false, true, left + r, top)
+            close()
+        }
+        .build()
 }
 
 /** One choice in the Add a row lists: icon, full name, what it is, and (for some) how many. */
