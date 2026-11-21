@@ -348,6 +348,7 @@ class LiveTvPlaybackController @Inject constructor(
         val ch = currentChannel ?: return false
         if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
             ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) return false
+        if (ch.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) return true
         return !sawLive && !p.isCurrentMediaItemDynamic
     }
 
@@ -376,17 +377,35 @@ class LiveTvPlaybackController @Inject constructor(
     private fun clipFinished(): Boolean {
         val p = _player ?: return false
         val ch = currentChannel ?: return false
-        if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
-            ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) return false
+        // Official highlights and condensed games (ESPN, NHL, MLB, YouTube) are never live.
+        if (ch.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) return true
+        if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) return false
         if (sawLive || p.isCurrentMediaItemDynamic) return false
         val d = p.duration
         return d != C.TIME_UNSET && d > 0
     }
 
+    /** An official highlight failed in its last few seconds: it has finished, not dropped. */
+    private fun clipFailedAtEnd(): Boolean {
+        val p = _player ?: return false
+        if (currentChannel?.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) return false
+        val d = p.duration
+        return d != C.TIME_UNSET && d > 0 && p.currentPosition >= d - 3_000L
+    }
+
+    private fun finishClip() {
+        com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Video ${currentChannel?.name} finished")
+        _videoFinished.tryEmit(Unit)
+        stop()
+    }
+
     private fun updateOwnTimeline() {
         val p = _player
         val ch = currentChannel
-        if (p != null && p.isCurrentMediaItemDynamic) sawLive = true
+        // The stand-in timeline the player shows before the stream answers always says "live";
+        // only the real one counts (it made every replay and highlight look live, so they
+        // reconnected at the end instead of finishing).
+        if (p != null && p.isCurrentMediaItemDynamic && !currentWindowIsPlaceholder(p)) sawLive = true
         _ownTimeline.value = p != null &&
             (ch?.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID ||
                 ch?.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) &&
@@ -395,6 +414,13 @@ class LiveTvPlaybackController @Inject constructor(
             // Live: only with a real rewind window (a short one would run out while paused, so
             // those keep the pause buffer). A replay: any real length.
             p.duration >= (if (p.isCurrentMediaItemDynamic) OWN_LIVE_WINDOW_MS else OWN_MIN_MS)
+    }
+
+    private fun currentWindowIsPlaceholder(p: ExoPlayer): Boolean {
+        val t = p.currentTimeline
+        if (t.isEmpty) return true
+        val i = p.currentMediaItemIndex.coerceIn(0, t.windowCount - 1)
+        return t.getWindow(i, androidx.media3.common.Timeline.Window()).isPlaceholder
     }
 
     // ---------------------------------------------------------------- watching while recording
@@ -1962,9 +1988,7 @@ class LiveTvPlaybackController @Inject constructor(
             if (playbackState == Player.STATE_ENDED && _state.value.catchupTitle == null) {
                 // A replay or highlight from Sports that played to its end: done, not a dropout.
                 if (clipFinished()) {
-                    com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Video ${currentChannel?.name} finished")
-                    _videoFinished.tryEmit(Unit)
-                    stop()
+                    finishClip()
                     return
                 }
                 // A live stream should never end; treat it as a dropped connection.
@@ -2109,6 +2133,7 @@ class LiveTvPlaybackController @Inject constructor(
             if (_state.value.catchupTitle != null) com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
                 "Catch-up failed on ${ch?.name} (${error.errorCodeName}); no other links left to try"
             )
+            if (clipFailedAtEnd()) { finishClip(); return }
             scheduleReconnect(describe(error), error)
         }
     }
