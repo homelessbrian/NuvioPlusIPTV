@@ -20,12 +20,14 @@ internal object NativeThumbs {
 
     /** Null when it works; otherwise why not (for the start-up report). */
     val problem: String? by lazy {
-        try {
+        val why: String? = try {
             System.loadLibrary("nuvioseekthumb")
             nativeInit()
         } catch (t: Throwable) {
             t.javaClass.simpleName + ": " + (t.message ?: "")
-        }.also { if (it != null) Log.w(TAG, "not available: $it") }
+        }
+        if (why != null) Log.w(TAG, "not available: $why")
+        why
     }
 
     val available: Boolean get() = problem == null
