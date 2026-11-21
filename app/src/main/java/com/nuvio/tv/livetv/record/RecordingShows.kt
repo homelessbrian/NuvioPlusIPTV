@@ -110,11 +110,11 @@ internal fun episodeLabel(rec: LiveTvRecording): String =
 
 private fun newestOf(show: RecordedShow): LiveTvRecording = show.episodes.maxByOrNull { airedMs(it) } ?: show.episodes.first()
 
-/** A folder in the Recorded grid: the show's picture stacked, how many episodes, how many are new. */
+/** A folder in the Recorded tab: the show's poster stacked, how many episodes, how many are new. */
 @Composable
 internal fun RecordedFolderCard(
     show: RecordedShow,
-    art: RecordingArt?,
+    poster: String?,
     watched: Int,
     fresh: Int,
     modifier: Modifier,
@@ -145,12 +145,12 @@ internal fun RecordedFolderCard(
         Box(Modifier.fillMaxWidth()) {
             Box(Modifier.align(Alignment.TopCenter).fillMaxWidth(0.86f).height(16.dp).clip(top).background(layer.copy(alpha = 0.55f)))
             Box(Modifier.align(Alignment.TopCenter).padding(top = 5.dp).fillMaxWidth(0.93f).height(16.dp).clip(top).background(layer.copy(alpha = 0.8f)))
-            ArtThumb(
-                art, newest.channelLogo, show.title,
+            PosterThumb(
+                poster, newest.channelLogo, show.title,
                 Modifier
                     .padding(top = 10.dp)
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
+                    .aspectRatio(2f / 3f)
                     .border(2.dp, if (focused) colors.FocusRing else androidx.compose.ui.graphics.Color.Transparent, shape)
             ) {
                 if (fresh > 0) {
@@ -169,15 +169,15 @@ internal fun RecordedFolderCard(
         }
         LiveText(
             show.title,
-            size = 15.sp,
+            size = 14.sp,
             weight = FontWeight.SemiBold,
             color = if (focused) colors.TextPrimary else colors.TextPrimary.copy(alpha = 0.9f),
             marquee = focused
         )
         LiveText(
             (if (watched >= show.episodes.size) "All watched" else "$watched of ${show.episodes.size} watched") +
-                " · latest " + shortDayLabel(airedMs(newest)).lowercase(Locale.getDefault()),
-            size = 13.sp,
+                " · " + shortDayLabel(airedMs(newest)),
+            size = 12.sp,
             color = colors.TextSecondary
         )
     }
