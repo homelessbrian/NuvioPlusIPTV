@@ -285,7 +285,7 @@ internal fun MultiviewPane(
         }
         if (overlayVisible && pane.channelKey != null) {
             Row(
-                Modifier.align(Alignment.TopStart).padding(8.dp).graphicsLayer { alpha = overlay.value }.clip(RoundedCornerShape(10.dp))
+                Modifier.align(Alignment.BottomStart).padding(8.dp).graphicsLayer { alpha = overlay.value }.clip(RoundedCornerShape(10.dp))
                     .background(LabelChip).padding(start = 5.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
