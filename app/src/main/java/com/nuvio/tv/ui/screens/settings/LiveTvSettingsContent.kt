@@ -1861,9 +1861,11 @@ internal fun LiveTvSettingsContent(
                         locale = context.settingsLocale,
                         onPlace = { p ->
                             val c = p.choice
-                            // This device (nothing picked on it) and the network folder are used
-                            // straight away; a drive opens "where on this drive".
-                            if (c != null && (p.isNetwork || (p.isDevice && p.folders.isEmpty()))) {
+                            // The network folder is used straight away; this device and a drive open
+                            // "where on it" (so a folder on the box can still be picked). Before
+                            // Android 11 folders can't be picked, so this device is used straight away.
+                            val direct = p.isNetwork || (p.isDevice && p.folders.isEmpty() && !com.nuvio.tv.livetv.record.DriveFolders.supported())
+                            if (c != null && direct) {
                                 pickingDrive = false
                                 useStorage(p.key, c.id)
                             } else {

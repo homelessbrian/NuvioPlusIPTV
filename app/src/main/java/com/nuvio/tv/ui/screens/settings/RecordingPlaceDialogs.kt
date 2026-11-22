@@ -24,8 +24,8 @@ import java.util.Locale
 
 /**
  * Save Recordings To: this device, each drive once and the network folder, under small headings.
- * The place new recordings go to says "In use". OK on this device or the network folder uses it;
- * OK on a drive opens [DrivePlaceDialog] (where on the drive).
+ * The place new recordings go to says "In use". OK on the network folder uses it; OK on this
+ * device or a drive opens [DrivePlaceDialog] (where on it).
  */
 @Composable
 internal fun SaveRecordingsToDialog(

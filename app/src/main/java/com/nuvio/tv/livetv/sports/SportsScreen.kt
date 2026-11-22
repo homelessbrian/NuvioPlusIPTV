@@ -335,8 +335,10 @@ fun SportsScreen(
     // menu; Back: the button of the page you're on, so one more Back opens the menu).
     fun hubToTop(toPage: Boolean = false) {
         scope.launch {
-            runCatching { listState.scrollToItem(0) }
-            runCatching { rowsState.scrollToItem(0) }
+            // Only lists that have been on screen: scrolling one that never was (All Events while
+            // you're on My Sports) waits for it to be drawn, so Back did nothing.
+            if (listState.layoutInfo.totalItemsCount > 0) runCatching { listState.scrollToItem(0) }
+            if (rowsState.layoutInfo.totalItemsCount > 0) runCatching { rowsState.scrollToItem(0) }
             repeat(2) { androidx.compose.runtime.withFrameNanos { } }
             val done = (toPage && runCatching { sportsPageChip.requestFocus() }.isSuccess) ||
                 runCatching { sportsFirstChip.requestFocus() }.isSuccess
