@@ -1734,6 +1734,8 @@ internal fun LiveTvSettingsContent(
                 // The drive open in "where on this drive" (its key), and the drive a folder is being picked on.
                 var openPlace by remember { mutableStateOf<String?>(null) }
                 var folderDrive by remember { mutableStateOf<String?>(null) }
+                // The network folder's own menu (use / change / remove), from Save Recordings To.
+                var openNetworkPlace by remember { mutableStateOf(false) }
                 val places = remember(drives, s.recordingStorage) { com.nuvio.tv.livetv.record.RecordingStorage.places(recContext, s.recordingStorage, drives) }
                 fun useStorage(placeKey: String, id: String) {
                     com.nuvio.tv.livetv.record.DriveFolders.setLastUsed(recContext, placeKey, id)
@@ -1861,11 +1863,14 @@ internal fun LiveTvSettingsContent(
                         locale = context.settingsLocale,
                         onPlace = { p ->
                             val c = p.choice
-                            // The network folder is used straight away; this device and a drive open
-                            // "where on it" (so a folder on the box can still be picked). Before
+                            // The network folder opens use / change / remove; this device and a drive
+                            // open "where on it" (so a folder on the box can still be picked). Before
                             // Android 11 folders can't be picked, so this device is used straight away.
-                            val direct = p.isNetwork || (p.isDevice && p.folders.isEmpty() && !com.nuvio.tv.livetv.record.DriveFolders.supported())
-                            if (c != null && direct) {
+                            val direct = p.isDevice && p.folders.isEmpty() && !com.nuvio.tv.livetv.record.DriveFolders.supported()
+                            if (p.isNetwork) {
+                                pickingDrive = false
+                                openNetworkPlace = true
+                            } else if (c != null && direct) {
                                 pickingDrive = false
                                 useStorage(p.key, c.id)
                             } else {
@@ -1891,6 +1896,38 @@ internal fun LiveTvSettingsContent(
                         },
                         onDismiss = { pickingDrive = false }
                     )
+                    if (openNetworkPlace) {
+                        val place = places.firstOrNull { it.isNetwork }
+                        if (place == null) openNetworkPlace = false
+                        else NetworkPlaceDialog(
+                            place = place,
+                            current = chosen?.id ?: s.recordingStorage,
+                            onUse = {
+                                openNetworkPlace = false
+                                place.choice?.let { useStorage(place.key, it.id) }
+                            },
+                            onChange = {
+                                openNetworkPlace = false
+                                withLogins { editingNetwork = true }
+                            },
+                            onRemove = {
+                                openNetworkPlace = false
+                                withLogins {
+                                    confirm(
+                                        context.getString(R.string.iptv_place_network_remove),
+                                        context.getString(R.string.iptv_place_network_remove_message, place.label),
+                                        context.getString(R.string.iptv_place_network_remove)
+                                    ) {
+                                        if (com.nuvio.tv.livetv.record.NetworkFolderStore.save(recContext, null)) {
+                                            networkVersion++
+                                            if (s.recordingStorage == com.nuvio.tv.livetv.record.NetworkFolderStore.STORAGE_ID) update { it.copy(recordingStorage = "") }
+                                        }
+                                    }
+                                }
+                            },
+                            onDismiss = { openNetworkPlace = false; pickingDrive = true }
+                        )
+                    }
                     openPlace?.let { key ->
                         val place = places.firstOrNull { it.key == key }
                         if (place == null) openPlace = null

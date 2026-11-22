@@ -47,4 +47,11 @@
     <string name="iptv_move_into_app_folder">Into the app\'s own folder</string>
     <string name="iptv_move_new_ones_go_here">Where new ones go</string>
     <string name="iptv_move_now_on">Now on %1$s.</string>
+    <string name="iptv_place_network_use">Use the Network Folder</string>
+    <string name="iptv_place_network_use_note">New recordings go to %1$s</string>
+    <string name="iptv_place_network_change">Change Network Folder…</string>
+    <string name="iptv_place_network_change_note">Pick a different computer, NAS or shared folder</string>
+    <string name="iptv_place_network_remove">Remove Network Folder</string>
+    <string name="iptv_place_network_remove_note">Back to how it was before it was set up</string>
+    <string name="iptv_place_network_remove_message">This TV stops using %1$s. Recordings already saved there stay on it and aren't deleted.</string>
 </resources>

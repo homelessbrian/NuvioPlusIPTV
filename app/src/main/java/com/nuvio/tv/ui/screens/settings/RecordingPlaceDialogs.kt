@@ -24,8 +24,8 @@ import java.util.Locale
 
 /**
  * Save Recordings To: this device, each drive once and the network folder, under small headings.
- * The place new recordings go to says "In use". OK on the network folder uses it; OK on this
- * device or a drive opens [DrivePlaceDialog] (where on it).
+ * The place new recordings go to says "In use". OK on the network folder opens
+ * [NetworkPlaceDialog]; OK on this device or a drive opens [DrivePlaceDialog] (where on it).
  */
 @Composable
 internal fun SaveRecordingsToDialog(
@@ -204,6 +204,59 @@ internal fun DrivePlaceDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioTheme.colors.TextTertiary,
                     modifier = Modifier.padding(start = NuvioTheme.spacing.lg, top = NuvioTheme.spacing.sm)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * OK on the network folder in Save Recordings To: use it, change it (another computer, NAS or
+ * share) or remove it, whichever folder is in use now.
+ */
+@Composable
+internal fun NetworkPlaceDialog(
+    place: RecordingStorage.Place,
+    current: String,
+    onUse: () -> Unit,
+    onChange: () -> Unit,
+    onRemove: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(80)
+        runCatching { first.requestFocus() }
+    }
+    val inUse = place.choice?.id == current
+    NuvioDialog(onDismiss = onDismiss, title = place.label, subtitle = null, width = 560.dp) {
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 420.dp),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+        ) {
+            item(key = "use") {
+                SettingsActionRow(
+                    title = context.getString(R.string.iptv_place_network_use),
+                    subtitle = context.getString(R.string.iptv_place_network_use_note, place.label),
+                    value = if (inUse) context.getString(R.string.iptv_place_in_use) else null,
+                    valueColor = NuvioTheme.colors.Secondary,
+                    onClick = onUse,
+                    modifier = Modifier.focusRequester(first)
+                )
+            }
+            item(key = "change") {
+                SettingsActionRow(
+                    title = context.getString(R.string.iptv_place_network_change),
+                    subtitle = context.getString(R.string.iptv_place_network_change_note),
+                    onClick = onChange
+                )
+            }
+            item(key = "remove") {
+                SettingsActionRow(
+                    title = context.getString(R.string.iptv_place_network_remove),
+                    subtitle = context.getString(R.string.iptv_place_network_remove_note),
+                    onClick = onRemove
                 )
             }
         }
