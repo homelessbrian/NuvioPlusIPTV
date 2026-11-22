@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Meilleure qualité"</string>
+    <string name="autoplay_mode_quality_desc">"Lit la meilleure source selon vos règles de qualité : résolution, source, groupes de release fiables, HDR et audio."</string>
+    <string name="quality_rules_title">"Règles de qualité"</string>
+    <string name="quality_rules_subtitle">"Ce que choisit Meilleure qualité et comment trie Meilleure qualité d’abord, pour chaque source."</string>
+    <string name="quality_rules_open">"Afficher"</string>
+    <string name="quality_rules_close">"Masquer"</string>
+    <string name="stream_sort_sources">"Trier les sources"</string>
+    <string name="stream_sort_sources_sub">"L’ordre de la liste des sources."</string>
+    <string name="stream_sort_source_order">"Ordre des sources"</string>
+    <string name="stream_sort_source_order_desc">"Tel que chaque source les envoie."</string>
+    <string name="stream_sort_best_first">"Meilleure qualité d’abord"</string>
+    <string name="stream_sort_best_first_desc">"Classées selon vos règles de qualité. Les liens exclus par les règles ne sont pas listés."</string>
+    <string name="quality_low_groups_title">"Groupes de release de faible qualité"</string>
+    <string name="quality_low_groups_subtitle">"Groupes connus pour des releases médiocres ou fausses (liste TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Mettre en bas"</string>
+    <string name="quality_low_groups_hide">"Masquer"</string>
+    <string name="quality_low_groups_normal">"Traiter comme les autres"</string>
+    <string name="quality_trusted_groups_title">"Groupes de release fiables"</string>
+    <string name="quality_trusted_groups_subtitle">"Les meilleurs d’abord. Commence avec la liste TRaSH Guides. Videz-la pour retrouver cette liste."</string>
+    <string name="quality_rules_reset_title">"Rétablir les recommandations"</string>
+    <string name="quality_rules_reset_subtitle">"Remet toutes les règles de qualité sur la configuration recommandée."</string>
+</resources>

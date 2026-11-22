@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Melhor qualidade"</string>
+    <string name="autoplay_mode_quality_desc">"Toca a melhor fonte segundo suas regras de qualidade: resolução, fonte, grupos de release confiáveis, HDR e áudio."</string>
+    <string name="quality_rules_title">"Regras de qualidade"</string>
+    <string name="quality_rules_subtitle">"O que Melhor qualidade escolhe e como Melhor qualidade primeiro ordena, para cada fonte."</string>
+    <string name="quality_rules_open">"Mostrar"</string>
+    <string name="quality_rules_close">"Ocultar"</string>
+    <string name="stream_sort_sources">"Ordenar fontes"</string>
+    <string name="stream_sort_sources_sub">"A ordem da lista de fontes."</string>
+    <string name="stream_sort_source_order">"Ordem das fontes"</string>
+    <string name="stream_sort_source_order_desc">"Como cada fonte as envia."</string>
+    <string name="stream_sort_best_first">"Melhor qualidade primeiro"</string>
+    <string name="stream_sort_best_first_desc">"Classificadas pelas suas regras de qualidade. Links que as regras excluem não aparecem."</string>
+    <string name="quality_low_groups_title">"Grupos de release de baixa qualidade"</string>
+    <string name="quality_low_groups_subtitle">"Grupos conhecidos por releases ruins ou falsos (lista do TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Mover para o fim"</string>
+    <string name="quality_low_groups_hide">"Ocultar"</string>
+    <string name="quality_low_groups_normal">"Tratar como os demais"</string>
+    <string name="quality_trusted_groups_title">"Grupos de release confiáveis"</string>
+    <string name="quality_trusted_groups_subtitle">"Os melhores primeiro. Começa com a lista do TRaSH Guides. Esvazie-a para recuperar essa lista."</string>
+    <string name="quality_rules_reset_title">"Restaurar o recomendado"</string>
+    <string name="quality_rules_reset_subtitle">"Volta todas as regras de qualidade para a configuração recomendada."</string>
+</resources>

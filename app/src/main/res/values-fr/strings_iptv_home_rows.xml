@@ -87,4 +87,34 @@
     <string name="home_rows_playlist_names">"Nom de la playlist dans les titres"</string>
     <string name="home_rows_playlist_names_hint">"Les rangées TV en direct et à la demande issues d\'un groupe de playlist indiquent de quelle playlist il s\'agit (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"Tous"</string>
+    <string name="home_rows_type_vod">"À la demande"</string>
+    <string name="home_rows_desc_vod">"%1$s · jusqu’à %2$d titres"</string>
+    <string name="home_rows_hidden_empty">"Rien à afficher pour l’instant – masqué sur l’accueil"</string>
+    <string name="home_rows_section_vod">"À la demande"</string>
+    <string name="home_rows_pick_vod_group">"Une catégorie de films ou de séries"</string>
+    <string name="home_rows_pick_vod_group_title">"Choisir une catégorie"</string>
+    <string name="home_rows_pick_vod_none">"Pas encore de catégories À la demande. Activez À la demande pour une playlist dans Paramètres → Live TV, ou affichez des groupes dans Gérer les groupes VOD."</string>
+    <string name="home_rows_pick_vod_recent">"Ajoutés récemment"</string>
+    <string name="home_rows_pick_vod_recent_hint">"Films ou séries"</string>
+    <string name="home_rows_vod_movies">"Films"</string>
+    <string name="home_rows_vod_series">"Séries"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="one">"%1$d titre"</item>
+        <item quantity="many">"%1$d titres"</item>
+        <item quantity="other">"%1$d titres"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"Films ajoutés récemment"</string>
+    <string name="home_rows_vod_recent_series_title">"Séries ajoutées récemment"</string>
+    <string name="home_rows_upcoming_today">"Aujourd’hui %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"Demain %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"Rangée À la demande"</string>
+    <string name="home_rows_option_vod">"Titres de"</string>
+    <string name="home_hero_live">"EN DIRECT"</string>
+    <string name="home_hero_min_left">"%1$d min restantes"</string>
+    <string name="home_hero_starting">"Commence maintenant"</string>
+    <string name="home_hero_starts_in_min">"Commence dans %1$d min"</string>
+    <string name="home_hero_starts_in_hours">"Commence dans %1$d h %2$d min"</string>
+    <string name="home_hero_watch_on">"À voir sur"</string>
+    <string name="home_hero_next">"ENSUITE"</string>
 </resources>

@@ -87,4 +87,34 @@
     <string name="home_rows_playlist_names">"Nome da playlist nos títulos das filas"</string>
     <string name="home_rows_playlist_names_hint">"As filas de TV em direto e On Demand de um grupo de uma playlist mostram de que playlist são (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"Todos"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · até %2$d títulos"</string>
+    <string name="home_rows_hidden_empty">"Nada para mostrar agora – oculta no Início"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"Uma categoria de filmes ou séries"</string>
+    <string name="home_rows_pick_vod_group_title">"Escolher uma categoria"</string>
+    <string name="home_rows_pick_vod_none">"Ainda não há categorias On Demand. Ative On Demand para uma playlist em Configurações → Live TV, ou mostre alguns grupos em Gerenciar grupos VOD."</string>
+    <string name="home_rows_pick_vod_recent">"Adicionados recentemente"</string>
+    <string name="home_rows_pick_vod_recent_hint">"Filmes ou séries"</string>
+    <string name="home_rows_vod_movies">"Filmes"</string>
+    <string name="home_rows_vod_series">"Séries"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="one">"%1$d título"</item>
+        <item quantity="many">"%1$d títulos"</item>
+        <item quantity="other">"%1$d títulos"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"Filmes adicionados recentemente"</string>
+    <string name="home_rows_vod_recent_series_title">"Séries adicionadas recentemente"</string>
+    <string name="home_rows_upcoming_today">"Hoje %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"Amanhã %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"Fileira On Demand"</string>
+    <string name="home_rows_option_vod">"Títulos de"</string>
+    <string name="home_hero_live">"AO VIVO"</string>
+    <string name="home_hero_min_left">"Faltam %1$d min"</string>
+    <string name="home_hero_starting">"Começa agora"</string>
+    <string name="home_hero_starts_in_min">"Começa em %1$d min"</string>
+    <string name="home_hero_starts_in_hours">"Começa em %1$d h %2$d min"</string>
+    <string name="home_hero_watch_on">"Assistir em"</string>
+    <string name="home_hero_next">"A SEGUIR"</string>
 </resources>
