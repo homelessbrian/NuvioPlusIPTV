@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Beste kwaliteit"</string>
+    <string name="autoplay_mode_quality_desc">"Speelt de beste bron af volgens je kwaliteitsregels: resolutie, bron, vertrouwde releasegroepen, HDR en audio."</string>
+    <string name="quality_rules_title">"Kwaliteitsregels"</string>
+    <string name="quality_rules_subtitle">"Wat Beste kwaliteit kiest en hoe Beste kwaliteit eerst sorteert, voor elke bron."</string>
+    <string name="quality_rules_open">"Tonen"</string>
+    <string name="quality_rules_close">"Verbergen"</string>
+    <string name="stream_sort_sources">"Bronnen sorteren"</string>
+    <string name="stream_sort_sources_sub">"De volgorde van de bronnenlijst."</string>
+    <string name="stream_sort_source_order">"Bronvolgorde"</string>
+    <string name="stream_sort_source_order_desc">"Zoals elke bron ze stuurt."</string>
+    <string name="stream_sort_best_first">"Beste kwaliteit eerst"</string>
+    <string name="stream_sort_best_first_desc">"Gerangschikt volgens je kwaliteitsregels. Links die de regels uitsluiten worden niet getoond."</string>
+    <string name="quality_low_groups_title">"Releasegroepen van lage kwaliteit"</string>
+    <string name="quality_low_groups_subtitle">"Groepen bekend om slechte of nep-releases (lijst van TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Onderaan zetten"</string>
+    <string name="quality_low_groups_hide">"Verbergen"</string>
+    <string name="quality_low_groups_normal">"Behandelen als de rest"</string>
+    <string name="quality_trusted_groups_title">"Vertrouwde releasegroepen"</string>
+    <string name="quality_trusted_groups_subtitle">"Beste eerst. Begint met de lijst van TRaSH Guides. Maak hem leeg om die lijst terug te krijgen."</string>
+    <string name="quality_rules_reset_title">"Terug naar aanbevolen"</string>
+    <string name="quality_rules_reset_subtitle">"Zet alle kwaliteitsregels terug naar de aanbevolen instelling."</string>
+</resources>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Najlepsza jakość"</string>
+    <string name="autoplay_mode_quality_desc">"Odtwarza najlepsze źródło według twoich reguł jakości: rozdzielczość, źródło, zaufane grupy release, HDR i dźwięk."</string>
+    <string name="quality_rules_title">"Reguły jakości"</string>
+    <string name="quality_rules_subtitle">"Co wybiera Najlepsza jakość i jak sortuje Najpierw najlepsza jakość, dla każdego źródła."</string>
+    <string name="quality_rules_open">"Pokaż"</string>
+    <string name="quality_rules_close">"Ukryj"</string>
+    <string name="stream_sort_sources">"Sortuj źródła"</string>
+    <string name="stream_sort_sources_sub">"Kolejność listy źródeł."</string>
+    <string name="stream_sort_source_order">"Kolejność źródeł"</string>
+    <string name="stream_sort_source_order_desc">"Tak, jak wysyła je każde źródło."</string>
+    <string name="stream_sort_best_first">"Najpierw najlepsza jakość"</string>
+    <string name="stream_sort_best_first_desc">"Według twoich reguł jakości. Linki wykluczone przez reguły nie są pokazywane."</string>
+    <string name="quality_low_groups_title">"Grupy release niskiej jakości"</string>
+    <string name="quality_low_groups_subtitle">"Grupy znane ze słabych lub fałszywych release'ów (lista TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Przenieś na koniec"</string>
+    <string name="quality_low_groups_hide">"Ukryj"</string>
+    <string name="quality_low_groups_normal">"Traktuj jak resztę"</string>
+    <string name="quality_trusted_groups_title">"Zaufane grupy release"</string>
+    <string name="quality_trusted_groups_subtitle">"Najlepsze najpierw. Zaczyna od listy TRaSH Guides. Wyczyść ją, aby odzyskać tę listę."</string>
+    <string name="quality_rules_reset_title">"Przywróć zalecane"</string>
+    <string name="quality_rules_reset_subtitle">"Przywraca wszystkie reguły jakości do zalecanych ustawień."</string>
+</resources>

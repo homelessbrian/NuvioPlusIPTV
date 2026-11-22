@@ -87,4 +87,33 @@
     <string name="home_rows_playlist_names">"Satır başlıklarında liste adı"</string>
     <string name="home_rows_playlist_names_hint">"Bir listenin grubundan gelen Canlı TV ve İsteğe Bağlı satırlar hangi liste olduğunu gösterir (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"Tümü"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · en fazla %2$d başlık"</string>
+    <string name="home_rows_hidden_empty">"Şu an gösterecek bir şey yok – Ana sayfada gizli"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"Bir film veya dizi kategorisi"</string>
+    <string name="home_rows_pick_vod_group_title">"Kategori seç"</string>
+    <string name="home_rows_pick_vod_none">"Henüz On Demand kategorisi yok. Ayarlar → Live TV'de bir oynatma listesi için On Demand'i aç veya VOD Gruplarını Yönet'te bazı grupları göster."</string>
+    <string name="home_rows_pick_vod_recent">"Son eklenenler"</string>
+    <string name="home_rows_pick_vod_recent_hint">"Filmler veya diziler"</string>
+    <string name="home_rows_vod_movies">"Filmler"</string>
+    <string name="home_rows_vod_series">"Diziler"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="one">"%1$d başlık"</item>
+        <item quantity="other">"%1$d başlık"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"Son eklenen filmler"</string>
+    <string name="home_rows_vod_recent_series_title">"Son eklenen diziler"</string>
+    <string name="home_rows_upcoming_today">"Bugün %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"Yarın %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"On Demand satırı"</string>
+    <string name="home_rows_option_vod">"Başlıkların kaynağı"</string>
+    <string name="home_hero_live">"CANLI"</string>
+    <string name="home_hero_min_left">"%1$d dk kaldı"</string>
+    <string name="home_hero_starting">"Şimdi başlıyor"</string>
+    <string name="home_hero_starts_in_min">"%1$d dk sonra başlıyor"</string>
+    <string name="home_hero_starts_in_hours">"%1$d sa %2$d dk sonra başlıyor"</string>
+    <string name="home_hero_watch_on">"Şurada izle"</string>
+    <string name="home_hero_next">"SONRAKİ"</string>
 </resources>

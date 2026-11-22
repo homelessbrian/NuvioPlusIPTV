@@ -87,4 +87,33 @@
     <string name="home_rows_playlist_names">"Playlistnaam in rijtitels"</string>
     <string name="home_rows_playlist_names_hint">"Live-tv- en On Demand-rijen uit een groep van een playlist tonen welke playlist het is (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"Alle"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · tot %2$d titels"</string>
+    <string name="home_rows_hidden_empty">"Nu niets te tonen – verborgen op Home"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"Een film- of seriecategorie"</string>
+    <string name="home_rows_pick_vod_group_title">"Kies een categorie"</string>
+    <string name="home_rows_pick_vod_none">"Nog geen On Demand-categorieën. Zet On Demand aan voor een playlist in Instellingen → Live TV, of toon groepen in VOD-groepen beheren."</string>
+    <string name="home_rows_pick_vod_recent">"Recent toegevoegd"</string>
+    <string name="home_rows_pick_vod_recent_hint">"Films of series"</string>
+    <string name="home_rows_vod_movies">"Films"</string>
+    <string name="home_rows_vod_series">"Series"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="one">"%1$d titel"</item>
+        <item quantity="other">"%1$d titels"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"Recent toegevoegde films"</string>
+    <string name="home_rows_vod_recent_series_title">"Recent toegevoegde series"</string>
+    <string name="home_rows_upcoming_today">"Vandaag %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"Morgen %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"On Demand-rij"</string>
+    <string name="home_rows_option_vod">"Titels uit"</string>
+    <string name="home_hero_live">"LIVE"</string>
+    <string name="home_hero_min_left">"Nog %1$d min"</string>
+    <string name="home_hero_starting">"Begint nu"</string>
+    <string name="home_hero_starts_in_min">"Begint over %1$d min"</string>
+    <string name="home_hero_starts_in_hours">"Begint over %1$d u %2$d min"</string>
+    <string name="home_hero_watch_on">"Kijk op"</string>
+    <string name="home_hero_next">"HIERNA"</string>
 </resources>

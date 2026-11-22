@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Лучшее качество"</string>
+    <string name="autoplay_mode_quality_desc">"Включает лучший источник по вашим правилам качества: разрешение, источник, надёжные релиз-группы, HDR и звук."</string>
+    <string name="quality_rules_title">"Правила качества"</string>
+    <string name="quality_rules_subtitle">"Что выбирает «Лучшее качество» и как сортирует «Сначала лучшее качество», для каждого источника."</string>
+    <string name="quality_rules_open">"Показывать"</string>
+    <string name="quality_rules_close">"Скрывать"</string>
+    <string name="stream_sort_sources">"Сортировка источников"</string>
+    <string name="stream_sort_sources_sub">"Порядок списка источников."</string>
+    <string name="stream_sort_source_order">"Порядок источников"</string>
+    <string name="stream_sort_source_order_desc">"Как их присылает каждый источник."</string>
+    <string name="stream_sort_best_first">"Сначала лучшее качество"</string>
+    <string name="stream_sort_best_first_desc">"По вашим правилам качества. Ссылки, исключённые правилами, не показываются."</string>
+    <string name="quality_low_groups_title">"Релиз-группы низкого качества"</string>
+    <string name="quality_low_groups_subtitle">"Группы, известные плохими или поддельными релизами (список TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Переносить в конец"</string>
+    <string name="quality_low_groups_hide">"Скрывать"</string>
+    <string name="quality_low_groups_normal">"Как остальные"</string>
+    <string name="quality_trusted_groups_title">"Надёжные релиз-группы"</string>
+    <string name="quality_trusted_groups_subtitle">"Лучшие сначала. Начинается со списка TRaSH Guides. Очистите его, чтобы вернуть этот список."</string>
+    <string name="quality_rules_reset_title">"Вернуть рекомендуемые"</string>
+    <string name="quality_rules_reset_subtitle">"Возвращает все правила качества к рекомендуемым."</string>
+</resources>
