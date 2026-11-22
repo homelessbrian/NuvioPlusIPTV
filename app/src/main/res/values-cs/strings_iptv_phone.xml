@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"Přidat do Nuvio + IPTV"</string>
+    <string name="iptv_phone_connected_to">"Připojeno k %1$s"</string>
+    <string name="iptv_phone_heading">"Přidat do TV"</string>
+    <string name="iptv_phone_instructions">"Vyplňte a klepněte na Odeslat do TV. Hned se objeví na televizi."</string>
+    <string name="iptv_phone_what_to_add">"Co přidat"</string>
+    <string name="iptv_phone_m3u_tab">"Odkaz M3U"</string>
+    <string name="iptv_phone_epg_tab">"Jen EPG"</string>
+    <string name="iptv_phone_name_label">"Název (volitelné)"</string>
+    <string name="iptv_phone_provider_placeholder">"Můj poskytovatel"</string>
+    <string name="iptv_phone_playlist_label">"Odkaz na playlist"</string>
+    <string name="iptv_phone_epg_optional_label">"Odkaz EPG (volitelné)"</string>
+    <string name="iptv_phone_user_agent_label">"User agent (volitelné)"</string>
+    <string name="iptv_phone_user_agent_placeholder">"Nechte prázdné pro výchozí"</string>
+    <string name="iptv_phone_server_label">"Server"</string>
+    <string name="iptv_phone_username_label">"Uživatelské jméno"</string>
+    <string name="iptv_phone_password_label">"Heslo"</string>
+    <string name="iptv_phone_include_live">"Zahrnout TV kanály"</string>
+    <string name="iptv_phone_include_vod">"Zahrnout filmy a seriály (On Demand)"</string>
+    <string name="iptv_phone_epg_label">"Odkaz EPG"</string>
+    <string name="iptv_phone_send">"Odeslat do TV"</string>
+    <string name="iptv_phone_network_note">"Funguje jen na stejné Wi‑Fi jako vaše TV. Stránka přestane fungovat, když na TV zavřete obrazovku."</string>
+    <string name="iptv_phone_guide_placeholder">"Průvodce"</string>
+    <string name="iptv_phone_sending">"Odesílání…"</string>
+    <string name="iptv_phone_unreachable">"Nepodařilo se spojit s TV. Ujistěte se, že je obrazovka Přidat z telefonu stále otevřená a jste na stejné Wi‑Fi."</string>
+    <string name="iptv_phone_not_found">"Nenalezeno"</string>
+    <string name="iptv_phone_nothing_to_send">"Není co odeslat."</string>
+    <string name="iptv_phone_missing">"Něco chybí."</string>
+    <string name="iptv_phone_could_not_add">"Televize to nemohla přidat. Zkuste to znovu."</string>
+    <string name="iptv_phone_playlist_missing">"Vložte odkaz na playlist."</string>
+    <string name="iptv_phone_playlist_scheme">"Odkaz na playlist by měl začínat http:// nebo https://."</string>
+    <string name="iptv_phone_epg_scheme">"Odkaz EPG by měl začínat http:// nebo https://."</string>
+    <string name="iptv_phone_server_missing">"Zadejte adresu serveru."</string>
+    <string name="iptv_phone_server_invalid">"To nevypadá jako adresa serveru."</string>
+    <string name="iptv_phone_credentials_missing">"Zadejte uživatelské jméno a heslo."</string>
+    <string name="iptv_phone_inclusion_missing">"Zapněte TV kanály nebo filmy a seriály."</string>
+    <string name="iptv_phone_epg_missing">"Vložte odkaz EPG."</string>
+    <string name="iptv_phone_kind_missing">"Vyberte, co přidat."</string>
+</resources>

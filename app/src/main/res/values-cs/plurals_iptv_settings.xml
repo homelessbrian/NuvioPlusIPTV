@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="one">"%1$d playlist"</item>
+        <item quantity="few">"%1$d playlisty"</item>
+        <item quantity="many">"%1$d playlistu"</item>
+        <item quantity="other">"%1$d playlistů"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="one">"%1$d průvodce"</item>
+        <item quantity="few">"%1$d průvodci"</item>
+        <item quantity="many">"%1$d průvodce"</item>
+        <item quantity="other">"%1$d průvodců"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="one">"%1$d kanál"</item>
+        <item quantity="few">"%1$d kanály"</item>
+        <item quantity="many">"%1$d kanálu"</item>
+        <item quantity="other">"%1$d kanálů"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="one">"%1$d pořad spárován"</item>
+        <item quantity="few">"%1$d pořady spárovány"</item>
+        <item quantity="many">"%1$d pořadu spárováno"</item>
+        <item quantity="other">"%1$d pořadů spárováno"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="one">"%1$d odebrán"</item>
+        <item quantity="few">"%1$d odebrány"</item>
+        <item quantity="many">"%1$d odebráno"</item>
+        <item quantity="other">"%1$d odebráno"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="one">"%1$d min"</item>
+        <item quantity="few">"%1$d min"</item>
+        <item quantity="many">"%1$d min"</item>
+        <item quantity="other">"%1$d min"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="one">"%1$d den"</item>
+        <item quantity="few">"%1$d dny"</item>
+        <item quantity="many">"%1$d dne"</item>
+        <item quantity="other">"%1$d dní"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="one">"%1$d hodina"</item>
+        <item quantity="few">"%1$d hodiny"</item>
+        <item quantity="many">"%1$d hodiny"</item>
+        <item quantity="other">"%1$d hodin"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="one">"%1$d sekunda"</item>
+        <item quantity="few">"%1$d sekundy"</item>
+        <item quantity="many">"%1$d sekundy"</item>
+        <item quantity="other">"%1$d sekund"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="one">"před %1$d dnem"</item>
+        <item quantity="few">"před %1$d dny"</item>
+        <item quantity="many">"před %1$d dne"</item>
+        <item quantity="other">"před %1$d dny"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="one">"před %1$d týdnem"</item>
+        <item quantity="few">"před %1$d týdny"</item>
+        <item quantity="many">"před %1$d týdne"</item>
+        <item quantity="other">"před %1$d týdny"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="one">"před %1$d měsícem"</item>
+        <item quantity="few">"před %1$d měsíci"</item>
+        <item quantity="many">"před %1$d měsíce"</item>
+        <item quantity="other">"před %1$d měsíci"</item>
+    </plurals>
+</resources>

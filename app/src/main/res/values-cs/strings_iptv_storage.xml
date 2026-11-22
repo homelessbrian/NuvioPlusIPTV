@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"Toto zařízení"</string>
+    <string name="iptv_storage_usb_drive">"USB disk"</string>
+    <string name="iptv_storage_read_only">"Jen pro čtení. Tento box disk čte, ale nemůže na něj zapisovat (obvykle disk NTFS). Naformátováním na exFAT na něj budete moci nahrávat."</string>
+    <string name="iptv_storage_unsupported_format">"Tento box nedokáže přečíst formát disku. Naformátování na exFAT to obvykle vyřeší."</string>
+    <string name="iptv_storage_not_ready">"Ještě není připraven. Chvíli počkejte a otevřete tento seznam znovu."</string>
+    <string name="iptv_storage_no_app_folder">"Android aplikaci nedal na disku vlastní složku. Odpojte disk a připojte jej znovu, nebo restartujte box."</string>
+    <string name="iptv_storage_unusable_state">"Momentálně nepoužitelný (%1$s)."</string>
+</resources>

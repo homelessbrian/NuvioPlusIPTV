@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"Náhledy při posouvání"</string>
+    <string name="playback_section_seek_thumbnails_desc">"Náhledové obrázky nad posuvníkem při posouvání"</string>
+    <string name="iptv_thumbs_title">"Náhledy při posouvání"</string>
+    <string name="iptv_thumbs_subtitle">"Při posouvání ukazuje náhledový obrázek nad posuvníkem. Obrázky se vytvářejí v této TV ze samotného videa"</string>
+    <string name="iptv_thumbs_works_on">"Funguje u: filmů a pořadů v hlavním přehrávači (včetně streamovaných odkazů HLS), vašich nahrávek, sportovních záznamů a sestřihů, zpětného sledování a přetáčení Live TV (vyrovnávací paměť pozastavení).\nZpětné sledování: obrázky pocházejí z části uložené funkcí Rychlejší přeskakování ve zpětném sledování, nebo přímo od poskytovatele u streamovaného (HLS) zpětného sledování.\nNefunguje u: torrentů, odkazů DASH ani chráněných streamů."</string>
+    <string name="iptv_thumbs_low_memory_note">"Toto zařízení má omezenou paměť. Náhledy mohou způsobit trhání. Pokud ano, samy se pozastaví a posuvník to oznámí."</string>
+    <string name="iptv_thumbs_include_4k">"Zahrnout 4K a HDR"</string>
+    <string name="iptv_thumbs_include_4k_desc">"Vytváří náhledy i pro videa 4K a HDR. Na zařízeních s dostatkem paměti je zapnuto, na slabších vypnuto, ale můžete to zapnout kdekoli a vyzkoušet. Náhledy 4K mohou na slabších zařízeních trhat nebo nefungovat a spotřebují víc dat. Obrázky z HDR videí mohou vypadat vybledle. Streamované odkazy používají svou nejmenší verzi, takže u nich na tom málokdy záleží"</string>
+    <string name="iptv_thumbs_when_to_make">"Kdy vytvářet náhledy"</string>
+    <string name="iptv_thumbs_when_seeking">"Jen při pozastavení nebo posouvání"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"Nejlehčí volba: při běžném přehrávání se nic nevytváří"</string>
+    <string name="iptv_thumbs_when_watching">"Během sledování"</string>
+    <string name="iptv_thumbs_when_watching_desc">"Vytvářejí se i na pozadí během přehrávání, když je video dobře načteno dopředu"</string>
+    <string name="iptv_thumbs_when_right_away">"Hned"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"Celé video od začátku, hned po otevření. Spotřebuje nejvíc dat"</string>
+    <string name="iptv_thumbs_storage_limit">"Limit úložiště"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"Uložené náhledy zaberou až tolik místa; nejdříve se mažou videa sledovaná nejdávněji"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"Vymazat uložené náhledy"</string>
+    <string name="iptv_thumbs_clear_desc">"Smaže všechny uložené náhledy. Při potřebě se vytvoří znovu"</string>
+    <string name="iptv_thumbs_last_paused">"Naposledy pozastaveno kvůli málo paměti: %1$s, %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"Vytváření náhledů…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"Náhledy pozastaveny: málo paměti"</string>
+    <string name="iptv_thumbs_msg_live">"Žádné náhledy pro Live TV"</string>
+    <string name="iptv_thumbs_msg_dash">"Žádné náhledy pro odkazy DASH"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"Pro náhledy zapněte Rychlejší přeskakování ve zpětném sledování"</string>
+    <string name="iptv_thumbs_msg_protected">"Tento stream je chráněný: žádné náhledy"</string>
+    <string name="iptv_thumbs_msg_torrent">"Žádné náhledy pro torrenty"</string>
+    <string name="iptv_thumbs_msg_link_kind">"Žádné náhledy pro tento druh odkazu"</string>
+    <string name="iptv_thumbs_msg_unreadable">"Tento stream nelze pro náhledy přečíst"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"Části tohoto streamu jsou pro náhledy příliš velké"</string>
+    <string name="iptv_thumbs_msg_stopped">"Náhledy pro toto video přestaly fungovat"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"Server neposlal náhledové obrázky"</string>
+    <string name="iptv_thumbs_msg_format">"Z formátu tohoto videa nelze na tomto zařízení vytvořit náhledy"</string>
+    <string name="iptv_thumbs_msg_open_failed">"Toto video se nepodařilo otevřít pro náhledy"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"Žádné náhledy pro tento stream zpětného sledování"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Žádné náhledy: tato TV potřebuje svůj jediný dekodér videa pro samotné video"</string>
+</resources>

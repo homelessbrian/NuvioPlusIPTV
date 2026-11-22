@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Nejlepší kvalita"</string>
+    <string name="autoplay_mode_quality_desc">"Přehraje nejlepší zdroj podle vašich pravidel kvality: rozlišení, zdroj, důvěryhodné release skupiny, HDR a zvuk."</string>
+    <string name="quality_rules_title">"Pravidla kvality"</string>
+    <string name="quality_rules_subtitle">"Co vybírá Nejlepší kvalita a jak řadí Nejlepší kvalita první, pro každý zdroj."</string>
+    <string name="quality_rules_open">"Zobrazit"</string>
+    <string name="quality_rules_close">"Skrýt"</string>
+    <string name="stream_sort_sources">"Řadit zdroje"</string>
+    <string name="stream_sort_sources_sub">"Pořadí seznamu zdrojů."</string>
+    <string name="stream_sort_source_order">"Pořadí zdrojů"</string>
+    <string name="stream_sort_source_order_desc">"Tak, jak je posílá každý zdroj."</string>
+    <string name="stream_sort_best_first">"Nejlepší kvalita první"</string>
+    <string name="stream_sort_best_first_desc">"Seřazeno podle vašich pravidel kvality. Odkazy, které pravidla vyřadí, se nezobrazí."</string>
+    <string name="quality_low_groups_title">"Release skupiny nízké kvality"</string>
+    <string name="quality_low_groups_subtitle">"Skupiny známé špatnými nebo falešnými release (seznam TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Přesunout na konec"</string>
+    <string name="quality_low_groups_hide">"Skrýt"</string>
+    <string name="quality_low_groups_normal">"Jako ostatní"</string>
+    <string name="quality_trusted_groups_title">"Důvěryhodné release skupiny"</string>
+    <string name="quality_trusted_groups_subtitle">"Nejlepší první. Začíná seznamem TRaSH Guides. Vymažte ho a seznam se vrátí."</string>
+    <string name="quality_rules_reset_title">"Obnovit doporučené"</string>
+    <string name="quality_rules_reset_subtitle">"Vrátí všechna pravidla kvality na doporučené nastavení."</string>
+</resources>
