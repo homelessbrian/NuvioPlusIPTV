@@ -101,7 +101,7 @@ internal class SyncParts(private val store: SharedPreferences) {
             "favorites", "hidden_channels", "hidden_groups", "hidden_playlists", "channel_names", "channel_logos", "channel_numbers",
             "group_names", "group_order", "custom_groups", "channel_order", "channel_copies", "channel_audio",
             "picture_shapes", "locked_groups", "favorite_groups", "name_removals", "reminders",
-            "vod_hidden_categories", "vod_group_order", "vod_group_names"
+            "vod_hidden_categories", "vod_group_order", "vod_group_names", "title_match_fixes"
         )
         private val SPORTS_KEYS = setOf("sports", "sports_mine")
         private val CALENDAR_KEYS = setOf(

@@ -42,11 +42,12 @@ class TitleMatchFixes @Inject constructor(
     suspend fun get(key: String): LiveTvPosterResolver.Hit? =
         if (loaded) fixes.value[key] else decode(prefs.titleMatchFixes.first())[key]
 
-    /** Saves [hit] for [key]; null goes back to automatic. */
-    suspend fun set(key: String, hit: LiveTvPosterResolver.Hit?) {
+    /** Saves [hit] (TMDB's [tmdbId], for the phone app) for [key]; null goes back to automatic. */
+    suspend fun set(key: String, hit: LiveTvPosterResolver.Hit?, tmdbId: Int? = null) {
         prefs.editTitleMatchFixes { raw ->
             val o = runCatching { JSONObject(raw) }.getOrNull() ?: JSONObject()
-            if (hit == null) o.remove(key) else o.put(key, VodMatchJson.encode(hit))
+            if (hit == null) o.remove(key)
+            else o.put(key, JSONObject(VodMatchJson.encode(hit)).apply { if (tmdbId != null) put("tm", tmdbId) }.toString())
             o.toString()
         }
         // Wait until the pick shows here too, so what's looked up next uses it.

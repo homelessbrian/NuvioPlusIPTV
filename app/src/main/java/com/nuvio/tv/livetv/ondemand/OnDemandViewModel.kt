@@ -101,7 +101,7 @@ class OnDemandViewModel @Inject constructor(
             val hit = picked?.let { runCatching { matchFixes.toHit(it) }.rethrowCancel().getOrNull() }
             if (picked != null && hit == null) return@launch
             repository.setPosterFix(item, "", null)
-            matchFixes.set(com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid), hit)
+            matchFixes.set(com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid), hit, picked?.tmdbId)
             posters.remove(item.uid)
             names.remove(item.uid)
             homeMatched.remove(item.uid)

@@ -278,7 +278,7 @@ class RecordingsViewModel @Inject constructor(
     fun setMatch(title: String, picked: com.nuvio.tv.livetv.data.TitleMatchFixes.Candidate?) {
         viewModelScope.launch {
             val hit = picked?.let { matchFixes.toHit(it) }
-            matchFixes.set(com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(title), hit)
+            matchFixes.set(com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(title), hit, picked?.tmdbId)
             // The collector below redraws the cards (here and when a pick comes in from another TV).
         }
     }
