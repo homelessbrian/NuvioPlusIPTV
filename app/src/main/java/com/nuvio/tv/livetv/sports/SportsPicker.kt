@@ -267,6 +267,22 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
                     if (league != null) {
                         val followed = league.id in follows.pins
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // The whole sport at once: every league in the row above
+                            // (then step into one and unfollow it, say the CFL, to take it back off).
+                            val inSport = leagues
+                            if (inSport.size > 1) {
+                                val name = runCatching { Sport.valueOf(sport).label }.getOrDefault("this sport")
+                                val k = inSport.count { it.id in follows.pins }
+                                SportsPill(
+                                    when {
+                                        k == inSport.size -> "★  Following all ${inSport.size} $name leagues"
+                                        k == 0 -> "☆  Follow all ${inSport.size} $name leagues"
+                                        else -> "◐  Following $k of ${inSport.size} $name: follow the rest"
+                                    },
+                                    selected = k == inSport.size,
+                                    onClick = { viewModel.repo.setPins(inSport.map { it.id }, k != inSport.size) }
+                                )
+                            }
                             // Following a league: its row on My Sports. A league with teams is
                             // there to browse; an event sport's events (UFC, F1…) count as yours.
                             SportsPill(

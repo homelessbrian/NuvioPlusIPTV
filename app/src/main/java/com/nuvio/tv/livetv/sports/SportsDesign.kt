@@ -804,11 +804,32 @@ internal fun SportsAction(
 
 /** A line in a Sports pop-up: white when highlighted, like the cards. */
 @Composable
-internal fun SportsMenuRow(label: String, modifier: Modifier = Modifier, detail: String? = null, onClick: () -> Unit) {
+internal fun SportsMenuRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    detail: String? = null,
+    /** A small button at the end of the line, reached with Right (for example "Turn all off"). */
+    action: String? = null,
+    onAction: () -> Unit = {},
+    onClick: () -> Unit
+) {
+    if (action == null) {
+        SportsMenuLine(label, modifier.fillMaxWidth(), detail, onClick)
+        return
+    }
+    // The line and its button are two separate things to highlight (Right goes from one to the other).
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        SportsMenuLine(label, modifier.weight(1f), detail, onClick)
+        Spacer(Modifier.width(10.dp))
+        SportsAction(action, onClick = onAction)
+    }
+}
+
+@Composable
+private fun SportsMenuLine(label: String, modifier: Modifier, detail: String?, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Row(
         modifier
-            .fillMaxWidth()
             .clip(SportsLook.SmallShape)
             .background(if (focused) NuvioTheme.colors.FocusBackground.copy(alpha = 0.25f) else Color.Transparent)
             .border(if (focused) NuvioTheme.focusRing.border(2.dp) else androidx.compose.foundation.BorderStroke(0.dp, Color.Transparent), SportsLook.SmallShape)

@@ -179,8 +179,15 @@ fun LiveTvGuideScreen(
     onOpenMultiview: () -> Unit = {},
     onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() },
     /** Full screen, the Channel Row's Games list: the game you're watching, on the Sports page. */
-    onOpenSportsGame: (String) -> Unit = {}
+    onOpenSportsGame: (String) -> Unit = {},
+    /** Asked when this screen goes away: false when it's only a Live TV screen on top (full screen, settings…) that Back returns from. */
+    leftLiveTv: () -> Boolean = { true }
 ) {
+    // Left Live TV for somewhere else: Recently Watched shows its real order when you come back.
+    val leftCheck = androidx.compose.runtime.rememberUpdatedState(leftLiveTv)
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { if (leftCheck.value()) viewModel.releaseRecentOrder() }
+    }
     // Hold the first draw until the saved settings and menu look are read. Before that the guide
     // only has the built-in defaults, and it drew one frame of the old look, then redrew.
     val settingsLoaded by viewModel.settingsLoaded.collectAsStateWithLifecycle()
@@ -1304,7 +1311,7 @@ private fun LiveTvGuideScreenBody(
                             scope.launch { delay(60); runCatching { gridFocus.requestFocus() } }
                         }
                     },
-                    onGroupMenu = { g -> if (!g.special) groupMenu = g },
+                    onGroupMenu = { g -> if (!g.special || g.id == ChannelGroup.RECENT) groupMenu = g },
                     searchFocusRequester = groupSearchFocus,
                     onRight = {
                         column = GuideColumn.CHANNEL
@@ -2134,6 +2141,12 @@ private fun LiveTvGuideScreenBody(
                 },
                 isFavorite = target.channel.key in user.favorites,
                 inFavoritesGroup = ui.selectedGroupId == ChannelGroup.FAVORITES,
+                inRecentGroup = ui.selectedGroupId == ChannelGroup.RECENT,
+                onRemoveRecent = {
+                    viewModel.removeFromRecent(target.channel.key)
+                    menuTarget = null
+                    com.nuvio.tv.livetv.record.LiveTvNotice.show("Removed from recently watched")
+                },
                 now = now,
                 onDismiss = { menuTarget = null },
                 onWatch = { menuTarget = null; viewModel.preview(target.channel); goFullscreen() },
@@ -2363,6 +2376,14 @@ private fun LiveTvGuideScreenBody(
             ActionMenuDialog(
                 title = g.title,
                 actions = buildList {
+                    if (g.id == ChannelGroup.RECENT) {
+                        add("Clear recently watched" to {
+                            groupMenu = null
+                            viewModel.clearRecent()
+                            com.nuvio.tv.livetv.record.LiveTvNotice.show("Recently watched cleared")
+                        })
+                        return@buildList
+                    }
                     add("Rename group…" to {
                         groupMenu = null
                         textPrompt = TextPrompt(
@@ -3492,7 +3513,8 @@ private fun GroupColumn(
                             if (!reorderMode && hiddenPending == null) onFocusGroup(g)
                         },
                         onClick = { if (hiddenPending != null) onToggleGroupVisible(g.id) else onSelect(g) },
-                        onLongClick = if (g.special) null else ({ onGroupMenu(g) })
+                        // Recently Watched has its own long-press menu (clear the list).
+                        onLongClick = if (g.special && g.id != ChannelGroup.RECENT) null else ({ onGroupMenu(g) })
                     )
                 }
             }
@@ -3724,6 +3746,8 @@ private fun ChannelContextMenu(
     target: MenuTarget,
     isFavorite: Boolean,
     inFavoritesGroup: Boolean,
+    inRecentGroup: Boolean = false,
+    onRemoveRecent: () -> Unit = {},
     now: Long,
     onDismiss: () -> Unit,
     onWatch: () -> Unit,
@@ -3813,6 +3837,7 @@ private fun ChannelContextMenu(
             if (program != null && seriesLabel == "Record series") item { MenuItem("Record new episodes only", onClick = { onSeriesNew(program) }) }
             item { MenuItem("Schedule a recording…", onClick = onScheduleRecording) }
             item { MenuHeader("Favorites & groups") }
+            if (inRecentGroup) item { MenuItem("Remove from recently watched", onClick = onRemoveRecent) }
             item { MenuItem(if (isFavorite) "Remove from favorites" else "Add to favorites", onClick = onToggleFavorite) }
             if (!inFavoritesGroup) item { MenuItem("Pick favorites in this group…", onClick = onPickFavorites) }
             if (isFavorite && inFavoritesGroup) {

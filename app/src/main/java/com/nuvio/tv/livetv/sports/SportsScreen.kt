@@ -291,10 +291,18 @@ fun SportsScreen(
         if (SportsLaunch.takeOpenPicker() || viewModel.isFirstVisit()) picker = true
     }
 
+    // A game asked for (Hold OK, or Watch) before any channel was found: it's looked for right now
+    // and plays as soon as its best channel turns up.
+    var pendingPlay by remember { mutableStateOf<SportsEvent?>(null) }
     /** Full screen in Live TV (from the start when the game is over). */
     fun watch(ev: SportsEvent, m: ChannelMatch?) {
         if (m == null) {
-            LiveTvNotice.show("No channel found for ${ev.title}. Open it and use Fix Channel to pick one.")
+            if (!hasChannels) LiveTvNotice.show("No playlist yet. Go to Settings › Live TV › Playlists & Guides and add an Xtream login or M3U link.")
+            else {
+                LiveTvNotice.show("Looking for a channel for ${ev.title}…")
+                pendingPlay = ev
+                viewModel.repo.findChannelsNow(ev)
+            }
             return
         }
         SportsLaunch.openedFromSports(ev.id)
@@ -325,10 +333,30 @@ fun SportsScreen(
     fun quickWatch(ev: SportsEvent) {
         val m = matches[ev.id]?.firstOrNull()
         when {
-            m == null -> LiveTvNotice.show("No channel found for ${ev.title}. Open it and use Fix Channel to pick one.")
+            m == null && !hasChannels -> LiveTvNotice.show("No playlist yet. Go to Settings › Live TV › Playlists & Guides and add an Xtream login or M3U link.")
+            m == null -> {
+                // Don't just say so: start looking for it now, and play it when it's found.
+                LiveTvNotice.show("Looking for a channel for ${ev.title}…")
+                pendingPlay = ev
+                viewModel.repo.findChannelsNow(ev)
+            }
             videoOn && ev.state != GameState.POST -> { SportsLaunch.pickGame(ev.id, m.channel.key); viewModel.playHere(m) }
             else -> watch(ev, m)
         }
+    }
+
+    LaunchedEffect(pendingPlay, matches) {
+        val ev = pendingPlay ?: return@LaunchedEffect
+        val m = matches[ev.id]?.firstOrNull() ?: return@LaunchedEffect
+        pendingPlay = null
+        LiveTvNotice.show("Found ${m.channel.name} for ${ev.title}")
+        if (videoOn && ev.state != GameState.POST) { SportsLaunch.pickGame(ev.id, m.channel.key); viewModel.playHere(m) } else watch(ev, m)
+    }
+    // Gives up on a request that finds nothing (the search itself stops after about ten minutes).
+    LaunchedEffect(pendingPlay) {
+        if (pendingPlay == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(10 * 60_000L)
+        pendingPlay = null
     }
 
     // Back up to the top bar (Left: its first button, My Sports, so one more Left opens Nuvio's
@@ -703,6 +731,8 @@ private fun SportsHub(
         chip != null && Sport.entries.any { it.name == chip } -> if (follows.isEmpty) CHIP_ALL else CHIP_MINE
         else -> chip ?: if (follows.isEmpty) CHIP_ALL else CHIP_MINE
     }
+    // Which leagues are kept fresh follows what the page shows: every league, or just yours.
+    LaunchedEffect(effectiveChip) { viewModel.repo.setViewScope(effectiveChip != CHIP_MINE) }
     val rowsSport: Sport? = effectiveChip.takeIf { it.startsWith(CHIP_SPORT) }?.let { c -> followedSports.firstOrNull { CHIP_SPORT + it.name == c } }
     val rowsPage = effectiveChip == CHIP_MINE || rowsSport != null
     // On every Sports page, the first Back takes the highlight up to the top (the page's own
@@ -1166,6 +1196,7 @@ private fun SportsHub(
             settings = settings,
             followed = remember(follows) { viewModel.repo.followedLeagueIds(follows) },
             onToggle = { l -> viewModel.repo.updateSettings { SportsCatalog.toggleShown(l, it) } },
+            onSetAll = { list, on -> viewModel.repo.updateSettings { SportsCatalog.setShown(list, on, viewModel.repo.followedLeagueIds(follows), it) } },
             onDismiss = { leaguesOpen = false; leaguesClosed++ }
         )
     }
@@ -1221,7 +1252,7 @@ private fun GameList(
         }
         if (!hasChannels) item(key = "nochannels") {
             LiveText(
-                "Add a playlist in Live TV settings to watch games from here. Scores and times still show.",
+                "No playlist yet: add one in Settings › Live TV › Playlists & Guides to watch games from here. Scores and times still show.",
                 color = SportsLook.Dim, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp)
             )
         }
@@ -1334,7 +1365,13 @@ private fun LeaguesBar(line: String, modifier: Modifier = Modifier, onClick: () 
  * doesn't jump away from the highlight when you press OK.
  */
 @Composable
-private fun LeaguesPicker(settings: SportsSettings, followed: Set<String>, onToggle: (League) -> Unit, onDismiss: () -> Unit) {
+private fun LeaguesPicker(
+    settings: SportsSettings,
+    followed: Set<String>,
+    onToggle: (League) -> Unit,
+    onSetAll: (List<League>, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
     val first = remember { FocusRequester() }
     val field = remember { FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -1352,24 +1389,38 @@ private fun LeaguesPicker(settings: SportsSettings, followed: Set<String>, onTog
     }
     SportsDialog(onDismiss = onDismiss, width = 620.dp) {
         LiveText("Leagues on All Events", size = 18.sp, weight = FontWeight.Bold)
-        LiveText("OK turns a league on or off, and opens or closes a sport. Leagues you follow always show.", color = SportsLook.Dim, size = 12.sp)
+        LiveText("OK turns a league on or off or opens a sport; Right on a sport: Turn all on / off. Leagues you follow always show.", color = SportsLook.Dim, size = 12.sp, maxLines = 3)
         Spacer(Modifier.height(8.dp))
         LiveTextField(
             value = query, onValueChange = { query = it }, hint = "Search leagues", focusRequester = field,
             onDone = { keyboard?.hide(); runCatching { first.requestFocus() } }
         )
         Spacer(Modifier.height(8.dp))
+        // Everything at once (or, with a search typed, just the leagues it found).
+        val scope = shown.flatMap { it.second }
+        val switchable = scope.count { it.id !in followed }
+        val kept = scope.size - switchable
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            SportsAction(if (searching) "Turn these on" else "Turn all on", onClick = { onSetAll(scope, true) })
+            SportsAction(if (searching) "Turn these off" else "Turn all off", onClick = { onSetAll(scope, false) })
+            if (kept > 0) LiveText("$kept you follow stay on", color = SportsLook.Dim, size = 11.sp)
+        }
+        Spacer(Modifier.height(8.dp))
         if (searching && shown.isEmpty()) LiveText("No leagues match that search.", color = SportsLook.Dim, size = 12.sp)
-        LazyColumn(Modifier.heightIn(max = 360.dp).keepFocusWhileHeld(horizontal = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        LazyColumn(Modifier.heightIn(max = 300.dp).keepFocusWhileHeld(horizontal = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             shown.forEachIndexed { gi, (sport, list) ->
                 val isOpen = searching || sport in open
                 item(key = "g_${sport.name}") {
                     val total = groups.first { it.first == sport }.second
                     val on = total.count { it.id in followed || SportsCatalog.shown(it, settings) }
+                    // Any league here that can be turned on and isn't: the button turns them on; otherwise it turns them off.
+                    val someOff = list.any { it.id !in followed && !SportsCatalog.shown(it, settings) }
                     SportsMenuRow(
                         label = (if (isOpen) "▾   " else "▸   ") + "${sport.icon}  ${sport.label}",
                         detail = if (searching) "${list.size} found" else "$on of ${total.size} on",
                         modifier = if (gi == 0) Modifier.focusRequester(first) else Modifier,
+                        action = if (someOff) "Turn all on" else "Turn all off",
+                        onAction = { onSetAll(list, someOff) },
                         onClick = { if (!searching) open = if (sport in open) open - sport else open + sport }
                     )
                 }
@@ -1882,7 +1933,7 @@ private fun GamePage(
                     }
                 }
                 matching -> LiveText("Looking through your channels…", color = SportsLook.Dim, size = 12.sp)
-                !hasChannels -> LiveText("Add a playlist in Live TV settings to watch from here.", color = SportsLook.Dim, size = 12.sp)
+                !hasChannels -> LiveText("No playlist yet. Add one in Settings › Live TV › Playlists & Guides.", color = SportsLook.Dim, size = 12.sp)
                 // Too far off to have been looked for yet: say when it will be.
                 ev.startMs - System.currentTimeMillis() > SportsMatcher.AHEAD_MS -> LiveText(
                     "Your channels are checked for this game from " +
@@ -1892,7 +1943,8 @@ private fun GamePage(
                     color = SportsLook.Dim, size = 12.sp, maxLines = 3
                 )
                 else -> LiveText(
-                    "Not in your channels' guides right now. Guides update during the day, so check back closer to the start. " +
+                    (if (ev.state == GameState.LIVE) "Not found in your channels yet. It's checked again every minute while this page is open. "
+                    else "Not in your channels' guides right now. Guides update during the day, so check back closer to the start. ") +
                         "Know where it's on? Pick a channel and it's remembered.",
                     color = SportsLook.Dim, size = 12.sp, maxLines = 3
                 )

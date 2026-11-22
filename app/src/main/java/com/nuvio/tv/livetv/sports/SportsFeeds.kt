@@ -246,6 +246,16 @@ internal class SportsFeeds {
     /** One ready-made file: its games, the league's logo, and the fingerprint of what came. */
     class CompactFile(val games: List<SportsEvent>, val logo: String?, val hash: String)
 
+    /** When the shared score files were found missing (see [compactIndex]); 0 when they're there. */
+    @Volatile private var sharedDeadAt = 0L
+
+    /**
+     * The shared score files aren't there for this build (a 404 within the last 6 hours): every league
+     * is then asked of ESPN directly, without first asking for a file that isn't there (one wasted
+     * request per league, every round).
+     */
+    fun sharedDead(now: Long): Boolean = sharedDeadAt != 0L && now - sharedDeadAt < 6 * 3_600_000L
+
     @Volatile private var compactIndexKept: CompactIndex? = null
     @Volatile private var compactIndexEtag: String? = null
     @Volatile private var compactIndexAt = 0L
@@ -256,6 +266,7 @@ internal class SportsFeeds {
      * little while; null when there is none, or it's old (the caller then reads the old way).
      */
     fun compactIndex(now: Long): CompactIndex? {
+        if (sharedDead(now)) return null
         val kept = compactIndexKept
         if (kept != null && now - compactIndexAt < 60_000L) return kept
         synchronized(this) {
@@ -268,8 +279,14 @@ internal class SportsFeeds {
                 http.newCall(b.build()).execute().use { r ->
                     when {
                         r.code == 304 && again != null -> again
-                        !r.isSuccessful -> null
+                        !r.isSuccessful -> {
+                            // A build without the app key reads the public nuvio-data files, which no longer
+                            // have the score files (they're served only to keyed builds): don't ask again for a while.
+                            if (r.code == 404 && !com.nuvio.tv.livetv.data.ForkService.hasKey) sharedDeadAt = now
+                            null
+                        }
                         else -> {
+                            sharedDeadAt = 0L
                             val parsed = parseCompactIndex(r.body?.string() ?: return@use null)
                             compactIndexEtag = if (parsed != null) r.header("ETag") else null
                             parsed

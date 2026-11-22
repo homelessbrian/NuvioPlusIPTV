@@ -540,6 +540,16 @@ object SportsCatalog {
         return s.copy(hiddenLeagues = set)
     }
 
+    /**
+     * Turns every one of [leagues] on or off for All Events in one go. Leagues you follow are left
+     * as they are (they always show, see [shown]).
+     */
+    fun setShown(leagues: Collection<League>, on: Boolean, followed: Set<String>, s: SportsSettings): SportsSettings {
+        var out = s
+        for (l in leagues) if (l.id !in followed && shown(l, out) != on) out = toggleShown(l, out)
+        return out
+    }
+
     /** Leagues in the order the region cares about them. */
     fun ordered(s: SportsSettings): List<League> {
         val region = regionOf(s)

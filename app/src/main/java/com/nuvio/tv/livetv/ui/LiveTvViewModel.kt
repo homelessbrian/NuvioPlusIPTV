@@ -18,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -49,6 +50,12 @@ object LiveTvAppOpens {
 @Singleton
 class LiveTvSession @Inject constructor() {
     val currentGroupId = MutableStateFlow<String?>(null)
+    /**
+     * The order Recently Watched shows while you stay in it. A channel played from that list is
+     * saved as the most recent straight away, but the list itself doesn't jump under you: it moves
+     * to the top once you've been to another group (or left Live TV) and come back.
+     */
+    val heldRecent = MutableStateFlow<List<String>?>(null)
     /** The [LiveTvAppOpens.count] that "Start in Full Screen" last ran for. */
     var autoPlayedForOpen = -1
     /** Set when full screen opens, so Back to the guide returns to the channel, not the groups. */
@@ -205,7 +212,9 @@ class LiveTvViewModel @Inject constructor(
         // Only what the lists use: saving the last channel, its picture quality or audio track
         // (on every channel change) used to rebuild every list over every channel, right when a
         // slower box needed its processor to start the new channel.
-        combine(displayChannels, userState.distinctUntilChanged { a, b -> sameForLists(a, b) }, settings) { a, b, c -> Triple(a, b, c) },
+        combine(displayChannels, userState.distinctUntilChanged { a, b -> sameForLists(a, b) }, settings, session.heldRecent) { a, b, c, held ->
+            Triple(a, if (held != null) b.copy(recent = held) else b, c)
+        },
         session.currentGroupId,
         searchQuery,
         combine(hasSources, com.nuvio.tv.livetv.parental.ParentalControls.unlocked) { h, _ -> h }
@@ -231,6 +240,10 @@ class LiveTvViewModel @Inject constructor(
     }
 
     init {
+        // Gone to another group: Recently Watched shows its real order next time.
+        viewModelScope.launch {
+            session.currentGroupId.collect { if (it != ChannelGroup.RECENT) session.heldRecent.value = null }
+        }
         // The player's settings, audio memory and catch-up notes are kept by [hooks] for the
         // whole app; this screen only answers backup switches and stalled replays while open.
         hooks.register(this)
@@ -432,6 +445,10 @@ class LiveTvViewModel @Inject constructor(
         val shown = (watchedIn ?: session.currentGroupId.value)?.takeIf { it != ChannelGroup.SEARCH }
         viewModelScope.launch {
             val addToRecent = !isAdultChannel(channel)
+            // Played from Recently Watched: keep the list as it is on screen (the change is still saved).
+            if (addToRecent && shown == ChannelGroup.RECENT && session.heldRecent.value == null) {
+                session.heldRecent.value = prefs.userState.first().recent
+            }
             prefs.recordWatched(channel.key, addToRecent = addToRecent)
             val user = prefs.userState.first()
             if (shown != null) {
@@ -470,7 +487,19 @@ class LiveTvViewModel @Inject constructor(
             .toList()
     }
 
-    fun clearRecent() { viewModelScope.launch { prefs.clearRecent() } }
+    fun clearRecent() {
+        session.heldRecent.value = null
+        viewModelScope.launch { prefs.clearRecent() }
+    }
+
+    /** One channel out of Recently Watched (it goes from the list on screen straight away). */
+    fun removeFromRecent(key: String) {
+        session.heldRecent.update { held -> held?.filter { it != key } }
+        viewModelScope.launch { prefs.removeRecent(key) }
+    }
+
+    /** Recently Watched moves to its saved order: called when Live TV is left. */
+    fun releaseRecentOrder() { session.heldRecent.value = null }
 
     /**
      * The channels in one of the Channel Row's lists (under the full play bar): recently watched

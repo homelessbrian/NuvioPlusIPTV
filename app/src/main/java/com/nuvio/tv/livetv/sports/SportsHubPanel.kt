@@ -127,7 +127,7 @@ internal fun HubIdlePanel(
         Spacer(Modifier.height(6.dp))
         LiveText(
             when {
-                !hasChannels -> "Add a playlist in Live TV settings to watch games here"
+                !hasChannels -> "No playlist yet: add one in Settings › Live TV › Playlists & Guides to watch games here"
                 ms.isEmpty() && ev.state == GameState.POST -> "Finished  ·  OK: results, highlights and replays"
                 ms.isEmpty() -> "Not found on your channels yet  ·  OK: game page"
                 ms.size == 1 -> "On ${ms[0].channel.name}  ·  Hold OK to watch it here"
