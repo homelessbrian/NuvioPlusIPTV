@@ -260,6 +260,8 @@ fun SportsScreen(
     var rowsReturning by remember { mutableStateOf(false) }
     // Left from the page's left edge: up to the top bar's first button (see leftJumpsToTop).
     val sportsFirstChip = remember { FocusRequester() }
+    // The button of the page you're on (Back takes the highlight up to it).
+    val sportsPageChip = remember { FocusRequester() }
     var topBarFocused by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val openSidebar = com.nuvio.tv.LocalOpenSidebar.current
@@ -328,13 +330,16 @@ fun SportsScreen(
         }
     }
 
-    // Back up to the top bar (its first button, My Sports, so one more Left or Back opens Nuvio's menu).
-    fun hubToTop() {
+    // Back up to the top bar (Left: its first button, My Sports, so one more Left opens Nuvio's
+    // menu; Back: the button of the page you're on, so one more Back opens the menu).
+    fun hubToTop(toPage: Boolean = false) {
         scope.launch {
             runCatching { listState.scrollToItem(0) }
             runCatching { rowsState.scrollToItem(0) }
             repeat(2) { androidx.compose.runtime.withFrameNanos { } }
-            if (runCatching { sportsFirstChip.requestFocus() }.isFailure) openSidebar()
+            val done = (toPage && runCatching { sportsPageChip.requestFocus() }.isSuccess) ||
+                runCatching { sportsFirstChip.requestFocus() }.isSuccess
+            if (!done) openSidebar()
         }
     }
     // Hold Back: full screen on what's playing in the window (like Live TV's guide). Nothing
@@ -465,8 +470,9 @@ fun SportsScreen(
                 )
             ) { SportsHub(
                 firstChip = sportsFirstChip,
+                pageChip = sportsPageChip,
                 topBarFocused = topBarFocused,
-                onBackToTop = { hubToTop() },
+                onBackToTop = { hubToTop(toPage = true) },
                 onTopBarFocus = { topBarFocused = it },
                 events = events,
                 known = known,
@@ -618,9 +624,11 @@ private fun SportsHub(
     onRowsReturned: () -> Unit,
     /** The top bar's first button (Left from the page's left edge comes up to it). */
     firstChip: FocusRequester,
+    /** The top bar's button for the page you're on (Back comes up to it). */
+    pageChip: FocusRequester,
     /** The top bar has the highlight. */
     topBarFocused: Boolean,
-    /** Back on My Sports' rows: the highlight goes up to the My Sports button first. */
+    /** Back on any Sports page: the highlight goes up to that page's button first. */
     onBackToTop: () -> Unit,
     onTopBarFocus: (Boolean) -> Unit,
     matches: Map<String, List<ChannelMatch>>,
@@ -694,9 +702,27 @@ private fun SportsHub(
     }
     val rowsSport: Sport? = effectiveChip.takeIf { it.startsWith(CHIP_SPORT) }?.let { c -> followedSports.firstOrNull { CHIP_SPORT + it.name == c } }
     val rowsPage = effectiveChip == CHIP_MINE || rowsSport != null
-    // On My Sports, the first Back takes the highlight up to the My Sports button; the next opens the menu.
+    // On every Sports page, the first Back takes the highlight up to the top (the page's own
+    // button in the top bar); the next opens the menu.
+    val topBarState = rememberLazyListState()
+    val topBarScope = androidx.compose.runtime.rememberCoroutineScope()
     BackHandler(enabled = !sidebarOpen) {
-        if (effectiveChip == CHIP_MINE && !topBarFocused) onBackToTop() else openSidebar()
+        if (topBarFocused) { openSidebar(); return@BackHandler }
+        topBarScope.launch {
+            // The page's button scrolled off the bar's end (a sport far along): bring it back first.
+            val key: Any = effectiveChip
+            val index = when (effectiveChip) {
+                CHIP_MINE -> 0
+                CHIP_ALL -> 1
+                CHIP_TABLES -> 2
+                CHIP_NETWORKS -> 3
+                else -> followedSports.indexOfFirst { CHIP_SPORT + it.name == effectiveChip }.takeIf { it >= 0 && followedSports.size > 1 }?.plus(6)
+            }
+            if (index != null && topBarState.layoutInfo.visibleItemsInfo.none { it.key == key }) {
+                runCatching { topBarState.scrollToItem(index) }
+            }
+            onBackToTop()
+        }
     }
     val leagueView = effectiveChip.takeIf { it.startsWith(CHIP_LEAGUE) }?.removePrefix(CHIP_LEAGUE)
     // Days before yesterday: their games are fetched when you open one.
@@ -864,25 +890,31 @@ private fun SportsHub(
         }
     }
     val filters: @Composable (Modifier) -> Unit = { m ->
-        LazyRow(m.keepFocusWhileHeld(vertical = false).onFocusChanged { onTopBarFocus(it.hasFocus) }, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)) {
+        // Switching pages swaps one top bar for another while it has the highlight, and the old
+        // one never hears it lost it: without this, Back thought the highlight was still up here
+        // and went straight to the menu.
+        DisposableEffect(Unit) { onDispose { onTopBarFocus(false) } }
+        // The button of the page you're on (Back brings the highlight up to it).
+        fun on(c: String): Modifier = if (effectiveChip == c) Modifier.focusRequester(pageChip) else Modifier
+        LazyRow(m.keepFocusWhileHeld(vertical = false).onFocusChanged { onTopBarFocus(it.hasFocus) }, state = topBarState, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)) {
             val upTo: Modifier = Modifier
-            item(key = CHIP_MINE) { FilterIcon("★", "My Sports", effectiveChip == CHIP_MINE, Modifier.focusRequester(firstChip).then(upTo), withLabel = true) { pickChip(CHIP_MINE) } }
+            item(key = CHIP_MINE) { FilterIcon("★", "My Sports", effectiveChip == CHIP_MINE, Modifier.focusRequester(firstChip).then(on(CHIP_MINE)).then(upTo), withLabel = true) { pickChip(CHIP_MINE) } }
             // Everything on, day by day (live games first), with how many are on now.
             item(key = CHIP_ALL) {
                 FilterIcon(
                     "▦", if (sections.liveCount > 0) "All Events · ${sections.liveCount} live" else "All Events",
-                    effectiveChip == CHIP_ALL, upTo, withLabel = true
+                    effectiveChip == CHIP_ALL, on(CHIP_ALL).then(upTo), withLabel = true
                 ) { pickChip(CHIP_ALL) }
             }
             // Your leagues' tables.
-            item(key = CHIP_TABLES) { FilterIcon("🏆", "Tables", effectiveChip == CHIP_TABLES, upTo, withLabel = true) { pickChip(CHIP_TABLES) } }
+            item(key = CHIP_TABLES) { FilterIcon("🏆", "Tables", effectiveChip == CHIP_TABLES, on(CHIP_TABLES).then(upTo), withLabel = true) { pickChip(CHIP_TABLES) } }
             // Each league's own channel (NFL Network, NBA TV…).
-            item(key = CHIP_NETWORKS) { FilterIcon("📡", "League Networks", effectiveChip == CHIP_NETWORKS, upTo, withLabel = true) { pickChip(CHIP_NETWORKS) } }
+            item(key = CHIP_NETWORKS) { FilterIcon("📡", "League Networks", effectiveChip == CHIP_NETWORKS, on(CHIP_NETWORKS).then(upTo), withLabel = true) { pickChip(CHIP_NETWORKS) } }
             item(key = "multiview") { FilterIcon("▦", "Multiview", false, upTo, withLabel = true, onClick = onOpenMultiview) }
             // Sports you follow: My Teams for that sport only.
             if (followedSports.size > 1) {
                 item(key = "sep1") { ChipGap() }
-                items(followedSports, key = { CHIP_SPORT + it.name }) { s -> FilterIcon(s.icon, s.label, effectiveChip == CHIP_SPORT + s.name, upTo) { pickChip(CHIP_SPORT + s.name) } }
+                items(followedSports, key = { CHIP_SPORT + it.name }) { s -> FilterIcon(s.icon, s.label, effectiveChip == CHIP_SPORT + s.name, on(CHIP_SPORT + s.name).then(upTo)) { pickChip(CHIP_SPORT + s.name) } }
             }
         }
     }
