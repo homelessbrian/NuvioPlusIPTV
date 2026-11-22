@@ -40,6 +40,8 @@ internal fun DriveFolderDialog(
     onDismiss: () -> Unit,
     /** The folder was picked and saved: its storage id. */
     onChosen: (String) -> Unit,
+    /** Open straight into this drive ([DriveFolders.idOf]) instead of the list of drives. */
+    startDrive: String? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -62,9 +64,15 @@ internal fun DriveFolderDialog(
         val f = dir
         when {
             d == null || f == null -> onDismiss()
-            f.absolutePath.trimEnd('/') == d.root.absolutePath.trimEnd('/') -> goTo(null, null)
+            f.absolutePath.trimEnd('/') == d.root.absolutePath.trimEnd('/') ->
+                if (startDrive != null) onDismiss() else goTo(null, null)
             else -> goTo(d, f.parentFile)
         }
+    }
+
+    // Opened from a drive in Save Recordings To: start in that drive.
+    LaunchedEffect(drives) {
+        if (startDrive != null && drive == null) drives.firstOrNull { it.id == startDrive }?.let { goTo(it, it.root) }
     }
 
     val suggested = context.getString(R.string.iptv_drive_folder_default_name)

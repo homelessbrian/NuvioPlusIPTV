@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import com.nuvio.tv.R
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -329,6 +330,8 @@ class RecordingsViewModel @Inject constructor(
     fun markUnwatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.clear(recorder.appContext, it.id) }
     fun moveTo(recs: List<LiveTvRecording>, target: RecordingStorage.Choice) = recorder.moveTo(recs.map { it.id }, target)
     fun storageIdOf(rec: LiveTvRecording): String? = recorder.storageIdOf(rec)
+    /** Where new recordings go now (Save Recordings To). */
+    fun currentStorageId(): String = recorder.currentStorage().id
 }
 
 /**
@@ -782,15 +785,31 @@ fun RecordingsScreen(
     }
     movePick?.let { recs ->
         val here = recs.mapNotNull { viewModel.storageIdOf(it) }.distinct()
-        val places = RecordingStorage.choices(recContext).filter { c -> recs.any { viewModel.storageIdOf(it) != c.id } }
+        val current = remember(recs) { viewModel.currentStorageId() }
+        // Each drive once: a drive moves recordings into the folder chosen for it (Save Recordings To).
+        val allPlaces = remember(recs) { RecordingStorage.places(recContext, current) }
+        fun placeName(p: RecordingStorage.Place, c: RecordingStorage.Choice): String =
+            RecordingStorage.folderName(c)?.let { p.label + " › " + it } ?: p.label
+        val nowOn = here.singleOrNull()?.let { id ->
+            allPlaces.firstNotNullOfOrNull { p -> p.all.firstOrNull { it.id == id }?.let { placeName(p, it) } }
+        }
+        val places = allPlaces.filter { p -> val c = p.choice; c != null && recs.any { viewModel.storageIdOf(it) != c.id } }
         RecordingActionDialog(
             title = if (recs.size == 1) "Move \"${recs.first().title}\"" else "Move ${recs.size} recordings",
-            detail = "Copies to the place you choose, checks the copy, then removes it from where it was. " +
-                "Leave the app open until it finishes.",
-            actions = places.map { c ->
-                val label = c.label + (if (c.isNetwork && c.totalBytes <= 0) "" else " · " + RecordingStorage.sizeLabel(c.freeBytes) + " free") +
-                    if (here.size == 1 && here.first() == c.id) "  (already here)" else ""
-                label to { movePick = null; viewModel.moveTo(recs, c) }
+            detail = listOfNotNull(
+                nowOn?.let { recContext.getString(R.string.iptv_move_now_on, it) },
+                "Copies to the place you choose, checks the copy, then removes it from where it was. " +
+                    "Leave the app open until it finishes."
+            ).joinToString(" "),
+            actions = places.map { p ->
+                val c = p.choice!!
+                val parts = ArrayList<String>()
+                parts += p.label
+                if (!(c.isNetwork && c.totalBytes <= 0)) parts += RecordingStorage.sizeLabel(c.freeBytes) + " free"
+                if (p.isDrive) parts += RecordingStorage.folderName(c)?.let { recContext.getString(R.string.iptv_move_into_folder, it) }
+                    ?: if (c.isFolder) recContext.getString(R.string.iptv_move_into_folder, recContext.getString(R.string.iptv_place_top_of_drive).lowercase()) else recContext.getString(R.string.iptv_move_into_app_folder)
+                if (c.id == current) parts += recContext.getString(R.string.iptv_move_new_ones_go_here)
+                parts.joinToString(" · ") to { movePick = null; viewModel.moveTo(recs, c) }
             } + listOf("Cancel" to { movePick = null }),
             onDismiss = { movePick = null }
         )

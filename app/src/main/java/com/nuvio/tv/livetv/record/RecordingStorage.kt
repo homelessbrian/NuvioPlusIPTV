@@ -109,6 +109,85 @@ object RecordingStorage {
         return out.distinctBy { it.id }
     }
 
+    /**
+     * One place in the lists people see (Save Recordings To, Move To): this device, each drive
+     * once, and the network folder. A drive can hold more than one [Choice] (the app's own folder
+     * and any folders picked on it); [choice] is the one this place stands for right now, or null
+     * for a drive plugged in with nothing set up on it yet (pick a folder to use it).
+     */
+    data class Place(
+        /** "primary" for this device, the drive's id ([DriveFolders.idOf]), or the network folder's id. */
+        val key: String,
+        val label: String,
+        val freeBytes: Long,
+        val totalBytes: Long,
+        val choice: Choice?,
+        /** The app's own folder on it (this device's own storage for "primary"). */
+        val appFolder: Choice?,
+        /** Folders picked on it. */
+        val folders: List<Choice>
+    ) {
+        val isDevice: Boolean get() = key == DriveFolders.PRIMARY
+        val isNetwork: Boolean get() = key == NetworkFolderStore.STORAGE_ID
+        val isDrive: Boolean get() = !isDevice && !isNetwork
+        /** Everything on this place recordings can be saved in. */
+        val all: List<Choice> get() = listOfNotNull(appFolder) + folders
+    }
+
+    /**
+     * [choices] grouped so each drive shows once. [current] is where new recordings go now: when
+     * it's on a drive, that drive stands for it; otherwise a drive stands for the folder last used
+     * on it ([DriveFolders.lastUsed]), else its newest picked folder, else the app's own folder.
+     */
+    fun places(context: Context, current: String, all: List<Choice> = choices(context)): List<Place> {
+        val displayContext = context.withAppLocale()
+        val drives = DriveFolders.drives(context)
+        fun driveKeyOf(c: Choice): String = when {
+            c.isNetwork -> NetworkFolderStore.STORAGE_ID
+            c.isDevice -> DriveFolders.PRIMARY
+            c.isFolder -> DriveFolders.parse(c.id)?.drive ?: c.id
+            else -> drives.firstOrNull { d -> !d.primary && (d.id == c.id || DriveFolders.pathOn(d, c.dir) != null) }?.id ?: c.id
+        }
+        val groups = LinkedHashMap<String, MutableList<Choice>>()
+        all.forEach { c -> groups.getOrPut(driveKeyOf(c)) { ArrayList() } += c }
+        // Drives plugged in with nothing on them yet: shown so a folder can be picked (Android 11+).
+        if (DriveFolders.supported()) {
+            drives.filter { !it.primary && it.id !in groups && DriveFolders.canBrowse(it) }.forEach { groups[it.id] = ArrayList() }
+        }
+        val out = groups.map { (key, list) ->
+            val app = list.firstOrNull { !it.isFolder && !it.isNetwork }
+            val folders = list.filter { it.isFolder }
+            val drive = drives.firstOrNull { it.id == key }
+            val choice = list.firstOrNull { it.id == current }
+                ?: DriveFolders.lastUsed(context, key)?.let { id -> list.firstOrNull { it.id == id } }
+                ?: folders.lastOrNull()
+                ?: app
+                ?: list.firstOrNull { it.isNetwork }
+            val label = when {
+                key == DriveFolders.PRIMARY -> displayContext.getString(R.string.iptv_storage_this_device)
+                key == NetworkFolderStore.STORAGE_ID -> list.firstOrNull()?.label.orEmpty()
+                app != null -> app.label
+                drive != null -> drive.label
+                else -> folders.firstOrNull()?.label?.substringBefore(" › ").orEmpty()
+            }
+            val free = choice ?: list.firstOrNull()
+            Place(
+                key = key,
+                label = label,
+                freeBytes = free?.freeBytes ?: drive?.let { runCatching { it.root.usableSpace }.getOrDefault(0L) } ?: 0L,
+                totalBytes = free?.totalBytes ?: drive?.let { runCatching { it.root.totalSpace }.getOrDefault(0L) } ?: 0L,
+                choice = choice,
+                appFolder = app,
+                folders = folders
+            )
+        }
+        // This device first, the network folder last.
+        return out.sortedBy { if (it.isDevice) 0 else if (it.isNetwork) 2 else 1 }
+    }
+
+    /** The folder name to show for a picked folder ("Nuvio Recordings"), or null for the drive's top level. */
+    fun folderName(c: Choice): String? = DriveFolders.parse(c.id)?.path?.takeIf { it.isNotEmpty() }?.substringAfterLast('/')
+
     /** A drive Android can see but recordings can't go to, and why (shown in the drive list). */
     data class Problem(val label: String, val reason: String)
 
@@ -133,8 +212,9 @@ object RecordingStorage {
                         displayContext.getString(R.string.iptv_storage_unsupported_format)
                     Environment.MEDIA_CHECKING, Environment.MEDIA_UNMOUNTED, Environment.MEDIA_EJECTING ->
                         displayContext.getString(R.string.iptv_storage_not_ready)
+                    // Shown in the list as a drive to pick a folder on (Android 11 and newer).
                     Environment.MEDIA_MOUNTED ->
-                        displayContext.getString(R.string.iptv_storage_no_app_folder)
+                        if (DriveFolders.supported()) null else displayContext.getString(R.string.iptv_storage_no_app_folder)
                     Environment.MEDIA_REMOVED, Environment.MEDIA_BAD_REMOVAL -> null
                     else -> displayContext.getString(R.string.iptv_storage_unusable_state, vol.state)
                 } ?: return@mapNotNull null

@@ -28,7 +28,8 @@ object DriveFolders {
     private const val PREFS = "livetv_drive_folders"
     private const val KEY = "folders"
     /** The device's own shared storage (it has no drive id). */
-    private const val PRIMARY = "primary"
+    const val PRIMARY = "primary"
+    private const val LAST_USED = "last_used"
 
     /** A chosen folder: [drive] is the drive's id ("primary" for the device), [path] is "" for the drive's top level. */
     data class Saved(val drive: String, val path: String) {
@@ -75,6 +76,22 @@ object DriveFolders {
     fun add(context: Context, s: Saved) = store(context, saved(context).filter { it != s } + s)
 
     fun remove(context: Context, s: Saved) = store(context, saved(context).filter { it != s })
+
+    /** The storage id last used on a drive (so the drive keeps standing for it when another place is chosen). */
+    fun lastUsed(context: Context, driveKey: String): String? = runCatching {
+        JSONObject(prefs(context).getString(LAST_USED, "{}")).optString(driveKey).takeIf { it.isNotEmpty() }
+    }.getOrNull()
+
+    fun setLastUsed(context: Context, driveKey: String, storageId: String) {
+        runCatching {
+            val o = JSONObject(prefs(context).getString(LAST_USED, "{}"))
+            o.put(driveKey, storageId)
+            prefs(context).edit().putString(LAST_USED, o.toString()).apply()
+        }
+    }
+
+    /** The drive can be read (so a folder on it can be picked once access is on). */
+    fun canBrowse(drive: Drive): Boolean = runCatching { drive.root.isDirectory }.getOrDefault(false)
 
     /** Drives (and the device's shared storage) that are plugged in and can be read now. */
     fun drives(context: Context): List<Drive> {
