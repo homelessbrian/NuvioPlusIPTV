@@ -481,8 +481,8 @@ fun MultiviewScreen(
                         pane = pane,
                         overlaysShown = overlaysShown,
                         fullScreen = isFull,
-                        // Two protected pictures cannot be stacked reliably, so the covered one is put away.
-                        hideVideo = fullPane != null && !isFull && state.panes.getOrNull(fullPane)?.isProtected == true,
+                        // Two video windows cannot be stacked reliably, so the covered one is put away.
+                        hideVideo = fullPane != null && !isFull,
                         hint = when {
                             isFull -> "Back: all panes"
                             pane.channelKey != null || pane.error != null -> "Hold OK: full screen"

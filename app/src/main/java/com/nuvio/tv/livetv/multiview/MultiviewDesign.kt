@@ -186,12 +186,12 @@ internal fun MultiviewPane(
             .clickable(onClick = onClick)
     ) {
         if (pane.player != null) {
-            // Panes are drawn like the rest of the screen (a texture), not in the TV's video window:
-            // some TV boxes have only one or two video windows, so the other panes played sound
-            // over a black picture. Protected channels can only be shown in the video window.
+            // Panes play in the TV's own video windows, which keeps them smooth. Only boxes known
+            // to have too few of those windows (the other panes played sound over a black
+            // picture) draw them like the rest of the screen instead; see MultiviewVideoWindows.
             // The kind is fixed when the view is made, so a change makes a new one.
-            androidx.compose.runtime.key(pane.isProtected) {
-                val layout = if (pane.isProtected) R.layout.live_tv_surface_player_view else R.layout.live_tv_texture_player_view
+            androidx.compose.runtime.key(pane.inVideoWindow) {
+                val layout = if (pane.inVideoWindow) R.layout.live_tv_surface_player_view else R.layout.live_tv_texture_player_view
                 AndroidView(
                     factory = { context ->
                         (LayoutInflater.from(context).inflate(layout, null) as PlayerView).apply {
@@ -209,7 +209,7 @@ internal fun MultiviewPane(
                     update = {
                         if (it.player !== pane.player) it.player = pane.player
                         it.videoSurfaceView?.visibility =
-                            if (hideVideo && pane.isProtected) android.view.View.INVISIBLE else android.view.View.VISIBLE
+                            if (hideVideo && pane.inVideoWindow) android.view.View.INVISIBLE else android.view.View.VISIBLE
                     },
                     onRelease = { it.player = null }
                 )
