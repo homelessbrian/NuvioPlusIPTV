@@ -166,3 +166,7 @@
 -dontwarn javax.naming.**
 -dontwarn org.slf4j.**
 -dontwarn javax.el.**
+
+# Audio Sync speech recognition uses JNI to read configuration fields by name.
+-keep class com.k2fsa.sherpa.onnx.** { *; }
+-keep interface com.k2fsa.sherpa.onnx.** { *; }

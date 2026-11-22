@@ -164,9 +164,12 @@ fun HomeScreen(
         }
     }
 
-    val onNavigateToDetailStable = remember(onNavigateToDetail, vodActions) {
+    val onNavigateToDetailStable = remember(onNavigateToDetail, vodActions, viewModel) {
         { id: String, type: String, addonBaseUrl: String ->
-            if (!vodActions.open(id)) onNavigateToDetail(id, type, addonBaseUrl)
+            if (!vodActions.open(id)) {
+                viewModel.beginTrailerHandoff(id)
+                onNavigateToDetail(id, type, addonBaseUrl)
+            }
         }
     }
     val latestContinueWatchingClickAction = androidx.compose.runtime.rememberUpdatedState(uiState.continueWatchingClickAction)
