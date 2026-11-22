@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Hledání…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Test selhal: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Playlist"</string>
+    <string name="iptv_settings_support_remote_title">"Tester tlačítek ovladače"</string>
+    <string name="iptv_settings_support_remote_instructions">"Stiskněte libovolné tlačítko. Nejnovější nahoře; barevné řádky jsou jiné tlačítko do 250 ms od předchozího (např. OK poslané s Nahoru/Dolů). Zavřete trojím stisknutím Zpět za sebou."</string>
+    <string name="iptv_settings_support_remote_waiting">"Čeká se na tlačítko…"</string>
+    <string name="iptv_settings_support_remote_action_down">"DOLŮ"</string>
+    <string name="iptv_settings_support_remote_action_up">"NAHORU"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"VÍCE"</string>
+    <string name="iptv_settings_support_remote_repeat">"opakování %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"dlouhý stisk"</string>
+    <string name="iptv_settings_support_remote_canceled">"zrušeno"</string>
+    <string name="iptv_settings_support_remote_held">"drženo %1$d ms"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Hlášení o spuštění Live TV"</string>
+    <string name="iptv_settings_support_report_subtitle">"Od spuštění aplikace. ▲ ▼ pro posun."</string>
+    <string name="iptv_settings_support_report_empty">"Zatím nic: nejprve otevřete Live TV."</string>
+    <string name="iptv_settings_support_report_send">"Odeslat celé hlášení"</string>
+    <string name="iptv_settings_support_report_no_network">"Připojte tuto TV k Wi-Fi, abyste mohli hlášení odeslat z telefonu."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Připojte telefon ke stejné Wi-Fi jako tuto TV.\n2. Naskenujte kód fotoaparátem telefonu, nebo napište adresu níže.\n3. Klepněte na Kopírovat krátké hlášení (vejde se do jedné zprávy na Discordu) a vložte jej do zprávy."</string>
+</resources>

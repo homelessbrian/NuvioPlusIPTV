@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_guide_add_favorite_group">"Добавить в избранные группы"</string>
+    <string name="iptv_guide_remove_favorite_group">"Убрать из избранных групп"</string>
+</resources>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"シークのサムネイル"</string>
+    <string name="playback_section_seek_thumbnails_desc">"シーク中にシークバーの上にプレビュー画像を表示"</string>
+    <string name="iptv_thumbs_title">"シークのサムネイル"</string>
+    <string name="iptv_thumbs_subtitle">"シーク中、シークバーの上にプレビュー画像を表示します。画像は映像そのものからこのテレビで作られます"</string>
+    <string name="iptv_thumbs_works_on">"対応: メインプレーヤーの映画と番組（ストリーミングの HLS リンクを含む）、録画、スポーツのリプレイとハイライト、キャッチアップ、Live TV の巻き戻し（一時停止バッファ）。\nキャッチアップ: 画像は「キャッチアップのスキップを速く」で保存した部分から、またはストリーミング（HLS）のキャッチアップではプロバイダーから直接取得します。\n非対応: トレント、DASH リンク、保護されたストリーム。"</string>
+    <string name="iptv_thumbs_low_memory_note">"この端末はメモリが限られています。サムネイルでカクつくことがあります。その場合は自動で一時停止し、シークバーに表示されます。"</string>
+    <string name="iptv_thumbs_include_4k">"4K と HDR も含める"</string>
+    <string name="iptv_thumbs_include_4k_desc">"4K と HDR の映像にもサムネイルを作ります。メモリに余裕のある端末では最初からオン、性能の低い端末ではオフですが、どこでもオンにして試せます。性能の低い端末では 4K のサムネイルがカクついたり動かなかったりし、通信量も増えます。HDR 映像の画像は色あせて見えることがあります。ストリーミングのリンクは最も小さいバージョンを使うので、ほとんど影響しません"</string>
+    <string name="iptv_thumbs_when_to_make">"サムネイルを作るタイミング"</string>
+    <string name="iptv_thumbs_when_seeking">"一時停止中とシーク中のみ"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"最も軽い設定: 普通に再生している間は何も作りません"</string>
+    <string name="iptv_thumbs_when_watching">"視聴中"</string>
+    <string name="iptv_thumbs_when_watching_desc">"映像が十分先まで読み込まれていれば、再生中もバックグラウンドで作ります"</string>
+    <string name="iptv_thumbs_when_right_away">"すぐに"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"開いたらすぐ、最初から映像全体を作ります。通信量が最も多くなります"</string>
+    <string name="iptv_thumbs_storage_limit">"保存容量の上限"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"保存したサムネイルが使う容量の上限。最も前に見た映像から消去されます"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"保存したサムネイルを消去"</string>
+    <string name="iptv_thumbs_clear_desc">"保存したサムネイルをすべて削除します。必要なときにまた作られます"</string>
+    <string name="iptv_thumbs_last_paused">"前回のメモリ不足による一時停止: %1$s、%2$s"</string>
+    <string name="iptv_thumbs_msg_making">"サムネイルを作成中…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"サムネイル一時停止: メモリ不足"</string>
+    <string name="iptv_thumbs_msg_live">"Live TV にはサムネイルがありません"</string>
+    <string name="iptv_thumbs_msg_dash">"DASH リンクにはサムネイルがありません"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"サムネイルを使うには「キャッチアップのスキップを速く」をオンにしてください"</string>
+    <string name="iptv_thumbs_msg_protected">"このストリームは保護されています: サムネイルなし"</string>
+    <string name="iptv_thumbs_msg_torrent">"トレントにはサムネイルがありません"</string>
+    <string name="iptv_thumbs_msg_link_kind">"この種類のリンクにはサムネイルがありません"</string>
+    <string name="iptv_thumbs_msg_unreadable">"このストリームはサムネイル用に読み取れませんでした"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"このストリームの分割が大きすぎてサムネイルを作れません"</string>
+    <string name="iptv_thumbs_msg_stopped">"この映像のサムネイルが動かなくなりました"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"サーバーからサムネイル画像が送られませんでした"</string>
+    <string name="iptv_thumbs_msg_format">"この映像の形式では、この端末でサムネイルを作れません"</string>
+    <string name="iptv_thumbs_msg_open_failed">"この映像はサムネイル用に開けませんでした"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"このキャッチアップのストリームにはサムネイルがありません"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"サムネイルなし：このテレビは唯一のビデオデコーダーを動画再生に使う必要があります"</string>
+</resources>

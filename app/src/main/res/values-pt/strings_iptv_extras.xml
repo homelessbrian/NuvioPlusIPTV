@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"Esta TV não conseguiu reproduzir este vídeo. Tente outra fonte ou mude para o MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Mostrar nos perfis"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Mostrar nos perfis: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Todos"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d de %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Os perfis desativados aqui não recebem canais, On Demand nem Sports de %1$s. A playlist continua para todos"</string>
+    <string name="iptv_backup_file">"Arquivo de backup"</string>
+    <string name="iptv_backup_file_summary">"Salve sua configuração em um arquivo ou restaure um"</string>
+    <string name="iptv_backup_file_description">"Uma cópia da sua configuração do Live TV em um arquivo .nptv: playlists com seus logins, guias, favoritos, grupos, Sports e configurações. Útil sem o Setup Sync ou para guardar sua própria cópia."</string>
+    <string name="iptv_backup_with_phone">"Backup ou restauração pelo celular"</string>
+    <string name="iptv_backup_with_phone_description">"Escaneie um código para salvar o arquivo no celular ou enviar um de volta"</string>
+    <string name="iptv_backup_save_on_tv">"Salvar um backup nesta TV"</string>
+    <string name="iptv_backup_save_on_tv_description">"Salvo em Downloads › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Restaurar desta TV"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Backups salvos nesta TV, o mais recente primeiro"</string>
+    <string name="iptv_backup_none_on_tv">"Ainda não há backups nesta TV. Salve um primeiro ou use o celular."</string>
+    <string name="iptv_backup_saving">"Salvando…"</string>
+    <string name="iptv_backup_saved_to">"Salvo em %1$s"</string>
+    <string name="iptv_backup_save_failed">"Não foi possível salvar o backup nesta TV. Tente pelo celular."</string>
+    <string name="iptv_backup_restoring">"Restaurando…"</string>
+    <string name="iptv_backup_restored">"Backup restaurado. As playlists e guias alterados estão carregando."</string>
+    <string name="iptv_backup_restore_failed">"Não foi possível restaurar esse backup (ele não tem playlists nem guias)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Restaurar este backup?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Salvo em %1$s no %2$s. Ele substitui a configuração do Live TV desta TV. Com o Setup Sync ligado, suas outras TVs também mudam."</string>
+    <string name="iptv_backup_restore_confirm_button">"Restaurar"</string>
+    <string name="iptv_backup_not_a_backup">"Isso não é um arquivo de backup do Nuvio + IPTV (.nptv)."</string>
+    <string name="iptv_backup_private_note">"O arquivo de backup contém os logins das suas playlists. Mantenha-o privado."</string>
+    <string name="iptv_backup_phone_steps">"1. Conecte o celular ao mesmo Wi-Fi desta TV.\n2. Escaneie o código com a câmera do celular.\n3. Salve o backup ou escolha um arquivo de backup para enviar para cá."</string>
+    <string name="iptv_backup_phone_check_tv">"Enviado. Escolha Restaurar na TV para concluir."</string>
+    <string name="iptv_backup_phone_title">"Backup do Nuvio + IPTV"</string>
+    <string name="iptv_backup_phone_save_heading">"Salvar um backup"</string>
+    <string name="iptv_backup_phone_save_text">"Salva a configuração do Live TV desta TV no seu celular como arquivo .nptv."</string>
+    <string name="iptv_backup_phone_save_button">"Salvar arquivo de backup"</string>
+    <string name="iptv_backup_phone_restore_heading">"Restaurar um backup"</string>
+    <string name="iptv_backup_phone_restore_text">"Escolha um arquivo .nptv para enviar à TV. Nada muda até você confirmar na TV."</string>
+    <string name="iptv_backup_phone_choose_file">"Escolher arquivo"</string>
+    <string name="iptv_backup_phone_restore_button">"Enviar para a TV"</string>
+</resources>

@@ -33,6 +33,7 @@ private fun update(context: android.content.Context, viewModel: PlayerViewModel)
     val owner = SeekThumbs.Owner.MAIN
     if (!SeekThumbSettings.values.value.enabled) { SeekThumbs.close(owner); return }
     val c = viewModel.controller
+    c._exoPlayer?.videoFormat.let { f -> SeekThumbs.playingFormat(owner, f?.sampleMimeType, f?.width ?: 0, f?.height ?: 0) }
     val timeline = viewModel.playbackTimeline.value
     val state = viewModel.uiState.value
     val url = viewModel.getCurrentStreamUrl()

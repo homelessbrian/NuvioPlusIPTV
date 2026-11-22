@@ -240,6 +240,22 @@ fun SportsSettingsContent(
                     )
                 }
             }
+            item(key = "replays") {
+                SettingsGroupCard(title = "Replays & Highlights") {
+                    SettingsToggleRow(
+                        "Show Highlights",
+                        "A finished game's page lists highlights, recaps and big plays. Off: only replays of the whole game (and condensed games, if they're on)",
+                        s.showHighlights,
+                        { update { it.copy(showHighlights = !it.showHighlights) } }
+                    )
+                    SettingsToggleRow(
+                        "Show Condensed Games",
+                        "A finished game's page lists condensed games: the whole game cut down to the action",
+                        s.showCondensed,
+                        { update { it.copy(showCondensed = !it.showCondensed) } }
+                    )
+                }
+            }
             item(key = "about") {
                 Text(
                     text = "Scores, schedules, team logos and colors come from ESPN's free public feed. " +

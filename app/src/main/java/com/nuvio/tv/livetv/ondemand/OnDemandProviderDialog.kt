@@ -84,7 +84,10 @@ internal fun ProviderDetailDialog(
     item: VodItem,
     viewModel: OnDemandViewModel,
     onDismiss: () -> Unit,
-    onPlay: (url: String, title: String, poster: String?, season: Int?, episode: Int?, episodeName: String?) -> Unit
+    /** [adult]: an adult title, played without saving its place (never in Continue watching). */
+    onPlay: (url: String, title: String, poster: String?, season: Int?, episode: Int?, episodeName: String?, adult: Boolean) -> Unit,
+    /** "Fix Match": pick the right title when it found the wrong one (or none). */
+    onFixMatch: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     val info by produceState<VodInfo?>(initialValue = null, item.uid) { value = viewModel.info(item) }
@@ -109,6 +112,10 @@ internal fun ProviderDetailDialog(
                     item.rating?.let { "★ $it" }
                 ).joinToString("  ·  ")
                 if (meta.isNotBlank()) LiveText(meta, color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+                onFixMatch?.let { fix ->
+                    Spacer(Modifier.height(8.dp))
+                    DialogPill("Fix Match", selected = false, onClick = fix)
+                }
                 Spacer(Modifier.height(8.dp))
                 LiveText(info?.plot ?: if (info == null) "Loading details…" else "", color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 6)
                 Spacer(Modifier.height(12.dp))
@@ -126,12 +133,12 @@ internal fun ProviderDetailDialog(
                                     "Play · ${v.label}" + if (v.detail.isNotBlank()) "  —  ${v.detail}" else "",
                                     if (v == versions.first()) Modifier.focusRequester(first) else Modifier
                                 ) {
-                                    scope.launch { viewModel.movieUrl(v.item)?.let { onPlay(it, item.name, poster, null, null, null) } }
+                                    scope.launch { val adult = viewModel.isAdult(item); viewModel.movieUrl(v.item)?.let { onPlay(it, item.name, poster, null, null, null, adult) } }
                                 }
                             }
                         }
                     } else MenuItem("Play", Modifier.focusRequester(first)) {
-                        scope.launch { viewModel.movieUrl(item)?.let { onPlay(it, item.name, poster, null, null, null) } }
+                        scope.launch { val adult = viewModel.isAdult(item); viewModel.movieUrl(item)?.let { onPlay(it, item.name, poster, null, null, null, adult) } }
                     }
                 } else {
                     val episodes = info?.episodes.orEmpty()
@@ -150,7 +157,7 @@ internal fun ProviderDetailDialog(
                                     "${ep.episode}.  ${ep.title}",
                                     if (ep == episodes.firstOrNull { it.season == current }) Modifier.focusRequester(first) else Modifier
                                 ) {
-                                    onPlay(ep.url, "${item.name} · S${ep.season}E${ep.episode}", poster, ep.season, ep.episode, ep.title)
+                                    scope.launch { onPlay(ep.url, "${item.name} · S${ep.season}E${ep.episode}", poster, ep.season, ep.episode, ep.title, viewModel.isAdult(item)) }
                                 }
                             }
                         }

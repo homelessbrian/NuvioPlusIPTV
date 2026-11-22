@@ -943,7 +943,6 @@
 
 
     <string name="mdblist_title">Hodnocení MDBList</string>
-    <string name="mdblist_subtitle">Konfigurovat externí hodnocení zobrazená v hrdinovi podrobností</string>
     <string name="mdblist_enable_title">Povolit hodnocení MDBList</string>
     <string name="mdblist_enable_subtitle">Získávat hodnocení od externích poskytovatelů na obrazovce podrobností metadat</string>
     <string name="mdblist_api_key_title">API klíč</string>
@@ -2826,4 +2825,6 @@
     <string name="stream_test_video_bitrate">Průměrný datový tok videa: %1$s</string>
     <string name="stream_test_error_connection">Připojení selhalo. Platnost posledního přehraného odkazu na stream mohla vypršet, nebo je nedostupný. Přehrajte prosím video znovu a zkuste to opět.</string>
 
+    <string name="settings_home_screen_rows">Řádky domovské obrazovky</string>
+    <string name="settings_home_screen_rows_subtitle">Vyberte pořadí řádků na domovské obrazovce</string>
 </resources>

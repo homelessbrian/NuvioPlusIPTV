@@ -301,7 +301,7 @@ private fun ScoringAlertCard(a: SportsAlert) {
             .sportsFrame(focused = false, playing = true, accent = SportsLook.Flash)
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (a.final) SportsBadge(if (a.league.sport == Sport.FOOTBALL) "FULL TIME" else "FINAL", Color.White, SportsLook.Ink)
+            if (a.final) SportsBadge(if (a.league.sport == Sport.FOOTBALL || a.league.sport == Sport.HANDBALL) "FULL TIME" else "FINAL", Color.White, SportsLook.Ink)
             else SportsBadge("${a.team.name.uppercase()} SCORE!", SportsLook.Flash, SportsLook.Ink)
             Spacer(Modifier.weight(1f))
             if (!a.final) ev.status?.let { LiveText(it, color = Color.White, size = 11.sp, weight = FontWeight.Black) }

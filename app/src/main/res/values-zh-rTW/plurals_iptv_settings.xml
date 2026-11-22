@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="other">"%1$d 個播放清單"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="other">"%1$d 個節目指南"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="other">"%1$d 個頻道"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="other">"已匹配 %1$d 個節目"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="other">"已移除 %1$d 個"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="other">"%1$d 分鐘"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="other">"%1$d 天"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="other">"%1$d 小時"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="other">"%1$d 秒"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="other">"%1$d 天前"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="other">"%1$d 周前"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="other">"%1$d 個月前"</item>
+    </plurals>
+</resources>

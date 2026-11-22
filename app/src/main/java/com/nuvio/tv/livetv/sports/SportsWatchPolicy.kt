@@ -32,6 +32,7 @@ internal data class SportsWatchRules(
 
     fun permits(channel: LiveChannel): Boolean {
         if (!sports.showInSidebar) return false
+        if (user.hidesPlaylistOf(channel)) return false
         if (!picked(channel) &&
             (channel.key in user.hiddenChannels || channel.groupId in user.hiddenGroups)) return false
         if (ParentalControls.enabled(live)) {
@@ -82,6 +83,8 @@ internal object SportsWatchPolicy {
             if (!follows.isEmpty) add(SportsWatchFilter(FILTER_MINE, "★", "My Sports"))
             add(SportsWatchFilter(FILTER_ALL, "▦", "All Events"))
             add(SportsWatchFilter(FILTER_LIVE, "●", "Live Now"))
+            // The leagues ticked under All Events' Pick Leagues, together.
+            if (settings.pickedLeagues.isNotEmpty()) add(SportsWatchFilter(FILTER_SPORT + SPORT_PICKED, "☰", pickedLeaguesLabel(settings)))
             sports.forEach { add(SportsWatchFilter(FILTER_SPORT + it.name, it.icon, it.label)) }
         }
     }

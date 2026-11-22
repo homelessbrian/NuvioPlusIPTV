@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Kualitas terbaik"</string>
+    <string name="autoplay_mode_quality_desc">"Putar sumber terbaik menurut aturan Kualitas: resolusi, sumber, grup rilis tepercaya, HDR, dan audio."</string>
+    <string name="quality_rules_title">"Aturan kualitas"</string>
+    <string name="quality_rules_subtitle">"Apa yang dipilih Kualitas terbaik dan cara Kualitas terbaik dulu mengurutkan, untuk setiap sumber."</string>
+    <string name="quality_rules_open">"Tampilkan"</string>
+    <string name="quality_rules_close">"Sembunyikan"</string>
+    <string name="stream_sort_sources">"Urutkan sumber"</string>
+    <string name="stream_sort_sources_sub">"Urutan daftar sumber."</string>
+    <string name="stream_sort_source_order">"Urutan sumber"</string>
+    <string name="stream_sort_source_order_desc">"Sesuai yang dikirim setiap sumber."</string>
+    <string name="stream_sort_best_first">"Kualitas terbaik dulu"</string>
+    <string name="stream_sort_best_first_desc">"Diurutkan menurut aturan Kualitas. Tautan yang dikecualikan aturan tidak ditampilkan."</string>
+    <string name="quality_low_groups_title">"Grup rilis berkualitas rendah"</string>
+    <string name="quality_low_groups_subtitle">"Grup yang dikenal dengan rilis buruk atau palsu (daftar TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Pindah ke bawah"</string>
+    <string name="quality_low_groups_hide">"Sembunyikan"</string>
+    <string name="quality_low_groups_normal">"Perlakukan seperti lainnya"</string>
+    <string name="quality_trusted_groups_title">"Grup rilis tepercaya"</string>
+    <string name="quality_trusted_groups_subtitle">"Terbaik dulu. Dimulai dengan daftar TRaSH Guides. Kosongkan untuk mendapatkan daftar itu lagi."</string>
+    <string name="quality_rules_reset_title">"Atur ulang ke rekomendasi"</string>
+    <string name="quality_rules_reset_subtitle">"Mengembalikan semua aturan Kualitas ke pengaturan yang direkomendasikan."</string>
+</resources>

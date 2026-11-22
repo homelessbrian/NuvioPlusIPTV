@@ -92,7 +92,7 @@ fun OnDemandHomeScreen(
     LaunchedEffect(Unit) { viewModel.loadHome() }
 
     var showManage by remember { mutableStateOf(false) }
-    // The card last highlighted, for the Menu button's "Fix poster".
+    // The card last highlighted, for the Menu button's "Fix Match".
     var lastFocusedCard by remember { mutableStateOf<String?>(null) }
     var cardMenu by remember { mutableStateOf<VodItem?>(null) }
     var fixFor by remember { mutableStateOf<VodItem?>(null) }
@@ -116,7 +116,8 @@ fun OnDemandHomeScreen(
         com.nuvio.tv.core.player.TrailerPlayerPool(
             context.applicationContext,
             entry.playerSettingsDataStore(),
-            entry.trailerSettingsDataStore()
+            entry.trailerSettingsDataStore(),
+            entry.youTubeExtractor()
         )
     }
     androidx.compose.runtime.DisposableEffect(ownPool) { onDispose { runCatching { ownPool.release() } } }
@@ -261,6 +262,7 @@ fun OnDemandHomeScreen(
     val posterOptions: com.nuvio.tv.ui.components.posteroptions.PosterOptionsViewModel = hiltViewModel()
     val optionsState by posterOptions.controller.state.collectAsStateWithLifecycle()
     var optionsUid by remember { mutableStateOf<String?>(null) }
+    var optionsItem by remember { mutableStateOf<VodItem?>(null) }
     val longPress: (MetaPreview) -> Unit = { card ->
         val item = viewModel.homeItem(card.id)
         if (item != null && !opening) {
@@ -270,6 +272,7 @@ fun OnDemandHomeScreen(
                     val target = viewModel.optionsTarget(card.id)
                     if (target != null) {
                         optionsUid = item.uid
+                        optionsItem = item
                         posterOptions.controller.show(target.first, target.second)
                     } else {
                         providerItem = item
@@ -306,7 +309,7 @@ fun OnDemandHomeScreen(
             .onPreviewKeyEvent { e ->
                 // Menu button: Manage VOD Groups, from anywhere on the page.
                 if (e.type == KeyEventType.KeyDown && e.key == Key.Menu) {
-                    // On a title: Fix poster or Manage VOD Groups. Elsewhere: Manage VOD Groups.
+                    // On a title: Fix Match or Manage VOD Groups. Elsewhere: Manage VOD Groups.
                     val item = lastFocusedCard?.let { viewModel.homeItem(it) }
                     if (item != null) cardMenu = item else showManage = true
                     true
@@ -479,25 +482,14 @@ fun OnDemandHomeScreen(
             com.nuvio.tv.livetv.ui.LiveText(OnDemandDatabase.displayTitle(item.name), size = 20.sp, weight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 2)
             androidx.compose.foundation.layout.Spacer(Modifier.height(14.dp))
             androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
-                com.nuvio.tv.livetv.ui.MenuItem("Fix poster", Modifier.focusRequester(first)) { cardMenu = null; fixFor = item }
+                com.nuvio.tv.livetv.ui.MenuItem("Fix Match", Modifier.focusRequester(first)) { cardMenu = null; fixFor = item }
                 com.nuvio.tv.livetv.ui.MenuItem("Manage VOD Groups") { cardMenu = null; showManage = true }
             }
         }
         LaunchedEffect(Unit) { kotlinx.coroutines.delay(60); runCatching { first.requestFocus() } }
     }
     fixFor?.let { item ->
-        com.nuvio.tv.livetv.ui.TextInputDialog(
-            title = "Fix poster",
-            initial = OnDemandDatabase.displayTitle(item.name) + (item.year?.let { " ($it)" } ?: ""),
-            hint = "The movie or series name, and the year if you know it, like Dune (2021). Leave it empty to go back to automatic.",
-            confirmLabel = "Save",
-            onDismiss = { fixFor = null },
-            onConfirm = { text ->
-                fixFor = null
-                val (name, year) = splitFixYear(text)
-                viewModel.fixPoster(item, name, year)
-            }
-        )
+        FixMatchFor(item, viewModel) { fixFor = null }
     }
     if (showManage) {
         ManageVodGroupsPanel(
@@ -513,23 +505,46 @@ fun OnDemandHomeScreen(
         controller = posterOptions.controller,
         onNavigateToDetail = { id, type, addonBaseUrl ->
             onOpenDetail(id, type, addonBaseUrl.ifBlank { null }, optionsUid.orEmpty())
-        }
+        },
+        // Holding OK on a title that found the wrong match: pick the right one.
+        extraLabel = "Fix Match",
+        onExtra = { optionsItem?.let { fixFor = it } }
     )
     providerItem?.let { item ->
         ProviderDetailDialog(
             item = item,
             viewModel = viewModel,
             onDismiss = { providerItem = null },
-            onPlay = { url, title, poster, season, episode, episodeName ->
+            onFixMatch = { providerItem = null; fixFor = item },
+            onPlay = { url, title, poster, season, episode, episodeName, adult ->
                 providerItem = null
                 // Played with the title's id, so Nuvio tracks progress: resumes, and Continue Watching.
                 onPlay(
                     url, title, if (item.kind == VodKind.SERIES) "series" else "movie", poster,
-                    VodHomeIds.metaId(item.uid), OnDemandDatabase.displayTitle(item.name), season, episode, episodeName
+                    if (adult) "" else VodHomeIds.metaId(item.uid), OnDemandDatabase.displayTitle(item.name), season, episode, episodeName
                 )
             }
         )
     }
+}
+
+/** Fix Match for an On Demand title: search and pick the right movie or show. */
+@Composable
+internal fun FixMatchFor(item: VodItem, viewModel: OnDemandViewModel, onDone: () -> Unit) {
+    val pin = viewModel.pinnedNow(item)
+    com.nuvio.tv.livetv.ui.FixMatchDialog(
+        title = OnDemandDatabase.displayTitle(item.name),
+        initialQuery = pin?.meta?.name ?: OnDemandDatabase.displayTitle(item.name).let { OnDemandDatabase.withoutTrailingYear(it) ?: it },
+        initialSeries = item.kind == VodKind.SERIES,
+        initialYear = if (pin == null) item.year else null,
+        scopeNote = "Its poster, artwork and details, and what it opens",
+        hasFix = pin != null,
+        current = com.nuvio.tv.livetv.data.TitleMatchFixes.currentOf(pin),
+        search = { q, kind, year -> viewModel.searchMatches(q, kind, year) },
+        onPick = { c -> onDone(); viewModel.pickMatch(item, c) },
+        onReset = { onDone(); viewModel.pickMatch(item, null) },
+        onDismiss = onDone
+    )
 }
 
 @Composable
@@ -598,6 +613,7 @@ private fun KindTab(label: String, selected: Boolean, onClick: () -> Unit) {
 interface OnDemandPlayerEntryPoint {
     fun playerSettingsDataStore(): com.nuvio.tv.data.local.PlayerSettingsDataStore
     fun trailerSettingsDataStore(): com.nuvio.tv.data.local.TrailerSettingsDataStore
+    fun youTubeExtractor(): com.nuvio.tv.data.trailer.InAppYouTubeExtractor
 }
 
 /**

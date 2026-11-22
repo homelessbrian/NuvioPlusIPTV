@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"Đang cập nhật danh sách phát \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels">"Đang đọc kênh…"</string>
+    <string name="iptv_repository_status_downloading_guide">"Đang tải lịch \"%1$s\"…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"Đang tải lịch \"%1$s\""</string>
+    <string name="iptv_repository_status_matching_data">"Đang khớp dữ liệu lịch…"</string>
+    <string name="iptv_repository_status_updating_guide">"Đang cập nhật lịch…"</string>
+    <string name="iptv_repository_status_adding_playlist">"Đang thêm kênh từ \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"Đang đọc kênh từ \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"Đang đọc kênh từ \"%1$s\" (%2$d/%3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"Không đủ bộ nhớ cho lịch \"%1$s\" — đã bỏ qua"</string>
+    <string name="iptv_repository_status_reading_guide">"Đang đọc lịch \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"Đang đọc lịch \"%1$s\" (%2$d/%3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"Đang đọc lịch \"%1$s\"… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"Đang đọc lịch \"%1$s\" (%2$d/%3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"Đang khớp lịch \"%1$s\"…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"Đang khớp lịch \"%1$s\" (%2$d/%3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"Đang tải danh sách phát \"%1$s\""</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s / %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"Đang tải kênh từ %1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"Không tìm thấy máy chủ của nhà cung cấp."</string>
+    <string name="iptv_repository_status_timeout_short">"Nhà cung cấp phản hồi quá lâu."</string>
+    <string name="iptv_repository_status_generic_error">"Đã xảy ra lỗi."</string>
+    <string name="iptv_repository_status_unknown_host_address">"Không tìm thấy máy chủ của nhà cung cấp (%1$s). Hãy kiểm tra địa chỉ, mạng, hoặc thử lại sau."</string>
+    <string name="iptv_repository_status_provider_timeout">"Nhà cung cấp phản hồi quá lâu (hết thời gian chờ). Có thể đang bận; hãy thử lại sau."</string>
+    <string name="iptv_repository_status_address">"địa chỉ"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"Không cập nhật được danh sách phát \"%1$s\". %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"Không cập nhật được lịch \"%1$s\". %2$s"</string>
+    <string name="iptv_repository_status_expired">"\"%1$s\" đã hết hạn"</string>
+    <string name="iptv_repository_status_expires_today">"\"%1$s\" hết hạn hôm nay"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"\"%1$s\" hết hạn ngày mai"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="other">"Đang thêm kênh từ %1$d danh sách phát mới…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="other">"\"%1$s\" hết hạn sau %2$d ngày"</item>
+    </plurals>
+    <string name="iptv_repository_status_storage_full_short">"Thiết bị này không đủ dung lượng lưu trữ. Lịch phát sóng trước đó vẫn được giữ."</string>
+</resources>

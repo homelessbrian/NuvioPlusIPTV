@@ -537,6 +537,22 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setStreamAutoPlayMode(mode)
     }
 
+    suspend fun setStreamListSort(sort: com.nuvio.tv.data.local.StreamListSort) {
+        playerSettingsDataStore.setStreamListSort(sort)
+    }
+
+    suspend fun setStreamQualityRules(rules: com.nuvio.tv.domain.model.DebridStreamPreferences) {
+        playerSettingsDataStore.setStreamQualityRules(rules)
+    }
+
+    suspend fun setStreamLowQualityGroups(value: com.nuvio.tv.core.player.LowQualityGroups) {
+        playerSettingsDataStore.setStreamLowQualityGroups(value)
+    }
+
+    suspend fun resetStreamQualityRules() {
+        playerSettingsDataStore.resetStreamQualityRules()
+    }
+
     suspend fun setStreamAutoPlaySource(source: StreamAutoPlaySource) {
         playerSettingsDataStore.setStreamAutoPlaySource(source)
     }

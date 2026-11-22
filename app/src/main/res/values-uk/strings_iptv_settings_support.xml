@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Пошук…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Тест не вдався: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Плейлист"</string>
+    <string name="iptv_settings_support_remote_title">"Тестер кнопок пульта"</string>
+    <string name="iptv_settings_support_remote_instructions">"Натисніть будь-яку кнопку. Найновіші вгорі; кольорові рядки — інша кнопка протягом 250 мс після попередньої (наприклад, OK, надісланий разом із «Вгору»/«Вниз»). Натисніть «Назад» 3 рази поспіль, щоб закрити."</string>
+    <string name="iptv_settings_support_remote_waiting">"Чекаємо кнопку…"</string>
+    <string name="iptv_settings_support_remote_action_down">"НАТИСК"</string>
+    <string name="iptv_settings_support_remote_action_up">"ВІДПУСК"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"КІЛЬКА"</string>
+    <string name="iptv_settings_support_remote_repeat">"повтор %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"довге натискання"</string>
+    <string name="iptv_settings_support_remote_canceled">"скасовано"</string>
+    <string name="iptv_settings_support_remote_held">"утримано %1$d мс"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Звіт про запуск Live TV"</string>
+    <string name="iptv_settings_support_report_subtitle">"Від запуску застосунку. ▲ ▼ для прокручування."</string>
+    <string name="iptv_settings_support_report_empty">"Поки нічого: спершу відкрийте Live TV."</string>
+    <string name="iptv_settings_support_report_send">"Надіслати весь звіт"</string>
+    <string name="iptv_settings_support_report_no_network">"Під’єднайте цей телевізор до Wi-Fi, щоб надіслати звіт із телефона."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Під’єднайте телефон до тієї самої мережі Wi-Fi, що й телевізор.\n2. Скануйте цей код камерою телефона або введіть адресу нижче.\n3. Натисніть «Копіювати короткий звіт» (вміщується в одне повідомлення Discord), потім вставте його в повідомлення."</string>
+</resources>

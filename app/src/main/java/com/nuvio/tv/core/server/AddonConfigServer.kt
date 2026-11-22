@@ -174,6 +174,7 @@ class AddonConfigServer(
             val disabledCollectionKeys = parseStringList(parsed["disabledCollectionKeys"])
             val followAddonsOrder = parsed["followAddonsOrder"] as? Boolean
             val trackingConsentUrls = parseStringList(parsed["trackingConsentUrls"])
+            val liveRowsJson = (parsed["liveRows"] as? List<*>)?.let { gson.toJson(it) }
             sanitizePendingAddonChange(
                 mode = webConfigMode,
                 proposedChange = PendingAddonChange(
@@ -183,7 +184,8 @@ class AddonConfigServer(
                     proposedCollectionsJson = collectionsJson,
                     proposedDisabledCollectionKeys = disabledCollectionKeys,
                     proposedFollowAddonsOrder = followAddonsOrder,
-                    trackingConsentUrls = trackingConsentUrls
+                    trackingConsentUrls = trackingConsentUrls,
+                    proposedLiveRowsJson = liveRowsJson
                 ),
                 currentState = currentPageStateProvider()
             )

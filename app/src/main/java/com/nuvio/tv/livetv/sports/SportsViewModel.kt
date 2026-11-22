@@ -39,6 +39,7 @@ class SportsViewModel @Inject constructor(
     val loading = repo.loading
     val matching = repo.matching
     val problem = repo.problem
+    val updatedAt = repo.updatedAt
 
     val use24h: StateFlow<Boolean> = livePrefs.settings.map { it.use24HourClock }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -130,6 +131,15 @@ class SportsViewModel @Inject constructor(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /**
+     * Anything in the window at all (a channel, a replay, a highlight, playing or paused): the
+     * Sports page shows the window; with nothing, the highlighted game and its table instead.
+     */
+    val windowInUse: StateFlow<Boolean> = playback.state
+        .map { it.channelKey != null }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     /** Something is playing (or starting) in the window, not paused: the TV stays awake. */
     val playingNow: StateFlow<Boolean> = playback.state
         .map { it.channelKey != null && (it.isPlaying || it.isBuffering) && !it.userPaused }
@@ -140,6 +150,8 @@ class SportsViewModel @Inject constructor(
     fun attachPlayer(): androidx.media3.common.Player = playback.attach()
     fun detachPlayer() { playback.detach() }
     fun onSurfaceAttached() = playback.onSurfaceAttached()
+    /** The page has no spot for the video window (see LiveTvPlaybackController.setPictureHidden). */
+    fun setPictureHidden(hidden: Boolean) = playback.setPictureHidden(hidden)
 
     /** Plays the channel in the Sports page's window (no full screen), remembered as last watched. */
     fun playHere(m: ChannelMatch) {

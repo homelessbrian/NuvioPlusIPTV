@@ -14,3 +14,5 @@ Lcom/nuvio/tv/ui/screens/settings/LiveTv*;
 HSPLcom/nuvio/tv/ui/screens/settings/LiveTv*;->**(**)**
 Lcom/nuvio/tv/ui/screens/settings/Sports*;
 HSPLcom/nuvio/tv/ui/screens/settings/Sports*;->**(**)**
+Lcom/nuvio/tv/core/player/**;
+HSPLcom/nuvio/tv/core/player/**;->**(**)**

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Mejor calidad"</string>
+    <string name="autoplay_mode_quality_desc">"Reproduce la mejor fuente según tus reglas de calidad: resolución, fuente, grupos de release de confianza, HDR y audio."</string>
+    <string name="quality_rules_title">"Reglas de calidad"</string>
+    <string name="quality_rules_subtitle">"Qué elige Mejor calidad y cómo ordena Mejor calidad primero, para cada fuente."</string>
+    <string name="quality_rules_open">"Mostrar"</string>
+    <string name="quality_rules_close">"Ocultar"</string>
+    <string name="stream_sort_sources">"Ordenar fuentes"</string>
+    <string name="stream_sort_sources_sub">"El orden de la lista de fuentes."</string>
+    <string name="stream_sort_source_order">"Orden de fuentes"</string>
+    <string name="stream_sort_source_order_desc">"Tal como las envía cada fuente."</string>
+    <string name="stream_sort_best_first">"Mejor calidad primero"</string>
+    <string name="stream_sort_best_first_desc">"Ordenadas por tus reglas de calidad. Los enlaces que las reglas excluyen no aparecen."</string>
+    <string name="quality_low_groups_title">"Grupos de release de baja calidad"</string>
+    <string name="quality_low_groups_subtitle">"Grupos conocidos por releases malas o falsas (lista de TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Mover al final"</string>
+    <string name="quality_low_groups_hide">"Ocultar"</string>
+    <string name="quality_low_groups_normal">"Tratar como el resto"</string>
+    <string name="quality_trusted_groups_title">"Grupos de release de confianza"</string>
+    <string name="quality_trusted_groups_subtitle">"Los mejores primero. Empieza con la lista de TRaSH Guides. Vacíala para recuperar esa lista."</string>
+    <string name="quality_rules_reset_title">"Restablecer lo recomendado"</string>
+    <string name="quality_rules_reset_subtitle">"Devuelve todas las reglas de calidad a la configuración recomendada."</string>
+</resources>

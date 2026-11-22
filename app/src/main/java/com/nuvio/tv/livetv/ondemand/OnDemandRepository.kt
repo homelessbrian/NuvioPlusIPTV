@@ -113,7 +113,8 @@ class OnDemandRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val db: OnDemandDatabase,
     private val prefs: LiveTvPreferences,
-    private val stalker: com.nuvio.tv.livetv.stalker.StalkerGateway
+    private val stalker: com.nuvio.tv.livetv.stalker.StalkerGateway,
+    private val languages: OnDemandLanguages
 ) {
     private fun text(@StringRes id: Int, vararg args: Any): String = context.withAppLocale().getString(id, *args)
 
@@ -186,6 +187,26 @@ class OnDemandRepository @Inject constructor(
         scope.launch {
             kotlinx.coroutines.flow.combine(hasContent, prefs.settings) { has, s -> has && s.onDemandInStreams && s.onDemandEnabled }
                 .collect { OnDemandStreams.offeredInStreams = it }
+        }
+        // "Hide non-English titles": switched on, titles labelled as another language are set
+        // aside at once, and the rest are checked in the background; either way, lists reload.
+        scope.launch(com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+            var first = true
+            prefs.settings.map { it.vodHideNonEnglish }.distinctUntilChanged().collect { on ->
+                hideForeign = on
+                if (first) {
+                    // At start-up lists already leave marked titles out; the background check
+                    // waits until the app has settled.
+                    first = false
+                    if (on) { kotlinx.coroutines.delay(START_DELAY_MS); startLanguageCheck() }
+                    return@collect
+                }
+                if (on) {
+                    runCatching { db.markForeignAll() }
+                    startLanguageCheck()
+                } else languages.stopSweep()
+                _version.value++
+            }
         }
         scope.launch {
             // Auto-play may pick your provider's copy only when that's on and its tab is first.
@@ -287,8 +308,11 @@ class OnDemandRepository @Inject constructor(
                 if (ok) System.currentTimeMillis() else System.currentTimeMillis() - REFRESH_MS + 60 * 60 * 1000L
             )
             runCatching { db.learnPrefixes(pl.id) }
+            // Titles in another language, marked again (an import writes changed titles afresh).
+            runCatching { db.markForeign(pl.id) }
             _version.value++
         }
+        if (hideForeign) startLanguageCheck()
         _hasContent.value = runCatching { db.hasAny() }.getOrDefault(_hasContent.value)
         // A problem stays visible in Settings → Live TV → On Demand (no more silent failures).
         // Every login's problem, not only the last one imported.
@@ -728,13 +752,44 @@ class OnDemandRepository @Inject constructor(
 
     // ------------------------------------------------------------------ reading
 
-    suspend fun categories(kind: VodKind): List<VodCategory> = withContext(Dispatchers.IO) {
-        runCatching { db.categories(kind) }.getOrDefault(emptyList())
+    /** "Hide non-English titles" is on (kept up to date from the settings; read by every list). */
+    @Volatile private var hideForeign: Boolean = false
+
+    private suspend fun hidingForeign(): Boolean =
+        runCatching { prefs.settings.first().vodHideNonEnglish }.getOrDefault(hideForeign).also { hideForeign = it }
+
+    /** Works through titles not checked yet in the background; lists reload when some were set aside. */
+    private fun startLanguageCheck() {
+        languages.startSweep(enabled = { hideForeign }, onMarked = { _version.value++ })
     }
 
+    /** What TMDB says about a title (artwork, details, original language): see [OnDemandLanguages.facts]. */
+    suspend fun tmdbFacts(item: VodItem): OnDemandLanguages.Facts? = languages.facts(item)
+
+    suspend fun categories(kind: VodKind): List<VodCategory> = withContext(Dispatchers.IO) {
+        val hide = hidingForeign()
+        runCatching { db.categories(kind, hide) }.getOrDefault(emptyList())
+    }
+
+    /**
+     * A page of titles. With "Hide non-English titles" on, titles in another language are never
+     * in it: those already known are left out by the catalog itself, and titles on the page not
+     * checked yet are checked first (a short wait, once per title) and the page read again
+     * without the ones that turned out to be in another language.
+     */
     suspend fun items(kind: VodKind, category: VodCategory?, hidden: Set<String>, newestFirst: Boolean, limit: Int, offset: Int, sort: VodSort = VodSort.DEFAULT, genre: String? = null, merge: Boolean = true, seed: Long = 0) =
         withContext(Dispatchers.IO) {
-            runCatching { db.items(kind, category, hidden, newestFirst, limit, offset, sort, genre, merge, seed) }.getOrDefault(emptyList())
+            val hide = hidingForeign()
+            fun read() = runCatching { db.items(kind, category, hidden, newestFirst, limit, offset, sort, genre, merge, seed, hide) }.getOrDefault(emptyList())
+            var page = read()
+            if (hide && page.isNotEmpty()) {
+                // A page or two may come back with newly found titles to set aside.
+                repeat(2) {
+                    if (!languages.check(page, PAGE_CHECK_MS)) return@withContext page
+                    page = read()
+                }
+            }
+            page
         }
 
     /** One version of a title you can pick: where it's from and what it is. */
@@ -794,7 +849,11 @@ class OnDemandRepository @Inject constructor(
         val signal = android.os.CancellationSignal()
         val stop = coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion(onCancelling = true, invokeImmediately = true) { if (it != null) signal.cancel() }
         try {
-            runCatching { db.search(kind, text, hidden, sort = sort, merge = merge, signal = signal) }.getOrDefault(emptyList())
+            val hide = hidingForeign()
+            val found = runCatching { db.search(kind, text, hidden, sort = sort, merge = merge, signal = signal, hideForeign = hide) }.getOrDefault(emptyList())
+            if (hide && found.isNotEmpty() && languages.check(found.take(SEARCH_CHECK), PAGE_CHECK_MS)) {
+                runCatching { db.search(kind, text, hidden, sort = sort, merge = merge, signal = signal, hideForeign = true) }.getOrDefault(found)
+            } else found
         } finally {
             stop?.dispose()
         }
@@ -922,6 +981,19 @@ class OnDemandRepository @Inject constructor(
         Unit
     }
 
+    /** Saved matches for these titles (see [VodMatchJson]), by uid, with whether each is complete. */
+    suspend fun savedMatches(items: List<VodItem>): Map<String, Pair<com.nuvio.tv.livetv.data.LiveTvPosterResolver.Hit, Boolean>> =
+        withContext(Dispatchers.IO) {
+            if (items.isEmpty()) return@withContext emptyMap()
+            val raw = runCatching { db.savedMatches(items.map { it.uid }) }.getOrDefault(emptyMap())
+            raw.mapNotNull { (uid, v) -> VodMatchJson.decode(v.first)?.let { uid to (it to v.second) } }.toMap()
+        }
+
+    suspend fun saveMatch(item: VodItem, json: String, detailed: Boolean) = withContext(Dispatchers.IO) {
+        runCatching { db.saveMatch(item.uid, json, detailed) }
+        Unit
+    }
+
     suspend fun cachedTitle(item: VodItem): String? = withContext(Dispatchers.IO) {
         runCatching { db.cachedTitle(item.uid) }.getOrNull()
     }
@@ -1000,7 +1072,7 @@ class OnDemandRepository @Inject constructor(
         val settings = prefs.settings.first()
         val allowed = candidates.values.filter { item ->
             val uid = "${item.kind.key}:${item.playlistId}:${item.categoryId}"
-            if (uid in user.vodHiddenCategories) return@filter false
+            if (user.hidesVodCategory(uid)) return@filter false
             val name = runCatching { db.categoryName(item.playlistId, item.kind, item.categoryId) }.getOrNull().orEmpty()
             !com.nuvio.tv.livetv.parental.ParentalControls.isLocked("vod:$uid", name, settings, user.lockedGroups)
         }
@@ -1131,6 +1203,10 @@ class OnDemandRepository @Inject constructor(
         private const val TAG = "OnDemand"
         /** Re-import each provider once a day. */
         private const val REFRESH_MS = 24L * 60 * 60 * 1000
+        /** How long a list waits for its unchecked titles' languages before showing ("Hide non-English titles"). */
+        private const val PAGE_CHECK_MS = 2_500L
+        /** Search results checked before showing (the best matches; the rest are checked in the background). */
+        private const val SEARCH_CHECK = 40
     }
 }
 

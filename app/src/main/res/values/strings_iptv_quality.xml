@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">Best quality</string>
+    <string name="autoplay_mode_quality_desc">Play the best source by your Quality rules: resolution, source, trusted release groups, HDR and audio.</string>
+    <string name="quality_rules_title">Quality rules</string>
+    <string name="quality_rules_subtitle">What Best quality picks and how Best quality first sorts, for every source.</string>
+    <string name="quality_rules_open">Show</string>
+    <string name="quality_rules_close">Hide</string>
+    <string name="stream_sort_sources">Sort sources</string>
+    <string name="stream_sort_sources_sub">The order of the source list.</string>
+    <string name="stream_sort_source_order">Source order</string>
+    <string name="stream_sort_source_order_desc">As each source sends them.</string>
+    <string name="stream_sort_best_first">Best quality first</string>
+    <string name="stream_sort_best_first_desc">Ranked by your Quality rules. Links the rules leave out aren\'t listed.</string>
+    <string name="quality_low_groups_title">Low-quality release groups</string>
+    <string name="quality_low_groups_subtitle">Groups known for poor or fake releases (TRaSH Guides list).</string>
+    <string name="quality_low_groups_push_down">Move to the bottom</string>
+    <string name="quality_low_groups_hide">Hide</string>
+    <string name="quality_low_groups_normal">Treat like the rest</string>
+    <string name="quality_trusted_groups_title">Trusted release groups</string>
+    <string name="quality_trusted_groups_subtitle">Best first. Starts with the TRaSH Guides list. Clear it to get that list back.</string>
+    <string name="quality_rules_reset_title">Reset to recommended</string>
+    <string name="quality_rules_reset_subtitle">Puts every Quality rule back to the recommended setup.</string>
+</resources>

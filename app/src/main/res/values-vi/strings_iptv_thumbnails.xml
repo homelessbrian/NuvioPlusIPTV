@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"Ảnh thu nhỏ khi tua"</string>
+    <string name="playback_section_seek_thumbnails_desc">"Ảnh xem trước phía trên thanh tua khi bạn tua"</string>
+    <string name="iptv_thumbs_title">"Ảnh thu nhỏ khi tua"</string>
+    <string name="iptv_thumbs_subtitle">"Hiện ảnh xem trước phía trên thanh tua khi bạn tua. Ảnh được tạo trên TV này từ chính video"</string>
+    <string name="iptv_thumbs_works_on">"Hoạt động với: phim và chương trình trong trình phát chính (kể cả liên kết HLS phát trực tuyến), bản ghi của bạn, phát lại và điểm nổi bật thể thao, xem lại, và tua lại Live TV (bộ đệm tạm dừng).\nXem lại: ảnh lấy từ phần được lưu bằng Tua xem lại nhanh hơn, hoặc trực tiếp từ nhà cung cấp với xem lại dạng HLS.\nKhông hoạt động với: torrent, liên kết DASH hoặc luồng được bảo vệ."</string>
+    <string name="iptv_thumbs_low_memory_note">"Thiết bị này có bộ nhớ hạn chế. Ảnh thu nhỏ có thể gây giật. Nếu vậy, chúng tự tạm dừng và thanh tua sẽ báo."</string>
+    <string name="iptv_thumbs_include_4k">"Bao gồm 4K và HDR"</string>
+    <string name="iptv_thumbs_include_4k_desc">"Tạo ảnh thu nhỏ cho cả video 4K và HDR. Mặc định bật trên thiết bị nhiều bộ nhớ và tắt trên máy yếu hơn, nhưng bạn có thể bật ở bất cứ đâu để thử. Ảnh 4K có thể giật hoặc không hoạt động trên máy yếu, và tốn nhiều dữ liệu hơn. Ảnh của video HDR có thể trông bạc màu. Liên kết phát trực tuyến dùng phiên bản nhỏ nhất, nên hiếm khi ảnh hưởng"</string>
+    <string name="iptv_thumbs_when_to_make">"Khi nào tạo ảnh thu nhỏ"</string>
+    <string name="iptv_thumbs_when_seeking">"Chỉ khi tạm dừng hoặc tua"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"Lựa chọn nhẹ nhất: không tạo gì khi video chỉ đang phát"</string>
+    <string name="iptv_thumbs_when_watching">"Trong khi xem"</string>
+    <string name="iptv_thumbs_when_watching_desc">"Cũng tạo ngầm khi video đang phát, khi đã tải trước đủ xa"</string>
+    <string name="iptv_thumbs_when_right_away">"Ngay lập tức"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"Toàn bộ video, từ đầu, ngay khi mở. Tốn dữ liệu nhất"</string>
+    <string name="iptv_thumbs_storage_limit">"Giới hạn lưu trữ"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"Ảnh thu nhỏ đã lưu chiếm tối đa chừng này; video xem lâu nhất sẽ bị xóa trước"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"Xóa ảnh thu nhỏ đã lưu"</string>
+    <string name="iptv_thumbs_clear_desc">"Xóa mọi ảnh thu nhỏ đã lưu. Chúng sẽ được tạo lại khi cần"</string>
+    <string name="iptv_thumbs_last_paused">"Lần tạm dừng gần nhất do thiếu bộ nhớ: %1$s, %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"Đang tạo ảnh thu nhỏ…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"Ảnh thu nhỏ tạm dừng: thiếu bộ nhớ"</string>
+    <string name="iptv_thumbs_msg_live">"Không có ảnh thu nhỏ cho Live TV"</string>
+    <string name="iptv_thumbs_msg_dash">"Không có ảnh thu nhỏ cho liên kết DASH"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"Bật Tua xem lại nhanh hơn để có ảnh thu nhỏ"</string>
+    <string name="iptv_thumbs_msg_protected">"Luồng này được bảo vệ: không có ảnh thu nhỏ"</string>
+    <string name="iptv_thumbs_msg_torrent">"Không có ảnh thu nhỏ cho torrent"</string>
+    <string name="iptv_thumbs_msg_link_kind">"Không có ảnh thu nhỏ cho loại liên kết này"</string>
+    <string name="iptv_thumbs_msg_unreadable">"Không đọc được luồng này để tạo ảnh thu nhỏ"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"Các đoạn của luồng này quá lớn để tạo ảnh thu nhỏ"</string>
+    <string name="iptv_thumbs_msg_stopped">"Ảnh thu nhỏ đã ngừng hoạt động cho video này"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"Máy chủ không gửi ảnh thu nhỏ"</string>
+    <string name="iptv_thumbs_msg_format">"Định dạng video này không tạo được ảnh thu nhỏ trên thiết bị này"</string>
+    <string name="iptv_thumbs_msg_open_failed">"Không mở được video này để tạo ảnh thu nhỏ"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"Không có ảnh thu nhỏ cho luồng xem lại này"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Không có hình thu nhỏ: TV này cần bộ giải mã video duy nhất cho video"</string>
+</resources>

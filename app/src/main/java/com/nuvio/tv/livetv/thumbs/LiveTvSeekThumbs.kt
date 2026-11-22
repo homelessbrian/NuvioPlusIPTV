@@ -62,6 +62,7 @@ private class Seen {
         growing = p.isCurrentMediaItemDynamic
         val f = p.videoFormat
         height = f?.height ?: 0
+        SeekThumbs.playingFormat(SeekThumbs.Owner.LIVE, f?.sampleMimeType, f?.width ?: 0, f?.height ?: 0)
         hdr = f?.colorInfo?.colorTransfer.let { it == C.COLOR_TRANSFER_ST2084 || it == C.COLOR_TRANSFER_HLG }
     }
 
@@ -86,8 +87,12 @@ private fun update(
     when {
         recording != null && recordingId != null -> {
             if (seen.durationMs <= 0L) return
+            // A network folder recording's pieces aren't all on this box: read through the recordings server.
+            val net = com.nuvio.tv.livetv.record.NetworkFolderStore.playUriFor(android.net.Uri.fromFile(recording))
             SeekThumbs.open(
-                context, owner, SeekThumbs.Source.Recording(recording, "recording|$recordingId|${recording.path}"),
+                context, owner,
+                if (net != null) SeekThumbs.Source.Hls(net.toString(), emptyMap(), "recording|$recordingId|${recording.path}")
+                else SeekThumbs.Source.Recording(recording, "recording|$recordingId|${recording.path}"),
                 seen.durationMs, seen.height, seen.hdr, seen.playback
             )
         }

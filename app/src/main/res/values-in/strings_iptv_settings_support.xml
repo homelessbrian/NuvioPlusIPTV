@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"Mencari…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"Uji gagal: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"Playlist"</string>
+    <string name="iptv_settings_support_remote_title">"Penguji tombol remote"</string>
+    <string name="iptv_settings_support_remote_instructions">"Tekan tombol apa saja. Terbaru di atas; baris berwarna adalah tombol berbeda dalam 250 ms dari sebelumnya (misalnya OK yang dikirim bersama Atas/Bawah). Tekan Kembali 3 kali berturut-turut untuk menutup."</string>
+    <string name="iptv_settings_support_remote_waiting">"Menunggu tombol…"</string>
+    <string name="iptv_settings_support_remote_action_down">"TEKAN"</string>
+    <string name="iptv_settings_support_remote_action_up">"LEPAS"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"MULTI"</string>
+    <string name="iptv_settings_support_remote_repeat">"ulang %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"tekan lama"</string>
+    <string name="iptv_settings_support_remote_canceled">"dibatalkan"</string>
+    <string name="iptv_settings_support_remote_held">"ditahan %1$d ms"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Laporan mulai Live TV"</string>
+    <string name="iptv_settings_support_report_subtitle">"Sejak aplikasi dimulai. ▲ ▼ untuk menggulir."</string>
+    <string name="iptv_settings_support_report_empty">"Belum ada: buka Live TV dulu."</string>
+    <string name="iptv_settings_support_report_send">"Kirim seluruh laporan"</string>
+    <string name="iptv_settings_support_report_no_network">"Hubungkan TV ini ke Wi-Fi untuk mengirim laporan dari ponsel."</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. Sambungkan ponsel ke Wi-Fi yang sama dengan TV ini.\n2. Pindai kode ini dengan kamera ponsel, atau ketik alamat di bawah.\n3. Ketuk Salin laporan singkat (muat dalam satu pesan Discord), lalu tempel di pesan Anda."</string>
+</resources>

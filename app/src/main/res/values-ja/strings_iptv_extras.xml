@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"このテレビではこの動画を再生できませんでした。別のソースを試すか、MPVに切り替えてください。"</string>
+    <string name="iptv_settings_show_on_profiles">"プロフィールに表示"</string>
+    <string name="iptv_settings_show_on_profiles_value">"プロフィールに表示: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"すべて"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d / %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"ここでオフにしたプロフィールには、%1$sのチャンネル、On Demand、Sportsが表示されません。プレイリスト自体は全員に残ります"</string>
+    <string name="iptv_backup_file">"バックアップファイル"</string>
+    <string name="iptv_backup_file_summary">"設定をファイルに保存、またはファイルから復元"</string>
+    <string name="iptv_backup_file_description">"Live TVの設定を1つの.nptvファイルにコピーします：ログイン付きのプレイリスト、番組表、お気に入り、グループ、Sports、設定。Setup Syncを使わない場合や、自分用のコピーに便利です。"</string>
+    <string name="iptv_backup_with_phone">"スマホでバックアップ・復元"</string>
+    <string name="iptv_backup_with_phone_description">"コードを読み取ってファイルをスマホに保存、または送り返します"</string>
+    <string name="iptv_backup_save_on_tv">"このテレビにバックアップを保存"</string>
+    <string name="iptv_backup_save_on_tv_description">"ダウンロード › Nuvio + IPTV に保存されます"</string>
+    <string name="iptv_backup_restore_on_tv">"このテレビから復元"</string>
+    <string name="iptv_backup_restore_on_tv_description">"このテレビに保存したバックアップ（新しい順）"</string>
+    <string name="iptv_backup_none_on_tv">"このテレビにはまだバックアップがありません。先に保存するか、スマホを使ってください。"</string>
+    <string name="iptv_backup_saving">"保存中…"</string>
+    <string name="iptv_backup_saved_to">"%1$s に保存しました"</string>
+    <string name="iptv_backup_save_failed">"このテレビにバックアップを保存できませんでした。スマホでお試しください。"</string>
+    <string name="iptv_backup_restoring">"復元中…"</string>
+    <string name="iptv_backup_restored">"バックアップを復元しました。変更されたプレイリストと番組表を読み込んでいます。"</string>
+    <string name="iptv_backup_restore_failed">"このバックアップは復元できませんでした（プレイリストや番組表がありません）。"</string>
+    <string name="iptv_backup_restore_confirm_title">"このバックアップを復元しますか？"</string>
+    <string name="iptv_backup_restore_confirm_message">"%1$sに%2$sで保存。このテレビのLive TV設定が置き換わります。Setup Syncがオンなら他のテレビも変わります。"</string>
+    <string name="iptv_backup_restore_confirm_button">"復元"</string>
+    <string name="iptv_backup_not_a_backup">"Nuvio + IPTVのバックアップファイル（.nptv）ではありません。"</string>
+    <string name="iptv_backup_private_note">"バックアップファイルにはプレイリストのログイン情報が含まれます。他人に渡さないでください。"</string>
+    <string name="iptv_backup_phone_steps">"1. スマホをこのテレビと同じWi-Fiにつなぎます。\n2. スマホのカメラでコードを読み取ります。\n3. バックアップを保存するか、送るバックアップファイルを選びます。"</string>
+    <string name="iptv_backup_phone_check_tv">"送信しました。テレビで「復元」を選ぶと完了します。"</string>
+    <string name="iptv_backup_phone_title">"Nuvio + IPTV バックアップ"</string>
+    <string name="iptv_backup_phone_save_heading">"バックアップを保存"</string>
+    <string name="iptv_backup_phone_save_text">"このテレビのLive TV設定を.nptvファイルとしてスマホに保存します。"</string>
+    <string name="iptv_backup_phone_save_button">"バックアップファイルを保存"</string>
+    <string name="iptv_backup_phone_restore_heading">"バックアップを復元"</string>
+    <string name="iptv_backup_phone_restore_text">"テレビに送る.nptvファイルを選んでください。テレビで確認するまで何も変わりません。"</string>
+    <string name="iptv_backup_phone_choose_file">"ファイルを選択"</string>
+    <string name="iptv_backup_phone_restore_button">"テレビに送る"</string>
+</resources>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"Ce téléviseur n'a pas pu lire cette vidéo. Essayez une autre source ou passez à MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Afficher sur les profils"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Afficher sur les profils : %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Tous"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d sur %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Les profils désactivés ici ne reçoivent ni chaînes, ni On Demand, ni Sports de %1$s. La playlist reste pour tout le monde"</string>
+    <string name="iptv_backup_file">"Fichier de sauvegarde"</string>
+    <string name="iptv_backup_file_summary">"Enregistrez votre configuration dans un fichier ou restaurez-en un"</string>
+    <string name="iptv_backup_file_description">"Une copie de votre configuration Live TV dans un fichier .nptv : playlists avec leurs identifiants, guides, favoris, groupes, Sports et réglages. Pratique sans Setup Sync ou pour garder votre propre copie."</string>
+    <string name="iptv_backup_with_phone">"Sauvegarder ou restaurer avec votre téléphone"</string>
+    <string name="iptv_backup_with_phone_description">"Scannez un code pour enregistrer le fichier sur votre téléphone ou en renvoyer un"</string>
+    <string name="iptv_backup_save_on_tv">"Enregistrer une sauvegarde sur ce téléviseur"</string>
+    <string name="iptv_backup_save_on_tv_description">"Enregistrée dans Téléchargements › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Restaurer depuis ce téléviseur"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Sauvegardes enregistrées sur ce téléviseur, la plus récente d'abord"</string>
+    <string name="iptv_backup_none_on_tv">"Aucune sauvegarde sur ce téléviseur pour l'instant. Enregistrez-en une d'abord ou utilisez votre téléphone."</string>
+    <string name="iptv_backup_saving">"Enregistrement…"</string>
+    <string name="iptv_backup_saved_to">"Enregistrée dans %1$s"</string>
+    <string name="iptv_backup_save_failed">"La sauvegarde n'a pas pu être enregistrée sur ce téléviseur. Essayez plutôt avec votre téléphone."</string>
+    <string name="iptv_backup_restoring">"Restauration…"</string>
+    <string name="iptv_backup_restored">"Sauvegarde restaurée. Les playlists et guides modifiés se chargent."</string>
+    <string name="iptv_backup_restore_failed">"Cette sauvegarde n'a pas pu être restaurée (elle ne contient ni playlist ni guide)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Restaurer cette sauvegarde ?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Enregistrée le %1$s sur %2$s. Elle remplace la configuration Live TV de ce téléviseur. Avec Setup Sync, vos autres téléviseurs changent aussi."</string>
+    <string name="iptv_backup_restore_confirm_button">"Restaurer"</string>
+    <string name="iptv_backup_not_a_backup">"Ce n'est pas un fichier de sauvegarde Nuvio + IPTV (.nptv)."</string>
+    <string name="iptv_backup_private_note">"Le fichier de sauvegarde contient les identifiants de vos playlists. Gardez-le privé."</string>
+    <string name="iptv_backup_phone_steps">"1. Connectez votre téléphone au même Wi-Fi que ce téléviseur.\n2. Scannez le code avec l'appareil photo du téléphone.\n3. Enregistrez la sauvegarde ou choisissez un fichier de sauvegarde à envoyer ici."</string>
+    <string name="iptv_backup_phone_check_tv">"Envoyé. Choisissez Restaurer sur votre téléviseur pour terminer."</string>
+    <string name="iptv_backup_phone_title">"Sauvegarde Nuvio + IPTV"</string>
+    <string name="iptv_backup_phone_save_heading">"Enregistrer une sauvegarde"</string>
+    <string name="iptv_backup_phone_save_text">"Enregistre la configuration Live TV de ce téléviseur sur votre téléphone en fichier .nptv."</string>
+    <string name="iptv_backup_phone_save_button">"Enregistrer le fichier"</string>
+    <string name="iptv_backup_phone_restore_heading">"Restaurer une sauvegarde"</string>
+    <string name="iptv_backup_phone_restore_text">"Choisissez un fichier .nptv à envoyer au téléviseur. Rien ne change avant votre confirmation sur le téléviseur."</string>
+    <string name="iptv_backup_phone_choose_file">"Choisir un fichier"</string>
+    <string name="iptv_backup_phone_restore_button">"Envoyer au téléviseur"</string>
+</resources>

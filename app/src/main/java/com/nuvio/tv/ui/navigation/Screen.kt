@@ -151,6 +151,8 @@ sealed class Screen(val route: String) {
     data object OnDemand : Screen("on_demand")
     /** Live TV fork: recorded shows. */
     data object Recordings : Screen("recordings")
+    /** Live TV fork: Recordings settings on their own, from the gear on Recordings. */
+    data object RecordingSettings : Screen("recording_settings")
     /** Live TV fork: release dates of your shows and movies. */
     data object Calendar : Screen("calendar")
     /** Live TV fork: scores, schedules and where to watch. */
@@ -189,8 +191,15 @@ sealed class Screen(val route: String) {
     data object Collections : Screen("collections")
 
     data object CollectionEditor : Screen("collection_editor?collectionId={collectionId}") {
+        private fun encode(value: String): String =
+            URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
         fun createRoute(collectionId: String? = null): String {
-            return "collection_editor?collectionId=${collectionId ?: ""}"
+            return if (collectionId.isNullOrEmpty()) {
+                "collection_editor?collectionId="
+            } else {
+                "collection_editor?collectionId=${encode(collectionId)}"
+            }
         }
     }
 

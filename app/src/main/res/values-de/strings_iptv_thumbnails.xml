@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"Mit dem Format dieses Videos können auf diesem Gerät keine Vorschaubilder erstellt werden"</string>
     <string name="iptv_thumbs_msg_open_failed">"Dieses Video konnte für Vorschaubilder nicht geöffnet werden"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"Keine Vorschaubilder für diesen Catch-up-Stream"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Keine Vorschaubilder: Dieser Fernseher braucht seinen einzigen Video-Decoder für das Video"</string>
 </resources>

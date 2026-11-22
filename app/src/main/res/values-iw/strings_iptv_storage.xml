@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"המכשיר הזה"</string>
+    <string name="iptv_storage_usb_drive">"כונן USB"</string>
+    <string name="iptv_storage_read_only">"קריאה בלבד. הממיר יכול לקרוא את הכונן אבל לא לכתוב אליו (בדרך כלל כונן NTFS). פירמוט ל-exFAT מאפשר להקליט אליו."</string>
+    <string name="iptv_storage_unsupported_format">"הממיר לא יכול לקרוא את הפורמט של הכונן. פירמוט ל-exFAT בדרך כלל פותר את זה."</string>
+    <string name="iptv_storage_not_ready">"עוד לא מוכן. חכו רגע ופתחו את הרשימה שוב."</string>
+    <string name="iptv_storage_no_app_folder">"Android לא נתן לאפליקציה תיקייה בכונן. נתקו את הכונן וחברו אותו שוב, או הפעילו מחדש את הממיר."</string>
+    <string name="iptv_storage_unusable_state">"לא זמין לשימוש כרגע (%1$s)."</string>
+</resources>

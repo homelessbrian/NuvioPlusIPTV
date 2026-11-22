@@ -161,6 +161,10 @@ sealed class HomeRow {
     @Immutable
     data class CollectionRow(val collection: Collection) : HomeRow()
 
+    /** Live TV fork: a Live TV or Sports row added from Reorder Home Catalogs ([key] = "livetv_…"). */
+    @Immutable
+    data class LiveRow(val key: String, val title: String) : HomeRow()
+
     /**
      * Placeholder for a catalog row whose data hasn't been fetched yet.
      * Rendered as a shimmer/skeleton row until the user scrolls near it
@@ -208,6 +212,9 @@ sealed class GridItem {
         val addonBaseUrl: String,
         val type: String
     ) : GridItem()
+    /** Live TV fork: a Live TV or Sports row, drawn across the whole grid. */
+    @Immutable
+    data class LiveRow(val key: String, val title: String) : GridItem()
     @Immutable
     data class CollectionHeader(
         val collectionId: String,

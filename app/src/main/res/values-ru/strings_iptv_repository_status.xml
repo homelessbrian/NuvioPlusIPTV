@@ -46,4 +46,5 @@
         <item quantity="many">"Срок «%1$s» истекает через %2$d дней"</item>
         <item quantity="other">"Срок «%1$s» истекает через %2$d дня"</item>
     </plurals>
+    <string name="iptv_repository_status_storage_full_short">"Недостаточно места на этом устройстве. Прежняя телепрограмма сохранена."</string>
 </resources>

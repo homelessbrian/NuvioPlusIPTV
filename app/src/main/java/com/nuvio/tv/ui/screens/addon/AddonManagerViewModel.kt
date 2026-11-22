@@ -21,6 +21,14 @@ import com.nuvio.tv.core.server.CollectionSourceInfo
 import com.nuvio.tv.core.server.DeviceIpAddress
 import com.nuvio.tv.core.server.FolderInfo
 import com.nuvio.tv.core.server.PageState
+import com.nuvio.tv.core.server.LiveRowChoicesInfo
+import com.nuvio.tv.core.server.LiveRowGroupInfo
+import com.nuvio.tv.core.server.LiveRowInfo
+import com.nuvio.tv.core.server.LiveRowSportInfo
+import com.nuvio.tv.core.server.LiveRowVodInfo
+import com.nuvio.tv.livetv.home.HomeLiveRow
+import com.nuvio.tv.livetv.home.HomeLiveRows
+import com.nuvio.tv.livetv.home.HomeRowChoices
 import com.nuvio.tv.core.server.PendingAddonChange
 import com.nuvio.tv.core.server.TmdbFiltersInfo
 import com.nuvio.tv.core.server.TmdbSourceMetadataInfo
@@ -51,12 +59,17 @@ import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,6 +93,8 @@ class AddonManagerViewModel @Inject constructor(
     private val tmdbCollectionSourceResolver: TmdbCollectionSourceResolver,
     private val traktPublicListSourceResolver: TraktPublicListSourceResolver,
     private val trackingAddonConsentController: TrackingAddonConsentController,
+    private val homeLiveRows: HomeLiveRows,
+    private val homeRowChoices: HomeRowChoices,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -106,11 +121,21 @@ class AddonManagerViewModel @Inject constructor(
     private var disabledHomeCatalogKeys: Set<String> = emptySet()
     private var followAddonsOrderEnabled: Boolean = false
     private var currentCollections: List<Collection> = emptyList()
+    // Live TV fork: the Live TV, Sports and On Demand rows, and what new ones can show (phone page).
+    @Volatile private var liveRows: List<HomeLiveRow> = emptyList()
+    @Volatile private var liveNames: Map<String, String> = emptyMap()
+    @Volatile private var liveChoices: LiveRowChoicesInfo = LiveRowChoicesInfo()
+    private var liveChoicesJob: Job? = null
+    private var addonDraftOrder: List<String>? = null
+    private var addonMoveBaseline: List<Addon>? = null
+    private var pendingAddonOrder: List<String>? = null
+    private var addonPersistGeneration: Int = 0
 
     init {
         observeInstalledAddons()
         observeCatalogPreferences()
         observeCollections()
+        observeLiveRows()
     }
 
     fun requestAddonSyncNow() {
@@ -217,6 +242,7 @@ class AddonManagerViewModel @Inject constructor(
     }
 
     fun removeAddon(baseUrl: String) {
+        pendingAddonOrder = null
         viewModelScope.launch {
             addonRepository.removeAddon(baseUrl)
         }
@@ -228,30 +254,103 @@ class AddonManagerViewModel @Inject constructor(
         }
     }
 
-    fun moveAddonUp(baseUrl: String) {
-        reorderAddon(baseUrl, -1)
-    }
-
-    fun moveAddonDown(baseUrl: String) {
-        reorderAddon(baseUrl, 1)
-    }
-
-    private fun reorderAddon(baseUrl: String, direction: Int) {
+    fun enterAddonMoveMode(baseUrl: String) {
         val current = _uiState.value.installedAddons
-        val index = current.indexOfFirst { it.baseUrl == baseUrl }
-        if (index == -1) return
+        if (current.size <= 1 || current.none { it.baseUrl == baseUrl }) return
+        pendingAddonOrder = null
+        addonMoveBaseline = current
+        addonDraftOrder = current.map { it.baseUrl }
+        _uiState.update { it.copy(movingAddonKey = baseUrl) }
+    }
 
-        val newIndex = index + direction
-        if (newIndex !in current.indices) return
-
-        val reordered = current.toMutableList().apply {
-            val item = removeAt(index)
-            add(newIndex, item)
+    fun moveAddonDuringDrag(baseUrl: String, direction: Int): Int? {
+        val draft = addonDraftOrder ?: return null
+        val fromIndex = draft.indexOf(baseUrl)
+        val toIndex = fromIndex + direction
+        if (fromIndex < 0 || toIndex !in draft.indices) return null
+        val reordered = draft.toMutableList().apply {
+            add(toIndex, removeAt(fromIndex))
         }
+        addonDraftOrder = reordered
+        applyAddonDraftOrder()
+        return toIndex
+    }
 
+    fun confirmAddonMove() {
+        val draft = addonDraftOrder
+        val baseline = addonMoveBaseline
+        val baselineKeys = baseline?.map { it.baseUrl }
+        addonDraftOrder = null
+        addonMoveBaseline = null
+        _uiState.update { it.copy(movingAddonKey = null) }
+        if (draft == null || draft == baselineKeys) return
+
+        val generation = ++addonPersistGeneration
+        pendingAddonOrder = draft
         viewModelScope.launch {
-            addonRepository.setAddonOrder(reordered.map { it.baseUrl })
+            var wrote = false
+            try {
+                withContext(NonCancellable) {
+                    addonRepository.setAddonOrder(draft)
+                    wrote = true
+                }
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (_: Throwable) {
+                wrote = false
+            }
+            if (!wrote && generation == addonPersistGeneration) {
+                if (pendingAddonOrder == draft) {
+                    pendingAddonOrder = null
+                }
+                if (baseline != null && _uiState.value.movingAddonKey == null) {
+                    _uiState.update { it.copy(installedAddons = baseline) }
+                }
+            }
         }
+        viewModelScope.launch {
+            delay(2_500L)
+            if (generation == addonPersistGeneration && pendingAddonOrder == draft) {
+                pendingAddonOrder = null
+            }
+        }
+    }
+
+    fun cancelAddonMove() {
+        val baseline = addonMoveBaseline
+        addonDraftOrder = null
+        addonMoveBaseline = null
+        pendingAddonOrder = null
+        _uiState.update {
+            it.copy(
+                movingAddonKey = null,
+                installedAddons = baseline ?: it.installedAddons
+            )
+        }
+    }
+
+    private fun applyAddonDraftOrder() {
+        val draft = addonDraftOrder ?: return
+        _uiState.update { state ->
+            state.copy(installedAddons = orderAddonsByKeys(state.installedAddons, draft))
+        }
+    }
+
+    private fun orderAddonsByKeys(
+        addons: List<Addon>,
+        orderKeys: List<String>
+    ): List<Addon> {
+        val byUrl = addons.associateBy { it.baseUrl }
+        val seen = LinkedHashSet<String>()
+        val ordered = ArrayList<Addon>(addons.size)
+        for (url in orderKeys) {
+            val addon = byUrl[url] ?: continue
+            if (seen.add(url)) ordered.add(addon)
+        }
+        for (addon in addons) {
+            if (seen.add(addon.baseUrl)) ordered.add(addon)
+        }
+        return ordered
     }
 
     fun startQrMode(webConfigMode: AddonWebConfigMode = this.webConfigMode) {
@@ -262,101 +361,12 @@ class AddonManagerViewModel @Inject constructor(
         }
 
         stopServerInternal()
+        startLiveChoices()
 
         server = AddonConfigServer.startOnAvailablePort(
             context = context,
             webConfigMode = webConfigMode,
-            currentPageStateProvider = {
-                val addons = _uiState.value.installedAddons
-                val orderedCatalogs = buildOrderedCatalogEntries(
-                    addons = addons.enabledAddons(),
-                    savedOrderKeys = homeCatalogOrderKeys,
-                    disabledKeys = disabledHomeCatalogKeys
-                )
-                // Build unified catalog list with collections interleaved
-                val catalogInfos = orderedCatalogs.map { catalog ->
-                    CatalogInfo(
-                        key = catalog.key,
-                        disableKey = catalog.disableKey,
-                        catalogName = catalog.catalogName,
-                        addonName = catalog.addonName,
-                        type = catalog.typeLabel,
-                        isDisabled = catalog.isDisabled
-                    )
-                }
-                val collectionInfos = currentCollections.map { col ->
-                    val colKey = "collection_${col.id}"
-                    CatalogInfo(
-                        key = colKey,
-                        disableKey = colKey,
-                        catalogName = col.title,
-                        addonName = "${col.folders.size} folder${if (col.folders.size != 1) "s" else ""}",
-                        type = "collection",
-                        isDisabled = colKey in disabledHomeCatalogKeys
-                    )
-                }
-
-                val unifiedCatalogs: List<CatalogInfo>
-                if (followAddonsOrderEnabled) {
-                    // In follow mode: addon catalogs in manifest order, collections placed by saved position
-                    val addonKeys = catalogInfos.map { it.key }
-                    val collectionKeysSet = collectionInfos.map { it.key }.toSet()
-                    val catalogByKey = (catalogInfos + collectionInfos).associateBy { it.key }
-                    val savedValid = homeCatalogOrderKeys.filter { it in catalogByKey }.distinct()
-
-                    if (savedValid.isNotEmpty()) {
-                        val result = mutableListOf<String>()
-                        var addonPointer = 0
-                        for (savedKey in savedValid) {
-                            if (savedKey in collectionKeysSet) {
-                                result.add(savedKey)
-                            } else {
-                                val targetIdx = addonKeys.indexOf(savedKey)
-                                if (targetIdx >= 0) {
-                                    while (addonPointer <= targetIdx) {
-                                        val ak = addonKeys[addonPointer]
-                                        if (ak !in result) result.add(ak)
-                                        addonPointer++
-                                    }
-                                }
-                            }
-                        }
-                        while (addonPointer < addonKeys.size) {
-                            val ak = addonKeys[addonPointer]
-                            if (ak !in result) result.add(ak)
-                            addonPointer++
-                        }
-                        for (ck in collectionKeysSet) {
-                            if (ck !in result) result.add(ck)
-                        }
-                        unifiedCatalogs = result.mapNotNull { catalogByKey[it] }
-                    } else {
-                        unifiedCatalogs = catalogInfos + collectionInfos
-                    }
-                } else {
-                    // Interleave based on saved order
-                    val catalogByKey = (catalogInfos + collectionInfos).associateBy { it.key }
-                    val savedOrder = homeCatalogOrderKeys
-                    val orderedKeys = savedOrder.filter { it in catalogByKey }
-                    val unseenKeys = catalogByKey.keys - orderedKeys.toSet()
-                    unifiedCatalogs = (orderedKeys + unseenKeys).mapNotNull { catalogByKey[it] }
-                }
-
-                PageState(
-                    addons = addons.map { addon ->
-                        AddonInfo(
-                            url = addon.baseUrl,
-                            name = addon.displayName.ifBlank { addon.baseUrl },
-                            description = addon.description
-                        )
-                    },
-                    catalogs = unifiedCatalogs,
-                    collections = collectionsToServerFormat(currentCollections),
-                    disabledCollectionKeys = disabledHomeCatalogKeys
-                        .filter { it.startsWith("collection_") },
-                    followAddonsOrder = followAddonsOrderEnabled
-                )
-            },
+            currentPageStateProvider = { buildPageState() },
             onChangeProposed = { change -> handleChangeProposed(change) },
             tmdbMetadataProvider = { request -> fetchTmdbSourceMetadata(request) },
             tmdbSearchProvider = { request -> searchTmdbSources(request) },
@@ -384,6 +394,160 @@ class AddonManagerViewModel @Inject constructor(
         }
     }
 
+    /** What the phone page shows: add-ons, Home's rows in order (with the Live TV ones), collections. */
+    private fun buildPageState(): PageState {
+        val addons = _uiState.value.installedAddons
+        val orderedCatalogs = buildOrderedCatalogEntries(
+            addons = addons.enabledAddons(),
+            savedOrderKeys = homeCatalogOrderKeys,
+            disabledKeys = disabledHomeCatalogKeys
+        )
+        // Build unified catalog list with collections interleaved
+        val catalogInfos = orderedCatalogs.map { catalog ->
+            CatalogInfo(
+                key = catalog.key,
+                disableKey = catalog.disableKey,
+                catalogName = catalog.catalogName,
+                addonName = catalog.addonName,
+                type = catalog.typeLabel,
+                isDisabled = catalog.isDisabled
+            )
+        }
+        val collectionInfos = currentCollections.map { col ->
+            val colKey = "collection_${col.id}"
+            CatalogInfo(
+                key = colKey,
+                disableKey = colKey,
+                catalogName = col.title,
+                addonName = "${col.folders.size} folder${if (col.folders.size != 1) "s" else ""}",
+                type = "collection",
+                isDisabled = colKey in disabledHomeCatalogKeys
+            )
+        } + liveCatalogInfos()
+
+        val unifiedCatalogs: List<CatalogInfo>
+        if (followAddonsOrderEnabled) {
+            // In follow mode: addon catalogs in manifest order, collections placed by saved position
+            val addonKeys = catalogInfos.map { it.key }
+            val collectionKeysSet = collectionInfos.map { it.key }.toSet()
+            val catalogByKey = (catalogInfos + collectionInfos).associateBy { it.key }
+            val savedValid = homeCatalogOrderKeys.filter { it in catalogByKey }.distinct()
+
+            if (savedValid.isNotEmpty()) {
+                val result = mutableListOf<String>()
+                var addonPointer = 0
+                for (savedKey in savedValid) {
+                    if (savedKey in collectionKeysSet) {
+                        result.add(savedKey)
+                    } else {
+                        val targetIdx = addonKeys.indexOf(savedKey)
+                        if (targetIdx >= 0) {
+                            while (addonPointer <= targetIdx) {
+                                val ak = addonKeys[addonPointer]
+                                if (ak !in result) result.add(ak)
+                                addonPointer++
+                            }
+                        }
+                    }
+                }
+                while (addonPointer < addonKeys.size) {
+                    val ak = addonKeys[addonPointer]
+                    if (ak !in result) result.add(ak)
+                    addonPointer++
+                }
+                for (ck in collectionKeysSet) {
+                    if (ck !in result) result.add(ck)
+                }
+                unifiedCatalogs = result.mapNotNull { catalogByKey[it] }
+            } else {
+                unifiedCatalogs = catalogInfos + collectionInfos
+            }
+        } else {
+            // Interleave based on saved order
+            val catalogByKey = (catalogInfos + collectionInfos).associateBy { it.key }
+            val savedOrder = homeCatalogOrderKeys
+            val orderedKeys = savedOrder.filter { it in catalogByKey }
+            val unseenKeys = catalogByKey.keys - orderedKeys.toSet()
+            unifiedCatalogs = (orderedKeys + unseenKeys).mapNotNull { catalogByKey[it] }
+        }
+
+        val empty = homeLiveRows.emptyRowIds.value
+        return PageState(
+            addons = addons.map { addon ->
+                AddonInfo(
+                    url = addon.baseUrl,
+                    name = addon.displayName.ifBlank { addon.baseUrl },
+                    description = addon.description
+                )
+            },
+            catalogs = unifiedCatalogs,
+            collections = collectionsToServerFormat(currentCollections),
+            disabledCollectionKeys = disabledHomeCatalogKeys
+                .filter { it.startsWith("collection_") },
+            followAddonsOrder = followAddonsOrderEnabled,
+            liveRows = liveRows.map { r ->
+                LiveRowInfo(
+                    id = r.id, key = r.key, kind = r.kind, source = r.source, title = r.title,
+                    name = liveNames[r.id] ?: r.title, sort = r.sort, limit = r.limit,
+                    showNext = r.showNext, hidePlaceholders = r.hidePlaceholders, opensGuide = r.opensGuide,
+                    playsGame = r.playsGame, startingSoon = r.startingSoon, shape = r.shape,
+                    after = r.after, label = r.label, hiddenEmpty = r.id in empty
+                )
+            },
+            liveRowChoices = liveChoices
+        )
+    }
+
+    /** Live TV fork: each Live TV, Sports and On Demand row, placed and turned on/off like a collection. */
+    private fun liveCatalogInfos(): List<CatalogInfo> = liveRows.map { r ->
+        CatalogInfo(
+            key = r.key,
+            disableKey = r.key,
+            catalogName = liveNames[r.id] ?: r.title,
+            addonName = "",
+            type = r.kind,
+            isDisabled = r.key in disabledHomeCatalogKeys
+        )
+    }
+
+    /** Each row's name as the phone page sent it (by row id), for the TV's confirm summary. */
+    private fun liveRowNamesFromJson(json: String): Map<String, String> = runCatching {
+        val arr = org.json.JSONArray(json)
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val id = o.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val name = o.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            id to name
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
+    private fun observeLiveRows() {
+        viewModelScope.launch {
+            combine(homeLiveRows.rows, homeLiveRows.names) { rows, names -> rows to names }
+                .collect { (rows, names) -> liveRows = rows; liveNames = names }
+        }
+    }
+
+    /** Keeps what new rows can show ready while the phone page is open. */
+    private fun startLiveChoices() {
+        liveChoicesJob?.cancel()
+        liveChoicesJob = viewModelScope.launch {
+            combine(
+                homeRowChoices.favoritesCount,
+                homeRowChoices.groups,
+                homeRowChoices.sportsChoices,
+                homeRowChoices.vodGroups
+            ) { fav, groups, sports, vod ->
+                LiveRowChoicesInfo(
+                    favorites = fav,
+                    groups = groups.map { LiveRowGroupInfo(it.id, it.name, it.playlist, it.count) },
+                    sports = sports.map { LiveRowSportInfo(it.source, it.name, it.icon, it.isLeague) },
+                    vodGroups = vod.map { LiveRowVodInfo(it.source, it.name, it.playlist, it.count, it.series) }
+                )
+            }.catch { }.collect { liveChoices = it }
+        }
+    }
+
     fun stopQrMode() {
         stopServerInternal()
         _uiState.update {
@@ -399,6 +563,8 @@ class AddonManagerViewModel @Inject constructor(
     private fun stopServerInternal() {
         server?.stop()
         server = null
+        liveChoicesJob?.cancel()
+        liveChoicesJob = null
     }
 
     private fun fetchTmdbSourceMetadata(request: TmdbSourceMetadataRequest): TmdbSourceMetadataInfo? {
@@ -489,10 +655,21 @@ class AddonManagerViewModel @Inject constructor(
         )
         val availableCatalogKeys = currentCatalogEntries.map { it.key }.toSet()
         val collectionKeysSet = currentCollections.map { "collection_${it.id}" }.toSet()
-        val allValidOrderKeys = availableCatalogKeys + collectionKeysSet
+        // Live TV fork: the rows the phone sent back (or today's when it sent none).
+        val currentLive = liveRows
+        val proposedLive = change.proposedLiveRowsJson?.let { HomeLiveRow.decode(it) }
+        val finalLive = proposedLive ?: currentLive
+        val proposedLiveNames = change.proposedLiveRowsJson?.let { liveRowNamesFromJson(it) }.orEmpty()
+        fun liveName(r: HomeLiveRow) = r.title.ifBlank { liveNames[r.id] ?: proposedLiveNames[r.id] ?: r.label.ifBlank { r.source } }
+        val allValidOrderKeys = availableCatalogKeys + collectionKeysSet + finalLive.map { it.key }
         val availableDisableKeyToName = currentCatalogEntries.associate { entry ->
             entry.disableKey to "${entry.catalogName} • ${entry.addonName}"
-        }
+        } + finalLive.associate { it.key to liveName(it) }
+        val currentLiveById = currentLive.associateBy { it.id }
+        val finalLiveIds = finalLive.mapTo(HashSet()) { it.id }
+        val addedLiveNames = finalLive.filter { it.id !in currentLiveById }.map { liveName(it) }
+        val removedLiveNames = currentLive.filter { it.id !in finalLiveIds }.map { liveName(it) }
+        val liveRowsEdited = finalLive.any { r -> currentLiveById[r.id]?.let { it.copy(after = r.after) != r } == true }
 
         val added = change.proposedUrls.filter { normalizeUrlForComparison(it) !in currentUrls }
         val removed = _uiState.value.installedAddons
@@ -510,7 +687,7 @@ class AddonManagerViewModel @Inject constructor(
         val currentDisabledCatalogKeys = currentCatalogEntries
             .filter { it.isDisabled }
             .map { it.disableKey }
-            .toSet()
+            .toSet() + currentLive.map { it.key }.filter { it in disabledHomeCatalogKeys }
         val resolvedProposedDisabledCatalogKeys = if (change.proposedDisabledCatalogKeys.isEmpty()) {
             currentDisabledCatalogKeys.toList()
         } else {
@@ -525,7 +702,8 @@ class AddonManagerViewModel @Inject constructor(
             .mapNotNull { availableDisableKeyToName[it] }
         val newlyEnabledCatalogs = (currentDisabledCatalogKeys - proposedDisabledSet)
             .mapNotNull { availableDisableKeyToName[it] }
-        val catalogsReordered = resolvedProposedCatalogOrderKeys != currentCatalogEntries.map { it.key }
+        val currentOrder = buildPageState().catalogs.map { it.key }.filter { it in allValidOrderKeys }
+        val catalogsReordered = resolvedProposedCatalogOrderKeys.filter { it in currentOrder } != currentOrder
 
         val removedNameMap = _uiState.value.installedAddons
             .associateBy({ normalizeUrlForComparison(it.baseUrl) }, { it.displayName })
@@ -558,7 +736,11 @@ class AddonManagerViewModel @Inject constructor(
                     proposedCollectionCount = proposedCollectionCount,
                     proposedDisabledCollectionKeys = proposedDisabledCollectionKeys,
                     proposedFollowAddonsOrder = change.proposedFollowAddonsOrder,
-                    trackingConsentUrls = change.trackingConsentUrls
+                    trackingConsentUrls = change.trackingConsentUrls,
+                    proposedLiveRowsJson = if (proposedLive != null) change.proposedLiveRowsJson else null,
+                    addedLiveRowNames = addedLiveNames,
+                    removedLiveRowNames = removedLiveNames,
+                    liveRowsEdited = liveRowsEdited
                 )
             )
         }
@@ -653,6 +835,12 @@ class AddonManagerViewModel @Inject constructor(
             }
             if (!isCurrentPendingChange(pending.changeId)) return@launch
             addonRepository.setAddonOrder(pending.proposedUrls)
+            // Live TV fork: the rows first, so their keys count as valid in Home's row order.
+            pending.proposedLiveRowsJson?.let { json ->
+                val rows = HomeLiveRow.decode(json)
+                homeLiveRows.setAll(rows)
+                liveRows = rows
+            }
             applyCatalogPreferencesFromPending(pending, pending.proposedUrls)
             if (pending.collectionsChanged && pending.proposedCollectionsJson != null) {
                 try {
@@ -663,7 +851,8 @@ class AddonManagerViewModel @Inject constructor(
             }
             // Apply disabled collection key changes
             if (pending.proposedDisabledCollectionKeys.isNotEmpty() || disabledHomeCatalogKeys.any { it.startsWith("collection_") }) {
-                val nonCollectionDisabledKeys = disabledHomeCatalogKeys.filter { !it.startsWith("collection_") }
+                // Read fresh: the catalog changes just saved aren't in the cached copy yet.
+                val nonCollectionDisabledKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.first().filter { !it.startsWith("collection_") }
                 val mergedDisabledKeys = nonCollectionDisabledKeys + pending.proposedDisabledCollectionKeys
                 layoutPreferenceDataStore.setDisabledHomeCatalogKeys(mergedDisabledKeys)
                 homeCatalogSettingsSyncService.triggerPush()
@@ -712,7 +901,9 @@ class AddonManagerViewModel @Inject constructor(
         val availableDisableKeys = availableCatalogEntries.map { it.disableKey }.toSet()
         // Collection keys are also valid in the ordering
         val collectionKeys = currentCollections.map { "collection_${it.id}" }.toSet()
-        val allValidOrderKeys = availableCatalogKeys + collectionKeys
+        // Live TV fork: Live TV, Sports and On Demand rows keep their place and on/off state.
+        val liveKeys = liveRows.map { it.key }.toSet()
+        val allValidOrderKeys = availableCatalogKeys + collectionKeys + liveKeys
 
         val validCatalogOrder = pending.proposedCatalogOrderKeys
             .asSequence()
@@ -721,7 +912,7 @@ class AddonManagerViewModel @Inject constructor(
             .toList()
         val validDisabledCatalogs = pending.proposedDisabledCatalogKeys
             .asSequence()
-            .filter { it in availableDisableKeys }
+            .filter { it in availableDisableKeys || it in liveKeys }
             .distinct()
             .toList()
 
@@ -850,9 +1041,24 @@ class AddonManagerViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, error = error.message) }
                 }
                 .collect { addons ->
+                    val draft = addonDraftOrder
+                    val pending = pendingAddonOrder
+                    val ordered = when {
+                        draft != null -> orderAddonsByKeys(addons, draft)
+                        pending != null -> {
+                            val emittedKeys = addons.map { it.baseUrl }
+                            if (emittedKeys == pending || emittedKeys.toSet() != pending.toSet()) {
+                                pendingAddonOrder = null
+                                addons
+                            } else {
+                                orderAddonsByKeys(addons, pending)
+                            }
+                        }
+                        else -> addons
+                    }
                     _uiState.update { state ->
                         state.copy(
-                            installedAddons = addons,
+                            installedAddons = ordered,
                             isLoading = false,
                             error = null
                         )

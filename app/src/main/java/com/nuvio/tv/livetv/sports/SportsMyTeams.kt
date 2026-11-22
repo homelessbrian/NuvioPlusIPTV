@@ -103,6 +103,9 @@ private fun splitSubtitle(ev: SportsEvent): Pair<String?, String?> {
 /** Where a highlighted row sits in the list: its heading just below the top, so two rows show whole. */
 private val ROW_TOP_INSET = 33.dp
 
+/** The top half of My Sports: the big card (or the video window) and the table beside it. */
+private val TOP_HEIGHT = 186.dp
+
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 internal fun MyTeamsRows(
@@ -120,6 +123,10 @@ internal fun MyTeamsRows(
     playingKey: String?,
     videoOn: Boolean,
     videoSlot: @Composable (Modifier) -> Unit,
+    /** Something is playing in the video window: it takes the top left, the table stays beside it. */
+    windowInUse: Boolean = false,
+    /** For the table beside the big card (the highlighted game's league). */
+    viewModel: SportsViewModel? = null,
     header: @Composable () -> Unit,
     columnState: LazyListState,
     rowState: (String, Int) -> LazyListState,
@@ -136,13 +143,40 @@ internal fun MyTeamsRows(
     onQuickWatch: (SportsEvent) -> Unit,
     onPick: () -> Unit
 ) {
-    fun playing(ev: SportsEvent) = playingKey != null && matches[ev.id]?.any { it.channel.key == playingKey } == true
+    val playingId = playingEventId(playingKey, page.heroes + page.rows.flatMap { it.events }, matches, now)
+    fun playing(ev: SportsEvent) = ev.id == playingId
     fun channelOf(ev: SportsEvent) = matches[ev.id]?.firstOrNull()?.channel?.name ?: ev.broadcasts.firstOrNull()
     val heroes = page.heroes
     var heroIndex by remember { mutableStateOf(0) }
     val heroAt = heroIndex.coerceIn(0, (heroes.size - 1).coerceAtLeast(0))
     val hero = heroes.getOrNull(heroAt)
     val heroReq = requesterFor("hero")
+    // The top half follows the card you're on: the big card shows the highlighted row game (the
+    // next big game again when the highlight goes back up to it), the table beside it its league.
+    var previewId by remember { mutableStateOf<String?>(null) }
+    val preview: SportsEvent? = previewId?.let { id -> page.rows.firstNotNullOfOrNull { r -> r.events.firstOrNull { it.id == id } } }
+    val shownEv: SportsEvent? = preview ?: hero
+    val showVideo = videoOn && windowInUse
+    // No big card while the window is in use: the highlight starts on the first row instead.
+    val firstRowReq: () -> FocusRequester? = {
+        page.rows.firstOrNull { it.events.isNotEmpty() }?.let { r ->
+            requesterFor("${r.key}|${r.events[r.startIndex.coerceIn(0, r.events.size - 1)].id}")
+        }
+    }
+    fun focusTop(back: FocusRequester?) {
+        val first = if (showVideo) firstRowReq() else null
+        runCatching { (back ?: first ?: heroReq).requestFocus() }
+            .onFailure { runCatching { (first ?: heroReq).requestFocus() }.onFailure { runCatching { firstRowReq()?.requestFocus() } } }
+    }
+    // Holding OK on the big card plays it in the window, which takes the big card's place: the
+    // highlight moves down to the first row instead of being lost.
+    var heroFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(showVideo) {
+        if (!showVideo || !heroFocused) return@LaunchedEffect
+        delay(80)
+        heroFocused = false
+        runCatching { firstRowReq()?.requestFocus() }
+    }
     var focusedOnce by remember { mutableStateOf(false) }
     LaunchedEffect(loading, hero != null, page.rows.isNotEmpty()) {
         if (loading) return@LaunchedEffect
@@ -153,15 +187,14 @@ internal fun MyTeamsRows(
         focusedOnce = true
         val back = if (returning) lastFocus?.let { requesterFor(it) } else null
         onReturned()
-        runCatching { (back ?: heroReq).requestFocus() }
-            .onFailure { runCatching { heroReq.requestFocus() } }
+        focusTop(back)
     }
 
     LaunchedEffect(jumpToHero, loading) {
         if (jumpToHero == 0 || loading) return@LaunchedEffect
         delay(160)
         focusedOnce = true
-        runCatching { heroReq.requestFocus() }
+        focusTop(null)
     }
 
     // Scrolling like Home's rows: the highlighted row's heading stays near the top (two rows show
@@ -199,29 +232,56 @@ internal fun MyTeamsRows(
         header()
         // 12dp under the top bar, the same as every Sports page (the bar keeps 2dp of its own).
         Spacer(Modifier.height(SportsSpace.RowGap + SportsSpace.RowPad))
-        Row(Modifier.fillMaxWidth().height(168.dp)) {
+        Row(Modifier.fillMaxWidth().height(TOP_HEIGHT)) {
             if (loading) {
                 Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                     com.nuvio.tv.livetv.ui.LoadingSpinner()
                 }
-            } else if (hero != null) {
+            } else if (showVideo) {
+                // Something playing: the window on the left, the highlighted game's table beside it.
+                videoSlot(Modifier.fillMaxHeight().aspectRatio(16f / 9f))
+                shownEv?.let { ev ->
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        OneLine(
+                            listOfNotNull(gameName(ev), whenLabel(ev, now, use24h, settings.hideScores)).joinToString("  ·  "),
+                            Color.White, 13.sp, FontWeight.Black, Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 4.dp)
+                        )
+                        viewModel?.let { vm ->
+                            GameTablePanel(
+                                ev, matches[ev.id].orEmpty(), settings, vm, Modifier.fillMaxWidth().weight(1f),
+                                rowH = 20.dp, channelsWhenHidden = true, now = now, use24h = use24h
+                            )
+                        }
+                    }
+                }
+            } else if (hero != null && shownEv != null) {
+                val previewing = preview != null
                 HeroCard(
-                    ev = hero,
-                    index = heroAt,
-                    count = heroes.size,
+                    ev = shownEv,
+                    index = if (previewing) 0 else heroAt,
+                    count = if (previewing) 1 else heroes.size,
                     follows = follows,
                     now = now,
                     use24h = use24h,
                     hideScores = settings.hideScores,
-                    channel = channelOf(hero),
-                    playing = playing(hero),
-                    reminded = follows.reminders.any { it.eventId == hero.id },
-                    modifier = Modifier.weight(1f).fillMaxHeight().focusRequester(heroReq).onFocusChanged { if (it.isFocused) onFocusKey("hero") },
+                    channel = channelOf(shownEv),
+                    playing = playing(shownEv),
+                    reminded = follows.reminders.any { it.eventId == shownEv.id },
+                    modifier = Modifier.weight(1.25f).fillMaxHeight().focusRequester(heroReq)
+                        .onFocusChanged { heroFocused = it.isFocused; if (it.isFocused) { previewId = null; onFocusKey("hero") } },
                     // Round and round: past the last game back to the first (and left from the first to the last).
                     onStep = { d -> heroIndex = Math.floorMod(heroAt + d, heroes.size) },
                     onClick = { onOpen(hero) },
                     onLongClick = { onQuickWatch(hero) }
                 )
+                viewModel?.let { vm ->
+                    Spacer(Modifier.width(16.dp))
+                    GameTablePanel(
+                        shownEv, matches[shownEv.id].orEmpty(), settings, vm, Modifier.weight(1f).fillMaxHeight(),
+                        rowH = 20.dp, channelsWhenHidden = true, now = now, use24h = use24h
+                    )
+                }
             } else {
                 Column(
                     Modifier.weight(1f).fillMaxHeight().sportsFrame(false, accent = NuvioTheme.colors.Secondary).padding(18.dp),
@@ -238,10 +298,10 @@ internal fun MyTeamsRows(
                     Spacer(Modifier.height(10.dp))
                     SportsAction("✎  Follow Teams & Leagues", modifier = Modifier.focusRequester(heroReq), onClick = onPick)
                 }
-            }
-            if (videoOn) {
-                Spacer(Modifier.width(16.dp))
-                videoSlot(Modifier.fillMaxHeight().aspectRatio(16f / 9f))
+                if (videoOn) {
+                    Spacer(Modifier.width(16.dp))
+                    videoSlot(Modifier.fillMaxHeight().aspectRatio(16f / 9f))
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -293,7 +353,7 @@ internal fun MyTeamsRows(
                                             playing = playing(ev),
                                             modifier = Modifier
                                                 .focusRequester(requesterFor(key))
-                                                .onFocusChanged { if (it.isFocused) { lastOnRow[0] = ev.id; onFocusKey(key); GameFocus.onGame?.invoke(ev) } }
+                                                .onFocusChanged { if (it.isFocused) { lastOnRow[0] = ev.id; previewId = ev.id; onFocusKey(key); GameFocus.onGame?.invoke(ev) } }
                                                 .steadyRowKeys(state, i, row.events.size) { j -> requesterFor(keyAt(j)) },
                                             onClick = { onOpen(ev) },
                                             onLongClick = { onQuickWatch(ev) }
@@ -435,7 +495,7 @@ private fun CornerBadge(ev: SportsEvent, now: Long, playing: Boolean) {
     val colors = NuvioTheme.colors
     val rec = isRecording(ev)
     when {
-        playing -> SportsBadge("▶ PLAYING", colors.Secondary, colors.OnSecondary)
+        playing -> PlayingBadge()
         rec -> RecBadge()
         ev.state == GameState.LIVE -> SportsBadge("● LIVE", SportsLook.Live, Color.White)
         ev.state == GameState.PRE -> when (dayWord(ev.startMs, now)) {
@@ -489,6 +549,7 @@ private fun HeroCard(
     val look = if (sides.size != 2) eventLook(ev, league) else null
     val label = when {
         ev.state == GameState.LIVE -> "● LIVE NOW"
+        ev.state == GameState.POST -> "FINAL · ${dayWord(ev.startMs, now).uppercase()}"
         mine != null -> "NEXT FOR ${mine.team.name.uppercase()} · ${dayWord(ev.startMs, now).uppercase()}"
         else -> "COMING UP · ${dayWord(ev.startMs, now).uppercase()}"
     }
@@ -624,4 +685,11 @@ internal fun LeagueChip(league: League, selected: Boolean, modifier: Modifier = 
 @Composable
 internal fun ChipGap(width: Dp = 2.dp) {
     Box(Modifier.padding(horizontal = width).width(1.dp).height(20.dp).background(SportsLook.Divider))
+}
+
+/** "Chelsea v Leeds United" (in the sport's order), or the event's own title (a race, a fight card). */
+private fun gameName(ev: SportsEvent): String {
+    val sport = SportsCatalog.league(ev.leagueId)?.sport ?: Sport.OTHER
+    val sides = ev.ordered(sport)
+    return if (sides.size == 2) sides.joinToString(if (sport.homeFirst) " v " else " at ") { it.team.name } else ev.title
 }

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"Aktualizace playlistu „%1$s“…"</string>
+    <string name="iptv_repository_status_reading_channels">"Načítání kanálů…"</string>
+    <string name="iptv_repository_status_downloading_guide">"Stahování průvodce „%1$s“…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"Stahování průvodce „%1$s“"</string>
+    <string name="iptv_repository_status_matching_data">"Párování dat průvodce…"</string>
+    <string name="iptv_repository_status_updating_guide">"Aktualizace průvodce…"</string>
+    <string name="iptv_repository_status_adding_playlist">"Přidávání kanálů z „%1$s“…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"Načítání kanálů z „%1$s“…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"Načítání kanálů z „%1$s“ (%2$d z %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"Nedostatek paměti pro průvodce „%1$s“ — přeskočeno"</string>
+    <string name="iptv_repository_status_reading_guide">"Načítání průvodce „%1$s“…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"Načítání průvodce „%1$s“ (%2$d z %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"Načítání průvodce „%1$s“… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"Načítání průvodce „%1$s“ (%2$d z %3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"Párování průvodce „%1$s“…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"Párování průvodce „%1$s“ (%2$d z %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"Stahování playlistu „%1$s“"</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s z %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"Načítání kanálů z %1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"Server poskytovatele nebyl nalezen."</string>
+    <string name="iptv_repository_status_timeout_short">"Poskytovatel odpovídal příliš dlouho."</string>
+    <string name="iptv_repository_status_generic_error">"Něco se pokazilo."</string>
+    <string name="iptv_repository_status_unknown_host_address">"Server poskytovatele nebyl nalezen (%1$s). Zkontrolujte adresu a připojení, nebo to zkuste později."</string>
+    <string name="iptv_repository_status_provider_timeout">"Poskytovatel odpovídal příliš dlouho (časový limit). Může být vytížený; zkuste to později."</string>
+    <string name="iptv_repository_status_address">"adresa"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"Playlist „%1$s“ se nepodařilo aktualizovat. %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"Průvodce „%1$s“ se nepodařilo aktualizovat. %2$s"</string>
+    <string name="iptv_repository_status_expired">"„%1$s“ vypršel"</string>
+    <string name="iptv_repository_status_expires_today">"„%1$s“ vyprší dnes"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"„%1$s“ vyprší zítra"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">"Přidávání kanálů z %1$d nového playlistu…"</item>
+        <item quantity="few">"Přidávání kanálů z %1$d nových playlistů…"</item>
+        <item quantity="many">"Přidávání kanálů z %1$d nového playlistu…"</item>
+        <item quantity="other">"Přidávání kanálů z %1$d nových playlistů…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">"„%1$s“ vyprší za %2$d den"</item>
+        <item quantity="few">"„%1$s“ vyprší za %2$d dny"</item>
+        <item quantity="many">"„%1$s“ vyprší za %2$d dne"</item>
+        <item quantity="other">"„%1$s“ vyprší za %2$d dní"</item>
+    </plurals>
+    <string name="iptv_repository_status_storage_full_short">"V zařízení není dost místa. Předchozí průvodce zůstává."</string>
+</resources>

@@ -52,6 +52,10 @@ class LiveTvPlayerHooks @Inject constructor(
         .map { l -> l.associate { it.id to it.catchupNoHlsSince } }
         .stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
+    private val dispatcharrIds: StateFlow<Set<String>> = prefs.playlists
+        .map { l -> l.filter { it.isDispatcharr }.mapTo(HashSet()) { it.id } }
+        .stateIn(scope, SharingStarted.Eagerly, emptySet())
+
     fun register(owner: Owner) = synchronized(owners) { owners.remove(owner); owners += owner }
 
     fun unregister(owner: Owner) = synchronized(owners) { owners.remove(owner) }
@@ -60,6 +64,7 @@ class LiveTvPlayerHooks @Inject constructor(
 
     init {
         playback.onLiveFailure = { key -> newestOwner()?.onLiveFailure(key) ?: false }
+        playback.dispatcharrSources = { dispatcharrIds.value }
         playback.onCatchupStalled = { newestOwner()?.onCatchupStalled() ?: false }
         // The audio track picked on each channel, remembered and used every time it plays.
         playback.onAudioChosen = { key, audio -> scope.launch { prefs.setChannelAudio(key, audio) } }

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"Tato televize nemůže přehrát toto video. Zkuste jiný zdroj nebo přepněte na MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Zobrazit v profilech"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Zobrazit v profilech: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Vše"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d z %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Profily, kde je vypnuto, nedostanou z %1$s žádné kanály, On Demand ani Sport. Playlist sám zůstává pro všechny"</string>
+    <string name="iptv_backup_file">"Záložní soubor"</string>
+    <string name="iptv_backup_file_summary">"Uložte nastavení do souboru nebo jej obnovte"</string>
+    <string name="iptv_backup_file_description">"Kopie nastavení Live TV v jednom souboru .nptv: playlisty a jejich přihlášení, průvodci, oblíbené, skupiny, Sport a nastavení. Hodí se bez Synchronizace nastavení nebo jako vlastní kopie."</string>
+    <string name="iptv_backup_with_phone">"Zálohovat nebo obnovit telefonem"</string>
+    <string name="iptv_backup_with_phone_description">"Naskenujte kód a uložte soubor do telefonu, nebo jej pošlete zpět"</string>
+    <string name="iptv_backup_save_on_tv">"Uložit zálohu v této TV"</string>
+    <string name="iptv_backup_save_on_tv_description">"Uloženo v Stažené soubory › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Obnovit z této TV"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Zálohy uložené v této TV, nejnovější první"</string>
+    <string name="iptv_backup_none_on_tv">"V této TV zatím nejsou žádné zálohy. Nejprve nějakou uložte, nebo použijte telefon."</string>
+    <string name="iptv_backup_saving">"Ukládání…"</string>
+    <string name="iptv_backup_saved_to">"Uloženo do %1$s"</string>
+    <string name="iptv_backup_save_failed">"Zálohu se v této TV nepodařilo uložit. Zkuste místo toho telefon."</string>
+    <string name="iptv_backup_restoring">"Obnovování…"</string>
+    <string name="iptv_backup_restored">"Záloha obnovena. Změněné playlisty a průvodci se načítají."</string>
+    <string name="iptv_backup_restore_failed">"Zálohu nelze obnovit (neobsahuje žádné playlisty ani průvodce)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Obnovit tuto zálohu?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Uloženo %1$s na %2$s. Nahradí nastavení Live TV této televize. Se zapnutou Synchronizací nastavení se změní i vaše další TV."</string>
+    <string name="iptv_backup_restore_confirm_button">"Obnovit"</string>
+    <string name="iptv_backup_not_a_backup">"Toto není záložní soubor Nuvio + IPTV (.nptv)."</string>
+    <string name="iptv_backup_private_note">"Záložní soubor obsahuje přihlášení k playlistům. Uchovejte jej v soukromí."</string>
+    <string name="iptv_backup_phone_steps">"1. Připojte telefon ke stejné Wi-Fi jako tuto TV.\n2. Naskenujte kód fotoaparátem telefonu.\n3. Uložte zálohu, nebo vyberte záložní soubor k odeslání sem."</string>
+    <string name="iptv_backup_phone_check_tv">"Odesláno. Dokončete volbou Obnovit na televizi."</string>
+    <string name="iptv_backup_phone_title">"Záloha Nuvio + IPTV"</string>
+    <string name="iptv_backup_phone_save_heading">"Uložit zálohu"</string>
+    <string name="iptv_backup_phone_save_text">"Uloží nastavení Live TV této televize do telefonu jako soubor .nptv."</string>
+    <string name="iptv_backup_phone_save_button">"Uložit záložní soubor"</string>
+    <string name="iptv_backup_phone_restore_heading">"Obnovit zálohu"</string>
+    <string name="iptv_backup_phone_restore_text">"Vyberte soubor .nptv k odeslání do TV. Nic se nezmění, dokud to na TV nepotvrdíte."</string>
+    <string name="iptv_backup_phone_choose_file">"Vybrat soubor"</string>
+    <string name="iptv_backup_phone_restore_button">"Odeslat do TV"</string>
+</resources>

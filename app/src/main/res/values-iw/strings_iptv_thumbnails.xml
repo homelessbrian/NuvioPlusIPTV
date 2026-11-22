@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"תמונות ממוזערות בחיפוש"</string>
+    <string name="playback_section_seek_thumbnails_desc">"תמונות תצוגה מקדימה מעל סרגל החיפוש בזמן חיפוש"</string>
+    <string name="iptv_thumbs_title">"תמונות ממוזערות בחיפוש"</string>
+    <string name="iptv_thumbs_subtitle">"מציג תמונת תצוגה מקדימה מעל סרגל החיפוש בזמן חיפוש. התמונות נוצרות בטלוויזיה הזו מהווידאו עצמו"</string>
+    <string name="iptv_thumbs_works_on">"עובד ב: סרטים ותוכניות בנגן הראשי (כולל קישורי HLS משודרים), ההקלטות שלך, שידורים חוזרים ותקצירים של ספורט, צפייה חוזרת והרצה לאחור של Live TV (מאגר ההשהיה).\nצפייה חוזרת: התמונות מגיעות מהחלק שנשמר בדילוג מהיר יותר בצפייה חוזרת, או ישירות מהספק בצפייה חוזרת משודרת (HLS).\nלא עובד ב: טורנטים, קישורי DASH או שידורים מוגנים."</string>
+    <string name="iptv_thumbs_low_memory_note">"למכשיר הזה זיכרון מוגבל. התמונות הממוזערות עלולות לגרום לגמגום. אם כן, הן נעצרות מעצמן וסרגל החיפוש מציין זאת."</string>
+    <string name="iptv_thumbs_include_4k">"לכלול 4K ו-HDR"</string>
+    <string name="iptv_thumbs_include_4k_desc">"יוצר תמונות ממוזערות גם לסרטוני 4K ו-HDR. מופעל מראש במכשירים עם הרבה זיכרון וכבוי בחלשים, אבל אפשר להפעיל בכל מקום ולנסות. תמונות 4K עלולות לגמגם או לא לעבוד במכשירים חלשים, ומשתמשות ביותר נתונים. תמונות של סרטוני HDR עלולות להיראות דהויות. קישורים משודרים משתמשים בגרסה הקטנה ביותר שלהם, כך שזה כמעט לא משנה להם"</string>
+    <string name="iptv_thumbs_when_to_make">"מתי ליצור תמונות ממוזערות"</string>
+    <string name="iptv_thumbs_when_seeking">"רק בהשהיה או בחיפוש"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"האפשרות הקלה ביותר: שום דבר לא נוצר כשהווידאו פשוט מתנגן"</string>
+    <string name="iptv_thumbs_when_watching">"בזמן צפייה"</string>
+    <string name="iptv_thumbs_when_watching_desc">"נוצרות גם ברקע בזמן הניגון, כשהווידאו נטען מספיק מראש"</string>
+    <string name="iptv_thumbs_when_right_away">"מיד"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"כל הסרטון, מההתחלה, ברגע שהוא נפתח. משתמש בהכי הרבה נתונים"</string>
+    <string name="iptv_thumbs_storage_limit">"מגבלת אחסון"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"תמונות ממוזערות שמורות תופסות עד המקום הזה; הסרטונים שנצפו הכי מזמן נמחקים ראשונים"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"ניקוי תמונות ממוזערות שמורות"</string>
+    <string name="iptv_thumbs_clear_desc">"מוחק כל תמונה ממוזערת שמורה. הן נוצרות שוב כשצריך"</string>
+    <string name="iptv_thumbs_last_paused">"הושהה לאחרונה בגלל זיכרון נמוך: %1$s, %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"יוצר תמונות ממוזערות…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"התמונות הממוזערות הושהו: זיכרון נמוך"</string>
+    <string name="iptv_thumbs_msg_live">"אין תמונות ממוזערות ל-Live TV"</string>
+    <string name="iptv_thumbs_msg_dash">"אין תמונות ממוזערות לקישורי DASH"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"הפעילו דילוג מהיר יותר בצפייה חוזרת לתמונות ממוזערות"</string>
+    <string name="iptv_thumbs_msg_protected">"השידור הזה מוגן: אין תמונות ממוזערות"</string>
+    <string name="iptv_thumbs_msg_torrent">"אין תמונות ממוזערות לטורנטים"</string>
+    <string name="iptv_thumbs_msg_link_kind">"אין תמונות ממוזערות לסוג קישור כזה"</string>
+    <string name="iptv_thumbs_msg_unreadable">"לא ניתן לקרוא את השידור הזה לתמונות ממוזערות"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"החלקים של השידור הזה גדולים מדי לתמונות ממוזערות"</string>
+    <string name="iptv_thumbs_msg_stopped">"התמונות הממוזערות הפסיקו לעבוד בסרטון הזה"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"השרת לא שלח תמונות תצוגה מקדימה"</string>
+    <string name="iptv_thumbs_msg_format">"הפורמט של הסרטון הזה לא מאפשר תמונות ממוזערות במכשיר הזה"</string>
+    <string name="iptv_thumbs_msg_open_failed">"לא ניתן לפתוח את הסרטון הזה לתמונות ממוזערות"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"אין תמונות ממוזערות לשידור החוזר הזה"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"אין תמונות ממוזערות: הטלוויזיה צריכה את מפענח הווידאו היחיד שלה לסרטון"</string>
+</resources>

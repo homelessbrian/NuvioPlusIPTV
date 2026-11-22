@@ -96,6 +96,7 @@ private fun PlaybackSectionContent(
     onClearTorrentCache: () -> Unit
 ) {
     when (section) {
+        PlaybackSection.TV_SETUP -> PlaybackTvSetupSection()
         PlaybackSection.PLAYER -> PlaybackPlayerSection(playerSettings, releaseDecoderOnBackground, onUpdate, onOpenDialog)
         PlaybackSection.STREAM_SELECTION -> PlaybackStreamSelectionSection(playerSettings, onUpdate, onOpenDialog)
         PlaybackSection.UP_NEXT -> PlaybackUpNextSection(playerSettings, onUpdate, onOpenDialog)

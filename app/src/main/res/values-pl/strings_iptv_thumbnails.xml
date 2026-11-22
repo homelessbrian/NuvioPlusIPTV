@@ -37,4 +37,5 @@
     <string name="iptv_thumbs_msg_format">"Format tego wideo nie pozwala tworzyć miniatur na tym urządzeniu"</string>
     <string name="iptv_thumbs_msg_open_failed">"Nie udało się otworzyć tego wideo dla miniatur"</string>
     <string name="iptv_thumbs_msg_catchup_stream">"Brak miniatur dla tego strumienia catch-up"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Brak miniatur: ten telewizor potrzebuje swojego jedynego dekodera wideo do odtwarzania"</string>
 </resources>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"Tambahkan ke Nuvio + IPTV"</string>
+    <string name="iptv_phone_connected_to">"Terhubung ke %1$s"</string>
+    <string name="iptv_phone_heading">"Tambahkan ke TV Anda"</string>
+    <string name="iptv_phone_instructions">"Isi ini lalu ketuk Kirim ke TV. Langsung muncul di TV Anda."</string>
+    <string name="iptv_phone_what_to_add">"Yang ingin ditambahkan"</string>
+    <string name="iptv_phone_m3u_tab">"Tautan M3U"</string>
+    <string name="iptv_phone_epg_tab">"Hanya EPG"</string>
+    <string name="iptv_phone_name_label">"Nama (opsional)"</string>
+    <string name="iptv_phone_provider_placeholder">"Penyedia saya"</string>
+    <string name="iptv_phone_playlist_label">"Tautan playlist"</string>
+    <string name="iptv_phone_epg_optional_label">"Tautan EPG (opsional)"</string>
+    <string name="iptv_phone_user_agent_label">"User agent (opsional)"</string>
+    <string name="iptv_phone_user_agent_placeholder">"Kosongkan untuk bawaan"</string>
+    <string name="iptv_phone_server_label">"Server"</string>
+    <string name="iptv_phone_username_label">"Nama pengguna"</string>
+    <string name="iptv_phone_password_label">"Kata sandi"</string>
+    <string name="iptv_phone_include_live">"Sertakan saluran TV"</string>
+    <string name="iptv_phone_include_vod">"Sertakan film &amp; serial (On Demand)"</string>
+    <string name="iptv_phone_epg_label">"Tautan EPG"</string>
+    <string name="iptv_phone_send">"Kirim ke TV"</string>
+    <string name="iptv_phone_network_note">"Hanya berfungsi di Wi‑Fi yang sama dengan TV Anda. Halaman ini berhenti berfungsi saat Anda menutup layar di TV."</string>
+    <string name="iptv_phone_guide_placeholder">"Panduan"</string>
+    <string name="iptv_phone_sending">"Mengirim…"</string>
+    <string name="iptv_phone_unreachable">"Tidak dapat menjangkau TV Anda. Pastikan layar Tambahkan dari ponsel masih terbuka dan Anda di Wi‑Fi yang sama."</string>
+    <string name="iptv_phone_not_found">"Tidak ditemukan"</string>
+    <string name="iptv_phone_nothing_to_send">"Tidak ada yang dikirim."</string>
+    <string name="iptv_phone_missing">"Ada yang kurang."</string>
+    <string name="iptv_phone_could_not_add">"TV tidak dapat menambahkannya. Coba lagi."</string>
+    <string name="iptv_phone_playlist_missing">"Tempel tautan playlist."</string>
+    <string name="iptv_phone_playlist_scheme">"Tautan playlist harus diawali http:// atau https://."</string>
+    <string name="iptv_phone_epg_scheme">"Tautan EPG harus diawali http:// atau https://."</string>
+    <string name="iptv_phone_server_missing">"Masukkan alamat server."</string>
+    <string name="iptv_phone_server_invalid">"Itu tidak terlihat seperti alamat server."</string>
+    <string name="iptv_phone_credentials_missing">"Masukkan nama pengguna dan kata sandi."</string>
+    <string name="iptv_phone_inclusion_missing">"Aktifkan saluran TV atau film &amp; serial."</string>
+    <string name="iptv_phone_epg_missing">"Tempel tautan EPG."</string>
+    <string name="iptv_phone_kind_missing">"Pilih yang ingin ditambahkan."</string>
+</resources>

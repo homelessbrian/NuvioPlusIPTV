@@ -96,7 +96,7 @@ private val LIVE_TV_SUBTITLE = R.string.iptv_settings_playlists_tv_guide_and_cha
 
 /**
  * Live TV settings are one place in Settings with a row of tabs across the top of it (Setup,
- * Guide, Playback, Integration): [HUB] is that tabbed page. [ALL] is the old single
+ * Guide, Playback, Recordings, Integration): [HUB] is that tabbed page. [ALL] is the old single
  * long list, kept for the guide's long-press menu. The others are the tabs themselves.
  */
 internal enum class LiveTvPage(
@@ -108,12 +108,13 @@ internal enum class LiveTvPage(
     HUB(R.string.iptv_settings_live_tv, R.string.iptv_settings_playlists_tv_guide_and_channel_options),
     MAIN(R.string.iptv_settings_live_tv, R.string.iptv_settings_your_playlists_guides_channels_groups_and_parental_controls, R.string.iptv_settings_setup),
     GUIDE(R.string.iptv_settings_live_tv, R.string.iptv_settings_how_the_guide_looks_and_behaves_while_you, R.string.iptv_settings_guide),
-    PLAYBACK(R.string.iptv_settings_live_tv, R.string.iptv_settings_picture_sound_pausing_and_recording, R.string.iptv_settings_playback),
+    PLAYBACK(R.string.iptv_settings_live_tv, R.string.iptv_settings_picture_sound_and_pausing, R.string.iptv_settings_playback),
+    RECORDINGS(R.string.iptv_settings_live_tv, R.string.iptv_settings_recordings_tab_subtitle, R.string.iptv_settings_recordings),
     ON_DEMAND(R.string.iptv_settings_on_demand, R.string.iptv_settings_movies_and_shows_from_your_provider, R.string.iptv_settings_on_demand),
     INTEGRATION(R.string.iptv_settings_live_tv, R.string.iptv_settings_how_live_tv_shows_up_in_the_rest, R.string.iptv_settings_integration)
 }
 
-private val LIVE_TABS = listOf(LiveTvPage.MAIN, LiveTvPage.GUIDE, LiveTvPage.PLAYBACK, LiveTvPage.INTEGRATION)
+private val LIVE_TABS = listOf(LiveTvPage.MAIN, LiveTvPage.GUIDE, LiveTvPage.PLAYBACK, LiveTvPage.RECORDINGS, LiveTvPage.INTEGRATION)
 
 /** The row of tabs across the top of Live TV settings; moving onto one shows it. */
 @Composable
@@ -158,7 +159,7 @@ internal fun LiveTabRow(selected: LiveTvPage, first: FocusRequester?, onSelect: 
 }
 
 
-/** On the four sub-tabs the sections sit open (there are only a few per tab), not folded. */
+/** On the sub-tabs the sections sit open (there are only a few per tab), not folded. */
 private val LocalLiveFlat = androidx.compose.runtime.compositionLocalOf { false }
 
 /** Standalone version, opened from the guide's long-press menu. */
@@ -170,6 +171,25 @@ fun LiveTvSettingsScreen(
     val context = LocalContext.current
     SettingsStandaloneScaffold(title = context.getString(LIVE_TV_TITLE), subtitle = context.getString(LIVE_TV_SUBTITLE)) {
         LiveTvSettingsContent(viewModel = viewModel, page = LiveTvPage.ALL)
+    }
+}
+
+/**
+ * Recordings settings on their own, opened from the gear on the Recordings page; Back goes
+ * back to Recordings.
+ */
+@Composable
+fun RecordingSettingsScreen(
+    viewModel: LiveTvSettingsViewModel = hiltViewModel()
+) {
+    val context = LocalContext.current
+    val first = androidx.compose.runtime.remember { FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(150)
+        runCatching { first.requestFocus() }
+    }
+    SettingsStandaloneScaffold(title = context.getString(R.string.iptv_settings_recordings), subtitle = context.getString(R.string.iptv_settings_recordings_tab_subtitle)) {
+        LiveTvSettingsContent(viewModel = viewModel, initialFocusRequester = first, page = LiveTvPage.RECORDINGS)
     }
 }
 
@@ -210,6 +230,7 @@ private sealed interface LiveDialog {
     data object HiddenGroups : LiveDialog
     data class PlaylistGuideShift(val source: PlaylistSource) : LiveDialog
     data class PlaylistGuides(val playlistId: String) : LiveDialog
+    data class PlaylistProfiles(val playlistId: String) : LiveDialog
     data class PlaylistCatchupShift(val source: PlaylistSource) : LiveDialog
     data class EpgSourceShift(val source: EpgSource) : LiveDialog
     data object ClockMode : LiveDialog
@@ -231,9 +252,14 @@ private sealed interface LiveDialog {
     data object CustomGroups : LiveDialog
     data object ChannelRow : LiveDialog
     data object ConfirmRestore : LiveDialog
+    data object BackupPhone : LiveDialog
+    data object BackupsOnTv : LiveDialog
+    data class ConfirmRestoreBackup(val backup: com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup) : LiveDialog
     data object PinCheck : LiveDialog
     data object PinNew : LiveDialog
     data object PinRemove : LiveDialog
+    /** The PIN before playlist logins are shown or handed out; [then] runs once it's right. */
+    data class LoginPin(val then: () -> Unit) : LiveDialog
     data object Reminders : LiveDialog
     data object StartPage : LiveDialog
     data object NameEditor : LiveDialog
@@ -354,7 +380,11 @@ internal fun LiveTvSettingsContent(
     val user by viewModel.userState.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle()
+    val hiddenPlaylistsByProfile by viewModel.hiddenPlaylistsByProfile.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<LiveDialog?>(null) }
+    /** The backup file section's last result ("Saved to …", "Restored"), shown as its summary. */
+    var backupMessage by remember { mutableStateOf<String?>(null) }
     var dnsChoice by remember { mutableStateOf(com.nuvio.tv.livetv.data.ForkDns.choice) }
     val drive by viewModel.driveSync.state.collectAsStateWithLifecycle()
     val cloud by viewModel.cloudSync.state.collectAsStateWithLifecycle()
@@ -374,6 +404,10 @@ internal fun LiveTvSettingsContent(
         dialog = LiveDialog.Confirm(title, message, label, action)
     }
     val hasPin = s.parentalPin.length >= 4
+    /** Runs [go] now, or after the PIN when playlist logins are locked. */
+    fun withLogins(go: () -> Unit) {
+        if (com.nuvio.tv.livetv.parental.ParentalControls.loginsLocked(s)) { pinWrong = false; dialog = LiveDialog.LoginPin(go) } else go()
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -483,6 +517,46 @@ internal fun LiveTvSettingsContent(
                         ) { viewModel.driveSync.disconnect() }
                     }
                 )
+            }
+
+            // ------------------------------------------------------------ Backup file (.nptv)
+            if (show(LiveTvPage.MAIN)) item(key = "backup_file") {
+                LiveSection(
+                    title = context.getString(R.string.iptv_backup_file),
+                    summary = backupMessage ?: context.getString(R.string.iptv_backup_file_summary),
+                    icon = Icons.Default.Backup,
+                    open = "backup_file" in open,
+                    onToggle = { toggle("backup_file") }
+                ) {
+                    Text(
+                        text = context.getString(R.string.iptv_backup_file_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioTheme.colors.TextSecondary
+                    )
+                    SettingsActionRow(
+                        context.getString(R.string.iptv_backup_with_phone),
+                        context.getString(R.string.iptv_backup_with_phone_description),
+                        onClick = { withLogins { dialog = LiveDialog.BackupPhone } }
+                    )
+                    SettingsActionRow(
+                        context.getString(R.string.iptv_backup_save_on_tv),
+                        context.getString(R.string.iptv_backup_save_on_tv_description),
+                        onClick = {
+                            withLogins {
+                                backupMessage = context.getString(R.string.iptv_backup_saving)
+                                viewModel.saveBackupOnTv { where ->
+                                    backupMessage = if (where != null) context.getString(R.string.iptv_backup_saved_to, where)
+                                        else context.getString(R.string.iptv_backup_save_failed)
+                                }
+                            }
+                        }
+                    )
+                    SettingsActionRow(
+                        context.getString(R.string.iptv_backup_restore_on_tv),
+                        context.getString(R.string.iptv_backup_restore_on_tv_description),
+                        onClick = { dialog = LiveDialog.BackupsOnTv }
+                    )
+                }
             }
 
             // ------------------------------------------------------------ Playlists & Guides
@@ -780,7 +854,7 @@ internal fun LiveTvSettingsContent(
                             context.getString(R.string.iptv_settings_movies_series_from_1_s, pl.name),
                             if (pl.importVod) context.getString(R.string.iptv_settings_included) else context.getString(R.string.iptv_settings_not_included_switch_on_to_import_this_provider),
                             pl.importVod,
-                            { viewModel.savePlaylist(pl.copy(importVod = !pl.importVod)) }
+                            { viewModel.savePlaylist(pl.copy(importVod = !pl.importVod, vodSwitchSet = true)) }
                         )
                     }
                     SubHeading(context.getString(R.string.iptv_settings_browsing))
@@ -808,6 +882,12 @@ internal fun LiveTvSettingsContent(
                         context.getString(R.string.iptv_settings_shows_each_movie_or_series_once_even_when),
                         s.vodMergeDuplicates,
                         { update { it.copy(vodMergeDuplicates = !it.vodMergeDuplicates) } }
+                    )
+                    SettingsToggleRow(
+                        context.getString(R.string.iptv_settings_hide_non_english_titles),
+                        context.getString(R.string.iptv_settings_hide_non_english_titles_sub),
+                        s.vodHideNonEnglish,
+                        { update { it.copy(vodHideNonEnglish = !it.vodHideNonEnglish) } }
                     )
                     SettingsToggleRow(
                         context.getString(R.string.iptv_settings_play_straight_from_my_provider),
@@ -1378,15 +1458,45 @@ internal fun LiveTvSettingsContent(
                         ).profileManager()
                     }.activeProfileId.collectAsStateWithLifecycle()
                     val homeRowOn = homeProfileId !in s.homeRowHiddenProfiles
+                    // Options with several choices open a list to pick from (they used to change
+                    // to the next choice on every press, like a switch).
+                    var picking by remember { mutableStateOf<String?>(null) }
+                    val shapeChoices = listOf(
+                        "WIDE" to context.getString(R.string.iptv_settings_wide),
+                        "TALL" to context.getString(R.string.iptv_settings_tall),
+                        "SQUARE" to context.getString(R.string.iptv_settings_square)
+                    )
+                    val orderChoices = listOf(
+                        "yours" to context.getString(R.string.iptv_settings_your_order),
+                        "number" to context.getString(R.string.iptv_settings_channel_number),
+                        "ending" to context.getString(R.string.iptv_settings_ending_soonest)
+                    )
+                    when (picking) {
+                        "launcher_shape" -> SettingsSingleChoiceDialog(
+                            title = context.getString(R.string.iptv_settings_card_shape),
+                            options = shapeChoices.map { (v, t) -> SettingsPickerOption(v, t) },
+                            selectedValue = s.launcherCardShape.ifBlank { "WIDE" },
+                            onOptionSelected = { v ->
+                                picking = null
+                                update { st -> st.copy(launcherCardShape = v) }
+                                com.nuvio.tv.livetv.home.LiveTvLauncherRows.refresh(homeProfileContext, afterMs = 1_500)
+                            },
+                            onDismiss = { picking = null }
+                        )
+                        "row_order" -> SettingsSingleChoiceDialog(
+                            title = context.getString(R.string.iptv_settings_row_order),
+                            options = orderChoices.map { (v, t) -> SettingsPickerOption(v, t) },
+                            selectedValue = s.homeRowSort.ifBlank { "yours" },
+                            onOptionSelected = { v -> picking = null; update { st -> st.copy(homeRowSort = v) } },
+                            onDismiss = { picking = null }
+                        )
+                    }
                     SubHeading(context.getString(R.string.iptv_settings_rows_on_your_tv_s_home_screen))
                     SettingsActionRow(
                         title = context.getString(R.string.iptv_settings_card_shape),
                         subtitle = context.getString(R.string.iptv_settings_match_your_launcher_s_row_wide_for_google),
                         value = when (s.launcherCardShape) { "TALL" -> context.getString(R.string.iptv_settings_tall); "SQUARE" -> context.getString(R.string.iptv_settings_square); else -> context.getString(R.string.iptv_settings_wide) },
-                        onClick = {
-                            update { st -> st.copy(launcherCardShape = when (st.launcherCardShape) { "WIDE" -> "TALL"; "TALL" -> "SQUARE"; else -> "WIDE" }) }
-                            com.nuvio.tv.livetv.home.LiveTvLauncherRows.refresh(homeProfileContext, afterMs = 1_500)
-                        }
+                        onClick = { picking = "launcher_shape" }
                     )
                     SubHeading(context.getString(R.string.iptv_settings_row_inside_nuvio_s_home_page))
                     SettingsToggleRow(
@@ -1423,17 +1533,7 @@ internal fun LiveTvSettingsContent(
                             title = context.getString(R.string.iptv_settings_row_order),
                             subtitle = context.getString(R.string.iptv_settings_your_order_channel_number_or_the_shows_ending),
                             value = when (s.homeRowSort) { "number" -> context.getString(R.string.iptv_settings_channel_number); "ending" -> context.getString(R.string.iptv_settings_ending_soonest); else -> context.getString(R.string.iptv_settings_your_order) },
-                            onClick = {
-                                update { st -> st.copy(homeRowSort = when (st.homeRowSort) { "yours" -> "number"; "number" -> "ending"; else -> "yours" }) }
-                            }
-                        )
-                        SettingsActionRow(
-                            title = context.getString(R.string.iptv_settings_channels_in_the_row),
-                            subtitle = context.getString(R.string.iptv_settings_how_many_channels_the_row_shows),
-                            value = if (s.homeRowLimit == 0) context.getString(R.string.iptv_settings_all) else "${s.homeRowLimit}",
-                            onClick = {
-                                update { st -> st.copy(homeRowLimit = when (st.homeRowLimit) { 10 -> 20; 20 -> 40; 40 -> 0; else -> 10 }) }
-                            }
+                            onClick = { picking = "row_order" }
                         )
                         SettingsToggleRow(
                             context.getString(R.string.iptv_settings_hide_channels_with_no_listings),
@@ -1580,6 +1680,16 @@ internal fun LiveTvSettingsContent(
                             s.lockAdultContent,
                             { update { it.copy(lockAdultContent = !it.lockAdultContent) } }
                         )
+                        // Turning it on is free; turning it off needs the PIN (unless already entered).
+                        SettingsToggleRow(
+                            context.getString(R.string.iptv_settings_lock_playlist_logins),
+                            context.getString(R.string.iptv_settings_lock_playlist_logins_description),
+                            s.lockLogins,
+                            {
+                                if (!s.lockLogins) update { it.copy(lockLogins = true) }
+                                else withLogins { update { it.copy(lockLogins = false) } }
+                            }
+                        )
                         SettingsActionRow(
                             context.getString(R.string.iptv_settings_turn_off_parental_controls), context.getString(R.string.iptv_settings_removes_the_pin_your_locked_groups_are_remembered),
                             context.getString(R.string.iptv_settings_1_s_locked, user.lockedGroups.size),
@@ -1608,21 +1718,75 @@ internal fun LiveTvSettingsContent(
             }
 
             // ------------------------------------------------------------ Recordings
-            if (show(LiveTvPage.PLAYBACK)) item(key = "recordings") {
+            if (show(LiveTvPage.RECORDINGS)) item(key = "recordings") {
                 val recContext = androidx.compose.ui.platform.LocalContext.current
-                // Drives come and go: read again whenever the section is opened.
-                val drives = remember("recordings" in open) { com.nuvio.tv.livetv.record.RecordingStorage.choices(recContext) }
-                val driveProblems = remember("recordings" in open) { com.nuvio.tv.livetv.record.RecordingStorage.problems(recContext) }
+                // Drives come and go: read again whenever the section is opened (or the network folder changes).
+                var networkVersion by remember { mutableStateOf(0) }
+                val drives = remember("recordings" in open, networkVersion) { com.nuvio.tv.livetv.record.RecordingStorage.choices(recContext) }
+                val driveProblems = remember("recordings" in open, networkVersion) { com.nuvio.tv.livetv.record.RecordingStorage.problems(recContext) }
                 val chosen = drives.firstOrNull { it.id == s.recordingStorage }
                 fun driveLabel(c: com.nuvio.tv.livetv.record.RecordingStorage.Choice) =
-                    c.label + " · " + com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(c.freeBytes, context.settingsLocale) + context.getString(R.string.iptv_settings_free)
+                    // A network folder that hasn't said how big it is: no "0 MB free".
+                    if (c.isNetwork && c.totalBytes <= 0) c.label
+                    else c.label + " · " + com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(c.freeBytes, context.settingsLocale) + context.getString(R.string.iptv_settings_free)
                 var pickingDrive by remember { mutableStateOf(false) }
+                var pickingFolder by remember { mutableStateOf(false) }
+                // The drive open in "where on this drive" (its key), and the drive a folder is being picked on.
+                var openPlace by remember { mutableStateOf<String?>(null) }
+                var folderDrive by remember { mutableStateOf<String?>(null) }
+                // The network folder's own menu (use / change / remove), from Save Recordings To.
+                var openNetworkPlace by remember { mutableStateOf(false) }
+                val places = remember(drives, s.recordingStorage) { com.nuvio.tv.livetv.record.RecordingStorage.places(recContext, s.recordingStorage, drives) }
+                fun useStorage(placeKey: String, id: String) {
+                    com.nuvio.tv.livetv.record.DriveFolders.setLastUsed(recContext, placeKey, id)
+                    update { it.copy(recordingStorage = id) }
+                }
+                // Waiting for "All files access" to be turned on in Android's settings: the folder
+                // picker opens by itself once it is (checked every second for a few minutes).
+                var waitingAccess by remember { mutableStateOf(false) }
+                LaunchedEffect(waitingAccess) {
+                    var tries = 0
+                    while (waitingAccess && tries++ < 300) {
+                        delay(1_000)
+                        if (com.nuvio.tv.livetv.record.DriveFolders.hasAccess()) { waitingAccess = false; pickingFolder = true }
+                    }
+                    waitingAccess = false
+                }
+                fun chooseFolder(driveKey: String? = null) {
+                    folderDrive = driveKey
+                    val folders = com.nuvio.tv.livetv.record.DriveFolders
+                    when {
+                        !folders.supported() -> confirm(
+                            context.getString(R.string.iptv_drive_folder_title),
+                            context.getString(R.string.iptv_drive_folder_unsupported),
+                            context.getString(android.R.string.ok)
+                        ) { }
+                        folders.hasAccess() -> pickingFolder = true
+                        else -> confirm(
+                            context.getString(R.string.iptv_drive_folder_access_title),
+                            context.getString(R.string.iptv_drive_folder_access_message),
+                            context.getString(R.string.iptv_drive_folder_access_open)
+                        ) {
+                            if (folders.openAccessSettings(recContext)) waitingAccess = true
+                            else com.nuvio.tv.livetv.record.LiveTvNotice.show(context.getString(R.string.iptv_drive_folder_access_missing))
+                        }
+                    }
+                }
+                var editingNetwork by remember { mutableStateOf(false) }
+                var pickingNetworkSpace by remember { mutableStateOf(false) }
+                var pickingKeepDays by remember { mutableStateOf(false) }
+                fun keepDaysLabel(days: Int) =
+                    if (days <= 0) context.getString(R.string.iptv_settings_never)
+                    else context.getString(R.string.iptv_settings_recording_keep_days_n, days)
+                var networkSpaceMb by remember { mutableStateOf(com.nuvio.tv.livetv.record.NetworkFolderStore.bufferMb(recContext)) }
+                fun networkSpaceLabel(mb: Int) = com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(mb.toLong() * 1024 * 1024, context.settingsLocale)
                 LiveSection(
                     title = context.getString(R.string.iptv_settings_recordings),
                     summary = context.getString(R.string.iptv_settings_saved_to) + (chosen?.label ?: if (s.recordingStorage.isEmpty()) context.getString(R.string.iptv_settings_this_device) else context.getString(R.string.iptv_settings_a_drive_that_isn_t_plugged_in)),
                     icon = Icons.Default.FiberManualRecord,
                     open = "recordings" in open,
-                    onToggle = { toggle("recordings") }
+                    onToggle = { toggle("recordings") },
+                    focusFirst = firstFocus(LiveTvPage.RECORDINGS)
                 ) {
                     SettingsActionRow(
                         title = context.getString(R.string.iptv_settings_save_recordings_to),
@@ -1632,6 +1796,22 @@ internal fun LiveTvSettingsContent(
                         value = chosen?.label ?: context.getString(R.string.iptv_settings_this_device),
                         onClick = { pickingDrive = true }
                     )
+                    // Saving to the network folder: which folder, and how much may wait on this device.
+                    if (chosen?.isNetwork == true) {
+                        val networkConfig = remember(networkVersion) { com.nuvio.tv.livetv.record.NetworkFolderStore.config(recContext) }
+                        SettingsActionRow(
+                            title = context.getString(R.string.iptv_settings_network_folder),
+                            subtitle = context.getString(R.string.iptv_settings_network_folder_row_subtitle),
+                            value = networkConfig?.label.orEmpty(),
+                            onClick = { withLogins { editingNetwork = true } }
+                        )
+                        SettingsActionRow(
+                            title = context.getString(R.string.iptv_settings_network_space),
+                            subtitle = context.getString(R.string.iptv_settings_network_space_subtitle),
+                            value = networkSpaceLabel(networkSpaceMb),
+                            onClick = { pickingNetworkSpace = true }
+                        )
+                    }
                     SettingsActionRow(
                         title = context.getString(R.string.iptv_settings_start_recording_early),
                         subtitle = context.getString(R.string.iptv_settings_starts_this_long_before_the_show_in_case),
@@ -1658,30 +1838,167 @@ internal fun LiveTvSettingsContent(
                             ) { update { it.copy(recordingSpaceRule = "DELETE_OLDEST") } }
                         }
                     )
-                    if (pickingDrive) ActionListDialog(
-                        title = context.getString(R.string.iptv_settings_save_recordings_to),
-                        actions = drives.map { c ->
-                            (driveLabel(c) + if (c.id == (chosen?.id ?: "")) "  ✓" else "") to {
+                    SettingsActionRow(
+                        title = context.getString(R.string.iptv_settings_delete_recordings_after),
+                        subtitle = if (s.recordingKeepDays > 0) context.getString(R.string.iptv_settings_delete_recordings_after_on)
+                        else context.getString(R.string.iptv_settings_delete_recordings_after_off),
+                        value = keepDaysLabel(s.recordingKeepDays),
+                        onClick = { pickingKeepDays = true }
+                    )
+                    if (pickingKeepDays) SettingsSingleChoiceDialog(
+                        title = context.getString(R.string.iptv_settings_delete_recordings_after),
+                        options = listOf(0, 3, 5, 7, 10, 14, 30).map { SettingsPickerOption(it, keepDaysLabel(it)) },
+                        selectedValue = s.recordingKeepDays,
+                        onOptionSelected = { days ->
+                            pickingKeepDays = false
+                            update { it.copy(recordingKeepDays = days) }
+                        },
+                        onDismiss = { pickingKeepDays = false },
+                        subtitle = context.getString(R.string.iptv_settings_delete_recordings_after_note)
+                    )
+                    if (pickingDrive) SaveRecordingsToDialog(
+                        places = places,
+                        current = chosen?.id ?: s.recordingStorage,
+                        problems = driveProblems,
+                        locale = context.settingsLocale,
+                        onPlace = { p ->
+                            val c = p.choice
+                            // The network folder opens use / change / remove; this device and a drive
+                            // open "where on it" (so a folder on the box can still be picked). Before
+                            // Android 11 folders can't be picked, so this device is used straight away.
+                            val direct = p.isDevice && p.folders.isEmpty() && !com.nuvio.tv.livetv.record.DriveFolders.supported()
+                            if (p.isNetwork) {
                                 pickingDrive = false
-                                update { it.copy(recordingStorage = c.id) }
-                            }
-                        } + driveProblems.map { p ->
-                            // Plugged in but not usable: say why instead of leaving it out.
-                            context.getString(R.string.iptv_settings_1_s_can_t_be_used, p.label) to {
+                                openNetworkPlace = true
+                            } else if (c != null && direct) {
                                 pickingDrive = false
-                                confirm(context.getString(R.string.iptv_settings_1_s_can_t_be_used_2, p.label), p.reason, context.getString(android.R.string.ok)) { }
-                            }
-                        } + listOf(
-                            context.getString(R.string.iptv_settings_drive_not_listed) to {
+                                useStorage(p.key, c.id)
+                            } else {
                                 pickingDrive = false
-                                confirm(
-                                    context.getString(R.string.iptv_settings_drive_not_listed),
-                                    context.getString(R.string.iptv_settings_missing_drive_help),
-                                    context.getString(android.R.string.ok)
-                                ) { }
+                                openPlace = p.key
                             }
-                        ),
+                        },
+                        onSetUpNetwork = {
+                            pickingDrive = false
+                            withLogins { editingNetwork = true }
+                        },
+                        onProblem = { p ->
+                            pickingDrive = false
+                            confirm(context.getString(R.string.iptv_settings_1_s_can_t_be_used_2, p.label), p.reason, context.getString(android.R.string.ok)) { }
+                        },
+                        onNotListed = {
+                            pickingDrive = false
+                            confirm(
+                                context.getString(R.string.iptv_settings_drive_not_listed),
+                                context.getString(R.string.iptv_settings_missing_drive_help),
+                                context.getString(android.R.string.ok)
+                            ) { }
+                        },
                         onDismiss = { pickingDrive = false }
+                    )
+                    if (openNetworkPlace) {
+                        val place = places.firstOrNull { it.isNetwork }
+                        if (place == null) openNetworkPlace = false
+                        else NetworkPlaceDialog(
+                            place = place,
+                            current = chosen?.id ?: s.recordingStorage,
+                            onUse = {
+                                openNetworkPlace = false
+                                place.choice?.let { useStorage(place.key, it.id) }
+                            },
+                            onChange = {
+                                openNetworkPlace = false
+                                withLogins { editingNetwork = true }
+                            },
+                            onRemove = {
+                                openNetworkPlace = false
+                                withLogins {
+                                    confirm(
+                                        context.getString(R.string.iptv_place_network_remove),
+                                        context.getString(R.string.iptv_place_network_remove_message, place.label),
+                                        context.getString(R.string.iptv_place_network_remove)
+                                    ) {
+                                        if (com.nuvio.tv.livetv.record.NetworkFolderStore.save(recContext, null)) {
+                                            networkVersion++
+                                            if (s.recordingStorage == com.nuvio.tv.livetv.record.NetworkFolderStore.STORAGE_ID) update { it.copy(recordingStorage = "") }
+                                        }
+                                    }
+                                }
+                            },
+                            onDismiss = { openNetworkPlace = false; pickingDrive = true }
+                        )
+                    }
+                    openPlace?.let { key ->
+                        val place = places.firstOrNull { it.key == key }
+                        if (place == null) openPlace = null
+                        else DrivePlaceDialog(
+                            place = place,
+                            current = chosen?.id ?: s.recordingStorage,
+                            locale = context.settingsLocale,
+                            onUse = { c ->
+                                openPlace = null
+                                useStorage(place.key, c.id)
+                            },
+                            onChooseFolder = {
+                                openPlace = null
+                                chooseFolder(place.key)
+                            },
+                            onForget = { c ->
+                                openPlace = null
+                                val name = com.nuvio.tv.livetv.record.RecordingStorage.folderName(c) ?: context.getString(R.string.iptv_place_top_of_drive)
+                                confirm(
+                                    context.getString(R.string.iptv_place_forget, name),
+                                    context.getString(R.string.iptv_drive_folder_forget_message, place.label + " › " + name),
+                                    context.getString(R.string.iptv_drive_folder_forget_button)
+                                ) {
+                                    com.nuvio.tv.livetv.record.DriveFolders.parse(c.id)?.let { com.nuvio.tv.livetv.record.DriveFolders.remove(recContext, it) }
+                                    networkVersion++
+                                    if (s.recordingStorage == c.id) update { it.copy(recordingStorage = "") }
+                                }
+                            },
+                            onDismiss = { openPlace = null; pickingDrive = true }
+                        )
+                    }
+                    if (pickingFolder) DriveFolderDialog(
+                        locale = context.settingsLocale,
+                        startDrive = folderDrive,
+                        onDismiss = { pickingFolder = false },
+                        onChosen = { id ->
+                            pickingFolder = false
+                            networkVersion++
+                            useStorage(com.nuvio.tv.livetv.record.DriveFolders.parse(id)?.drive ?: folderDrive.orEmpty(), id)
+                        }
+                    )
+                    if (editingNetwork) NetworkFolderDialog(
+                        onDismiss = { editingNetwork = false },
+                        onSaved = {
+                            editingNetwork = false
+                            networkVersion++
+                            update { it.copy(recordingStorage = com.nuvio.tv.livetv.record.NetworkFolderStore.STORAGE_ID) }
+                        },
+                        onRemoved = {
+                            editingNetwork = false
+                            networkVersion++
+                            if (s.recordingStorage == com.nuvio.tv.livetv.record.NetworkFolderStore.STORAGE_ID) update { it.copy(recordingStorage = "") }
+                        }
+                    )
+                    if (pickingNetworkSpace) SettingsSingleChoiceDialog(
+                        title = context.getString(R.string.iptv_settings_network_space),
+                        options = com.nuvio.tv.livetv.record.NetworkFolderStore.BUFFER_CHOICES_MB.map { mb ->
+                            SettingsPickerOption(
+                                mb,
+                                if (mb == com.nuvio.tv.livetv.record.NetworkFolderStore.BUFFER_CHOICES_MB.first())
+                                    context.getString(R.string.iptv_settings_network_space_smallest, networkSpaceLabel(mb))
+                                else networkSpaceLabel(mb)
+                            )
+                        },
+                        selectedValue = networkSpaceMb,
+                        onOptionSelected = { mb ->
+                            com.nuvio.tv.livetv.record.NetworkFolderStore.setBufferMb(recContext, mb)
+                            networkSpaceMb = mb
+                            pickingNetworkSpace = false
+                        },
+                        onDismiss = { pickingNetworkSpace = false }
                     )
                 }
             }
@@ -1745,7 +2062,9 @@ internal fun LiveTvSettingsContent(
                 FormField(context.getString(R.string.iptv_settings_user_agent_optional), context.getString(R.string.iptv_settings_leave_empty_for_default))
             ),
             onDismiss = close,
-            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addPlaylist(v[0], v[1], v[3], epgUrl = v[2]); close() }
+            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addPlaylist(v[0], v[1], v[3], epgUrl = v[2]); close() },
+            toggle2 = context.getString(R.string.iptv_settings_include_movies_series_on_demand) to true,
+            onSaveBoth = { v, _, vod -> if (v[1].isNotBlank()) viewModel.addPlaylist(v[0], v[1], v[3], epgUrl = v[2], importVod = vod); close() }
         )
         LiveDialog.AddXtream -> SourceFormDialog(
             title = context.getString(R.string.iptv_settings_add_xtream_codes_login_2),
@@ -1775,9 +2094,13 @@ internal fun LiveTvSettingsContent(
         LiveDialog.AddFromPhone -> AddFromPhoneDialog(viewModel = viewModel, onDismiss = close)
         LiveDialog.AddEpg -> SourceFormDialog(
             title = context.getString(R.string.iptv_settings_add_epg_source_2),
-            fields = listOf(FormField(context.getString(R.string.iptv_settings_name), context.getString(R.string.iptv_settings_guide)), FormField(context.getString(R.string.iptv_settings_xmltv_url), "http://…/epg.xml.gz")),
+            fields = listOf(
+                FormField(context.getString(R.string.iptv_settings_name), context.getString(R.string.iptv_settings_guide)),
+                FormField(context.getString(R.string.iptv_settings_xmltv_url), "http://…/epg.xml.gz"),
+                FormField(context.getString(R.string.iptv_settings_user_agent_optional), "")
+            ),
             onDismiss = close,
-            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addEpg(v[0], v[1]); close() }
+            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addEpg(v[0], v[1], v[2]); close() }
         )
         is LiveDialog.PlaylistActions -> ActionListDialog(
             title = d.source.name,
@@ -1792,7 +2115,7 @@ internal fun LiveTvSettingsContent(
                 context.getString(R.string.iptv_settings_account_details, parts.joinToString(" · "))
             },
             actions = listOfNotNull(
-                context.getString(R.string.iptv_settings_edit) to { dialog = LiveDialog.EditPlaylist(d.source) },
+                context.getString(R.string.iptv_settings_edit) to { withLogins { dialog = LiveDialog.EditPlaylist(d.source) } },
                 context.getString(R.string.iptv_settings_update_now) to { viewModel.updatePlaylistNow(d.source); close() },
                 (if (d.source.enabled) context.getString(R.string.iptv_settings_disable) else context.getString(R.string.iptv_settings_enable)) to { viewModel.setPlaylistEnabled(d.source.id, !d.source.enabled); close() },
                 context.getString(R.string.iptv_settings_delete_playlist) to { dialog = LiveDialog.ConfirmDeletePlaylist(d.source) },
@@ -1826,6 +2149,15 @@ internal fun LiveTvSettingsContent(
                 (context.getString(R.string.iptv_settings_catchup_shift_value, offsetLabel(context, d.source.catchupShiftMinutes))).takeIf { d.source.liveEnabled && !d.source.isStalker }?.let {
                     it to { dialog = LiveDialog.PlaylistCatchupShift(d.source) }
                 },
+                // Which Nuvio profiles see this playlist (only with more than one profile).
+                if (profiles.size > 1) {
+                    val shownOn = profiles.count { d.source.id !in hiddenPlaylistsByProfile[it.id].orEmpty() }
+                    context.getString(
+                        R.string.iptv_settings_show_on_profiles_value,
+                        if (shownOn == profiles.size) context.getString(R.string.iptv_settings_show_on_profiles_all)
+                        else context.getString(R.string.iptv_settings_show_on_profiles_count, shownOn, profiles.size)
+                    ) to { dialog = LiveDialog.PlaylistProfiles(d.source.id) }
+                } else null,
                 context.getString(R.string.iptv_settings_move_up) to { viewModel.movePlaylist(d.source.id, -1); close() },
                 context.getString(R.string.iptv_settings_move_down) to { viewModel.movePlaylist(d.source.id, 1); close() }
             ),
@@ -1848,7 +2180,7 @@ internal fun LiveTvSettingsContent(
         is LiveDialog.EditPlaylist -> {
             val src = d.source
             if (src.isStalker) {
-                StalkerSourceDialog(src, onDismiss = close, onSave = { name, config, guide, vod, live, _ ->
+                StalkerSourceDialog(src, hidePassword = com.nuvio.tv.livetv.parental.ParentalControls.hideLogins(s), onDismiss = close, onSave = { name, config, guide, vod, live, _ ->
                     viewModel.savePlaylist(src.copy(name = name, sourceType = "stalker", stalkerConfig = config,
                         useEmbeddedEpg = guide, importVod = vod, importLive = live))
                     close()
@@ -1860,7 +2192,7 @@ internal fun LiveTvSettingsContent(
                         FormField(context.getString(R.string.iptv_settings_name), "", src.name),
                         FormField(context.getString(R.string.iptv_settings_server), "", src.xtreamServer, defaultHttp = true),
                         FormField(context.getString(R.string.iptv_settings_username), "", src.xtreamUsername),
-                        FormField(context.getString(R.string.iptv_settings_password), "", src.xtreamPassword),
+                        FormField(context.getString(R.string.iptv_settings_password), "", src.xtreamPassword, secret = com.nuvio.tv.livetv.parental.ParentalControls.hideLogins(s)),
                         FormField(context.getString(R.string.iptv_settings_user_agent_optional), "", src.userAgent)
                     ),
                     toggle = context.getString(R.string.iptv_settings_load_built_in_guide) to src.useEmbeddedEpg,
@@ -1890,9 +2222,19 @@ internal fun LiveTvSettingsContent(
                         FormField(context.getString(R.string.iptv_settings_user_agent_optional), "", src.userAgent)
                     ),
                     toggle = context.getString(R.string.iptv_settings_load_guide_linked_in_playlist) to src.useEmbeddedEpg,
+                    toggle2 = context.getString(R.string.iptv_settings_include_movies_series_on_demand) to src.importVod,
                     onDismiss = close,
                     onSave = { v, t ->
                         viewModel.savePlaylist(src.copy(name = v[0], url = v[1], userAgent = v[2], useEmbeddedEpg = t))
+                        close()
+                    },
+                    onSaveBoth = { v, t, vod ->
+                        viewModel.savePlaylist(
+                            src.copy(
+                                name = v[0], url = v[1], userAgent = v[2], useEmbeddedEpg = t, importVod = vod,
+                                vodSwitchSet = src.vodSwitchSet || vod != src.importVod
+                            )
+                        )
                         close()
                     }
                 )
@@ -1901,7 +2243,7 @@ internal fun LiveTvSettingsContent(
         is LiveDialog.EpgActions -> ActionListDialog(
             title = d.source.name,
             actions = listOf(
-                context.getString(R.string.iptv_settings_edit) to { dialog = LiveDialog.EditEpg(d.source) },
+                context.getString(R.string.iptv_settings_edit) to { withLogins { dialog = LiveDialog.EditEpg(d.source) } },
                 context.getString(R.string.iptv_settings_update_now) to { viewModel.saveEpg(d.source); close() },
                 (context.getString(R.string.iptv_settings_time_shift_value, offsetLabel(context, d.source.shiftMinutes))) to { dialog = LiveDialog.EpgSourceShift(d.source) },
                 (if (d.source.enabled) context.getString(R.string.iptv_settings_disable) else context.getString(R.string.iptv_settings_enable)) to { viewModel.setEpgEnabled(d.source.id, !d.source.enabled); close() },
@@ -1929,6 +2271,15 @@ internal fun LiveTvSettingsContent(
             initial = "", hint = "PIN", confirmLabel = context.getString(R.string.iptv_settings_turn_off), numeric = true,
             onDismiss = close,
             onConfirm = { if (it.trim() == s.parentalPin) { update { st -> st.copy(parentalPin = "") }; close() } else pinWrong = true }
+        )
+        is LiveDialog.LoginPin -> TextInputDialog(
+            title = if (pinWrong) context.getString(R.string.iptv_settings_wrong_pin_try_again) else context.getString(R.string.iptv_settings_enter_pin_for_logins),
+            initial = "", hint = "PIN", confirmLabel = context.getString(R.string.iptv_settings_next), numeric = true,
+            onDismiss = close,
+            onConfirm = {
+                if (com.nuvio.tv.livetv.parental.ParentalControls.unlockLogins(it, s)) { pinWrong = false; close(); d.then() }
+                else pinWrong = true
+            }
         )
         LiveDialog.HomeRowSource -> SettingsSingleChoiceDialog(
             title = context.getString(R.string.iptv_settings_channels_in_the_row_2),
@@ -2051,9 +2402,13 @@ internal fun LiveTvSettingsContent(
         )
         is LiveDialog.EditEpg -> SourceFormDialog(
             title = context.getString(R.string.iptv_settings_edit_epg_source),
-            fields = listOf(FormField(context.getString(R.string.iptv_settings_name), "", d.source.name), FormField(context.getString(R.string.iptv_settings_xmltv_url), "", d.source.url)),
+            fields = listOf(
+                FormField(context.getString(R.string.iptv_settings_name), "", d.source.name),
+                FormField(context.getString(R.string.iptv_settings_xmltv_url), "", d.source.url),
+                FormField(context.getString(R.string.iptv_settings_user_agent_optional), "", d.source.userAgent)
+            ),
             onDismiss = close,
-            onSave = { v, _ -> viewModel.saveEpg(d.source.copy(name = v[0], url = v[1])); close() }
+            onSave = { v, _ -> viewModel.saveEpg(d.source.copy(name = v[0], url = v[1], userAgent = v[2])); close() }
         )
         LiveDialog.HiddenChannels -> UnhideDialog(
             title = context.getString(R.string.iptv_settings_hidden_channels_2),
@@ -2069,6 +2424,43 @@ internal fun LiveTvSettingsContent(
             onUnhideAll = { viewModel.unhideAllGroups(); close() },
             onDismiss = close
         )
+        LiveDialog.BackupPhone -> BackupPhoneDialog(
+            viewModel = viewModel,
+            onBackup = { b -> dialog = LiveDialog.ConfirmRestoreBackup(b) },
+            onDismiss = close
+        )
+        LiveDialog.BackupsOnTv -> BackupsOnTvDialog(
+            viewModel = viewModel,
+            onPick = { b -> dialog = LiveDialog.ConfirmRestoreBackup(b) },
+            onDismiss = close
+        )
+        is LiveDialog.ConfirmRestoreBackup -> {
+            val b = d.backup
+            val whenText = if (b.createdAt > 0) DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, context.settingsLocale).format(Date(b.createdAt)) else ""
+            ConfirmDeleteDialog(
+                title = context.getString(R.string.iptv_backup_restore_confirm_title),
+                message = context.getString(R.string.iptv_backup_restore_confirm_message, whenText, b.device.ifBlank { "?" }),
+                confirmLabel = context.getString(R.string.iptv_backup_restore_confirm_button),
+                onConfirm = {
+                    close()
+                    backupMessage = context.getString(R.string.iptv_backup_restoring)
+                    viewModel.restoreBackup(b) { ok ->
+                        backupMessage = context.getString(if (ok) R.string.iptv_backup_restored else R.string.iptv_backup_restore_failed)
+                    }
+                },
+                onDismiss = close
+            )
+        }
+        is LiveDialog.PlaylistProfiles -> {
+            val src = playlists.firstOrNull { it.id == d.playlistId }
+            if (src == null) LaunchedEffect(Unit) { close() } else PlaylistProfilesDialog(
+                source = src,
+                profiles = profiles,
+                hidden = hiddenPlaylistsByProfile,
+                onToggle = { profileId, shown -> viewModel.setPlaylistShownOn(src.id, profileId, shown) },
+                onDismiss = close
+            )
+        }
         is LiveDialog.PlaylistGuides -> {
             val src = playlists.firstOrNull { it.id == d.playlistId }
             if (src == null) LaunchedEffect(Unit) { close() } else PlaylistGuidesDialog(
@@ -2464,6 +2856,172 @@ private fun DriveSignInDialog(prompt: com.nuvio.tv.livetv.sync.SignInPrompt, onC
 // ==================================================================== dialogs
 
 /**
+ * "Back up or restore with your phone": a QR code opens a page on the home network where the
+ * phone saves this TV's backup file or sends one back. A file sent back is only restored after
+ * Restore is chosen on the TV.
+ */
+@Composable
+private fun BackupPhoneDialog(
+    viewModel: LiveTvSettingsViewModel,
+    onBackup: (com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val closeFocus = remember { FocusRequester() }
+    var handle by remember { mutableStateOf<com.nuvio.tv.livetv.crash.BackupPhoneServer.Handle?>(null) }
+    var noNetwork by remember { mutableStateOf(false) }
+    val logoRes = com.nuvio.tv.livetv.branding.LiveTvBranding.iptvWordmark(NuvioTheme.currentTheme.brandWordmarkResource)
+    val accentArgb = NuvioTheme.colors.Secondary.toArgb()
+    val tvName = remember(context) {
+        runCatching { android.provider.Settings.Global.getString(context.contentResolver, "device_name") }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: android.os.Build.MODEL
+            ?: context.getString(R.string.iptv_settings_your_tv)
+    }
+    val phoneTexts = remember(context, tvName) { com.nuvio.tv.livetv.crash.BackupPhoneServer.Texts.from(context.resources, tvName) }
+    val logoBytes = remember(context, logoRes) {
+        runCatching { context.resources.openRawResource(logoRes).use { it.readBytes() } }.getOrNull()
+    }
+    val checkTv = remember(context) { context.getString(R.string.iptv_backup_phone_check_tv) }
+    val currentOnBackup by androidx.compose.runtime.rememberUpdatedState(onBackup)
+    androidx.compose.runtime.DisposableEffect(phoneTexts, logoBytes, accentArgb, viewModel) {
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val h = com.nuvio.tv.livetv.crash.BackupPhoneServer.start(
+            texts = phoneTexts,
+            accent = String.format(java.util.Locale.US, "#%06X", accentArgb and 0xFFFFFF),
+            logo = { logoBytes },
+            backup = { runCatching { kotlinx.coroutines.runBlocking { viewModel.backupFile() } }.getOrNull() },
+            onRestore = { b ->
+                main.post { currentOnBackup(b) }
+                checkTv
+            }
+        )
+        handle = h
+        noNetwork = h == null
+        onDispose { h?.stop() }
+    }
+    LaunchedEffect(Unit) {
+        delay(80)
+        runCatching { closeFocus.requestFocus() }
+    }
+    val qrBitmap = remember(handle?.url) {
+        handle?.url?.let { runCatching { com.nuvio.tv.core.qr.QrCodeGenerator.generate(it, 420, margin = 1) }.getOrNull() }
+    }
+    NuvioDialog(onDismiss = onDismiss, title = context.getString(R.string.iptv_backup_with_phone), width = 620.dp) {
+        if (noNetwork) {
+            Text(
+                text = context.getString(R.string.iptv_settings_connect_this_tv_to_your_home_wi_fi),
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            androidx.compose.foundation.layout.Row(
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                qrBitmap?.let {
+                    androidx.compose.foundation.Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = context.getString(R.string.iptv_settings_qr_code),
+                        modifier = Modifier.size(196.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+                ) {
+                    Text(
+                        text = context.getString(R.string.iptv_backup_phone_steps),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = NuvioTheme.colors.TextSecondary
+                    )
+                    handle?.url?.let {
+                        Text(
+                            text = context.getString(R.string.iptv_settings_phone_address, it.removePrefix("http://")),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioTheme.colors.TextPrimary
+                        )
+                    }
+                }
+            }
+            Text(
+                text = context.getString(R.string.iptv_backup_private_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        SettingsDialogActionRow(horizontalAlignment = Alignment.CenterHorizontally) {
+            androidx.compose.foundation.layout.Box(Modifier.focusRequester(closeFocus)) {
+                SettingsDialogActionButton(text = context.getString(R.string.action_close), onClick = onDismiss)
+            }
+        }
+    }
+}
+
+/** The backups saved on this TV (Downloads › Nuvio + IPTV), newest first: pick one to restore. */
+@Composable
+private fun BackupsOnTvDialog(
+    viewModel: LiveTvSettingsViewModel,
+    onPick: (com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val first = remember { FocusRequester() }
+    var saved by remember { mutableStateOf<List<com.nuvio.tv.livetv.sync.LiveTvBackupFile.Saved>?>(null) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        saved = viewModel.tvBackups()
+        delay(80)
+        runCatching { first.requestFocus() }
+    }
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = context.getString(R.string.iptv_backup_restore_on_tv),
+        subtitle = context.getString(R.string.iptv_backup_restore_on_tv_description),
+        width = 620.dp
+    ) {
+        val list = saved
+        if (list != null && list.isEmpty()) {
+            Text(
+                text = context.getString(R.string.iptv_backup_none_on_tv),
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioTheme.colors.TextSecondary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        if (!list.isNullOrEmpty()) {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+            ) {
+                itemsIndexed(list, key = { _, s -> s.ref }) { i, s ->
+                    SettingsActionRow(
+                        title = s.name,
+                        subtitle = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, context.settingsLocale).format(Date(s.modifiedMs)),
+                        onClick = {
+                            scope.launch {
+                                val b = viewModel.readTvBackup(s)
+                                if (b != null) onPick(b) else problem = context.getString(R.string.iptv_backup_not_a_backup)
+                            }
+                        },
+                        modifier = if (i == 0) Modifier.focusRequester(first) else Modifier
+                    )
+                }
+            }
+        }
+        problem?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = NuvioTheme.colors.TextSecondary) }
+        SettingsDialogActionRow {
+            androidx.compose.foundation.layout.Box(if (list.isNullOrEmpty()) Modifier.focusRequester(first) else Modifier) {
+                SettingsDialogActionButton(text = context.getString(R.string.action_close), onClick = onDismiss)
+            }
+        }
+    }
+}
+
+/**
  * "Add from your phone": a QR code opens a page on the home network where a playlist link, an
  * Xtream login or an EPG link can be pasted on the phone. Whatever is sent is added right away
  * (the code in the address means only someone who can see this screen can use it).
@@ -2529,13 +3087,13 @@ private fun AddFromPhoneDialog(viewModel: LiveTvSettingsViewModel, onDismiss: ()
                 }
                 "epg" -> {
                     val name = e.name.ifBlank { "EPG" }
-                    viewModel.addEpg(name, e.url)
+                    viewModel.addEpg(name, e.url, e.userAgent)
                     receipt(R.string.iptv_settings_tv_guide_1_s, name)
                 }
                 else -> {
                     val name = e.name.ifBlank { receipt(R.string.iptv_settings_playlist) }
                     // The guide link goes with the playlist (switched on for it only), like the TV's own form.
-                    viewModel.addPlaylist(name, e.url, e.userAgent, epgUrl = e.epgUrl)
+                    viewModel.addPlaylist(name, e.url, e.userAgent, epgUrl = e.epgUrl, importVod = e.includeVod)
                     if (e.epgUrl.isNotBlank()) receipt(R.string.iptv_settings_added_playlist_guide, name) else receipt(R.string.iptv_settings_playlist_1_s, name)
                 }
             }
@@ -2651,6 +3209,47 @@ private fun guidesValue(
 }
 
 @Composable
+private fun PlaylistProfilesDialog(
+    source: PlaylistSource,
+    profiles: List<com.nuvio.tv.domain.model.UserProfile>,
+    hidden: Map<Int, Set<String>>,
+    onToggle: (Int, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(80)
+        runCatching { first.requestFocus() }
+    }
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = context.getString(R.string.iptv_settings_show_on_profiles),
+        subtitle = context.getString(R.string.iptv_settings_show_on_profiles_description, source.name),
+        width = 560.dp
+    ) {
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 360.dp),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+        ) {
+            itemsIndexed(profiles, key = { _, p -> p.id }) { i, p ->
+                val shown = source.id !in hidden[p.id].orEmpty()
+                SettingsToggleRow(
+                    title = p.name,
+                    subtitle = null,
+                    checked = shown,
+                    onToggle = { onToggle(p.id, !shown) },
+                    modifier = if (i == 0) Modifier.focusRequester(first) else Modifier
+                )
+            }
+        }
+        SettingsDialogActionRow {
+            SettingsDialogActionButton(text = context.getString(R.string.iptv_settings_done), onClick = onDismiss, primary = true)
+        }
+    }
+}
+
+@Composable
 private fun PlaylistGuidesDialog(
     source: PlaylistSource,
     rows: List<GuideRow>,
@@ -2702,6 +3301,7 @@ private fun PlaylistGuidesDialog(
 @Composable
 private fun StalkerSourceDialog(
     source: PlaylistSource? = null,
+    hidePassword: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (String, com.nuvio.stalker.StalkerConfig, Boolean, Boolean, Boolean, String) -> Unit
 ) {
@@ -2719,7 +3319,7 @@ private fun StalkerSourceDialog(
             FormField(context.getString(R.string.iptv_settings_guide_link_optional), "http://…/epg.xml.gz").takeIf { source == null }
         ) + listOf(
             FormField(context.getString(R.string.iptv_settings_username_optional), "", config?.username.orEmpty()),
-            FormField(context.getString(R.string.iptv_settings_password_optional), "", config?.password.orEmpty()),
+            FormField(context.getString(R.string.iptv_settings_password_optional), "", config?.password.orEmpty(), secret = hidePassword),
             FormField(context.getString(R.string.iptv_settings_serial_number_optional), "", config?.serialNumber.orEmpty()),
             FormField(context.getString(R.string.iptv_settings_device_id_optional), "", config?.deviceId.orEmpty()),
             FormField(context.getString(R.string.iptv_settings_device_id_2_optional), "", config?.deviceId2.orEmpty()),
@@ -2754,7 +3354,9 @@ private data class FormField(
     val label: String,
     val hint: String,
     val initial: String = "",
-    val defaultHttp: Boolean = false
+    val defaultHttp: Boolean = false,
+    /** Shown as dots (passwords, when playlist logins are locked). */
+    val secret: Boolean = false
 )
 
 @Composable
@@ -2812,7 +3414,8 @@ private fun SourceFormDialog(
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = field.hint,
                     prefixText = if (field.defaultHttp) playlistAddressPrefix(values[i].value) else null,
-                    focusRequester = if (i == 0) firstField else null
+                    focusRequester = if (i == 0) firstField else null,
+                    secret = field.secret
                 )
             }
         }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import com.nuvio.tv.livetv.model.effectiveGuideSize
@@ -156,6 +157,10 @@ private fun OverlayModeContent(
     var futurePrompt by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
     // Holding OK on a channel or a show: Record / Record series, as in the guide.
     var recordMenu by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
+    // "Program info" from that menu: the show's whole description; Back goes back to the menu.
+    var infoMenu by remember { mutableStateOf<Pair<LiveChannel, EpgProgram>?>(null) }
+    // Back from Program info: the menu opens again with Program info highlighted.
+    var menuOnInfo by remember { mutableStateOf(false) }
     val recordingsList by viewModel.recordings.collectAsStateWithLifecycle()
     val schedulesList by viewModel.schedules.collectAsStateWithLifecycle()
     val seriesList by viewModel.seriesRules.collectAsStateWithLifecycle()
@@ -194,7 +199,7 @@ private fun OverlayModeContent(
     // Closes itself after a while without a key press.
     LaunchedEffect(activity) {
         delay(15_000)
-        if (futurePrompt == null && recordMenu == null) onClose()
+        if (futurePrompt == null && recordMenu == null && infoMenu == null) onClose()
     }
 
     val focusedChannel = channels.getOrNull(chIndex)
@@ -477,7 +482,7 @@ private fun OverlayModeContent(
                     .background(Color.Black.copy(alpha = 0.55f))
                     .padding(16.dp)
             ) {
-                LiveText(p.title, size = osp(20f), weight = FontWeight.Bold, marquee = true, modifier = Modifier.fillMaxWidth())
+                LiveText(titleMarks(p.title).title, size = osp(20f), weight = FontWeight.Bold, marquee = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(6.dp))
                 val live = now >= p.startMs && now < p.stopMs
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -503,7 +508,7 @@ private fun OverlayModeContent(
         val first = remember { FocusRequester() }
         val bell = com.nuvio.tv.livetv.calendar.rememberLiveBell(p, ch)
         LiveDialog(onDismiss = { futurePrompt = null; activity++ }, width = 460.dp) {
-            LiveText(p.title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
+            LiveText(titleMarks(p.title).title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
             LiveText(
                 "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)} · ${ch.name}",
                 color = NuvioTheme.colors.TextSecondary, size = osp(13f)
@@ -541,6 +546,7 @@ private fun OverlayModeContent(
     }
     recordMenu?.let { (ch, p) ->
         val first = remember { FocusRequester() }
+        val infoItem = remember { FocusRequester() }
         val onNow = now >= p.startMs && now < p.stopMs
         val recordingNow = recordingsList.any { it.channelKey == ch.key && it.isRecording }
         val recordLabel = when {
@@ -554,7 +560,7 @@ private fun OverlayModeContent(
             if (seriesList.any { it.channel.key == ch.key && it.norm == n }) "Stop recording series" else "Record series"
         }
         LiveDialog(onDismiss = { recordMenu = null; activity++ }, width = 460.dp) {
-            LiveText(p.title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
+            LiveText(titleMarks(p.title).title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
             LiveText(
                 "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)} · ${ch.name}",
                 color = NuvioTheme.colors.TextSecondary, size = osp(13f)
@@ -577,16 +583,75 @@ private fun OverlayModeContent(
                     recordMenu = null
                     activity++
                 }
+                MenuItem("Program info", Modifier.focusRequester(infoItem)) {
+                    recordMenu = null
+                    infoMenu = ch to p
+                    activity++
+                }
                 MenuItem("Close", if (recordLabel == null && seriesLabel == null) Modifier.focusRequester(first) else Modifier) {
                     recordMenu = null
                     activity++
                 }
             }
         }
-        LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
+        LaunchedEffect(Unit) {
+            delay(60)
+            val onInfo = menuOnInfo
+            menuOnInfo = false
+            runCatching { (if (onInfo) infoItem else first).requestFocus() }
+        }
     }
     LaunchedEffect(recordMenu) {
-        if (recordMenu == null) { delay(60); runCatching { focus.requestFocus() } }
+        if (recordMenu == null) {
+            delay(60)
+            if (recordMenu == null && infoMenu == null) runCatching { focus.requestFocus() }
+        }
+    }
+    infoMenu?.let { (ch, listed) ->
+        val p = rememberShowDetails(ch.key, listed) ?: listed
+        val close = remember { FocusRequester() }
+        val scroll = androidx.compose.foundation.rememberScrollState()
+        val scope = rememberCoroutineScope()
+        val lineSize = osp(16f)
+        val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { (lineSize * 1.3f).toPx() } * 3
+        // Back (or Close) goes back to the hold-OK menu, one step at a time.
+        val back: () -> Unit = {
+            infoMenu = null
+            menuOnInfo = true
+            recordMenu = ch to listed
+            activity++
+        }
+        LiveDialog(onDismiss = back, width = 640.dp) {
+            Column(
+                Modifier.dpadScrollsText(scroll, scope, stepPx).onPreviewKeyEvent { e ->
+                    // Reading counts as using the overlay: it doesn't close itself meanwhile.
+                    if (e.type == KeyEventType.KeyDown) activity++
+                    false
+                }
+            ) {
+                LiveText(titleMarks(p.title).title, size = osp(22f), weight = FontWeight.Bold, maxLines = 2)
+                Spacer(Modifier.height(6.dp))
+                val meta = listOfNotNull(
+                    "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)}",
+                    ch.name,
+                    p.episode?.takeIf { settings.showEpisodeNumbers && it.isNotBlank() },
+                    p.category?.takeIf { it.isNotBlank() }
+                ).joinToString("  ·  ")
+                LiveText(meta, color = NuvioTheme.colors.TextSecondary, size = osp(14f), maxLines = 2)
+                Spacer(Modifier.height(12.dp))
+                ReadableDescription(
+                    p.description?.takeIf { it.isNotBlank() } ?: "No description available.",
+                    scroll,
+                    size = lineSize,
+                    maxLines = 12
+                )
+                Spacer(Modifier.height(16.dp))
+                LiveFocusRow(modifier = Modifier.focusRequester(close), onClick = back) { f ->
+                    LiveText("Close", color = focusedTextColor(f))
+                }
+            }
+        }
+        LaunchedEffect(Unit) { delay(60); runCatching { close.requestFocus() } }
     }
 }
 
@@ -716,7 +781,7 @@ private fun ChannelsPanel(
                             if (ch.key in favorites) LiveText("  ★", color = if (onSolid) Color.White else NuvioTheme.colors.Rating, size = osp(12f))
                         }
                         LiveText(
-                            p?.title ?: "No program information",
+                            p?.title?.let { titleMarks(it).title } ?: "No program information",
                             color = when {
                                 p == null -> if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextTertiary
                                 else -> accent
@@ -750,10 +815,11 @@ private class GroupRow(val source: String?, val group: Int)
 private fun overlayGroupRows(groups: List<ChannelGroup>, headed: Boolean, collapsed: Set<String>): List<GroupRow> {
     if (!headed) return groups.indices.map { GroupRow(groups[it].sourceId, it) }
     val out = ArrayList<GroupRow>()
-    groups.forEachIndexed { i, g -> if (g.sourceId == null) out += GroupRow(null, i) }
-    groups.mapNotNull { it.sourceId }.distinct().forEach { src ->
+    // Favorite groups first, outside their playlist's heading (as in the guide).
+    groups.forEachIndexed { i, g -> if (g.section == null) out += GroupRow(null, i) }
+    groups.mapNotNull { it.section }.distinct().forEach { src ->
         out += GroupRow(src, -1)
-        if (src !in collapsed) groups.forEachIndexed { i, g -> if (g.sourceId == src) out += GroupRow(src, i) }
+        if (src !in collapsed) groups.forEachIndexed { i, g -> if (g.section == src) out += GroupRow(src, i) }
     }
     return out
 }
@@ -781,7 +847,7 @@ private fun GroupsPanel(
                     val src = row.source.orEmpty()
                     val focused = headingAt == src
                     val isCollapsed = src in collapsed
-                    val inSource = groups.filter { it.sourceId == src }
+                    val inSource = groups.filter { it.section == src }
                     val colors = liveCellColors(focused = focused, idle = Color.Transparent, idleText = NuvioTheme.colors.Secondary)
                     Row(
                         modifier = Modifier
@@ -824,6 +890,14 @@ private fun GroupsPanel(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     LiveText(g.title, color = colors.text, size = osp(16f), modifier = Modifier.weight(1f), marquee = headingAt == null && i == index)
+                    if (g.favorite) {
+                        androidx.compose.material3.Icon(
+                            androidx.compose.material.icons.Icons.Default.Star, contentDescription = null,
+                            tint = if (headingAt == null && i == index) colors.text else NuvioTheme.colors.Secondary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        if (showCounts) Spacer(Modifier.width(6.dp))
+                    }
                     if (showCounts) LiveText(g.count.toString(), color = NuvioTheme.colors.TextSecondary, size = osp(12f))
                 }
             }
@@ -865,7 +939,7 @@ private fun SchedulePreview(channel: LiveChannel, list: List<EpgProgram>, now: L
             Row(modifier = Modifier.fillMaxWidth().height(orow(36f)).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                 LiveText(formatClock(p.startMs, use24h), color = color, size = osp(14f), weight = weight, modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
                 Spacer(Modifier.width(10.dp))
-                LiveText(p.title, color = color, size = osp(14f), weight = weight, modifier = Modifier.weight(1f))
+                LiveText(titleMarks(p.title).title, color = color, size = osp(14f), weight = weight, modifier = Modifier.weight(1f))
                 if (live) {
                     Spacer(Modifier.width(6.dp))
                     LiveText(
@@ -943,7 +1017,7 @@ private fun SchedulePanel(
                         ) {
                             LiveText(formatClock(p.startMs, use24h), color = colors.text, size = osp(14f), weight = if (live) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.widthIn(min = odp(if (use24h) 40f else 60f)))
                             Spacer(Modifier.width(10.dp))
-                            LiveText(p.title, color = colors.text, size = osp(14f), weight = if (live) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f), marquee = isFocused)
+                            LiveText(titleMarks(p.title).title, color = colors.text, size = osp(14f), weight = if (live) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f), marquee = isFocused)
                             if (live && channel.key == playingKey) {
                                 val onSolid = isFocused && focused && LocalLiveSolidHighlight.current
                                 Icon(
@@ -1041,7 +1115,11 @@ internal fun LiveTvBackupFlyout(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onLongPress: (LiveChannel) -> Unit = {},
-    menuOpen: Boolean = false
+    menuOpen: Boolean = false,
+    gameTitle: String = "",
+    gameChannels: List<LiveChannel> = emptyList(),
+    /** What a game channel's guide says about the game ([EpgProgram]: what's on it now), for its row. */
+    gameGuide: (LiveChannel, EpgProgram?) -> com.nuvio.tv.livetv.sports.GuideLine? = { _, _ -> null }
 ) {
     val sizeSettings by viewModel.settings.collectAsStateWithLifecycle()
     val (textScale, rowScale) = when (sizeSettings.effectiveGuideSize) {
@@ -1054,31 +1132,40 @@ internal fun LiveTvBackupFlyout(
         LocalOverlayScale provides textScale,
         LocalOverlayRowScale provides rowScale
     ) {
-        BackupFlyoutContent(viewModel, channels, playingKey, onPick, onClose, modifier, onLongPress, menuOpen)
+        BackupFlyoutContent(viewModel, channels, gameTitle, gameChannels, playingKey, onPick, onClose, modifier, onLongPress, menuOpen, gameGuide)
     }
 }
 
 @Composable
 private fun BackupFlyoutContent(
     viewModel: LiveTvViewModel,
-    channels: List<LiveChannel>,
+    copies: List<LiveChannel>,
+    gameTitle: String,
+    gameChannels: List<LiveChannel>,
     playingKey: String?,
     onPick: (LiveChannel) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier,
     onLongPress: (LiveChannel) -> Unit,
-    menuOpen: Boolean
+    menuOpen: Boolean,
+    gameGuide: (LiveChannel, EpgProgram?) -> com.nuvio.tv.livetv.sports.GuideLine?
 ) {
     val programs by viewModel.programs.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()
+    // Watching a game: the other channels showing it first (they're what people want when a game's
+    // stream drops), then this channel's own copies; one list to move through, each part under a
+    // heading. Otherwise just the copies.
+    val channels = remember(copies, gameChannels) { gameChannels + copies }
+    val headed = gameChannels.isNotEmpty()
+    fun rowAt(i: Int): Int = i + (if (headed) 1 else 0) + (if (headed && copies.isNotEmpty() && i >= gameChannels.size) 1 else 0)
     // Opens on the first copy that isn't the one playing.
     var index by remember { mutableIntStateOf(channels.indexOfFirst { it.key != playingKey }.coerceAtLeast(0)) }
     var activity by remember { mutableIntStateOf(0) }
     val focus = remember { FocusRequester() }
-    val state = rememberLazyListState(initialFirstVisibleItemIndex = (index - 3).coerceAtLeast(0))
-    keepVisible(state, index)
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = (rowAt(index) - 3).coerceAtLeast(0))
+    keepVisible(state, rowAt(index))
     // On opening, and again when the long-press menu closes.
     LaunchedEffect(menuOpen) { if (!menuOpen) { delay(60); runCatching { focus.requestFocus() } } }
     // Closes itself after a while without a key press, like overlay mode (not while its menu is up).
@@ -1155,68 +1242,121 @@ private fun BackupFlyoutContent(
             }
         }
         LazyColumn(state = state, modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(channels, key = { _, c -> c.key }) { i, ch ->
-                val p = programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
-                    ?: viewModel.currentProgram(ch.key)
-                val isFocused = i == index
-                val colors = liveCellColors(focused = isFocused, idle = if (ch.key == playingKey) Color.White.copy(alpha = 0.08f) else Color.Transparent)
-                // On a solid highlight the accent-colored bits would disappear: make them white.
-                val onSolid = isFocused && LocalLiveSolidHighlight.current
-                val accent = if (onSolid) Color.White else NuvioTheme.colors.Secondary
-                val dim = if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextSecondary
-                val shape = RoundedCornerShape(8.dp)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(orow(74f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                        .clip(shape)
-                        .background(colors.background)
-                        .border(2.dp, colors.border, shape)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (settings.showChannelLogos) {
-                        ChannelLogo(ch.logo, 32.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            LiveText(ch.name, color = colors.text, size = osp(15f), modifier = Modifier.weight(1f, fill = false), marquee = isFocused && i == restingIndex)
-                            backupQuality(ch.name)?.let { q ->
-                                Spacer(Modifier.width(6.dp))
-                                LiveText(q, color = dim, size = osp(11f), weight = FontWeight.Bold)
-                            }
-                        }
-                        val from = playlistNames[ch.sourceId] ?: ch.sourceName
-                        // The group always shows here (even when hidden on the play bar): it's what tells
-                        // same-named copies apart (UK, World, another language).
-                        LiveText(
-                            listOfNotNull(from.takeIf { it.isNotBlank() }, ch.group.takeIf { it.isNotBlank() }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
-                            color = dim, size = osp(12f), maxLines = 1,
-                            marquee = isFocused && i == restingIndex
-                        )
-                        LiveText(
-                            p?.title ?: "No program information",
-                            color = if (p == null) (if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextTertiary) else accent,
-                            size = osp(13f),
-                            marquee = isFocused && i == restingIndex
-                        )
-                        if (p != null) {
-                            Spacer(Modifier.height(3.dp))
-                            ProgressBar(
-                                p.progress(now),
-                                Modifier.fillMaxWidth(),
-                                color = if (onSolid) Color.White else null,
-                                trackColor = if (onSolid) Color.White.copy(alpha = 0.35f) else null
-                            )
-                        }
-                    }
-                    if (ch.key == playingKey) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Playing", tint = accent, modifier = Modifier.size(odp(20f)))
-                    }
+            if (headed) item(key = "head:game") {
+                FlyoutSection(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle))
+            }
+            itemsIndexed(gameChannels, key = { _, c -> "game:" + c.key }) { i, ch ->
+                FlyoutRow(viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames, gameGuide = gameGuide)
+            }
+            if (headed && copies.isNotEmpty()) item(key = "head:copies") {
+                FlyoutSection(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_other_copies, copies.firstOrNull { it.key == playingKey }?.name ?: copies.first().name))
+            }
+            itemsIndexed(copies, key = { _, c -> c.key }) { j, ch ->
+                val i = gameChannels.size + j
+                FlyoutRow(viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames)
+            }
+        }
+    }
+}
+
+/** A heading in the backup flyout ("Other copies of ESPN", "Also showing Bears vs Lions"). */
+@Composable
+private fun FlyoutSection(text: String) {
+    LiveText(
+        text,
+        color = NuvioTheme.colors.TextSecondary,
+        size = osp(12f),
+        weight = FontWeight.SemiBold,
+        maxLines = 1,
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun FlyoutRow(
+    viewModel: LiveTvViewModel,
+    ch: LiveChannel,
+    isFocused: Boolean,
+    resting: Boolean,
+    playingKey: String?,
+    programs: Map<String, List<EpgProgram>>,
+    now: Long,
+    showLogos: Boolean,
+    playlistNames: Map<String, String>,
+    /** A game channel: what its guide says about the game, coloured, before what's on. */
+    gameGuide: ((LiveChannel, EpgProgram?) -> com.nuvio.tv.livetv.sports.GuideLine?)? = null
+) {
+    val p = programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
+        ?: viewModel.currentProgram(ch.key)
+    val guide = gameGuide?.invoke(ch, p)
+    val colors = liveCellColors(focused = isFocused, idle = if (ch.key == playingKey) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+    // On a solid highlight the accent-colored bits would disappear: make them white.
+    val onSolid = isFocused && LocalLiveSolidHighlight.current
+    val accent = if (onSolid) Color.White else NuvioTheme.colors.Secondary
+    val dim = if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextSecondary
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(orow(74f))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .clip(shape)
+            .background(colors.background)
+            .border(2.dp, colors.border, shape)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (showLogos) {
+            ChannelLogo(ch.logo, 32.dp)
+            Spacer(Modifier.width(8.dp))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LiveText(ch.name, color = colors.text, size = osp(15f), modifier = Modifier.weight(1f, fill = false), marquee = isFocused && resting)
+                backupQuality(ch.name)?.let { q ->
+                    Spacer(Modifier.width(6.dp))
+                    LiveText(q, color = dim, size = osp(11f), weight = FontWeight.Bold)
                 }
             }
+            val from = playlistNames[ch.sourceId] ?: ch.sourceName
+            // The group always shows here (even when hidden on the play bar): it's what tells
+            // same-named copies apart (UK, World, another language).
+            LiveText(
+                listOfNotNull(from.takeIf { it.isNotBlank() }, ch.group.takeIf { it.isNotBlank() }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
+                color = dim, size = osp(12f), maxLines = 1,
+                marquee = isFocused && resting
+            )
+            if (guide != null) {
+                // "● Showing it now · Man City v Fulham", in the guide's colour (white on a solid highlight).
+                val gc = if (onSolid) Color.White else com.nuvio.tv.livetv.sports.guideColor(guide.kind, NuvioTheme.colors.Secondary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).clip(androidx.compose.foundation.shape.CircleShape).background(gc))
+                    Spacer(Modifier.width(5.dp))
+                    LiveText(
+                        guide.text + (p?.title?.let { " · " + titleMarks(it).title } ?: ""),
+                        color = gc, size = osp(13f), weight = FontWeight.SemiBold,
+                        marquee = isFocused && resting,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
+            } else LiveText(
+                p?.title?.let { titleMarks(it).title } ?: "No program information",
+                color = if (p == null) (if (onSolid) Color.White.copy(alpha = 0.8f) else NuvioTheme.colors.TextTertiary) else accent,
+                size = osp(13f),
+                marquee = isFocused && resting
+            )
+            if (p != null) {
+                Spacer(Modifier.height(3.dp))
+                ProgressBar(
+                    p.progress(now),
+                    Modifier.fillMaxWidth(),
+                    color = if (onSolid) Color.White else null,
+                    trackColor = if (onSolid) Color.White.copy(alpha = 0.35f) else null
+                )
+            }
+        }
+        if (ch.key == playingKey) {
+            Icon(Icons.Default.PlayArrow, contentDescription = "Playing", tint = accent, modifier = Modifier.size(odp(20f)))
         }
     }
 }

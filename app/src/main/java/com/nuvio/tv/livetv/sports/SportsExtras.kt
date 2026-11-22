@@ -15,8 +15,24 @@ import java.util.TimeZone
 /** One team stat, side by side ("TOTAL YARDS 214 · 331"). Values for the bars when they're numbers. */
 data class StatLine(val label: String, val away: String, val home: String, val awayValue: Double?, val homeValue: Double?)
 
-/** A game's leader: "PASSING · Patrick Mahomes · 22/31, 236 YDS, 1 TD". [teamId]: whose (for the dot's colour). */
-data class Performer(val category: String, val name: String, val line: String, val teamId: String?)
+/**
+ * A game's leader: "PASSING · Patrick Mahomes · 22/31, 236 YDS, 1 TD". [teamId]: whose (for the colour).
+ * [value]: the number to compare the two teams' leaders by; [photo] the player's headshot when ESPN has one.
+ */
+data class Performer(
+    val category: String,
+    val name: String,
+    val line: String,
+    val teamId: String?,
+    val athleteId: String? = null,
+    val photo: String? = null,
+    val jersey: String? = null,
+    val position: String? = null,
+    val value: Double? = null
+)
+
+/** A player who did well beyond the leaders (from the box score): "24 PTS · 6 REB · 3 AST". */
+data class Standout(val name: String, val line: String, val teamId: String?, val athleteId: String?, val photo: String?, val jersey: String?, val position: String?)
 
 /** A team's last results, newest last ("W", "L", "D"). */
 data class FormRow(val teamId: String?, val team: String, val results: List<String>)
@@ -25,7 +41,11 @@ data class FormRow(val teamId: String?, val team: String, val results: List<Stri
 data class Meeting(val dateMs: Long?, val text: String)
 
 /** A line of the league table. [mine]: one of this game's teams. */
-data class TableRow(val pos: String, val team: String, val a: String, val b: String, val c: String, val mine: Boolean)
+data class TableRow(
+    val pos: String, val team: String, val a: String, val b: String, val c: String, val mine: Boolean,
+    /** Set on the first row of a second group (the other team's division): its name, shown above it. */
+    val group: String? = null
+)
 
 /** A team's starting line-up (football). */
 data class Lineup(val team: String, val teamId: String?, val formation: String?, val players: List<String>)
@@ -33,6 +53,7 @@ data class Lineup(val team: String, val teamId: String?, val formation: String?,
 data class GameExtras(
     val stats: List<StatLine> = emptyList(),
     val performers: List<Performer> = emptyList(),
+    val standouts: List<Standout> = emptyList(),
     val form: List<FormRow> = emptyList(),
     val meetings: List<Meeting> = emptyList(),
     val tableTitle: String? = null,
@@ -86,6 +107,7 @@ internal object SportsExtras {
         return GameExtras(
             stats = runCatching { stats(root, sport, homeId) }.getOrDefault(emptyList()),
             performers = runCatching { performers(root) }.getOrDefault(emptyList()),
+            standouts = runCatching { standouts(root) }.getOrDefault(emptyList()),
             form = runCatching { form(root, ::nameOf) }.getOrDefault(emptyList()),
             meetings = runCatching { meetings(root, ::nameOf) }.getOrDefault(emptyList()),
             lineups = runCatching { lineups(root, ::nameOf) }.getOrDefault(emptyList())
@@ -131,23 +153,58 @@ internal object SportsExtras {
     private fun performers(root: JSONObject): List<Performer> {
         val perTeam = root.optJSONArray("leaders").objs()
         if (perTeam.isEmpty()) return emptyList()
-        // [{team, leaders: [{displayName, leaders: [{displayValue, athlete}]}]}], one per team.
+        // [{team, leaders: [{displayName, leaders: [{displayValue, value, athlete}]}]}], one per team.
         val byTeam = perTeam.map { t ->
             val teamId = t.optJSONObject("team")?.s("id")
             t.optJSONArray("leaders").objs().mapNotNull { cat ->
                 val top = cat.optJSONArray("leaders").objs().firstOrNull() ?: return@mapNotNull null
-                val name = top.optJSONObject("athlete")?.let { it.s("displayName") ?: it.s("shortName") } ?: return@mapNotNull null
+                val athlete = top.optJSONObject("athlete")
+                val name = athlete?.let { it.s("displayName") ?: it.s("shortName") } ?: return@mapNotNull null
+                val shown = top.s("displayValue") ?: ""
                 Performer(
-                    (cat.s("shortDisplayName") ?: cat.s("displayName") ?: cat.s("name") ?: "").uppercase(Locale.ROOT)
+                    category = (cat.s("shortDisplayName") ?: cat.s("displayName") ?: cat.s("name") ?: "").uppercase(Locale.ROOT)
                         .replace(" YARDS", "").replace("YARDS", "").trim(),
-                    name, top.s("displayValue") ?: "", teamId
+                    name = name,
+                    line = shown,
+                    teamId = teamId,
+                    athleteId = athlete.s("id"),
+                    photo = athlete.optJSONObject("headshot")?.s("href"),
+                    jersey = athlete.s("jersey"),
+                    position = athlete.optJSONObject("position")?.let { it.s("abbreviation") ?: it.s("displayName") },
+                    value = top.optDouble("value").takeIf { !it.isNaN() } ?: num(shown)
+                )
+            }.distinctBy { it.category }.take(5)
+        }
+        // Every kind both teams have (points, rebounds, assists…), each team's leader in turn.
+        val out = ArrayList<Performer>()
+        for (i in 0 until 5) for (list in byTeam) list.getOrNull(i)?.let { out += it }
+        return out.distinctBy { it.name + it.category }
+    }
+
+    // ---- other players who did well (box scores with points: basketball)
+    private fun standouts(root: JSONObject): List<Standout> {
+        data class Row(val s: Standout, val pts: Double)
+        val rows = root.optJSONObject("boxscore")?.optJSONArray("players").objs().flatMap { t ->
+            val teamId = t.optJSONObject("team")?.s("id")
+            val group = t.optJSONArray("statistics").objs().firstOrNull() ?: return@flatMap emptyList()
+            val labels = (group.optJSONArray("labels") ?: group.optJSONArray("names"))?.let { a -> (0 until a.length()).map { a.optString(it).uppercase(Locale.ROOT) } }.orEmpty()
+            val iPts = labels.indexOf("PTS").takeIf { it >= 0 } ?: return@flatMap emptyList()
+            val shown = listOf("PTS", "REB", "AST").map { it to labels.indexOf(it) }.filter { it.second >= 0 }
+            group.optJSONArray("athletes").objs().mapNotNull { a ->
+                if (a.optBoolean("didNotPlay", false)) return@mapNotNull null
+                val stats = a.optJSONArray("stats") ?: return@mapNotNull null
+                val ath = a.optJSONObject("athlete") ?: return@mapNotNull null
+                val name = ath.s("displayName") ?: ath.s("shortName") ?: return@mapNotNull null
+                val pts = num(stats.optString(iPts)) ?: return@mapNotNull null
+                val line = shown.mapNotNull { (k, i) -> stats.optString(i).takeIf { it.isNotBlank() && it != "--" }?.let { "$it $k" } }.joinToString(" · ")
+                Row(
+                    Standout(name, line, teamId, ath.s("id"), ath.optJSONObject("headshot")?.s("href"), ath.s("jersey"),
+                        ath.optJSONObject("position")?.let { it.s("abbreviation") ?: it.s("displayName") }),
+                    pts
                 )
             }
         }
-        // Both teams' first two kinds (passing, then rushing…), each team's leader in turn.
-        val out = ArrayList<Performer>()
-        for (i in 0 until 3) for (list in byTeam) list.getOrNull(i)?.let { out += it }
-        return out.distinctBy { it.name + it.category }.take(4)
+        return rows.sortedByDescending { it.pts }.map { it.s }.take(8)
     }
 
     // ---- last five
@@ -199,27 +256,41 @@ internal object SportsExtras {
         val groups = st.optJSONArray("groups").objs()
         fun entries(g: JSONObject) = g.optJSONObject("standings")?.optJSONArray("entries").objs()
         fun isMine(en: JSONObject) = en.s("id") in ids || (en.s("team") ?: en.optJSONObject("team")?.s("displayName")) in teamNames
-        val group = groups.firstOrNull { g -> entries(g).any(::isMine) } ?: groups.firstOrNull() ?: return e
-        val all = entries(group)
-        if (all.isEmpty()) return e
+        // Each team's own group: two divisions when the teams are in different ones (an NFL game
+        // between two divisions used to show only the first team's).
+        val mineGroups = groups.filter { g -> entries(g).any(::isMine) }.take(2)
+            .ifEmpty { listOfNotNull(groups.firstOrNull()) }
+        if (mineGroups.isEmpty() || mineGroups.all { entries(it).isEmpty() }) return e
         fun stat(en: JSONObject, vararg n: String): String? {
             val stats = en.optJSONArray("stats").objs()
             for (name in n) stats.firstOrNull { it.s("name") == name || it.s("type") == name }?.let { s -> s.s("displayValue")?.let { return it } }
             return null
         }
-        val soccerLike = all.any { stat(it, "points") != null && stat(it, "gamesPlayed") != null }
+        val sample = mineGroups.flatMap { entries(it) }
+        val soccerLike = sample.any { stat(it, "points") != null && stat(it, "gamesPlayed") != null }
         val head = if (soccerLike) listOf("P", "GD", "Pts") else listOf("W", "L", "PCT")
-        val rows = all.mapIndexed { i, en ->
+        fun rowsOf(g: JSONObject) = entries(g).mapIndexed { i, en ->
             val name = en.s("team") ?: en.optJSONObject("team")?.s("displayName") ?: "?"
             val pos = stat(en, "rank", "position") ?: (i + 1).toString()
             if (soccerLike) TableRow(pos, name, stat(en, "gamesPlayed") ?: "", stat(en, "pointDifferential", "differential") ?: "", stat(en, "points") ?: "", isMine(en))
             else TableRow(pos, name, stat(en, "wins") ?: "", stat(en, "losses") ?: "", stat(en, "winPercent", "leagueWinPercent") ?: "", isMine(en))
         }
-        // The top three, and one either side of each of this game's teams (in table order).
-        val keep = sortedSetOf(0, 1, 2)
-        rows.forEachIndexed { i, r -> if (r.mine) { keep += i - 1; keep += i; keep += i + 1 } }
-        val slice = keep.filter { it in rows.indices }.map { rows[it] }.take(8)
-        val title = group.s("header") ?: st.s("header")
+        // A small group (a division of four) is shown whole. A bigger one: the top three, and one
+        // either side of this game's teams (in table order), within [limit] rows.
+        fun cut(rows: List<TableRow>, limit: Int): List<TableRow> {
+            if (rows.size <= limit) return rows
+            val keep = sortedSetOf(0, 1, 2)
+            rows.forEachIndexed { i, r -> if (r.mine) { keep += i - 1; keep += i; keep += i + 1 } }
+            return keep.filter { it in rows.indices }.map { rows[it] }.take(limit)
+        }
+        val limit = if (mineGroups.size > 1) 5 else 8
+        val slice = mineGroups.flatMapIndexed { gi, g ->
+            val rows = cut(rowsOf(g), limit)
+            if (gi == 0 || rows.isEmpty()) rows
+            else listOf(rows[0].copy(group = g.s("header") ?: g.s("name") ?: "")) + rows.drop(1)
+        }
+        if (slice.isEmpty()) return e
+        val title = mineGroups[0].s("header") ?: st.s("header")
         return e.copy(tableTitle = title, tableHead = head, table = slice)
     }
 

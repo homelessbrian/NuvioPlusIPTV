@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Chất lượng tốt nhất"</string>
+    <string name="autoplay_mode_quality_desc">"Phát nguồn tốt nhất theo quy tắc Chất lượng: độ phân giải, nguồn, nhóm phát hành tin cậy, HDR và âm thanh."</string>
+    <string name="quality_rules_title">"Quy tắc chất lượng"</string>
+    <string name="quality_rules_subtitle">"Chất lượng tốt nhất chọn gì và Chất lượng tốt nhất trước sắp xếp thế nào, cho mọi nguồn."</string>
+    <string name="quality_rules_open">"Hiện"</string>
+    <string name="quality_rules_close">"Ẩn"</string>
+    <string name="stream_sort_sources">"Sắp xếp nguồn"</string>
+    <string name="stream_sort_sources_sub">"Thứ tự danh sách nguồn."</string>
+    <string name="stream_sort_source_order">"Thứ tự nguồn"</string>
+    <string name="stream_sort_source_order_desc">"Theo thứ tự mỗi nguồn gửi."</string>
+    <string name="stream_sort_best_first">"Chất lượng tốt nhất trước"</string>
+    <string name="stream_sort_best_first_desc">"Xếp theo quy tắc Chất lượng. Liên kết bị quy tắc loại ra không được liệt kê."</string>
+    <string name="quality_low_groups_title">"Nhóm phát hành chất lượng thấp"</string>
+    <string name="quality_low_groups_subtitle">"Các nhóm nổi tiếng với bản phát hành kém hoặc giả (danh sách TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Đưa xuống cuối"</string>
+    <string name="quality_low_groups_hide">"Ẩn"</string>
+    <string name="quality_low_groups_normal">"Đối xử như các mục khác"</string>
+    <string name="quality_trusted_groups_title">"Nhóm phát hành tin cậy"</string>
+    <string name="quality_trusted_groups_subtitle">"Tốt nhất trước. Bắt đầu bằng danh sách TRaSH Guides. Xóa trống để lấy lại danh sách đó."</string>
+    <string name="quality_rules_reset_title">"Đặt lại theo đề xuất"</string>
+    <string name="quality_rules_reset_subtitle">"Đưa mọi quy tắc Chất lượng về thiết lập đề xuất."</string>
+</resources>

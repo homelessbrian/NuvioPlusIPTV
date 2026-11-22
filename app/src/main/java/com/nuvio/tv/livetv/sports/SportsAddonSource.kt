@@ -498,6 +498,9 @@ class SportsAddonSource @Inject constructor(
 
         /** Words that tie a list to one sport. Longest first: "american football" before "football". */
         private val SPORT_NAMES: List<Pair<String, Sport>> = listOf(
+            // Handball first: its competitions share football's names ("Champions League", "Bundesliga").
+            "handball champions league" to Sport.HANDBALL, "handball bundesliga" to Sport.HANDBALL, "handball" to Sport.HANDBALL,
+            "ehf" to Sport.HANDBALL, "starligue" to Sport.HANDBALL,
             "american football" to Sport.AMERICAN_FOOTBALL, "college football" to Sport.AMERICAN_FOOTBALL,
             "nfl" to Sport.AMERICAN_FOOTBALL, "ncaaf" to Sport.AMERICAN_FOOTBALL, "cfl" to Sport.AMERICAN_FOOTBALL,
             "aussie rules" to Sport.AUSSIE_RULES, "afl" to Sport.AUSSIE_RULES,
@@ -538,7 +541,8 @@ class SportsAddonSource @Inject constructor(
             Sport.RACING to listOf("motorsport", "racing", "f1", "formula 1"),
             Sport.GOLF to listOf("golf"),
             Sport.TENNIS to listOf("tennis"),
-            Sport.CRICKET to listOf("cricket")
+            Sport.CRICKET to listOf("cricket"),
+            Sport.HANDBALL to listOf("handball")
         )
 
         private val MONTHS = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")

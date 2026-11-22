@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"صور التقديم المصغرة"</string>
+    <string name="playback_section_seek_thumbnails_desc">"صور معاينة فوق شريط التقديم أثناء التقديم"</string>
+    <string name="iptv_thumbs_title">"صور التقديم المصغرة"</string>
+    <string name="iptv_thumbs_subtitle">"تعرض صورة معاينة فوق شريط التقديم أثناء التقديم. تُصنع الصور على هذا التلفاز من الفيديو نفسه"</string>
+    <string name="iptv_thumbs_works_on">"تعمل على: الأفلام والبرامج في المشغّل الرئيسي (ومنها روابط HLS المبثوثة)، وتسجيلاتك، وإعادات وملخصات الرياضة، وإعادة المشاهدة، وإرجاع Live TV (مخزن الإيقاف المؤقت).\nإعادة المشاهدة: تأتي الصور من الجزء المحفوظ بخيار تخطٍّ أسرع في إعادة المشاهدة، أو مباشرة من المزوّد لإعادة المشاهدة المبثوثة (HLS).\nلا تعمل على: التورنت، أو روابط DASH، أو البث المحمي."</string>
+    <string name="iptv_thumbs_low_memory_note">"ذاكرة هذا الجهاز محدودة. قد تسبب الصور المصغرة تقطعًا. إن حدث ذلك، تتوقف من تلقاء نفسها ويخبرك شريط التقديم."</string>
+    <string name="iptv_thumbs_include_4k">"تضمين 4K وHDR"</string>
+    <string name="iptv_thumbs_include_4k_desc">"يصنع صورًا مصغرة لفيديوهات 4K وHDR أيضًا. يبدأ مفعّلًا في الأجهزة ذات الذاكرة الكبيرة ومتوقفًا في الأضعف، لكن يمكنك تفعيله في أي مكان وتجربته. قد تتقطع صور 4K أو لا تعمل في الأجهزة الضعيفة، وتستهلك بيانات أكثر. قد تبدو صور فيديوهات HDR باهتة. الروابط المبثوثة تستخدم أصغر نسخة لديها، لذا نادرًا ما يهم هذا معها"</string>
+    <string name="iptv_thumbs_when_to_make">"متى تُصنع الصور المصغرة"</string>
+    <string name="iptv_thumbs_when_seeking">"فقط عند الإيقاف المؤقت أو التقديم"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"الخيار الأخف: لا يُصنع شيء أثناء التشغيل العادي"</string>
+    <string name="iptv_thumbs_when_watching">"أثناء المشاهدة"</string>
+    <string name="iptv_thumbs_when_watching_desc">"تُصنع أيضًا في الخلفية أثناء التشغيل، عندما يكون الفيديو محمّلًا جيدًا مسبقًا"</string>
+    <string name="iptv_thumbs_when_right_away">"فورًا"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"الفيديو كله، من البداية، بمجرد فتحه. يستهلك أكثر بيانات"</string>
+    <string name="iptv_thumbs_storage_limit">"حد التخزين"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"تشغل الصور المصغرة المحفوظة حتى هذه المساحة؛ تُمسح أولًا فيديوهات شوهدت منذ أطول مدة"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s م.ب"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s ك.ب"</string>
+    <string name="iptv_thumbs_clear">"مسح الصور المصغرة المحفوظة"</string>
+    <string name="iptv_thumbs_clear_desc">"يحذف كل صورة مصغرة محفوظة. تُصنع مجددًا عند الحاجة"</string>
+    <string name="iptv_thumbs_last_paused">"آخر إيقاف بسبب الذاكرة المنخفضة: %1$s، %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"جارٍ صنع الصور المصغرة…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"الصور المصغرة متوقفة: ذاكرة منخفضة"</string>
+    <string name="iptv_thumbs_msg_live">"لا صور مصغرة لـ Live TV"</string>
+    <string name="iptv_thumbs_msg_dash">"لا صور مصغرة لروابط DASH"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"فعّل تخطٍّ أسرع في إعادة المشاهدة للصور المصغرة"</string>
+    <string name="iptv_thumbs_msg_protected">"هذا البث محمي: لا صور مصغرة"</string>
+    <string name="iptv_thumbs_msg_torrent">"لا صور مصغرة للتورنت"</string>
+    <string name="iptv_thumbs_msg_link_kind">"لا صور مصغرة لهذا النوع من الروابط"</string>
+    <string name="iptv_thumbs_msg_unreadable">"تعذّرت قراءة هذا البث للصور المصغرة"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"أجزاء هذا البث كبيرة جدًا للصور المصغرة"</string>
+    <string name="iptv_thumbs_msg_stopped">"توقفت الصور المصغرة عن العمل لهذا الفيديو"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"لم يرسل الخادم صور المعاينة"</string>
+    <string name="iptv_thumbs_msg_format">"صيغة هذا الفيديو لا تتيح صنع صور مصغرة على هذا الجهاز"</string>
+    <string name="iptv_thumbs_msg_open_failed">"تعذّر فتح هذا الفيديو للصور المصغرة"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"لا صور مصغرة لبث إعادة المشاهدة هذا"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"لا صور مصغّرة: يحتاج هذا التلفاز إلى مفكك ترميز الفيديو الوحيد لديه لتشغيل الفيديو"</string>
+</resources>

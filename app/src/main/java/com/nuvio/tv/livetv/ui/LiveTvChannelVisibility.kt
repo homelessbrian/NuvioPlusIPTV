@@ -23,7 +23,8 @@ internal fun liveTvChannelVisibility(
     settings: LiveTvSettings,
 ): LiveTvChannelVisibility {
     // A hidden playlist group can still supply custom groups, but never the all-channels picker.
-    val notHidden = channels.filter { it.key !in user.hiddenChannels }
+    // A playlist this profile doesn't show supplies nothing at all, custom groups included.
+    val notHidden = channels.filter { it.key !in user.hiddenChannels && !user.hidesPlaylistOf(it) }
     val shown = notHidden.filter { it.groupId !in user.hiddenGroups }
     val lockedIds = HashSet<String>()
     notHidden.distinctBy { it.groupId }.forEach { channel ->
@@ -59,6 +60,7 @@ internal fun allowedLiveTvChannelsFlow(
     channels,
     user.distinctUntilChanged { previous, next ->
         previous.hiddenChannels == next.hiddenChannels && previous.hiddenGroups == next.hiddenGroups &&
+            previous.hiddenPlaylists == next.hiddenPlaylists &&
             previous.lockedGroups == next.lockedGroups && previous.customGroups == next.customGroups
     },
     settings.distinctUntilChanged { previous, next ->

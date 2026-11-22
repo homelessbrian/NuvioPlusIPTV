@@ -207,6 +207,12 @@ class TmdbService @Inject constructor(
      * @return The TMDB ID as a string, or null if conversion failed
      */
     suspend fun ensureTmdbId(videoId: String, mediaType: String, fallbackImdbId: String? = null): String? {
+        // Live TV fork: an On Demand card's own id stands for its title's TMDB or matched id
+        // (Home's trailers, backdrops and logos for On Demand rows).
+        if (videoId.startsWith("nuviovod:")) {
+            val real = com.nuvio.tv.livetv.ondemand.VodHomeIds.tmdbLookupId(videoId) ?: return null
+            return ensureTmdbId(real, mediaType, fallbackImdbId)
+        }
         // Check if it's already a TMDB ID (numeric or prefixed)
         val cleanId = videoId
             .removePrefix("tmdb:")

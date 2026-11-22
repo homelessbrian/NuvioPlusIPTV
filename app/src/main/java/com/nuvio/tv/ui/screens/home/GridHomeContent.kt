@@ -340,6 +340,7 @@ fun GridHomeContent(
                 is GridItem.SeeAll -> "see_all_${item.addonBaseUrl.hashCode()}_${item.catalogId}_${item.addonId}_${item.type}"
                 is GridItem.CollectionHeader -> "col_header_${item.collectionId}"
                 is GridItem.CollectionFolder -> "col_folder_${item.collectionId}_${item.folder.id}"
+                is GridItem.LiveRow -> item.key
             }
             item to key
         }
@@ -349,7 +350,7 @@ fun GridHomeContent(
     // are "pre-section" items (e.g. Hero). Continue Watching goes between them and the rest.
     val firstSectionIndex = remember(gridItemsWithKeys) {
         gridItemsWithKeys.indexOfFirst { (item, _) ->
-            item is GridItem.SectionDivider || item is GridItem.CollectionHeader
+            item is GridItem.SectionDivider || item is GridItem.CollectionHeader || item is GridItem.LiveRow
         }
     }
     val preItems = remember(gridItemsWithKeys, firstSectionIndex) {
@@ -400,13 +401,13 @@ fun GridHomeContent(
             var i = 0
             while (i < postItems.size) {
                 val (item, _) = postItems[i]
-                if (item is GridItem.SectionDivider || item is GridItem.CollectionHeader) {
+                if (item is GridItem.SectionDivider || item is GridItem.CollectionHeader || item is GridItem.LiveRow) {
                     // Collect all items in this section
                     result.add(postItems[i])
                     i++
                     val sectionContent = mutableListOf<Pair<GridItem, String>>()
                     var seeAllItem: Pair<GridItem, String>? = null
-                    while (i < postItems.size && postItems[i].first !is GridItem.SectionDivider && postItems[i].first !is GridItem.CollectionHeader) {
+                    while (i < postItems.size && postItems[i].first !is GridItem.SectionDivider && postItems[i].first !is GridItem.CollectionHeader && postItems[i].first !is GridItem.LiveRow) {
                         if (postItems[i].first is GridItem.SeeAll) {
                             seeAllItem = postItems[i]
                         } else if (postItems[i].first is GridItem.Content) {
@@ -480,7 +481,7 @@ fun GridHomeContent(
                     key = { it.second },
                     span = { pair ->
                         val spanCount = when (pair.first) {
-                            is GridItem.Hero, is GridItem.SectionDivider, is GridItem.CollectionHeader -> maxLineSpan
+                            is GridItem.Hero, is GridItem.SectionDivider, is GridItem.CollectionHeader, is GridItem.LiveRow -> maxLineSpan
                             else -> 1
                         }
                         GridItemSpan(spanCount)
@@ -493,6 +494,7 @@ fun GridHomeContent(
                             is GridItem.SeeAll -> "see_all"
                             is GridItem.CollectionHeader -> "collection_header"
                             is GridItem.CollectionFolder -> "collection_folder"
+                            is GridItem.LiveRow -> "live_home_row"
                         }
                     }
                 ) { (gridItem, itemKey) ->
@@ -693,7 +695,7 @@ fun GridHomeContent(
                     key = { it.second },
                     span = { pair ->
                         val spanCount = when (pair.first) {
-                            is GridItem.Hero, is GridItem.SectionDivider, is GridItem.CollectionHeader -> maxLineSpan
+                            is GridItem.Hero, is GridItem.SectionDivider, is GridItem.CollectionHeader, is GridItem.LiveRow -> maxLineSpan
                             else -> 1
                         }
                         GridItemSpan(spanCount)
@@ -706,6 +708,7 @@ fun GridHomeContent(
                             is GridItem.SeeAll -> "see_all"
                             is GridItem.CollectionHeader -> "collection_header"
                             is GridItem.CollectionFolder -> "collection_folder"
+                            is GridItem.LiveRow -> "live_home_row"
                         }
                     }
                 ) { (gridItem, itemKey) ->
@@ -844,6 +847,21 @@ fun GridHomeContent(
 
                     is GridItem.CollectionHeader -> {
                         SectionDivider(catalogName = gridItem.title)
+                    }
+
+                    // Live TV fork: a Live TV or Sports row across the grid, sized like its posters.
+                    is GridItem.LiveRow -> {
+                        com.nuvio.tv.livetv.home.HomeLiveRowSection(
+                            rowKey = gridItem.key,
+                            style = com.nuvio.tv.livetv.home.HomeLiveRowStyle.fromPoster(
+                                posterWidth = posterCardStyle.width,
+                                posterHeight = posterCardStyle.height,
+                                startPadding = 0.dp,
+                                cornerRadius = posterCardStyle.cornerRadius,
+                                titleStyle = MaterialTheme.typography.headlineMedium,
+                                cardSpacing = NuvioTheme.spacing.md
+                            ).copy(landscape = globalLandscape)
+                        )
                     }
 
                     is GridItem.CollectionFolder -> {

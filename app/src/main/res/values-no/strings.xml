@@ -505,7 +505,6 @@
 
     <!-- MDBListSettingsScreen -->
     <string name="mdblist_title">MDBList-vurderinger</string>
-    <string name="mdblist_subtitle">Konfigurer eksterne vurderinger vist i helt-delen av detaljer</string>
     <string name="mdblist_enable_title">Aktiver MDBList-vurderinger</string>
     <string name="mdblist_enable_subtitle">Hent vurderinger fra eksterne leverandører i detaljedskjermen for metadata</string>
     <string name="mdblist_api_key_title">API-nøkkel</string>
@@ -1114,4 +1113,6 @@
     <string name="watchlist_removed">Fjernet fra ønskelisten</string>
     <string name="playback_player_auto">Automatisk (Best for innhold)</string>
     <string name="playback_player_auto_desc">ExoPlayer for filmer og serier · MPV for anime</string>
+    <string name="settings_home_screen_rows">Rader på startskjermen</string>
+    <string name="settings_home_screen_rows_subtitle">Velg rekkefølgen på radene på startskjermen</string>
 </resources>

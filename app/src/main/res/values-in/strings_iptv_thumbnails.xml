@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"Thumbnail Geser"</string>
+    <string name="playback_section_seek_thumbnails_desc">"Gambar pratinjau di atas bilah geser saat Anda menggeser"</string>
+    <string name="iptv_thumbs_title">"Thumbnail Geser"</string>
+    <string name="iptv_thumbs_subtitle">"Menampilkan gambar pratinjau di atas bilah geser saat Anda menggeser. Gambar dibuat di TV ini dari videonya sendiri"</string>
+    <string name="iptv_thumbs_works_on">"Berfungsi untuk: film dan acara di pemutar utama (termasuk tautan HLS streaming), rekaman Anda, siaran ulang dan sorotan olahraga, siaran ulang, dan mundur di Live TV (buffer jeda).\nSiaran ulang: gambar berasal dari bagian yang disimpan dengan Lompat Siaran Ulang Lebih Cepat, atau langsung dari penyedia untuk siaran ulang streaming (HLS).\nTidak berfungsi untuk: torrent, tautan DASH, atau stream terlindungi."</string>
+    <string name="iptv_thumbs_low_memory_note">"Perangkat ini memorinya terbatas. Thumbnail bisa membuat tersendat. Jika begitu, thumbnail berhenti sendiri dan bilah geser memberi tahu."</string>
+    <string name="iptv_thumbs_include_4k">"Sertakan 4K dan HDR"</string>
+    <string name="iptv_thumbs_include_4k_desc">"Juga membuat thumbnail untuk video 4K dan HDR. Aktif di awal untuk perangkat dengan memori besar dan mati untuk yang lebih rendah, tapi Anda bisa mengaktifkannya di mana saja dan mencobanya. Thumbnail 4K bisa tersendat atau tidak berfungsi di perangkat kelas bawah, dan memakai lebih banyak data. Gambar video HDR bisa tampak pudar. Tautan streaming memakai versi terkecilnya, jadi ini jarang berpengaruh"</string>
+    <string name="iptv_thumbs_when_to_make">"Kapan Membuat Thumbnail"</string>
+    <string name="iptv_thumbs_when_seeking">"Hanya Saat Dijeda atau Digeser"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"Pilihan paling ringan: tidak ada yang dibuat saat video sekadar diputar"</string>
+    <string name="iptv_thumbs_when_watching">"Saat Menonton"</string>
+    <string name="iptv_thumbs_when_watching_desc">"Juga dibuat di latar belakang saat video diputar, jika sudah termuat cukup jauh"</string>
+    <string name="iptv_thumbs_when_right_away">"Langsung"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"Seluruh video, dari awal, begitu dibuka. Memakai data paling banyak"</string>
+    <string name="iptv_thumbs_storage_limit">"Batas Penyimpanan"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"Thumbnail tersimpan memakai ruang hingga sebanyak ini; video yang paling lama ditonton dihapus lebih dulu"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"Hapus Thumbnail Tersimpan"</string>
+    <string name="iptv_thumbs_clear_desc">"Menghapus semua thumbnail tersimpan. Dibuat lagi saat diperlukan"</string>
+    <string name="iptv_thumbs_last_paused">"Terakhir dijeda karena memori rendah: %1$s, %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"Membuat thumbnail…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"Thumbnail dijeda: memori rendah"</string>
+    <string name="iptv_thumbs_msg_live">"Tidak ada thumbnail untuk Live TV"</string>
+    <string name="iptv_thumbs_msg_dash">"Tidak ada thumbnail untuk tautan DASH"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"Aktifkan Lompat Siaran Ulang Lebih Cepat untuk thumbnail"</string>
+    <string name="iptv_thumbs_msg_protected">"Stream ini terlindungi: tidak ada thumbnail"</string>
+    <string name="iptv_thumbs_msg_torrent">"Tidak ada thumbnail untuk torrent"</string>
+    <string name="iptv_thumbs_msg_link_kind">"Tidak ada thumbnail untuk jenis tautan ini"</string>
+    <string name="iptv_thumbs_msg_unreadable">"Stream ini tidak bisa dibaca untuk thumbnail"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"Potongan stream ini terlalu besar untuk thumbnail"</string>
+    <string name="iptv_thumbs_msg_stopped">"Thumbnail berhenti berfungsi untuk video ini"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"Server tidak mengirim gambar thumbnail"</string>
+    <string name="iptv_thumbs_msg_format">"Format video ini tidak bisa membuat thumbnail di perangkat ini"</string>
+    <string name="iptv_thumbs_msg_open_failed">"Video ini tidak bisa dibuka untuk thumbnail"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"Tidak ada thumbnail untuk stream siaran ulang ini"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Tanpa thumbnail: TV ini memerlukan satu-satunya dekoder videonya untuk video"</string>
+</resources>

@@ -820,7 +820,6 @@
 
     <!-- MDBListSettingsScreen -->
     <string name="mdblist_title">எம்டிபிலிஸ்ட் மதிப்பீடுகள்</string>
-    <string name="mdblist_subtitle">விவர முக்கியப்பகுதியில் காட்டப்படும் வெளிப்புற மதிப்பீடுகளை அமை</string>
     <string name="mdblist_enable_title">எம்டிபிலிஸ்ட் மதிப்பீடுகளை இயக்கு</string>
     <string name="mdblist_enable_subtitle">மேட்டாடேட்டா விவரத்திரையில் வெளிப்புற வழங்குநர்களிலிருந்து மதிப்பீடுகளை பெறு</string>
     <string name="mdblist_api_key_title">ஏபிஐ விசை</string>
@@ -2250,4 +2249,6 @@
     <string name="trakt_comments_error_request_failed">ட்ராக்ட் கருத்துகள் கோரிக்கை தோல்வியடைந்தது</string>
     <string name="trakt_library_error_fetch_list_items">பட்டியல் உருப்படிகளைப் பெற முடியவில்லை</string>
 
+    <string name="settings_home_screen_rows">முகப்புத் திரை வரிசைகள்</string>
+    <string name="settings_home_screen_rows_subtitle">உங்கள் முகப்புத் திரையில் வரிசைகளின் வரிசையைத் தேர்ந்தெடுக்கவும்</string>
 </resources>

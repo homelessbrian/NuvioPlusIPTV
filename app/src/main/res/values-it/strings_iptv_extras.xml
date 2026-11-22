@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"Questa TV non è riuscita a riprodurre il video. Prova un'altra fonte o passa a MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Mostra nei profili"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Mostra nei profili: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Tutti"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d di %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"I profili disattivati qui non ricevono canali, On Demand né Sports da %1$s. La playlist resta per tutti"</string>
+    <string name="iptv_backup_file">"File di backup"</string>
+    <string name="iptv_backup_file_summary">"Salva la configurazione in un file o ripristinane uno"</string>
+    <string name="iptv_backup_file_description">"Una copia della tua configurazione Live TV in un file .nptv: playlist con i loro accessi, guide, preferiti, gruppi, Sports e impostazioni. Utile senza Setup Sync o per tenere una copia tua."</string>
+    <string name="iptv_backup_with_phone">"Backup o ripristino con il telefono"</string>
+    <string name="iptv_backup_with_phone_description">"Scansiona un codice per salvare il file sul telefono o inviarne uno"</string>
+    <string name="iptv_backup_save_on_tv">"Salva un backup su questa TV"</string>
+    <string name="iptv_backup_save_on_tv_description">"Salvato in Download › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Ripristina da questa TV"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Backup salvati su questa TV, dal più recente"</string>
+    <string name="iptv_backup_none_on_tv">"Nessun backup su questa TV. Salvane prima uno o usa il telefono."</string>
+    <string name="iptv_backup_saving">"Salvataggio…"</string>
+    <string name="iptv_backup_saved_to">"Salvato in %1$s"</string>
+    <string name="iptv_backup_save_failed">"Non è stato possibile salvare il backup su questa TV. Prova con il telefono."</string>
+    <string name="iptv_backup_restoring">"Ripristino…"</string>
+    <string name="iptv_backup_restored">"Backup ripristinato. Le playlist e le guide cambiate si stanno caricando."</string>
+    <string name="iptv_backup_restore_failed">"Non è stato possibile ripristinare il backup (non contiene playlist né guide)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Ripristinare questo backup?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Salvato il %1$s su %2$s. Sostituisce la configurazione Live TV di questa TV. Con Setup Sync attivo cambiano anche le altre TV."</string>
+    <string name="iptv_backup_restore_confirm_button">"Ripristina"</string>
+    <string name="iptv_backup_not_a_backup">"Questo non è un file di backup di Nuvio + IPTV (.nptv)."</string>
+    <string name="iptv_backup_private_note">"Il file di backup contiene gli accessi delle tue playlist. Tienilo privato."</string>
+    <string name="iptv_backup_phone_steps">"1. Collega il telefono alla stessa rete Wi-Fi di questa TV.\n2. Scansiona il codice con la fotocamera del telefono.\n3. Salva il backup o scegli un file di backup da inviare qui."</string>
+    <string name="iptv_backup_phone_check_tv">"Inviato. Scegli Ripristina sulla TV per finire."</string>
+    <string name="iptv_backup_phone_title">"Backup di Nuvio + IPTV"</string>
+    <string name="iptv_backup_phone_save_heading">"Salva un backup"</string>
+    <string name="iptv_backup_phone_save_text">"Salva sul telefono la configurazione Live TV di questa TV come file .nptv."</string>
+    <string name="iptv_backup_phone_save_button">"Salva file di backup"</string>
+    <string name="iptv_backup_phone_restore_heading">"Ripristina un backup"</string>
+    <string name="iptv_backup_phone_restore_text">"Scegli un file .nptv da inviare alla TV. Non cambia nulla finché non confermi sulla TV."</string>
+    <string name="iptv_backup_phone_choose_file">"Scegli file"</string>
+    <string name="iptv_backup_phone_restore_button">"Invia alla TV"</string>
+</resources>

@@ -111,6 +111,8 @@ public final class VpnConnectionService extends android.net.VpnService {
     private final AtomicLong generation = new AtomicLong();
     private TunnelEngine engine;
     private String profile;
+    /** The home-network addresses this Full app connection lets skip the tunnel (VpnHomeBypass). */
+    private String bypassKey = "";
     private ProtectionMode scope = ProtectionMode.OFF;
     private volatile boolean destroyed;
     private long started, lastProbe, lastStatsLog, lastEgressProbe;
@@ -210,6 +212,7 @@ public final class VpnConnectionService extends android.net.VpnService {
                 throw new IllegalStateException("VPN consent is required.");
             profile = expected;
             scope = mode;
+            bypassKey = VpnHomeBypass.key(this);
             started = SystemClock.elapsedRealtime();
             lastProbe = lastStatsLog = lastEgressProbe = 0;
             probeVerified = false;
@@ -224,7 +227,8 @@ public final class VpnConnectionService extends android.net.VpnService {
             } else if (selectedIsOpenVpn(expected)) {
                 engine = OpenVpnSession.selected(this, expected, null);
             } else {
-                Config config = WireGuardProfiles.prepareSelected(this, mode);
+                // Only the connection itself (not the checks before it) lets the network folder past the tunnel.
+                Config config = WireGuardProfiles.withHomeBypass(this, WireGuardProfiles.prepareSelected(this, mode));
                 engine = new AppWideWireGuardEngine(this, config, failed -> {
                         if (destroyed || engine != failed) return;
                         generation.incrementAndGet();
@@ -259,7 +263,9 @@ public final class VpnConnectionService extends android.net.VpnService {
     private boolean matchesSettings() {
         try {
             VpnPreferences value = new AndroidVpnSettings(this).read();
-            return scope != ProtectionMode.OFF && value.getMode() == scope && java.util.Objects.equals(profile, value.getSelectedProfileId());
+            return scope != ProtectionMode.OFF && value.getMode() == scope && java.util.Objects.equals(profile, value.getSelectedProfileId())
+                // A Full app connection made before the network folder changed reconnects to use it.
+                && (scope != ProtectionMode.APP_WIDE || bypassKey.equals(VpnHomeBypass.key(this)));
         } catch (Exception failure) { return false; }
     }
     private void poll() {

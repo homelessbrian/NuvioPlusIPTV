@@ -317,11 +317,29 @@ class LiveTvViewModel @Inject constructor(
 
     fun setGroupLocked(groupId: String, locked: Boolean) = viewModelScope.launch { prefs.setGroupLocked(groupId, locked) }
 
+    fun isGroupFavorite(groupId: String) = groupId in userState.value.favoriteGroups
+
+    /** Stars a group so it's listed first (or takes the star off). */
+    fun setGroupFavorite(groupId: String, favorite: Boolean) = viewModelScope.launch { prefs.setGroupFavorite(groupId, favorite) }
+
     fun checkPin(pin: String) = com.nuvio.tv.livetv.parental.ParentalControls.checkPin(pin, settings.value)
 
+    /** The group the guide was showing before a search, for Back from the results. */
+    private var searchReturnGroup: String? = null
+
     fun setSearchQuery(q: String) {
+        val previous = session.currentGroupId.value
+        if (previous != null && previous != ChannelGroup.SEARCH) searchReturnGroup = previous
         searchQuery.value = q
         session.currentGroupId.value = ChannelGroup.SEARCH
+    }
+
+    /** Back from search results: the group you were in before searching (or the first group). */
+    fun leaveSearch() {
+        searchQuery.value = ""
+        val back = searchReturnGroup?.takeIf { id -> uiState.value.groups.any { it.id == id } }
+        session.currentGroupId.value = back ?: uiState.value.defaultGroupId
+        searchReturnGroup = null
     }
 
     /** Channels already tried in a row of backup switches (cleared when you change channel). */
@@ -386,6 +404,10 @@ class LiveTvViewModel @Inject constructor(
             .toList()
         return if (others.isEmpty()) emptyList() else listOf(ch) + others
     }
+
+    /** Backup lists: false for channels in a locked group (as in [backupsFor]). */
+    fun canOfferAsBackup(ch: LiveChannel): Boolean =
+        !com.nuvio.tv.livetv.parental.ParentalControls.isLocked(ch.groupId, ch.group, settings.value, userState.value.lockedGroups)
 
     /** [watchedIn]: the group it was picked from outside the guide (Quick Channels), saved as the group you watched in. */
     fun preview(channel: LiveChannel, watchedIn: String? = null) {
@@ -965,7 +987,8 @@ class LiveTvViewModel @Inject constructor(
                     "recent" -> ChannelGroup.RECENT
                     else -> s.homeRowSource
                 }
-                val limit = if (s.homeRowLimit > 0) s.homeRowLimit * 3 else 200
+                // Every channel in the group (no limit setting any more), up to a sane maximum.
+                val limit = 200
                 buildUi(channels, user, s, groupId, "", true, exactGroup = true).channels.take(limit).map { it.key }
             }
         }.flowOn(Dispatchers.Default).distinctUntilChanged()
@@ -1403,6 +1426,13 @@ class LiveTvViewModel @Inject constructor(
     fun channelByKey(key: String?): LiveChannel? =
         key?.let { k -> channelKeyLookup.find(displayChannels.value, k) ?: playback.playingChannel?.takeIf { it.key == k } }
 
+    /**
+     * The channel as the current group shows it, for on-screen labels: with "Number channels
+     * 1, 2, 3… in each group" on, its number in that group (as in the guide), not the playlist's.
+     */
+    fun shownChannel(key: String?): LiveChannel? =
+        key?.let { k -> uiState.value.channels.firstOrNull { it.key == k } } ?: channelByKey(key)
+
     // ------------------------------------------------------------ recording
 
     val schedules = scheduler.schedules
@@ -1678,9 +1708,10 @@ internal fun stationNote(name: String): String? =
 internal fun sameForLiveTvLists(a: LiveUserState, b: LiveUserState): Boolean =
     a.favorites == b.favorites && a.recent == b.recent &&
         a.hiddenChannels == b.hiddenChannels && a.hiddenGroups == b.hiddenGroups &&
+        a.hiddenPlaylists == b.hiddenPlaylists &&
         a.lockedGroups == b.lockedGroups && a.customGroups == b.customGroups &&
         a.channelOrder == b.channelOrder && a.groupOrder == b.groupOrder &&
-        a.channelCopies == b.channelCopies
+        a.channelCopies == b.channelCopies && a.favoriteGroups == b.favoriteGroups
 
 /** The guide's groups and the channels of [groupIdRaw], from your saved choices (also used by Home's row). */
 internal fun buildUi(
@@ -1805,11 +1836,16 @@ internal fun buildUi(
             result
         }
     }
-    groups += orderedRegular
+    // Favorite groups (starred from the group menu) go first, in the order above.
+    val pinned = if (user.favoriteGroups.isEmpty()) orderedRegular else {
+        val (fav, rest) = orderedRegular.partition { it.id in user.favoriteGroups }
+        fav.map { it.copy(favorite = true) } + rest
+    }
+    groups += pinned
 
     val defaultGroupId = when {
         s.showAllChannelsGroup -> ChannelGroup.ALL
-        orderedRegular.isNotEmpty() -> orderedRegular.first().id
+        pinned.isNotEmpty() -> pinned.first().id
         s.showFavoritesGroup -> ChannelGroup.FAVORITES
         else -> ChannelGroup.ALL
     }
@@ -1841,7 +1877,7 @@ internal fun buildUi(
         allVisibleChannels = sortedVisible,
         hasSources = hasSrc,
         searchQuery = query,
-        orderableGroupIds = orderedRegular.map { it.id },
+        orderableGroupIds = pinned.map { it.id },
         customGroups = custom,
         defaultGroupId = defaultGroupId
     )

@@ -156,3 +156,17 @@
 # still optimised), so a crash or freeze report names the real screen and function instead
 # of scrambled letters like "za.q2.f".
 -keep,allowshrinking,allowoptimization class com.nuvio.tv.** { *; }
+
+# ── Live TV fork: recording to a network folder (smbj) ────────────────────────
+# smbj's event bus (mbassador) finds its listeners by their @Handler annotation, so keep both
+# whole. Kerberos logins (org.ietf.jgss) aren't on Android and aren't used (password logins only).
+-keep class com.hierynomus.** { *; }
+-keep class net.engio.mbassy.** { *; }
+-dontwarn org.ietf.jgss.**
+-dontwarn javax.naming.**
+-dontwarn org.slf4j.**
+-dontwarn javax.el.**
+
+# Audio Sync speech recognition uses JNI to read configuration fields by name.
+-keep class com.k2fsa.sherpa.onnx.** { *; }
+-keep interface com.k2fsa.sherpa.onnx.** { *; }

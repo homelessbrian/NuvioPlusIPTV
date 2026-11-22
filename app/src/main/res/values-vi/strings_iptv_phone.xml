@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"Thêm vào Nuvio + IPTV"</string>
+    <string name="iptv_phone_connected_to">"Đã kết nối với %1$s"</string>
+    <string name="iptv_phone_heading">"Thêm vào TV"</string>
+    <string name="iptv_phone_instructions">"Điền thông tin rồi chạm Gửi tới TV. Nó sẽ xuất hiện trên TV ngay."</string>
+    <string name="iptv_phone_what_to_add">"Thêm gì"</string>
+    <string name="iptv_phone_m3u_tab">"Liên kết M3U"</string>
+    <string name="iptv_phone_epg_tab">"Chỉ EPG"</string>
+    <string name="iptv_phone_name_label">"Tên (không bắt buộc)"</string>
+    <string name="iptv_phone_provider_placeholder">"Nhà cung cấp của tôi"</string>
+    <string name="iptv_phone_playlist_label">"Liên kết danh sách phát"</string>
+    <string name="iptv_phone_epg_optional_label">"Liên kết EPG (không bắt buộc)"</string>
+    <string name="iptv_phone_user_agent_label">"User agent (không bắt buộc)"</string>
+    <string name="iptv_phone_user_agent_placeholder">"Để trống để dùng mặc định"</string>
+    <string name="iptv_phone_server_label">"Máy chủ"</string>
+    <string name="iptv_phone_username_label">"Tên người dùng"</string>
+    <string name="iptv_phone_password_label">"Mật khẩu"</string>
+    <string name="iptv_phone_include_live">"Bao gồm kênh TV"</string>
+    <string name="iptv_phone_include_vod">"Bao gồm phim và phim bộ (On Demand)"</string>
+    <string name="iptv_phone_epg_label">"Liên kết EPG"</string>
+    <string name="iptv_phone_send">"Gửi tới TV"</string>
+    <string name="iptv_phone_network_note">"Chỉ hoạt động khi cùng Wi‑Fi với TV. Trang này ngừng hoạt động khi bạn đóng màn hình trên TV."</string>
+    <string name="iptv_phone_guide_placeholder">"Lịch phát sóng"</string>
+    <string name="iptv_phone_sending">"Đang gửi…"</string>
+    <string name="iptv_phone_unreachable">"Không kết nối được TV. Hãy kiểm tra màn hình Thêm từ điện thoại vẫn đang mở và bạn đang dùng cùng Wi‑Fi."</string>
+    <string name="iptv_phone_not_found">"Không tìm thấy"</string>
+    <string name="iptv_phone_nothing_to_send">"Không có gì để gửi."</string>
+    <string name="iptv_phone_missing">"Còn thiếu thông tin."</string>
+    <string name="iptv_phone_could_not_add">"TV không thêm được. Hãy thử lại."</string>
+    <string name="iptv_phone_playlist_missing">"Dán liên kết danh sách phát."</string>
+    <string name="iptv_phone_playlist_scheme">"Liên kết danh sách phát phải bắt đầu bằng http:// hoặc https://."</string>
+    <string name="iptv_phone_epg_scheme">"Liên kết EPG phải bắt đầu bằng http:// hoặc https://."</string>
+    <string name="iptv_phone_server_missing">"Nhập địa chỉ máy chủ."</string>
+    <string name="iptv_phone_server_invalid">"Đó có vẻ không phải địa chỉ máy chủ."</string>
+    <string name="iptv_phone_credentials_missing">"Nhập tên người dùng và mật khẩu."</string>
+    <string name="iptv_phone_inclusion_missing">"Bật kênh TV hoặc phim và phim bộ."</string>
+    <string name="iptv_phone_epg_missing">"Dán liên kết EPG."</string>
+    <string name="iptv_phone_kind_missing">"Chọn nội dung cần thêm."</string>
+</resources>

@@ -408,7 +408,10 @@ private class AndroidMultiviewPanePlayer(
     val player: ExoPlayer = ExoPlayer.Builder(context, renderers)
         .setLoadControl(
             DefaultLoadControl.Builder()
-                .setBufferDurationsMs(1_500, 10_000, 500, 1_000)
+                // Enough ahead to ride out a provider's small hiccups. It used to keep only 1.5 s
+                // (like the "None" buffer size), so with two or more streams sharing the
+                // connection the panes took turns stuttering. The memory cap below still applies.
+                .setBufferDurationsMs(12_000, 30_000, 1_500, 3_000)
                 .setBackBuffer(0, false)
                 .setTargetBufferBytes(bufferBytes)
                 .setPrioritizeTimeOverSizeThresholds(false)
@@ -633,7 +636,9 @@ internal object MultiviewPlaybackErrors {
             PlaybackException.ERROR_CODE_TIMEOUT,
             PlaybackException.ERROR_CODE_UNSPECIFIED,
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
-            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED -> true
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+            // The TV took this pane's decoder away for a moment (another pane or app needed it).
+            PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED -> true
             else -> false
         }
     }
@@ -660,6 +665,7 @@ internal object MultiviewPlaybackErrors {
             PlaybackException.ERROR_CODE_DECODING_FAILED,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED ->
                 "This TV can't decode this stream alongside the others. Remove a pane or choose another channel."

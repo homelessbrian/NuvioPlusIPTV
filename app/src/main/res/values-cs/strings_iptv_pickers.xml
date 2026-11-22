@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_quick_channels_title">"Rychlé kanály"</string>
+    <string name="iptv_quick_channels_subtitle">"Zkratky schované pod ovládací lištou. Otevřete je stiskem Dolů na liště."</string>
+    <string name="iptv_quick_channels_show">"Zobrazit Rychlé kanály"</string>
+    <string name="iptv_quick_channels_opens_on">"Otevře se na"</string>
+    <string name="iptv_quick_channels_opens_on_hint">"Seznam, který se ukáže první"</string>
+    <string name="iptv_quick_channels_first_list">"První seznam"</string>
+    <string name="iptv_quick_channels_last_used">"Naposledy použitý"</string>
+    <string name="iptv_quick_channels_lists_hint">"Seznamy v řadě · OK zapne nebo vypne, šipky přesouvají"</string>
+    <string name="iptv_quick_channels_recent">"Naposledy sledované"</string>
+    <string name="iptv_quick_channels_favorites">"Oblíbené"</string>
+    <string name="iptv_quick_channels_built_in">"Vestavěné"</string>
+    <string name="iptv_quick_channels_playlist_group">"%1$s · skupina playlistu"</string>
+    <string name="iptv_quick_channels_your_group">"Vaše skupina"</string>
+    <string name="iptv_quick_channels_group_missing">"Skupina nenalezena"</string>
+    <string name="iptv_quick_channels_group_missing_hint">"Momentálně není ve vašich playlistech"</string>
+    <string name="iptv_quick_channels_add_group">"Přidat skupinu playlistu…"</string>
+    <string name="iptv_quick_channels_add_group_hint">"Jakákoli skupina z jakéhokoli playlistu, i vaše vlastní"</string>
+    <string name="iptv_quick_channels_add_groups_title">"Přidat skupiny playlistu"</string>
+    <string name="iptv_quick_channels_no_groups">"Zatím žádné skupiny. Nejprve přidejte playlist."</string>
+    <string name="iptv_quick_channels_add_groups_hint">"Každá zaškrtnutá se stane samostatným seznamem v Rychlých kanálech."</string>
+    <string name="iptv_quick_channels_my_groups">"Moje skupiny"</string>
+    <plurals name="iptv_quick_channels_count">
+        <item quantity="one">"%1$d kanál"</item>
+        <item quantity="few">"%1$d kanály"</item>
+        <item quantity="many">"%1$d kanálu"</item>
+        <item quantity="other">"%1$d kanálů"</item>
+    </plurals>
+    <string name="iptv_vod_sort_provider_order">"Pořadí poskytovatele"</string>
+    <string name="iptv_vod_sort_name_az">"A–Z"</string>
+    <string name="iptv_vod_sort_name_za">"Z–A"</string>
+    <string name="iptv_vod_sort_newest">"Nejnovější vydání"</string>
+    <string name="iptv_vod_sort_oldest">"Nejstarší vydání"</string>
+    <string name="iptv_vod_sort_recently_added">"Nedávno přidané"</string>
+    <string name="iptv_vod_sort_highest_rated">"Nejlépe hodnocené"</string>
+    <string name="iptv_vod_sort_shuffle">"Náhodně"</string>
+    <string name="iptv_vod_sort_provider_order_hint">"Pořadí, v jakém je posílá poskytovatel"</string>
+    <string name="iptv_vod_sort_name_az_hint">"Čísla a symboly první, pak A až Z"</string>
+    <string name="iptv_vod_sort_name_za_hint">"Z až A, pak čísla a symboly"</string>
+    <string name="iptv_vod_sort_newest_hint">"Podle roku vydání, nejnovější první"</string>
+    <string name="iptv_vod_sort_oldest_hint">"Podle roku vydání, nejstarší první"</string>
+    <string name="iptv_vod_sort_recently_added_hint">"Co poskytovatel přidal naposledy"</string>
+    <string name="iptv_vod_sort_highest_rated_hint">"Podle hodnocení poskytovatele, nejlepší první"</string>
+    <string name="iptv_vod_sort_shuffle_hint">"Při každém výběru nové náhodné pořadí"</string>
+    <string name="iptv_vod_sort_default_hint">"Řídí se výchozím řazením v Nastavení"</string>
+</resources>

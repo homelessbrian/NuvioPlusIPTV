@@ -42,4 +42,5 @@
         <item quantity="one">"\"%1$s\" %2$d gün içinde sona eriyor"</item>
         <item quantity="other">"\"%1$s\" %2$d gün içinde sona eriyor"</item>
     </plurals>
+    <string name="iptv_repository_status_storage_full_short">"Bu cihazda yeterli depolama alanı yok. Önceki rehber korunuyor."</string>
 </resources>

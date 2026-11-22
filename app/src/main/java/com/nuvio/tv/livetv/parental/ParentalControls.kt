@@ -37,4 +37,22 @@ object ParentalControls {
     }
 
     fun checkPin(pin: String, s: LiveTvSettings): Boolean = pin.trim() == s.parentalPin
+
+    // Playlist logins (server, username, password, playlist and guide links, backups) behind the
+    // PIN. Off unless the user turns it on; once the PIN is entered they stay open until the app
+    // is closed, like locked groups.
+    private val _loginsUnlocked = MutableStateFlow(false)
+
+    /** Whether showing or handing out playlist logins needs the PIN right now. */
+    fun loginsLocked(s: LiveTvSettings): Boolean = enabled(s) && s.lockLogins && !_loginsUnlocked.value
+
+    /** Whether login fields should show as dots (the lock is on, even once opened). */
+    fun hideLogins(s: LiveTvSettings): Boolean = enabled(s) && s.lockLogins
+
+    /** True (and logins stay open) if [pin] is right. */
+    fun unlockLogins(pin: String, s: LiveTvSettings): Boolean {
+        if (!checkPin(pin, s)) return false
+        _loginsUnlocked.value = true
+        return true
+    }
 }

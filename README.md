@@ -24,15 +24,15 @@
 
 ## 🆕 New in this update
 
-- **🎬 Highlights and replays for finished games:** official highlights and condensed games (ESPN, NHL, MLB), YouTube highlights, and replays from your sports addons for every sport, labelled Full game, Condensed or Highlights. [More below](#-sports-hub).
-- **🖥️ Multiview:** hold OK on a pane to watch it full screen, and Back returns to all of them, still playing. Pane names fade away with the top bar.
-- **📺 A guide for each playlist:** paste a guide link when you add a playlist, and switch each playlist's guides on or off.
-- **🎞️ On Demand from M3U playlists:** movies and series straight from the playlist, with the expiry date when it comes from an Xtream provider.
-- **🌐 DNS setting:** Cloudflare or Google, for when channels say your provider's server can't be found.
-- **👥 Keep profiles matched:** copy settings from one profile to another, or keep profiles matched so a change on one applies to all.
-- **📋 Copy several channels to a group** at once, and **Hide Stray Entries** for the odd leftovers some providers put in their playlists.
-- **📅 Calendar:** race weekends show each session on its own day, and golf and tennis tournaments show on every day they're on.
-- **Built on Nuvio 1.2.0-beta.2,** with Stremio tracking addons and a subtitle outline width setting.
+- **🎞️ Record to a network folder:** save recordings to a NAS or shared folder, with **Find on Network** to pick it. One file per show, and every TV on the same folder shares one library. You can also record to any folder on a USB drive. [More below](#%EF%B8%8F-recordings).
+- **🗂️ Recordings, redone:** Recorded, Scheduled and Series tabs with posters, **Fix Match** for the wrong poster, **Delete Recordings After**, and its own tab in Live TV settings.
+- **🏆 A new Sports hub:** a game preview and league table beside the list, a game page with tabs and a guide line under every channel, **Top Players with photos**, **Pick Leagues** to see several leagues together, and team colours while you watch. [More below](#-sports-hub).
+- **🎬 More highlights:** from the sports' own YouTube channels (UFC, F1, boxing, tennis, darts and more), for older games and past races too.
+- **🏠 Live TV, Sports and On Demand rows on Home:** add them from **Settings → Content & Discovery → Home Screen Rows**.
+- **⭐ Better sources:** **Best quality** auto-play with your own **Quality rules**, and **Set up for this TV**, which checks your box, screen and sound and suggests settings.
+- **📺 Live TV:** **favorite groups**, **Show on Profiles**, a **Backup File** you can save and restore, **Lock Playlist Logins**, and a **User agent** box for guides.
+- **🤾 Handball,** Czech and Slovak leagues, and college tables with conferences.
+- **Built on Nuvio 1.2.0-beta.3,** with automatic audio-based subtitle sync, trailer subtitles, star ratings and drag-to-reorder collections.
 
 ---
 
@@ -62,6 +62,8 @@ Sports in the side menu shows scores and schedules, and works out **which of you
   - **Your order:** arrange the rows how you like.
 - **All Events:** every game in your region's leagues plus every league and team you follow (scores for every league, wherever you are), with a live count. **Day tabs** run from a week back to a week ahead.
 - **Choose Leagues:** a bar on All Events turns any league on or off.
+- **Pick Leagues:** a button on All Events's sport row shows several leagues together (say college basketball and the NFL), with a **Live only** switch for today.
+- **A preview beside the list:** with nothing playing, the highlighted game shows large with its league table, both teams marked. On My Sports, the top half follows the card you're on.
 - **Follow anything:**
   - **Teams, countries, whole leagues,** or a **name** (a player, driver or fighter) to catch any show that mentions it.
   - **One search** finds teams and leagues alike.
@@ -70,6 +72,7 @@ Sports in the side menu shows scores and schedules, and works out **which of you
 
 ### 🏆 Tables
 - **🏆 Tables** in the Sports top bar: your leagues across the top, the table below, opened on your team. The video keeps playing beside it.
+- **College:** records, a conference column and a tab for each conference.
 - **Football:** played, won, drawn, lost, goal difference and points, the **last five** as coloured squares, **▲ / ▼ place changes** since the last round, and coloured edges for **Champions League, Europa League and relegation** places.
 - **US sports:** **Division / Conference / League** views, clinched marks (x, y, z, e) and **playoff lines** (Play-In too for the NBA).
 - **Racing:** F1, NASCAR and IndyCar drivers' standings, with points behind the leader.
@@ -103,13 +106,14 @@ Sports in the side menu shows scores and schedules, and works out **which of you
   - **ice hockey:** the Elite Ice Hockey League
   - **Gaelic games:** the National Football League
   - **netball:** the UK Netball Superleague and Super Netball
+- **Handball:** the Handball-Bundesliga, Starligue, EHF Champions League and more. **Czech and Slovak** leagues too.
 - **Wrestling and boxing schedules.** WWE and AEW shows are matched to your channels by show name.
 - **Your TV guide fills the gaps:** darts, snooker, horse racing, cycling and cricket internationals are found in your own guide.
 
 ### 🧩 Sports addons
 Have a sports addon installed in Nuvio, like **HighFly** or **StremVerse**? Sports now uses it too. There's nothing to set up.
 - **Found automatically:** open a game and the app looks for it in your sports addons. While the page is open and nothing has shown up yet, it keeps checking, since streams usually appear close to the start.
-- **Live streams in the channel list:** a game that's on shows the addons' streams in its channel list, after your own channels.
+- **Live streams in the channel list:** a game that's on shows the addons' streams in its channel list, after your own channels. They also show with the game's other channels in the backup list, Quick Channels and Multiview.
 - **Replays & Highlights:** a finished game gets its own list of replays, highlights and recaps from your addons, for every sport, labelled **Full game**, **Condensed** or **Highlights**, best quality first.
 - **No replays yet?** If you don't have it, the game page suggests the **Nuvio Live Sports** addon, which has replays of most games.
 - **When it's over:** a replay or highlight that plays to the end takes you back to the game's page.
@@ -118,6 +122,8 @@ Have a sports addon installed in Nuvio, like **HighFly** or **StremVerse**? Spor
 
 ### 🎬 Official highlights
 - **Finished games** get official highlights and condensed games from ESPN, the NHL and MLB, plus YouTube highlights that play right in the app. They're in the same list as your addons' replays.
+- **From the sports' own channels:** races, fights, golf, tennis, darts and more get highlights and full replays from official YouTube channels (UFC, F1, NASCAR, boxing promoters and others). Older games and past races keep theirs, and race, fight and tournament rows go back through the whole season.
+- **Your choice:** **Settings → Sports → Replays & Highlights** has **Show Highlights** and **Show Condensed Games** switches.
 
 ### Watching
 - **Watch on your channels:**
@@ -125,11 +131,16 @@ Have a sports addon installed in Nuvio, like **HighFly** or **StremVerse**? Spor
   - **Your country's channels:** TV listings for each game add your own country's channels, and outside the US they come first. The channel airing the game at its start time is picked first.
   - **Labels:** each channel is marked **SHOWING IT** or **MAYBE**.
   - **Channels from:** show only one region's or language's channels (UK, US, Ireland, Canada, Australia, English, or a language), with the rest one click away. Game reminders and Watch now use them first too.
+- **Games list in Quick Channels:** while you watch a live game, a **Games** list shows the league's other games. OK on one shows its channels.
 - **Switch when a channel fails:** during a live game, if a channel won't start, drops or keeps freezing, the next channel showing it takes over.
 - **Fix Channel:** pick the right channel once, for one game, every game on that network, or every game for a team. It's remembered. Each network can have its own link, listed under **Your Channel Links**, and games with a link skip the guide search.
 - **Video window:** hold OK on a game to watch it on the Sports page while you keep browsing. Hold Back for full screen.
 - **Watch from the start** on channels with catch-up.
 - **Game pages:**
+  - **a row of the day's games** along the top, then tabs for Stats, Line-ups, Top Players, Table, Win Chance, Match Info and Head to Head
+  - **a line under every channel** saying whether it's showing the game now, later, or something else
+  - **Top Players with photos:** the player of the game, every leader category, and a profile when you press OK
+  - **team colours** across the page while a game plays, with a big score beside the video
   - the score by period, and the latest scoring as it happens
   - **before it starts:** form, the last meetings, match info, win chance and the table
   - **once it's on:** team stats, top performers or line-ups, and win chance as it changes
@@ -192,6 +203,7 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **A new TV in minutes:** sign in with the QR code and everything comes back by itself.
 - **Encrypted:** your saved setup, including your IPTV logins, is encrypted before it's stored. Nothing is written to Nuvio's own servers.
 - **In your control:** **Settings → Live TV → Setup Sync** has Sync Now, Restore Earlier Copy, Turn Off and Delete Saved Setup.
+- **Per TV:** audio passthrough, buffer size, match frame rate and aspect ratio stay on each TV, since they depend on its screen and sound.
 - **Combined, not overwritten:** favorites, hidden channels and your own groups are combined between devices item by item, and your channel and guide order stays the way you set it.
 - **Profiles:** **Copy Settings** copies a profile's Live TV favorites, groups, channel order, hidden items, Sports and Calendar choices to another profile. **Keep Matched** keeps profiles the same, so a change on one applies to all (turn it off with **Stop Matching** in Profile Options).
 - **Coming from Google Drive sync?** **Import from Google Drive** moves your Drive backup over in one step. Drive sync keeps working too.
@@ -245,13 +257,21 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Backup channels:** a button on the info bar lists the other copies of the channel you're watching, hidden ones included, so you can switch when one is having trouble. Copies match even when the name has a sound layout like 5.1.
 - **DNS:** System (your network's normal lookup), Cloudflare or Google, for when channels say your provider's server can't be found or your internet company blocks IPTV. On System, the app tries Cloudflare and Google by itself when it needs to. The VPN takes care of this while it's on.
 - **Update now** downloads your playlist again in full, and **deleting a playlist** clears everything it left behind.
+- **Include movies & series (On Demand)** switch for M3U playlists, when you add or edit one.
+- **Guide user agent:** an optional **User agent** box on each guide. If a guide server turns the app away, the app retries as a media player by itself.
 - **Hide Stray Entries:** leaves out odd leftovers some providers put in their playlists, like a single episode in its own group.
 - **Channel name editor** (like TiviMate): strip "USA:", "HD", "24/7" and similar from channel names. Prefixes followed by just a space ("USA ESPN") are removed too when a playlist uses them on lots of channels.
 
 ### ⏺️ Recordings
 - **Record a show, or a whole series,** from the guide or overlay mode. Series recordings skip repeats and episodes you cancelled.
 - **Record from the player:** until you stop it, until the show ends, or until a set time. Shows on catch-up channels are saved from catch-up after they end, which is the most reliable way.
-- **Save to this device or a USB drive.** Choose what happens when space runs low: stop recording, or delete the oldest.
+- **Recorded, Scheduled and Series tabs** with posters. Scheduled is grouped by day, and Recording Now sits in a strip above the tabs. The round gear opens **Recordings settings**, also under **Settings → Live TV → Recordings**.
+- **Save to this device, a USB drive or a network folder.** **Settings → Live TV → Recordings → Save Recordings To** lists each place once: On This Box, USB Drives and Network. Choose what happens when space runs low: stop recording, or delete the oldest.
+- **Network folder (NAS or computer):** **Find on Network** searches your home network, you sign in and pick a shared folder. Recordings are one file per show, like "Show - S01E02.ts", that plays in VLC and other apps. Every TV on the same folder shares one library, and the folder follows your Setup Sync. It works with the VPN in Full app mode too.
+- **Any folder on a USB drive:** for boxes that don't give the app its own folder on a drive, pick any folder and turn on All files access once.
+- **Move To** moves recordings between places. **Delete Recordings After** (3 to 30 days) clears old ones, and **Keep Forever** protects the ones you pick.
+- **Fix Match:** hold OK on a recording (or an On Demand title) to search for the right show or movie. A pick covers every recording of that show and syncs.
+- **Series:** **Record new episodes only**, and repeating recordings every day, on weekdays or the days you pick.
 - **Choose the padding:** how early recordings start and how long they keep going after the show.
 - **Recordings carry on with the app closed or the box in standby**, and catch-up saves wait for the connection to come back.
 - **Watch while it records,** with skipping back and forward.
@@ -259,6 +279,9 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Size and details** for every recording: channel, air time, length, size and where it's saved.
 
 ### 🗂️ Channel management
+- **Favorite groups:** hold OK on a group and choose **Add to favorite groups**. They sit at the top with a star.
+- **Show on Profiles:** choose which profiles see each playlist (with 2 or more profiles).
+- **Backup File:** **Settings → Live TV → Backup File** saves your whole setup as one .nptv file, on the TV or with your phone, and restores it.
 - **Manage visibility** and **reorder** for channels *and* groups. Move several groups at once.
 - **Copy, rename and renumber** channels (tick several to **copy them to a group** at once), **create your own groups,** and **number channels 1, 2, 3…** in each group.
 - **Channel numbers from your playlist** are used when it has them.
@@ -271,12 +294,17 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Each title once:** duplicates are merged, and a picker lets you choose the version when there are several. Your provider's copies are listed best quality first, with quality tags.
 - **Play Straight from My Provider:** Play skips the source list for titles you opened from On Demand.
 - **Adult titles** never appear in Continue watching.
+- **Hide Non-English Titles:** under **Settings → Live TV → On Demand**, leaves out titles whose original language isn't English.
+- **Continue Watching On Demand:** a Home row for what you were watching.
+- **Saved matches:** posters, backdrops and details come back straight away, and titles your addons don't have are looked up on TMDB.
 
 ### 🔔 Watching
 - **Start in Full Screen:** open the app straight into the last channel you watched.
 - **Zap** with Up/Down, type a channel number, or jump to the **last channel**.
 - **Pause and rewind live TV**, even on channels without catch-up.
-- **Seek thumbnails:** preview pictures above the seek bar, up to 4K. On by default except on low-memory boxes, and you can switch them on or off any time under **Settings → Playback** (they may not work well on lower-end devices).
+- **Best quality:** **Settings → Playback → Stream Selection** can auto-play the best source by your **Quality rules**, and sort the list **Best quality first**.
+- **Set up for this TV:** the first section of **Settings → Playback** checks your box, screen and sound and suggests settings, each with the reason. **Apply all** and **Undo**.
+- **Seek thumbnails:** preview pictures above the seek bar, up to 4K, now filled in sooner. On by default except on low-memory boxes, and you can switch them on or off any time under **Settings → Playback** (they may not work well on lower-end devices).
 - **Reminders:** "Remind me" on any upcoming show, with a pop-up and a Watch button.
 - **Player menu:** audio, **closed captions**, screen size, **picture shape**, stream info, **sleep timer**, record, find & stream, and watch from the beginning.
 - **Your audio choice is remembered for each channel** (a second language, or 5.1 over stereo).
@@ -289,12 +317,14 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 
 ### 🔒 Parental controls
 - **PIN locks:** a PIN that locks any group or category. Adult content locks automatically.
+- **Lock Playlist Logins:** under Parental Controls, once a PIN is set. Editing playlists and guides, backups and the network folder then ask for the PIN, and passwords show as dots.
 
 ### 🔎 Part of Nuvio, not bolted on
 - **In the side menu:** Live TV, Sports, On Demand, Recordings and the Calendar sit in Nuvio's side menu, with their settings inside Nuvio's own Settings.
 - **Menu & Features:** turn pages on or off for each profile (including Live TV, Sports, On Demand and Recordings), put the side menu in your order, and put Discover in the menu or inside Search. **How the Menu Looks** adds a line above Live TV and **Shrink the Menu to Fit**.
 - **Open the App On:** start straight on Home, Live TV, Sports, the Calendar, On Demand and more.
 - **Home screen row:** your favorite channels and what's on now, next to Continue watching.
+- **Live TV, Sports and On Demand rows:** **Settings → Content & Discovery → Home Screen Rows → Add a row**. Favorites, a playlist group, your own groups, games on now, a movie or series category, or Recently added. They work in every Home layout and keep their place on all your TVs.
 - **Rows on your TV's home screen:** Live Now in Sports, Favorite Channels and Recently Watched Channels for Google TV, Projectivy and similar launchers, with Wide, Tall or Square cards.
 - **One search** for movies, shows, channels and On Demand. Live TV results put the best matches first.
 - **Live TV in Nuvio search:**
@@ -333,7 +363,7 @@ Requires **Android 7.0 or newer** (Fire OS 6 or later). It installs **alongside*
 
 **On a phone or tablet?** Get **[Nuvio + IPTV Mobile](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile/releases)** instead.
 
-**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.2.0-beta.2).
+**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.2.0-beta.3).
 
 ---
 

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="zero">"%1$d قائمة تشغيل"</item>
+        <item quantity="one">"قائمة تشغيل واحدة (%1$d)"</item>
+        <item quantity="two">"قائمتا تشغيل (%1$d)"</item>
+        <item quantity="few">"%1$d قوائم تشغيل"</item>
+        <item quantity="many">"%1$d قائمة تشغيل"</item>
+        <item quantity="other">"%1$d قائمة تشغيل"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="zero">"%1$d دليل"</item>
+        <item quantity="one">"دليل واحد (%1$d)"</item>
+        <item quantity="two">"دليلان (%1$d)"</item>
+        <item quantity="few">"%1$d أدلة"</item>
+        <item quantity="many">"%1$d دليلًا"</item>
+        <item quantity="other">"%1$d دليل"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="zero">"%1$d قناة"</item>
+        <item quantity="one">"قناة واحدة (%1$d)"</item>
+        <item quantity="two">"قناتان (%1$d)"</item>
+        <item quantity="few">"%1$d قنوات"</item>
+        <item quantity="many">"%1$d قناة"</item>
+        <item quantity="other">"%1$d قناة"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="zero">"%1$d برنامج مطابق"</item>
+        <item quantity="one">"برنامج مطابق واحد (%1$d)"</item>
+        <item quantity="two">"برنامجان مطابقان (%1$d)"</item>
+        <item quantity="few">"%1$d برامج مطابقة"</item>
+        <item quantity="many">"%1$d برنامجًا مطابقًا"</item>
+        <item quantity="other">"%1$d برنامج مطابق"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="zero">"أزيل %1$d"</item>
+        <item quantity="one">"أزيل %1$d"</item>
+        <item quantity="two">"أزيل %1$d"</item>
+        <item quantity="few">"أزيل %1$d"</item>
+        <item quantity="many">"أزيل %1$d"</item>
+        <item quantity="other">"أزيل %1$d"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="zero">"%1$d د"</item>
+        <item quantity="one">"%1$d د"</item>
+        <item quantity="two">"%1$d د"</item>
+        <item quantity="few">"%1$d د"</item>
+        <item quantity="many">"%1$d د"</item>
+        <item quantity="other">"%1$d د"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="zero">"%1$d يوم"</item>
+        <item quantity="one">"يوم واحد (%1$d)"</item>
+        <item quantity="two">"يومان (%1$d)"</item>
+        <item quantity="few">"%1$d أيام"</item>
+        <item quantity="many">"%1$d يومًا"</item>
+        <item quantity="other">"%1$d يوم"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="zero">"%1$d ساعة"</item>
+        <item quantity="one">"ساعة واحدة (%1$d)"</item>
+        <item quantity="two">"ساعتان (%1$d)"</item>
+        <item quantity="few">"%1$d ساعات"</item>
+        <item quantity="many">"%1$d ساعة"</item>
+        <item quantity="other">"%1$d ساعة"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="zero">"%1$d ثانية"</item>
+        <item quantity="one">"ثانية واحدة (%1$d)"</item>
+        <item quantity="two">"ثانيتان (%1$d)"</item>
+        <item quantity="few">"%1$d ثوانٍ"</item>
+        <item quantity="many">"%1$d ثانية"</item>
+        <item quantity="other">"%1$d ثانية"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="zero">"قبل %1$d يوم"</item>
+        <item quantity="one">"قبل يوم (%1$d)"</item>
+        <item quantity="two">"قبل يومين (%1$d)"</item>
+        <item quantity="few">"قبل %1$d أيام"</item>
+        <item quantity="many">"قبل %1$d يومًا"</item>
+        <item quantity="other">"قبل %1$d يوم"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="zero">"قبل %1$d أسبوع"</item>
+        <item quantity="one">"قبل أسبوع (%1$d)"</item>
+        <item quantity="two">"قبل أسبوعين (%1$d)"</item>
+        <item quantity="few">"قبل %1$d أسابيع"</item>
+        <item quantity="many">"قبل %1$d أسبوعًا"</item>
+        <item quantity="other">"قبل %1$d أسبوع"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="zero">"قبل %1$d شهر"</item>
+        <item quantity="one">"قبل شهر (%1$d)"</item>
+        <item quantity="two">"قبل شهرين (%1$d)"</item>
+        <item quantity="few">"قبل %1$d أشهر"</item>
+        <item quantity="many">"قبل %1$d شهرًا"</item>
+        <item quantity="other">"قبل %1$d شهر"</item>
+    </plurals>
+</resources>

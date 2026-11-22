@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"最高画質"</string>
+    <string name="autoplay_mode_quality_desc">"画質ルールに沿って最良のソースを再生します: 解像度、ソース、信頼できるリリースグループ、HDR、音声。"</string>
+    <string name="quality_rules_title">"画質ルール"</string>
+    <string name="quality_rules_subtitle">"「最高画質」が何を選び、「最高画質を先に」がどう並べるか。すべてのソースに適用されます。"</string>
+    <string name="quality_rules_open">"表示"</string>
+    <string name="quality_rules_close">"非表示"</string>
+    <string name="stream_sort_sources">"ソースの並べ替え"</string>
+    <string name="stream_sort_sources_sub">"ソース一覧の順番。"</string>
+    <string name="stream_sort_source_order">"ソースの順番"</string>
+    <string name="stream_sort_source_order_desc">"各ソースが送ってきた順。"</string>
+    <string name="stream_sort_best_first">"最高画質を先に"</string>
+    <string name="stream_sort_best_first_desc">"画質ルールで順位付けします。ルールで除外されたリンクは表示されません。"</string>
+    <string name="quality_low_groups_title">"低品質なリリースグループ"</string>
+    <string name="quality_low_groups_subtitle">"質の悪いリリースや偽物で知られるグループ（TRaSH Guides のリスト）。"</string>
+    <string name="quality_low_groups_push_down">"最後に回す"</string>
+    <string name="quality_low_groups_hide">"非表示"</string>
+    <string name="quality_low_groups_normal">"他と同じ扱い"</string>
+    <string name="quality_trusted_groups_title">"信頼できるリリースグループ"</string>
+    <string name="quality_trusted_groups_subtitle">"良い順。最初は TRaSH Guides のリストです。空にするとそのリストに戻ります。"</string>
+    <string name="quality_rules_reset_title">"おすすめに戻す"</string>
+    <string name="quality_rules_reset_subtitle">"すべての画質ルールをおすすめの設定に戻します。"</string>
+</resources>

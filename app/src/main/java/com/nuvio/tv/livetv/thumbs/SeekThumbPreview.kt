@@ -132,6 +132,7 @@ private fun seekThumbMessageText(context: android.content.Context, message: Stri
         SeekThumbs.MSG_CATCHUP_SAVE -> R.string.iptv_thumbs_msg_catchup_save
         SeekThumbs.MSG_PROTECTED -> R.string.iptv_thumbs_msg_protected
         SeekThumbs.MSG_TORRENT -> R.string.iptv_thumbs_msg_torrent
+        SeekThumbs.MSG_ONE_DECODER -> R.string.iptv_thumbs_msg_one_decoder
         "No thumbnails for this kind of link" -> R.string.iptv_thumbs_msg_link_kind
         "This stream couldn't be read for thumbnails" -> R.string.iptv_thumbs_msg_unreadable
         "This stream's pieces are too large for thumbnails" -> R.string.iptv_thumbs_msg_pieces_large

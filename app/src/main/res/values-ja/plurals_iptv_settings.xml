@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="other">"%1$d 件のプレイリスト"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="other">"%1$d 件の番組表"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="other">"%1$d チャンネル"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="other">"%1$d 件の番組を照合"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="other">"%1$d 件削除"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="other">"%1$d 分"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="other">"%1$d 日"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="other">"%1$d 時間"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="other">"%1$d 秒"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="other">"%1$d 日前"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="other">"%1$d 週間前"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="other">"%1$d か月前"</item>
+    </plurals>
+</resources>

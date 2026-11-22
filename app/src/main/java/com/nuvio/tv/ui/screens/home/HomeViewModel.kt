@@ -89,6 +89,10 @@ class HomeViewModel @Inject constructor(
     internal val profileManager: com.nuvio.tv.core.profile.ProfileManager,
     internal val tvRecommendationManager: TvRecommendationManager,
     internal val serverCatalog: ServerCatalog,
+    // Live TV fork: Live TV and Sports rows added to Home.
+    internal val homeLiveRows: com.nuvio.tv.livetv.home.HomeLiveRows,
+    internal val trailerPlayerPool: com.nuvio.tv.core.player.TrailerPlayerPool,
+    internal val backgroundTrailerController: com.nuvio.tv.core.player.BackgroundTrailerController,
     internal val metaPreviewEnricher: MetaPreviewEnricher = MetaPreviewEnricher(
         tmdbService,
         tmdbMetadataService,
@@ -231,6 +235,12 @@ class HomeViewModel @Inject constructor(
     internal val catalogOrder = mutableListOf<String>()
     internal var addonsCache: List<Addon> = emptyList()
     internal var collectionsCache: List<Collection> = emptyList()
+    /** Live TV fork: the Live TV and Sports rows (key to name), in no particular order. */
+    internal var liveRowsCache: List<Pair<String, String>> = emptyList()
+    /** Live TV fork: On Demand rows' titles (by row key), and Live TV/Sports rows with nothing to show. */
+    internal var vodRowsCache: Map<String, CatalogRow> = emptyMap()
+    internal var vodRowKeys: Set<String> = emptySet()
+    internal var emptyLiveRowKeys: Set<String> = emptySet()
     internal var homeCatalogOrderKeys: List<String> = emptyList()
     internal var disabledHomeCatalogKeys: Set<String> = emptySet()
     internal var followAddonsOrderEnabled: Boolean = false
@@ -253,6 +263,8 @@ class HomeViewModel @Inject constructor(
     internal val trailerPreviewNegativeCache = mutableSetOf<String>()
     internal val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewAudioUrlsState = mutableStateMapOf<String, String>()
+    internal val trailerPreviewYoutubeKeys = mutableMapOf<String, String>()
+    internal var continueTrailerInDetails = false
     internal var activeTrailerPreviewItemId: String? = null
     internal var trailerPreviewRequestVersion: Long = 0L
     internal var trailerPreviewJob: Job? = null
@@ -311,6 +323,8 @@ class HomeViewModel @Inject constructor(
     internal var cwPipelineJob: Job? = null
     internal val fullyWatchedSeriesIds get() = watchedSeriesStateHolder
     internal var tmdbEnrichFocusJob: Job? = null
+    /** Live TV fork: waiting for a highlighted On Demand card's match (see onItemFocusPipeline). */
+    internal var vodMatchWaitJob: Job? = null
     internal var pendingTmdbEnrichItemId: String? = null
     /** Item that was focused during startup grace period — will be enriched once grace ends. */
     internal var deferredEnrichItem: MetaPreview? = null
@@ -354,6 +368,11 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewAudioUrlsState
 
     init {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterTrailerContinueInDetails.collect { enabled ->
+                continueTrailerInDetails = enabled
+            }
+        }
         // Accumulates individual watched status changes and flushes them as a single
         // update after 150ms of inactivity, preventing N separate recompositions.
         viewModelScope.launch {
@@ -620,6 +639,20 @@ class HomeViewModel @Inject constructor(
 
     fun requestTrailerPreview(item: MetaPreview) = requestTrailerPreviewPipeline(item)
 
+    fun beginTrailerHandoff(itemId: String) {
+        if (!continueTrailerInDetails) return
+        val videoUrl = trailerPreviewUrlsState[itemId] ?: return
+        val audioUrl = trailerPreviewAudioUrlsState[itemId]
+        val youtubeKey = trailerPreviewYoutubeKeys[itemId]
+        if (backgroundTrailerController.beginTransfer(itemId, videoUrl, audioUrl, youtubeKey)) return
+        trailerPlayerPool.beginHandoff(
+            itemId = itemId,
+            videoUrl = videoUrl,
+            audioUrl = audioUrl,
+            youtubeKey = youtubeKey
+        )
+    }
+
     fun requestTrailerPreview(
         itemId: String,
         title: String,
@@ -850,7 +883,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun observeCollections() = observeCollectionsPipeline()
+    private fun observeCollections() {
+        observeCollectionsPipeline()
+        observeLiveRowsPipeline()
+    }
 
     private fun observeInstalledAddons() = observeInstalledAddonsPipeline()
 

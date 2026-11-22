@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.data
 
 import android.util.Xml
 import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.model.SUB_TITLE_MARK
 import org.xmlpull.v1.XmlPullParser
 import java.io.InputStream
 
@@ -30,6 +31,9 @@ data class XmltvResult(
  * been read) only channels that match the playlist are kept in memory.
  */
 object XmltvParser {
+
+    /** Storing the shows failed (see `flush`): never mistaken for a broken file. */
+    private class StoreFailed(cause: Exception) : RuntimeException(cause)
 
     fun parse(
         input: InputStream,
@@ -69,7 +73,11 @@ object XmltvParser {
         var buf = ArrayList<EpgProgram>()
         fun flush() {
             val id = bufId ?: return
-            if (buf.isNotEmpty()) onPrograms?.invoke(id, orderedPrograms(buf))
+            // A failure while storing (storage full, database error) is not a broken guide file:
+            // it goes up to the caller, so the update stops and the listings from before stay.
+            if (buf.isNotEmpty()) onPrograms?.let { store ->
+                try { store(id, orderedPrograms(buf)) } catch (e: Exception) { throw StoreFailed(e) }
+            }
             buf = ArrayList()
             bufId = null
         }
@@ -117,6 +125,8 @@ object XmltvParser {
             }
             event = parser.next()
         }
+        } catch (e: StoreFailed) {
+            throw e.cause ?: e
         } catch (e: Exception) {
             // A guide broken partway (bad characters, cut off): keep everything read up to there
             // instead of throwing the whole guide away.
@@ -125,7 +135,7 @@ object XmltvParser {
             if (!wantedResolved) wanted = null
         }
         // The last channel's shows (also when the guide broke partway: what was read is kept).
-        runCatching { flush() }
+        try { flush() } catch (e: StoreFailed) { throw e.cause ?: e } catch (_: Exception) { }
         val sorted = programs.mapValues { (_, list) -> orderedPrograms(list) }
         return XmltvResult(channels, sorted, error, seenIds)
     }
@@ -216,10 +226,14 @@ object XmltvParser {
         // air date here instead ("20260929"), which would make every poster look "wrong year".
         val year = date?.trim()?.takeIf { it.length == 4 }?.toIntOrNull()?.takeIf { it in 1900..2100 }
             ?: yearIn(title) ?: yearIn(desc)
+        // The sub-title (often a game's match-up: "College Football" / "Texas at LSU") leads the
+        // description behind an invisible mark, so the guide can show it beside the title
+        // without storing anything new (see EpgProgram.subTitle).
+        val sub = subTitle?.trim()?.takeIf { it.isNotBlank() }?.let { if (it.length > 120) it.take(120).trimEnd() else it }
         val fullDesc = when {
-            subTitle.isNullOrBlank() -> desc?.takeIf { it.isNotBlank() }
-            desc.isNullOrBlank() -> subTitle
-            else -> "$subTitle\n$desc"
+            sub == null -> desc?.takeIf { it.isNotBlank() }
+            desc.isNullOrBlank() -> "$SUB_TITLE_MARK$sub"
+            else -> "$SUB_TITLE_MARK$sub\n$desc"
         }
         return EpgProgram(
             startMs = start,
@@ -228,7 +242,7 @@ object XmltvParser {
             // show, and very long descriptions are cut: a big guide held several hundred thousand
             // listings in memory, which is what made huge playlists freeze.
             title = title?.trim().orEmpty().ifBlank { "No information" }
-                .let { if (newTag && !NEW_IN_TITLE.containsMatchIn(it)) "$it (New)" else it }
+                .let { if (newTag && !saysNew(it)) "$it (New)" else it }
                 .let { if (it.length <= 80) it.intern() else it },
             description = fullDesc?.let { if (it.length > 800) it.take(800).trimEnd() + "…" else it },
             category = category?.trim()?.intern(),
@@ -242,7 +256,14 @@ object XmltvParser {
     }
 
     /** A title that already says it's new (see titleMarks). */
-    private val NEW_IN_TITLE = Regex("""^\s*new\s*[:\-–|]|[(\[]\s*new\s*[)\]]|ᴺᴱᵂ""", RegexOption.IGNORE_CASE)
+    private val NEW_IN_TITLE = Regex("""^\s*new\s*[:\-–|]|[(\[]\s*new\s*[)\]]""", RegexOption.IGNORE_CASE)
+
+    /**
+     * The title already has a NEW mark: "NEW:", "(New)", or small raised letters in any mix of
+     * cases ("ᴺᴱᵂ", "ᴺᵉʷ"). Adding " (New)" on top of those showed the mark twice.
+     */
+    private fun saysNew(title: String): Boolean =
+        NEW_IN_TITLE.containsMatchIn(title) || "new" in com.nuvio.tv.livetv.ui.LiveTvSearchBridge.smallWords(title)
 
     private val yearInParens = Regex("""\((19\d{2}|20\d{2})\)""")
 

@@ -115,7 +115,7 @@ internal fun BackupChannelMenu(
                         .joinToString(" · "),
                     color = NuvioTheme.colors.TextSecondary, size = 13.sp
                 )
-                program?.let { LiveText("Now: ${it.title}", color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 1) }
+                program?.let { LiveText("Now: ${titleMarks(it.title).title}", color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 1) }
                 Spacer(Modifier.height(14.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (!playing || canRestart) item { MenuHeader("Watch", first = true) }

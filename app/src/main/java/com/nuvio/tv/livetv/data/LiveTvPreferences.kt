@@ -132,6 +132,9 @@ class LiveTvPreferences @Inject constructor(
         val catchupShift = intPreferencesKey("catchup_shift_minutes")
         val parentalPin = stringPreferencesKey("parental_pin")
         val lockAdultContent = booleanPreferencesKey("lock_adult_content")
+        val lockLogins = booleanPreferencesKey("lock_logins")
+        /** The network folder for recordings (JSON); "" once removed. Synced (Logins part) so other TVs and phones get it. */
+        val networkFolder = stringPreferencesKey("network_folder")
         val showQualityBadges = booleanPreferencesKey("show_quality_badges")
         val showFrameRate = booleanPreferencesKey("show_frame_rate")
         val matchFrameRate = booleanPreferencesKey("match_frame_rate")
@@ -158,6 +161,8 @@ class LiveTvPreferences @Inject constructor(
         /** Profiles kept matched ("1,3" per group): each group shares one copy of its Live TV choices. */
         val profileMatch = stringSetPreferencesKey("profile_match_groups")
         val calendarChannelPicks = stringPreferencesKey("calendar_channel_picks")
+        /** "Fix match" picks for recordings and On Demand titles (JSON object), see TitleMatchFixes. */
+        val titleMatchFixes = stringPreferencesKey("title_match_fixes")
         val calendarPlans = stringPreferencesKey("calendar_plans")
         val onDemandInStreams = booleanPreferencesKey("on_demand_in_streams")
         val onDemandStreamsPosition = stringPreferencesKey("on_demand_streams_position")
@@ -182,9 +187,12 @@ class LiveTvPreferences @Inject constructor(
         val audioPassthrough = booleanPreferencesKey("audio_passthrough")
         val showPosters = booleanPreferencesKey("show_posters")
         val vodMergeDuplicates = booleanPreferencesKey("vod_merge_duplicates")
+        val vodHideNonEnglish = booleanPreferencesKey("vod_hide_non_english")
+        val homeRowPlaylistNames = booleanPreferencesKey("home_row_playlist_names")
         val vodDefaultSort = stringPreferencesKey("vod_default_sort")
         val recordingStorage = stringPreferencesKey("recording_storage")
         val recordingSpaceRule = stringPreferencesKey("recording_space_rule")
+        val recordingKeepDays = intPreferencesKey("recording_keep_days")
         val recordPre = intPreferencesKey("record_pre_minutes")
         val recordPost = intPreferencesKey("record_post_minutes")
         val vodSorts = stringPreferencesKey("vod_sorts")
@@ -224,6 +232,7 @@ class LiveTvPreferences @Inject constructor(
         val guideInfoHidden = stringPreferencesKey("guide_info_hidden")
         val launcherRows = stringPreferencesKey("launcher_rows")
         val lockedGroups = stringSetPreferencesKey("locked_groups")
+        val favoriteGroups = stringSetPreferencesKey("favorite_groups")
         val collapsedPlaylists = stringSetPreferencesKey("collapsed_playlists")
         val reminders = stringPreferencesKey("reminders")
         val channelQuality = stringPreferencesKey("channel_quality")
@@ -238,6 +247,8 @@ class LiveTvPreferences @Inject constructor(
 
         val hiddenChannels = stringSetPreferencesKey("hidden_channels")
         val hiddenGroups = stringSetPreferencesKey("hidden_groups")
+        /** Playlists (their ids) a profile doesn't show; the playlists themselves stay shared. */
+        val hiddenPlaylists = stringSetPreferencesKey("hidden_playlists")
         val favorites = stringPreferencesKey("favorites")
         val recent = stringPreferencesKey("recent")
         /** Recently watched channel -> the group it was opened from, as JSON. */
@@ -258,6 +269,8 @@ class LiveTvPreferences @Inject constructor(
         val sports = stringPreferencesKey("sports")
         /** Sports: the teams, leagues and names you follow, and game reminders (per profile), as JSON. */
         val sportsMine = stringPreferencesKey("sports_mine")
+        /** Live TV and Sports rows added to Nuvio's home screen (per profile), as JSON. */
+        val homeRows = stringPreferencesKey("home_live_rows")
     }
 
     // ---------- Nuvio profiles ----------
@@ -272,10 +285,10 @@ class LiveTvPreferences @Inject constructor(
     private val personalStringKeys: List<Preferences.Key<String>> = listOf(
         Keys.favorites, Keys.recent, Keys.recentGroups, Keys.lastChannel, Keys.previousChannel, Keys.lastGroup,
         Keys.groupOrder, Keys.customGroups, Keys.channelOrder, Keys.channelCopies, Keys.reminders,
-        Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine
+        Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine, Keys.homeRows
     )
     private val personalSetKeys: List<Preferences.Key<Set<String>>> = listOf(
-        Keys.hiddenChannels, Keys.hiddenGroups, Keys.vodHiddenCategories
+        Keys.hiddenChannels, Keys.hiddenGroups, Keys.vodHiddenCategories, Keys.favoriteGroups, Keys.hiddenPlaylists
     )
 
     /**
@@ -370,7 +383,7 @@ class LiveTvPreferences @Inject constructor(
     /** What "Copy Settings" carries from one profile to another (history and reminders stay). */
     private val copiedStringKeys: List<Preferences.Key<String>> = listOf(
         Keys.favorites, Keys.groupOrder, Keys.customGroups, Keys.channelOrder, Keys.channelCopies,
-        Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine
+        Keys.vodGroupOrder, Keys.vodSorts, Keys.sportsMine, Keys.homeRows
     )
     private val copiedCalendarKeys: List<Preferences.Key<String>> = listOf(
         Keys.calendarFollows, Keys.calendarHiddenShows
@@ -533,6 +546,13 @@ class LiveTvPreferences @Inject constructor(
     private val settingsMemo = SnapshotMemo<LiveTvSettings>()
     private val userStateMemo = SnapshotMemo<LiveUserState>()
 
+    /** The network folder for recordings as JSON: null when never set up here or synced, "" once removed. */
+    val networkFolderJson: Flow<String?> = store.data.map { it[Keys.networkFolder] }.distinctUntilChanged()
+
+    suspend fun setNetworkFolderJson(json: String) {
+        store.edit { it[Keys.networkFolder] = json }
+    }
+
     val playlists: Flow<List<PlaylistSource>> = store.data
         .map { p -> playlistsMemo.get(p, null, 0) { decodePlaylists(p[Keys.playlists]) } }
         .distinctUntilChanged()
@@ -619,6 +639,7 @@ class LiveTvPreferences @Inject constructor(
             catchupShiftMinutes = p[Keys.catchupShift] ?: d.catchupShiftMinutes,
             parentalPin = p[Keys.parentalPin] ?: d.parentalPin,
             lockAdultContent = p[Keys.lockAdultContent] ?: d.lockAdultContent,
+            lockLogins = p[Keys.lockLogins] ?: d.lockLogins,
             showQualityBadges = p[Keys.showQualityBadges] ?: d.showQualityBadges,
             showFrameRate = p[Keys.showFrameRate] ?: d.showFrameRate,
             // Before the three choices it was on or off; on worked like "On start/stop".
@@ -658,9 +679,12 @@ class LiveTvPreferences @Inject constructor(
             audioPassthrough = p[Keys.audioPassthrough] ?: d.audioPassthrough,
             showPosters = p[Keys.showPosters] ?: d.showPosters,
             vodMergeDuplicates = p[Keys.vodMergeDuplicates] ?: d.vodMergeDuplicates,
+            vodHideNonEnglish = p[Keys.vodHideNonEnglish] ?: d.vodHideNonEnglish,
+            homeRowPlaylistNames = p[Keys.homeRowPlaylistNames] ?: d.homeRowPlaylistNames,
             vodDefaultSort = p[Keys.vodDefaultSort] ?: d.vodDefaultSort,
             recordingStorage = p[Keys.recordingStorage] ?: d.recordingStorage,
             recordingSpaceRule = p[Keys.recordingSpaceRule] ?: d.recordingSpaceRule,
+            recordingKeepDays = p[Keys.recordingKeepDays] ?: d.recordingKeepDays,
             recordPreMinutes = p[Keys.recordPre] ?: d.recordPreMinutes,
             recordPostMinutes = p[Keys.recordPost] ?: d.recordPostMinutes,
             // The row used to be on/off for the whole app. Turned off before (with no per-profile
@@ -740,6 +764,7 @@ class LiveTvPreferences @Inject constructor(
         LiveUserState(
             hiddenChannels = p[Keys.hiddenChannels] ?: emptySet(),
             hiddenGroups = p[Keys.hiddenGroups] ?: emptySet(),
+            hiddenPlaylists = p[Keys.hiddenPlaylists] ?: emptySet(),
             favorites = decodeStringList(p[Keys.favorites]),
             recent = decodeStringList(p[Keys.recent]),
             recentGroups = decodeStringMap(p[Keys.recentGroups]),
@@ -759,6 +784,7 @@ class LiveTvPreferences @Inject constructor(
             channelOrder = decodeListMap(p[Keys.channelOrder]),
             channelCopies = decodeListMap(p[Keys.channelCopies]),
             lockedGroups = p[Keys.lockedGroups] ?: emptySet(),
+            favoriteGroups = p[Keys.favoriteGroups] ?: emptySet(),
             reminders = decodeReminders(p[Keys.reminders]),
             channelQuality = decodeStringMap(d[Keys.channelQuality] ?: p[Keys.channelQuality]),
             channelAudio = decodeStringMap(p[Keys.channelAudio]),
@@ -881,6 +907,13 @@ class LiveTvPreferences @Inject constructor(
         store.edit { it[Keys.calendarChannelPicks] = transform(it[Keys.calendarChannelPicks] ?: "") }
     }
 
+    /** "Fix match": the title picked by hand for a recorded show or an On Demand title (JSON object). */
+    val titleMatchFixes: Flow<String> = store.data.map { it[Keys.titleMatchFixes] ?: "" }.distinctUntilChanged()
+
+    suspend fun editTitleMatchFixes(transform: (String) -> String) {
+        store.edit { it[Keys.titleMatchFixes] = transform(it[Keys.titleMatchFixes] ?: "") }
+    }
+
     /** The Calendar's Live TV plans ("record when it's in my guide", "record every new episode"), as JSON. */
     val calendarPlans: Flow<String> = store.data.map { it[Keys.calendarPlans] ?: "" }.distinctUntilChanged()
 
@@ -953,6 +986,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.catchupShift] = s.catchupShiftMinutes
         p[Keys.parentalPin] = s.parentalPin
         p[Keys.lockAdultContent] = s.lockAdultContent
+        p[Keys.lockLogins] = s.lockLogins
         p[Keys.showQualityBadges] = s.showQualityBadges
         p[Keys.showFrameRate] = s.showFrameRate
         p[Keys.frameRateMode] = s.frameRateMode
@@ -997,9 +1031,12 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.audioPassthrough] = s.audioPassthrough
         p[Keys.showPosters] = s.showPosters
         p[Keys.vodMergeDuplicates] = s.vodMergeDuplicates
+        p[Keys.vodHideNonEnglish] = s.vodHideNonEnglish
+        p[Keys.homeRowPlaylistNames] = s.homeRowPlaylistNames
         p[Keys.vodDefaultSort] = s.vodDefaultSort
         p[Keys.recordingStorage] = s.recordingStorage
         p[Keys.recordingSpaceRule] = s.recordingSpaceRule
+        p[Keys.recordingKeepDays] = s.recordingKeepDays
         p[Keys.recordPre] = s.recordPreMinutes
         p[Keys.recordPost] = s.recordPostMinutes
         p[Keys.homeRowEnabled] = s.homeRowEnabled
@@ -1158,6 +1195,18 @@ class LiveTvPreferences @Inject constructor(
     val sportsMineJson: Flow<String?> =
         kotlinx.coroutines.flow.combine(store.data, profileManager.activeProfileId) { p, id -> profileView(p, id)[Keys.sportsMine] }
             .distinctUntilChanged()
+
+    /** This profile's Live TV and Sports rows on Nuvio's home screen (JSON). */
+    val homeRowsJson: Flow<String?> =
+        kotlinx.coroutines.flow.combine(store.data, profileManager.activeProfileId) { p, id -> profileView(p, id)[Keys.homeRows] }
+            .distinctUntilChanged()
+
+    suspend fun editHomeRows(transform: (String?) -> String) {
+        store.edit { p ->
+            val id = currentProfile
+            p[my(Keys.homeRows, id)] = transform(profileView(p, id)[Keys.homeRows])
+        }
+    }
 
     suspend fun editSportsSettings(transform: (String?) -> String) {
         store.edit { p -> p[Keys.sports] = transform(p[Keys.sports]) }
@@ -1365,8 +1414,8 @@ class LiveTvPreferences @Inject constructor(
                 if (value is Set<*>) {
                     val dead: ((String) -> Boolean) = when (base) {
                         "hidden_channels" -> ::deadChannel
-                        "hidden_groups", "locked_groups" -> ::deadGroup
-                        "collapsed_playlists" -> ::deadOwner
+                        "hidden_groups", "locked_groups", "favorite_groups" -> ::deadGroup
+                        "collapsed_playlists", "hidden_playlists" -> ::deadOwner
                         else -> continue
                     }
                     val set = value.filterIsInstance<String>()
@@ -1529,10 +1578,34 @@ class LiveTvPreferences @Inject constructor(
         store.edit { it[my(Keys.hiddenChannels)] = emptySet() }
     }
 
+    /** Which playlists each profile doesn't show (profile id → playlist ids). */
+    val hiddenPlaylistsByProfile: Flow<Map<Int, Set<String>>> =
+        kotlinx.coroutines.flow.combine(store.data, profileManager.profiles) { p, profiles ->
+            profiles.associate { it.id to (profileView(p, it.id)[Keys.hiddenPlaylists] ?: emptySet()) }
+        }.distinctUntilChanged()
+
+    /** Shows or hides playlist [playlistId] on profile [profileId] (profiles kept matched change together). */
+    suspend fun setPlaylistShownOn(playlistId: String, profileId: Int, shown: Boolean) {
+        if (playlistId.isBlank()) return
+        store.edit { p ->
+            val key = my(Keys.hiddenPlaylists, profileId)
+            val cur = profileView(p, profileId)[Keys.hiddenPlaylists] ?: emptySet()
+            p[key] = if (shown) cur - playlistId else cur + playlistId
+        }
+    }
+
     suspend fun setGroupHidden(groupId: String, hidden: Boolean) {
         store.edit { p ->
             val cur = p[my(Keys.hiddenGroups)] ?: emptySet()
             p[my(Keys.hiddenGroups)] = if (hidden) cur + groupId else cur - groupId
+        }
+    }
+
+    /** Stars a group (or takes the star off), for this profile. */
+    suspend fun setGroupFavorite(groupId: String, favorite: Boolean) {
+        store.edit { p ->
+            val cur = p[my(Keys.favoriteGroups)] ?: emptySet()
+            p[my(Keys.favoriteGroups)] = if (favorite) cur + groupId else cur - groupId
         }
     }
 
@@ -1733,7 +1806,7 @@ class LiveTvPreferences @Inject constructor(
                             it.copy(lastUpdatedMs = 0, lastError = null, channelCount = 0, serverTimezone = "", catchupNoHlsSince = 0L)
                         })
                         Keys.epgs.name -> encodeEpgs(decodeEpgs(value).map {
-                            it.copy(lastUpdatedMs = 0, lastError = null, programCount = 0)
+                            it.copy(lastUpdatedMs = 0, lastError = null, programCount = 0, fallbackUserAgent = "")
                         })
                         else -> value
                     }
@@ -1764,7 +1837,7 @@ class LiveTvPreferences @Inject constructor(
         data.optJSONObject(com.nuvio.vpn.android.VpnBackup.KEY)?.optString("v")?.let {
             com.nuvio.vpn.android.VpnBackup.restoreSetup(context, it)
         }
-        // Playlists whose address or login changed: they need downloading again.
+        // Playlists whose address or login changed, and guides whose link or user agent changed: they need downloading again.
         val changed = HashSet<String>()
         store.edit { p ->
             val localPlaylists = decodePlaylists(p[Keys.playlists]).associateBy { it.id }
@@ -1797,6 +1870,7 @@ class LiveTvPreferences @Inject constructor(
                                     r.copy(
                                         lastUpdatedMs = l.lastUpdatedMs, lastError = l.lastError, channelCount = l.channelCount,
                                         serverTimezone = l.serverTimezone, catchupNoHlsSince = l.catchupNoHlsSince,
+                                        dispatcharr = l.dispatcharr || r.dispatcharr,
                                         fallbackUserAgent = l.fallbackUserAgent.ifBlank { r.fallbackUserAgent }
                                     )
                                 } ?: r
@@ -1804,7 +1878,12 @@ class LiveTvPreferences @Inject constructor(
                         } else if (name == Keys.epgs.name) {
                             v = encodeEpgs(decodeEpgs(v).map { r ->
                                 localEpgs[r.id]?.let { l ->
-                                    r.copy(lastUpdatedMs = l.lastUpdatedMs, lastError = l.lastError, programCount = l.programCount)
+                                    // A new link or user agent from the other TV: downloaded again.
+                                    if (l.url != r.url || l.userAgent != r.userAgent) changed += r.id
+                                    r.copy(
+                                        lastUpdatedMs = l.lastUpdatedMs, lastError = l.lastError, programCount = l.programCount,
+                                        fallbackUserAgent = if (l.url == r.url) l.fallbackUserAgent.ifBlank { r.fallbackUserAgent } else ""
+                                    )
                                 } ?: r
                             })
                         }
@@ -1861,7 +1940,9 @@ class LiveTvPreferences @Inject constructor(
                     linkServer = o.optString("linkServer"),
                     linkUsername = o.optString("linkUsername"),
                     linkPassword = o.optString("linkPassword"),
-                    vodInPlaylist = o.optBoolean("vodInPlaylist", false)
+                    vodInPlaylist = o.optBoolean("vodInPlaylist", false),
+                    vodSwitchSet = o.optBoolean("vodSwitchSet", false),
+                    dispatcharr = o.optBoolean("dispatcharr", false)
                 )
             }
         }.getOrDefault(emptyList())
@@ -1879,7 +1960,7 @@ class LiveTvPreferences @Inject constructor(
                     .put("xtreamServer", s.xtreamServer).put("xtreamUsername", s.xtreamUsername)
                     .put("xtreamPassword", s.xtreamPassword)
                     .put("linkServer", s.linkServer).put("linkUsername", s.linkUsername)
-                    .put("linkPassword", s.linkPassword).put("vodInPlaylist", s.vodInPlaylist)
+                    .put("linkPassword", s.linkPassword).put("vodInPlaylist", s.vodInPlaylist).put("vodSwitchSet", s.vodSwitchSet)
                     .put("lastUpdatedMs", s.lastUpdatedMs).put("lastError", s.lastError ?: "")
                     .put("channelCount", s.channelCount)
                     .put("importVod", s.importVod)
@@ -1892,6 +1973,7 @@ class LiveTvPreferences @Inject constructor(
                     .put("guideShiftMinutes", s.guideShiftMinutes)
                     .put("catchupShiftMinutes", s.catchupShiftMinutes)
                     .apply {
+                        if (s.dispatcharr) put("dispatcharr", true)
                         if (s.guidesOff.isNotEmpty()) put("guidesOff", JSONArray(s.guidesOff.sorted()))
                         val type = if (s.isStalker) "stalker" else s.sourceType
                         if (type.isNotBlank()) put("sourceType", type)
@@ -1916,7 +1998,9 @@ class LiveTvPreferences @Inject constructor(
                     lastUpdatedMs = o.optLong("lastUpdatedMs"),
                     lastError = o.optString("lastError").ifBlank { null },
                     programCount = o.optInt("programCount"),
-                    shiftMinutes = o.optInt("shiftMinutes", 0)
+                    shiftMinutes = o.optInt("shiftMinutes", 0),
+                    userAgent = o.optString("userAgent"),
+                    fallbackUserAgent = o.optString("fallbackUserAgent")
                 )
             }
         }.getOrDefault(emptyList())
@@ -1931,6 +2015,7 @@ class LiveTvPreferences @Inject constructor(
                     .put("enabled", s.enabled).put("lastUpdatedMs", s.lastUpdatedMs)
                     .put("lastError", s.lastError ?: "").put("programCount", s.programCount)
                     .put("shiftMinutes", s.shiftMinutes)
+                    .put("userAgent", s.userAgent).put("fallbackUserAgent", s.fallbackUserAgent)
             )
         }
         return arr.toString()
@@ -1948,8 +2033,14 @@ class LiveTvPreferences @Inject constructor(
 
     private companion object {
         const val EPG_SEP = "\u0001"
-        /** Per-TV keys that Google Drive sync never copies. */
-        private val SYNC_EXCLUDED_BASE = setOf("last_channel", "previous_channel", "last_group", "recent", "on_demand_imports", "channel_quality", "developer_tools", "recording_storage")
+        /**
+         * Per-TV keys that sync never copies. The last five depend on this TV's own screen and sound
+         * set-up (a receiver, a 24p screen, how much memory it has), so each TV keeps its own.
+         */
+        private val SYNC_EXCLUDED_BASE = setOf(
+            "last_channel", "previous_channel", "last_group", "recent", "on_demand_imports", "channel_quality", "developer_tools", "recording_storage",
+            "audio_passthrough", "buffer_size", "match_frame_rate", "frame_rate_mode", "aspect_mode"
+        )
         private val PROFILE_SUFFIX = Regex("""_p\d+$""")
         /** A playlist id (they are random UUIDs). */
         private val PLAYLIST_ID = Regex("""[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}""")

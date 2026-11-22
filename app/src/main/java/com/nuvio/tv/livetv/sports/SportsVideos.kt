@@ -26,7 +26,8 @@ import java.util.concurrent.TimeUnit
  *  - NHL: the condensed game (about 10 minutes), the 5-minute recap and every goal.
  *  - MLB: the condensed game, the recap and the game's highlights.
  *  - YouTube highlights TheSportsDB lists for the game (mostly official league and club
- *    channels), played with the same in-app YouTube player as trailers.
+ *    channels), and the sports' own channels' videos (UFC, Formula 1, the boxing promoters,
+ *    PGA Tour, Tennis TV…, see [YtMatch]), played with the same in-app YouTube player as trailers.
  *
  * ESPN's and MLB's videos are plain links. NHL's and YouTube's are worked out only when one
  * is picked (their links expire), see [playable].
@@ -37,7 +38,7 @@ internal class SportsVideos(
     private val youTube: InAppYouTubeExtractor
 ) {
     enum class Kind(val label: String) {
-        CONDENSED("Condensed game"), RECAP("Recap"), HIGHLIGHTS("Highlights"), PLAY("Play")
+        REPLAY("Replay"), CONDENSED("Condensed game"), RECAP("Recap"), HIGHLIGHTS("Highlights"), PLAY("Play")
     }
 
     class Video(
@@ -187,49 +188,84 @@ internal class SportsVideos(
             ?: urls.firstOrNull { it.second.contains(".mp4") }?.second
     }
 
-    // ------------------------------------------------------------------ YouTube (TheSportsDB)
+    // ------------------------------------------------------------------ YouTube (TheSportsDB + the sports' channels)
 
     @Volatile private var ytList: Pair<Long, JSONObject>? = null
 
+    /**
+     * YouTube highlights for [ev]: the ones TheSportsDB lists for its games, then the sports' own
+     * channels (UFC, Formula 1, the boxing promoters…; nuvio-data's "yt" list), matched by teams,
+     * fighters or the event's name. Both come in the same file.
+     */
     private fun youTubeFor(ev: SportsEvent): List<Video> {
         val cached = ytList
         val root = if (cached != null && System.currentTimeMillis() - cached.first < YT_LIST_TTL) cached.second
         else JSONObject(dataGet(SportsFeeds.DATA_URL + "sportsdb/highlights.json")).also { ytList = System.currentTimeMillis() to it }
-        val days = root.optJSONObject("days") ?: return emptyList()
-        val tsdbId = if (ev.id.startsWith("tsdb:")) ev.id.substringAfterLast(':') else null
-        val out = ArrayList<Video>()
-        for (shift in listOf(0, -1, 1)) {
-            val rows = days.optJSONArray(utcDay(ev.startMs, shift)) ?: continue
-            for (i in 0 until rows.length()) {
-                val r = rows.optJSONObject(i) ?: continue
-                val video = r.optString("video")
-                if (youTubeId(video) == null) continue
-                val name = r.optString("event")
-                val same = (tsdbId != null && r.optString("id") == tsdbId) || titleFits(ev, name)
-                if (!same) continue
-                out += Video("yt:" + youTubeId(video), "${name.ifBlank { gameTitle(ev) }} · Highlights", Kind.HIGHLIGHTS, "YouTube", null, video)
-            }
-            if (out.isNotEmpty()) break
+        // An older game: its month(s) from the archive too (the file above only holds the last week).
+        val roots = listOf(root) + if (System.currentTimeMillis() - ev.startMs > ARCHIVE_AFTER_MS) {
+            listOf(utcDay(ev.startMs, -1), utcDay(maxOf(ev.endMs ?: ev.startMs, ev.startMs), 4))
+                .map { it.take(7) }.distinct().mapNotNull { archiveMonth(it) }
+        } else emptyList()
+        val m = YtMatch.of(ev, SportsCatalog.league(ev.leagueId)?.sport)
+        class Found(val video: Video, val rank: Int, val order: Int)
+        val found = LinkedHashMap<String, Found>()
+        fun add(id: String, title: String, from: String, url: String, order: Int) {
+            if (id in found) return
+            // A whole fight, match or race a channel put up counts as a replay, not a highlight.
+            val kind = if (YtMatch.isWhole(title)) Kind.REPLAY else Kind.HIGHLIGHTS
+            found[id] = Found(Video("yt:$id", title, kind, from, null, url), YtMatch.rank(title), order)
         }
-        return out
+        // TheSportsDB's list: by its game id, or by the game's name.
+        run {
+            val tsdbId = if (ev.id.startsWith("tsdb:")) ev.id.substringAfterLast(':') else null
+            for (shift in listOf(0, -1, 1)) {
+                val day = utcDay(ev.startMs, shift)
+                val rows = roots.firstNotNullOfOrNull { it.optJSONObject("days")?.optJSONArray(day) } ?: continue
+                val before = found.size
+                for (i in 0 until rows.length()) {
+                    val r = rows.optJSONObject(i) ?: continue
+                    val video = r.optString("video")
+                    val id = youTubeId(video) ?: continue
+                    val name = r.optString("event")
+                    if ((tsdbId != null && r.optString("id") == tsdbId) || m.nameFits(name)) {
+                        add(id, "${name.ifBlank { gameTitle(ev) }} · Highlights", "YouTube", video, 0)
+                    }
+                }
+                if (found.size > before) break
+            }
+        }
+        // The sports' own channels.
+        for (arr in roots.mapNotNull { it.optJSONArray("yt") }) {
+            for (i in 0 until arr.length()) {
+                val r = arr.optJSONObject(i) ?: continue
+                val id = r.optString("v").takeIf { it.length == 11 } ?: continue
+                val title = r.optString("t")
+                if (m.channelFits(title, r.optLong("at") * 1000, r.optString("s"), r.optInt("d") == 1)) {
+                    add(id, title, r.optString("c").ifBlank { "YouTube" }, "https://www.youtube.com/watch?v=$id", 1)
+                }
+            }
+        }
+        return found.values.sortedWith(compareBy<Found> { it.rank }.thenBy { it.order }).take(MAX_YOUTUBE).map { it.video }
     }
 
-    /** A TheSportsDB event name ("Arsenal vs Chelsea") is this game: both teams in it, or most of an event's words. */
-    private fun titleFits(ev: SportsEvent, name: String): Boolean {
-        val n = norm(name)
-        if (n.isEmpty()) return false
-        val a = ev.away
-        val h = ev.home
-        if (a != null && h != null) return teamIn(a, n) && teamIn(h, n)
-        val words = ev.title.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 3 && it !in STOP_WORDS }
-        if (words.isEmpty()) return false
-        return words.count { norm(it) in n } * 10 >= words.size * 7
-    }
-
-    private fun teamIn(s: Side, n: String): Boolean {
-        val t = s.team
-        return listOfNotNull(t.fullName, t.name, t.location?.let { it + t.name }, t.location?.takeIf { it.length >= 5 })
-            .map(::norm).filter { it.length >= 3 }.any { it in n }
+    /** One month of the highlights archive (sportsdb/highlights/<yyyy-MM>.json); null when it can't be read. */
+    private fun archiveMonth(month: String): JSONObject? {
+        val now = System.currentTimeMillis()
+        // A month that's over hardly changes; the current one fills in through the day.
+        val ttl = if (month == utcDay(now, 0).take(7)) YT_LIST_TTL else ARCHIVE_TTL
+        synchronized(archive) { archive[month]?.takeIf { now - it.first < ttl }?.let { return it.second } }
+        val read = try {
+            JSONObject(dataGet(SportsFeeds.DATA_URL + "sportsdb/highlights/$month.json"))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: java.io.IOException) {
+            // Not there (a month before the archive started): nothing for it.
+            if (e.message?.contains("404") == true) JSONObject() else return null
+        } catch (_: Throwable) {
+            return null
+        }
+        synchronized(archive) { archive[month] = now to read }
+        return read
     }
 
     // ------------------------------------------------------------------ ESPN
@@ -294,9 +330,17 @@ internal class SportsVideos(
         private val POLICY_KEY = Regex("policyKey:\"([^\"]+)\"")
         private const val SAME_GAME_MS = 5 * 3600_000L
         private const val YT_LIST_TTL = 10 * 60_000L
+        /** Games older than this also look in the archive (highlights.json holds the last 7 days). */
+        private const val ARCHIVE_AFTER_MS = 5 * 86_400_000L
+        private const val ARCHIVE_TTL = 6 * 3600_000L
+
+        /** Archive months read lately (a few: each is a month of every sport's videos). */
+        private val archive = object : LinkedHashMap<String, Pair<Long, JSONObject>>(4, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, JSONObject>>?): Boolean = size > 3
+        }
         private const val MAX_PLAYS = 30
+        private const val MAX_YOUTUBE = 24
         private val FROM_ORDER = listOf("NHL", "MLB", "ESPN", "YouTube")
-        private val STOP_WORDS = setOf("the", "and", "vs", "grand", "prix", "round", "final", "race", "fight", "night", "card", "main")
         private const val UA = "Mozilla/5.0 (Linux; Android 12; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
 
         /** Sound files for picked YouTube videos, by their picture file (links expire: kept in memory only). */
@@ -364,12 +408,17 @@ internal class SportsVideos(
          * The game's replays list: your addons' full games first, then condensed games (official
          * ones before addons'), recaps, highlights, and single plays last.
          */
-        fun merge(addon: List<ChannelMatch>, official: List<ChannelMatch>): List<ChannelMatch> {
+        fun merge(
+            addon: List<ChannelMatch>,
+            official: List<ChannelMatch>,
+            showHighlights: Boolean = true,
+            showCondensed: Boolean = true
+        ): List<ChannelMatch> {
             fun rank(m: ChannelMatch): Int {
                 val how = m.how
                 val isOfficial = m.channel.sourceId == SOURCE_ID
                 return when {
-                    !isOfficial && (how.startsWith("Full game") || how.startsWith("Replay")) -> 0
+                    how.startsWith("Full game") || how.startsWith(Kind.REPLAY.label) -> 0
                     how.startsWith(Kind.CONDENSED.label) -> 1
                     !isOfficial && how.startsWith("Condensed") -> 2
                     how.startsWith(Kind.RECAP.label) -> 3
@@ -378,7 +427,18 @@ internal class SportsVideos(
                     else -> 6
                 }
             }
-            return (addon + official).withIndex().sortedWith(compareBy({ rank(it.value) }, { it.index })).map { it.value }
+            // Sports settings: Show Highlights / Show Condensed Games.
+            fun shown(m: ChannelMatch): Boolean {
+                val how = m.how
+                val isOfficial = m.channel.sourceId == SOURCE_ID
+                if (!showCondensed && how.startsWith("Condensed")) return false
+                if (!showHighlights) {
+                    if (how.startsWith(Kind.HIGHLIGHTS.label)) return false
+                    if (isOfficial && (how.startsWith(Kind.RECAP.label) || how.startsWith(Kind.PLAY.label))) return false
+                }
+                return true
+            }
+            return (addon + official).filter(::shown).withIndex().sortedWith(compareBy({ rank(it.value) }, { it.index })).map { it.value }
         }
 
         internal fun youTubeId(url: String): String? =
@@ -392,7 +452,7 @@ internal class SportsVideos(
             return p.fold(0) { acc, n -> acc * 60 + n }.takeIf { it > 0 }
         }
 
-        private fun norm(s: String): String = s.lowercase().filter { it.isLetterOrDigit() }
+        private fun norm(s: String): String = YtMatch.fold(s).filter { it.isLetterOrDigit() }
 
         private fun sameTeam(side: Side?, name: String?, abbr: String?): Boolean {
             val t = side?.team ?: return false

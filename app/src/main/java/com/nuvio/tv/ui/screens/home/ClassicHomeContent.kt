@@ -287,6 +287,7 @@ fun ClassicHomeContent(
                 is HomeRow.Catalog -> row.row.stableKey()
                 is HomeRow.CollectionRow -> "collection_${row.collection.id}"
                 is HomeRow.PlaceholderCatalog -> row.stableCatalogKey
+                is HomeRow.LiveRow -> row.key
             }
         }
     }
@@ -816,6 +817,7 @@ fun ClassicHomeContent(
                     }
                     is HomeRow.CollectionRow -> "collection_${item.collection.id}"
                     is HomeRow.PlaceholderCatalog -> "${item.stableCatalogKey}_$index"
+                    is HomeRow.LiveRow -> item.key
                 }
             },
             contentType = { _, item ->
@@ -823,6 +825,7 @@ fun ClassicHomeContent(
                     is HomeRow.Catalog -> "catalog_row"
                     is HomeRow.CollectionRow -> "collection_row"
                     is HomeRow.PlaceholderCatalog -> "catalog_row"
+                    is HomeRow.LiveRow -> "live_home_row"
                 }
             }
         ) { index, homeRow ->
@@ -846,7 +849,8 @@ fun ClassicHomeContent(
                         shouldRequestInitialFocus &&
                             !heroVisible &&
                             (!uiState.continueWatchingEnabled || uiState.continueWatchingItems.isEmpty()) &&
-                            index == 0
+                            // Live TV fork: the first poster row (a Live TV row may be above it).
+                            index == visibleHomeRows.indexOfFirst { it is HomeRow.Catalog }
                     val focusedItemIndex = when {
                         shouldRestoreFocus -> focusState.focusedItemIndex
                         shouldInitialFocusFirstCatalogRow -> 0
@@ -949,6 +953,21 @@ fun ClassicHomeContent(
                 }
 
                 is HomeRow.PlaceholderCatalog -> { }
+
+                // Live TV fork: a Live TV or Sports row, sized like this layout's posters.
+                is HomeRow.LiveRow -> {
+                    com.nuvio.tv.livetv.home.HomeLiveRowSection(
+                        rowKey = homeRow.key,
+                        style = com.nuvio.tv.livetv.home.HomeLiveRowStyle.fromPoster(
+                            posterWidth = classicCatalogPosterCardStyle.width,
+                            posterHeight = classicCatalogPosterCardStyle.height,
+                            startPadding = NuvioTheme.spacing.xxxl,
+                            cornerRadius = classicCatalogPosterCardStyle.cornerRadius,
+                            titleStyle = MaterialTheme.typography.headlineMedium,
+                            cardSpacing = NuvioTheme.spacing.lg
+                        ).copy(landscape = globalLandscape)
+                    )
+                }
             }
         }
     }

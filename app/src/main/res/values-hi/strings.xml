@@ -458,7 +458,6 @@
 
     <!-- MDBListSettingsScreen -->
     <string name="mdblist_title">MDBList रेटिंग्स</string>
-    <string name="mdblist_subtitle">डिटेल हीरो में दिखाई जाने वाली बाहरी रेटिंग्स कॉन्फ़िगर करें</string>
     <string name="mdblist_enable_title">MDBList रेटिंग्स सक्षम करें</string>
     <string name="mdblist_enable_subtitle">मेटाडेटा डिटेल स्क्रीन में बाहरी प्रोवाइडर से रेटिंग प्राप्त करें</string>
     <string name="mdblist_api_key_title">API Key</string>
@@ -989,4 +988,6 @@
     <string name="update_ignore">नज़रअंदाज़ करें</string>
     <string name="playback_player_auto">ऑटो (सामग्री के लिए सर्वश्रेष्ठ)</string>
     <string name="playback_player_auto_desc">ExoPlayer मूवीज़ और टीवी शोज़ के लिए · MPV एनीमे के लिए</string>
+    <string name="settings_home_screen_rows">होम स्क्रीन की पंक्तियाँ</string>
+    <string name="settings_home_screen_rows_subtitle">अपनी होम स्क्रीन पर पंक्तियों का क्रम चुनें</string>
 </resources>

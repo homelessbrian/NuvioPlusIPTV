@@ -149,12 +149,53 @@ data class TraktSourceSearchResultInfo(
     val coverImageUrl: String? = null
 )
 
+/** A Live TV, Sports or On Demand row on Home, as the phone page edits it. */
+data class LiveRowInfo(
+    val id: String,
+    val key: String,
+    val kind: String,
+    val source: String,
+    /** Your name for the row ("" = the group's or league's own name, shown as [name]). */
+    val title: String,
+    /** The name Home shows. */
+    val name: String,
+    val sort: String,
+    val limit: Int,
+    val showNext: Boolean,
+    val hidePlaceholders: Boolean,
+    val opensGuide: Boolean,
+    val playsGame: Boolean,
+    val startingSoon: Boolean,
+    val shape: String,
+    val after: String,
+    val label: String,
+    /** Nothing to show right now, so Home leaves it out for now. */
+    val hiddenEmpty: Boolean = false
+)
+
+data class LiveRowGroupInfo(val id: String, val name: String, val playlist: String?, val count: Int)
+
+data class LiveRowSportInfo(val source: String, val name: String, val icon: String, val isLeague: Boolean)
+
+data class LiveRowVodInfo(val source: String, val name: String, val playlist: String?, val count: Int, val series: Boolean)
+
+/** What a new Live TV, Sports or On Demand row can show. */
+data class LiveRowChoicesInfo(
+    val favorites: Int = 0,
+    val groups: List<LiveRowGroupInfo> = emptyList(),
+    val sports: List<LiveRowSportInfo> = emptyList(),
+    val vodGroups: List<LiveRowVodInfo> = emptyList()
+)
+
 data class PageState(
     val addons: List<AddonInfo>,
     val catalogs: List<CatalogInfo>,
     val collections: List<CollectionInfo> = emptyList(),
     val disabledCollectionKeys: List<String> = emptyList(),
-    val followAddonsOrder: Boolean = false
+    val followAddonsOrder: Boolean = false,
+    /** Live TV fork: the Live TV, Sports and On Demand rows (null when Live TV rows can't be set up here). */
+    val liveRows: List<LiveRowInfo>? = null,
+    val liveRowChoices: LiveRowChoicesInfo? = null
 )
 
 data class PendingAddonChange(
@@ -166,6 +207,8 @@ data class PendingAddonChange(
     val proposedDisabledCollectionKeys: List<String> = emptyList(),
     val proposedFollowAddonsOrder: Boolean? = null,
     val trackingConsentUrls: List<String> = emptyList(),
+    /** Live TV fork: the whole list of Live TV, Sports and On Demand rows as JSON (null = unchanged). */
+    val proposedLiveRowsJson: String? = null,
     var status: AddonChangeStatus = AddonChangeStatus.PENDING
 )
 

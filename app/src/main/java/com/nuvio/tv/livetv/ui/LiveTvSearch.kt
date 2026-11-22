@@ -354,7 +354,7 @@ private fun LiveSearchCard(
         kotlinx.coroutines.delay(2_500)
         posterFor(hit)?.let { value = it }
     }
-    val title = p?.title?.takeIf { !LiveTvRepository.isPlaceholderTitle(it) } ?: hit.channel.name
+    val title = p?.title?.takeIf { !LiveTvRepository.isPlaceholderTitle(it) }?.let { titleMarks(it).title } ?: hit.channel.name
     SearchResultCard(
         title = title,
         lines = listOfNotNull("CH: ${hit.channel.name}", playlistName),

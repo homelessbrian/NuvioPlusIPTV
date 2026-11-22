@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"最佳画质"</string>
+    <string name="autoplay_mode_quality_desc">"按你的画质规则播放最佳来源：分辨率、来源、可信发布组、HDR 和音频。"</string>
+    <string name="quality_rules_title">"画质规则"</string>
+    <string name="quality_rules_subtitle">"“最佳画质”选择什么，以及“最佳画质优先”如何排序，适用于所有来源。"</string>
+    <string name="quality_rules_open">"显示"</string>
+    <string name="quality_rules_close">"隐藏"</string>
+    <string name="stream_sort_sources">"来源排序"</string>
+    <string name="stream_sort_sources_sub">"来源列表的顺序。"</string>
+    <string name="stream_sort_source_order">"来源顺序"</string>
+    <string name="stream_sort_source_order_desc">"按各来源发送的顺序。"</string>
+    <string name="stream_sort_best_first">"最佳画质优先"</string>
+    <string name="stream_sort_best_first_desc">"按你的画质规则排列。被规则排除的链接不会列出。"</string>
+    <string name="quality_low_groups_title">"低质量发布组"</string>
+    <string name="quality_low_groups_subtitle">"以劣质或虚假发布闻名的组（TRaSH Guides 列表）。"</string>
+    <string name="quality_low_groups_push_down">"移到底部"</string>
+    <string name="quality_low_groups_hide">"隐藏"</string>
+    <string name="quality_low_groups_normal">"与其他相同对待"</string>
+    <string name="quality_trusted_groups_title">"可信发布组"</string>
+    <string name="quality_trusted_groups_subtitle">"最好的排在前面。以 TRaSH Guides 列表开始。清空即可恢复该列表。"</string>
+    <string name="quality_rules_reset_title">"恢复推荐设置"</string>
+    <string name="quality_rules_reset_subtitle">"把所有画质规则恢复为推荐设置。"</string>
+</resources>

@@ -75,8 +75,49 @@ class OnDemandViewModel @Inject constructor(
     private val metaRepository: com.nuvio.tv.domain.repository.MetaRepository,
     private val trailerService: com.nuvio.tv.data.trailer.TrailerService,
     private val watchProgressRepository: com.nuvio.tv.domain.repository.WatchProgressRepository,
-    private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder
+    private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val layoutPrefs: com.nuvio.tv.data.local.LayoutPreferenceDataStore,
+    private val matchFixes: com.nuvio.tv.livetv.data.TitleMatchFixes
 ) : ViewModel() {
+
+    /** The title picked with Fix match for this one, if any (it always wins). */
+    private suspend fun pinned(item: VodItem): LiveTvPosterResolver.Hit? =
+        matchFixes.get(com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid))
+
+    /** The pick for this title, for the Fix match window. */
+    fun pinnedNow(item: VodItem): LiveTvPosterResolver.Hit? =
+        matchFixes.fixes.value[com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid)]
+
+    /** Shows and movies for the Fix match search. */
+    suspend fun searchMatches(text: String, series: Boolean?, year: Int?) = matchFixes.search(text, series, year)
+
+    /**
+     * Fix match: this title is [picked] from now on (poster, artwork, details, and what it opens);
+     * null goes back to automatic. Also clears a name typed with the old "Fix poster".
+     */
+    fun pickMatch(item: VodItem, picked: com.nuvio.tv.livetv.data.TitleMatchFixes.Candidate?) {
+        viewModelScope.launch {
+            val hit = picked?.let { runCatching { matchFixes.toHit(it) }.rethrowCancel().getOrNull() }
+            if (picked != null && hit == null) return@launch
+            repository.setPosterFix(item, "", null)
+            matchFixes.set(com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid), hit, picked?.tmdbId)
+            posters.remove(item.uid)
+            names.remove(item.uid)
+            homeMatched.remove(item.uid)
+            homeHits.remove(item.uid)
+            homeDetailed.remove(item.uid)
+            if (hit != null) useMatch(item, hit, detailed = true)
+            else {
+                enrichOne(item, urgent = true)
+                if (!homeMatched.containsKey(item.uid)) posterFor(item)
+            }
+            updateHomeRows()
+        }
+    }
+
+    /** Your poster provider's pattern for Home rows (Settings › Layout), or "" when none. */
+    @Volatile private var posterPattern: String = ""
 
     private val imdbIds = com.nuvio.tv.livetv.data.boundedCache<String, String>(2_000)
 
@@ -102,7 +143,9 @@ class OnDemandViewModel @Inject constructor(
         val after = AFTER_SEPARATOR.find(clean)?.groupValues?.get(1)?.trim()
         // A series listed by season ("Loki S02", "Dark Season 1"): the show's own name too.
         val show = if (item.kind == VodKind.SERIES) clean.replace(SEASON_TAIL, "").trim().takeIf { it.length >= 2 && it != clean } else null
-        return listOfNotNull(clean, show, after?.takeIf { it.length >= 2 }).distinct()
+        // A year at the end with just a space ("Troll 2 2025"): the name without it, after the full one.
+        val noYear = OnDemandDatabase.withoutTrailingYear(clean)
+        return listOfNotNull(clean, noYear, show, after?.takeIf { it.length >= 2 }).distinct()
     }
 
     /**
@@ -111,6 +154,7 @@ class OnDemandViewModel @Inject constructor(
      * among same-named titles.
      */
     private suspend fun matchAny(item: VodItem, urgent: Boolean, imdb: String? = null): LiveTvPosterResolver.Hit? {
+        pinned(item)?.let { return it }
         repository.posterFix(item)?.let { (title, year) ->
             return resolver.matchFor(title, item.kind == VodKind.SERIES, year, urgent = urgent)
         }
@@ -120,16 +164,45 @@ class OnDemandViewModel @Inject constructor(
         return null
     }
 
+    /**
+     * Whether a failed [matchAny] was a real answer (none of your catalogs has it) rather than
+     * lookups being paused or your addons not answering; then the title is tried again later.
+     */
+    private suspend fun matchAnswered(item: VodItem, imdb: String?): Boolean {
+        if (pinned(item) != null) return true
+        repository.posterFix(item)?.let { (title, year) -> return resolver.answered(title, item.kind == VodKind.SERIES, year) }
+        return matchTitles(item).all { resolver.answered(it, item.kind == VodKind.SERIES, item.year, imdb) }
+    }
+
+    /**
+     * The title as TMDB knows it, as a card's match (poster, backdrop, description, rating, and a
+     * "tmdb:" id for trailers), for titles none of your addons has. One request, saved.
+     */
+    private suspend fun tmdbMatch(item: VodItem): LiveTvPosterResolver.Hit? {
+        val f = runCatching { repository.tmdbFacts(item) }.rethrowCancel().getOrNull() ?: return null
+        val id = f.tmdbId ?: return null
+        if (f.poster == null && f.backdrop == null) return null
+        val series = item.kind == VodKind.SERIES
+        val meta = com.nuvio.tv.domain.model.MetaPreview(
+            id = "tmdb:$id",
+            type = if (series) com.nuvio.tv.domain.model.ContentType.SERIES else com.nuvio.tv.domain.model.ContentType.MOVIE,
+            rawType = if (series) "series" else "movie",
+            name = f.title?.takeIf { it.isNotBlank() } ?: OnDemandDatabase.displayTitle(item.name),
+            poster = f.poster,
+            posterShape = com.nuvio.tv.domain.model.PosterShape.POSTER,
+            background = f.backdrop,
+            logo = null,
+            description = f.overview,
+            releaseInfo = (f.year ?: item.year)?.toString(),
+            imdbRating = f.rating?.toFloat(),
+            genres = item.genre?.split(',')?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
+        )
+        return LiveTvPosterResolver.Hit(meta, VodMatchJson.TMDB_SOURCE, if (series) "series" else "movie")
+    }
+
     /** True when the provider's id says the match is another title (a same-named film, a remake). */
     private fun wrongTitle(hit: LiveTvPosterResolver.Hit, imdb: String?): Boolean =
         imdb != null && hit.meta.imdbId != imdb && hit.meta.id != imdb
-
-    /** TMDB's poster for the provider's own TMDB id: exact, whatever the title is called. */
-    private suspend fun tmdbPosterById(item: VodItem): String? {
-        val id = item.tmdbId?.takeIf { it.isNotBlank() } ?: return null
-        val type = if (item.kind == VodKind.SERIES) com.nuvio.tv.domain.model.ContentType.SERIES else com.nuvio.tv.domain.model.ContentType.MOVIE
-        return runCatching { tmdbMetadata.fetchEnrichment(tmdbId = id, contentType = type)?.poster }.getOrNull()?.takeIf { it.isNotBlank() }
-    }
 
     /** "Fix poster": look this title up by [title] (and [year]) from now on; a blank title goes back to automatic. */
     fun fixPoster(item: VodItem, title: String, year: Int?) {
@@ -185,12 +258,23 @@ class OnDemandViewModel @Inject constructor(
 
     init {
         repository.start()
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { VodPictures.tidy(appContext) }
+        // A poster provider set in Nuvio (RPDB and the like) shows on On Demand cards too.
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(layoutPrefs.customPosterUrlPattern, layoutPrefs.customPosterEnabledScreens) { pattern, screens ->
+                com.nuvio.tv.core.poster.patternForScreen(pattern, com.nuvio.tv.core.poster.CustomPosterScreen.HOME, screens)
+            }.distinctUntilChanged().collect { p ->
+                if (p == posterPattern) return@collect
+                posterPattern = p
+                updateHomeRows()
+            }
+        }
         viewModelScope.launch { repository.version.collect { reload() } }
         // New genres from the background fill: refresh the lists, keep your place.
         viewModelScope.launch { repository.genreUpdates.drop(1).collect { refreshGenres() } }
         // Only reload when hidden or locked categories actually change (not on every saved setting).
         viewModelScope.launch {
-            prefs.userState.map { it.vodHiddenCategories to it.lockedGroups }
+            prefs.userState.map { Triple(it.vodHiddenCategories, it.lockedGroups, it.hiddenPlaylists) }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect { reload(keepSelection = true) }
@@ -220,6 +304,7 @@ class OnDemandViewModel @Inject constructor(
         val s = prefs.settings.first()
         val all = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
         val hidden = user.vodHiddenCategories + all.filter { c ->
+            c.playlistId in user.hiddenPlaylists ||
             ParentalControls.isLocked("vod:${c.uid}", c.name, s, user.lockedGroups)
         }.map { it.uid }
         val merge = s.vodMergeDuplicates
@@ -316,35 +401,50 @@ class OnDemandViewModel @Inject constructor(
 
     /** Your own addon's poster when it has the title; otherwise the provider's. */
     suspend fun posterFor(item: VodItem): String? {
-        posters[item.uid]?.let { return it }
+        posters[item.uid]?.let { return withProvider(item, it) }
         // "Use posters from my addons" off: the provider's image, no lookups at all.
         if (!settings.value.onDemandAddonPosters) return item.icon
+        // Picked with Fix match (maybe on another TV): that title's poster.
+        matchFixes.fixes.value[com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid)]?.let { p ->
+            (p.meta.rawPosterUrl ?: p.meta.poster)?.let { posters[item.uid] = it; return withProvider(item, it, p.meta) }
+        }
         // Remembered from an earlier visit (kept between app starts).
         repository.cachedPoster(item)?.let { (cached, checked) ->
             val fresh = System.currentTimeMillis() - checked < WEEK_MS
-            if (cached.isNotBlank()) { posters[item.uid] = cached; return cached }
+            if (cached.isNotBlank()) { posters[item.uid] = cached; return withProvider(item, cached) }
             if (fresh) return item.icon
         }
         // The provider's TMDB id, when it sends one, says exactly which title it is: same-named
         // films, remakes and titles in another language no longer get another title's poster.
         // One lookup per title, remembered with the poster. (Not with "Fix poster": then the
         // name you typed decides.)
-        val fixed = repository.posterFix(item) != null
+        val fixed = repository.posterFix(item) != null || pinned(item) != null
         val imdb = if (fixed) null else kotlinx.coroutines.withTimeoutOrNull(4_000) { imdbFor(item) }
         var hit = matchAny(item, urgent = false, imdb = imdb)
+        val answered = hit != null || matchAnswered(item, imdb)
         var byId: String? = null
         if (!fixed && (hit == null || wrongTitle(hit, imdb))) {
-            byId = tmdbPosterById(item)
-            if (byId != null) hit = null
-        }
-        repository.cachePoster(item, hit?.meta?.poster ?: byId, hit?.meta?.name)
+            val t = tmdbMatch(item)
+            if (t != null) { hit = t; byId = t.meta.poster; noteMatch(item, t, detailed = true) }
+        } else if (hit != null) noteMatch(item, hit, detailed = false)
+        // Nothing found only because lookups were paused or your addons didn't answer: not
+        // remembered as "no poster" (that kept the provider's picture for a week).
+        val raw = hit?.meta?.let { it.rawPosterUrl ?: it.poster }
+        if (hit != null || answered) repository.cachePoster(item, raw ?: byId, hit?.meta?.name)
         hit?.meta?.name?.let { names[item.uid] = it }
         // The same match carries the title's genres: keep them for "By genre".
         hit?.meta?.genres?.takeIf { it.isNotEmpty() }?.let { repository.fillGenres(item, it) }
-        val poster = hit?.meta?.poster ?: byId ?: item.icon
+        val poster = raw ?: byId ?: item.icon
         if (poster != null) posters[item.uid] = poster
-        return poster
+        return poster?.let { withProvider(item, it, hit?.meta) }
     }
+
+    /** [poster], or your poster provider's picture for the title when one is set (as on Home). */
+    private fun withProvider(item: VodItem, poster: String, matched: com.nuvio.tv.domain.model.MetaPreview? = null): String =
+        VodHomeIds.customPoster(item, matched ?: homeMatched[item.uid], posterPattern) ?: poster
+
+    /** Adult titles (by their own name or their category's): played without saving their place. */
+    suspend fun isAdult(item: VodItem): Boolean = runCatching { repository.isAdult(item) }.getOrDefault(false)
 
     suspend fun targetFor(item: VodItem): OnDemandTarget {
         // Adult titles never open Nuvio's details page (which would put them in Continue watching).
@@ -360,6 +460,10 @@ class OnDemandViewModel @Inject constructor(
             hitJob.await() to idJob.await()
         }
         hit?.meta?.genres?.takeIf { it.isNotEmpty() }?.let { repository.fillGenres(item, it) }
+        // Picked with Fix match from TMDB: opens by its IMDb id with your own addons.
+        if (hit != null && hit.addonBaseUrl == VodMatchJson.TMDB_SOURCE) {
+            return hit.meta.imdbId?.let { OnDemandTarget.Details(it, type, null, item.uid) } ?: OnDemandTarget.Provider(item)
+        }
         return when {
             hit != null && (imdb == null || hit.meta.imdbId == imdb || hit.meta.id == imdb) ->
                 OnDemandTarget.Details(hit.meta.id, hit.meta.rawType.ifBlank { hit.type }, hit.addonBaseUrl, item.uid)
@@ -382,7 +486,7 @@ class OnDemandViewModel @Inject constructor(
             val names = playlistNames.value
             val all = repository.categories(kind)
             val multi = all.map { it.playlistId }.distinct().size > 1
-            val visible = all.filter { it.uid !in user.vodHiddenCategories }
+            val visible = all.filter { !user.hidesVodCategory(it.uid) }
                 .map { OnDemandSection.Category(it, if (multi) names[it.playlistId] else null) }
             val genres = repository.genres(kind)
             val byGenre = _ui.value.byGenre && genres.isNotEmpty()
@@ -390,6 +494,7 @@ class OnDemandViewModel @Inject constructor(
                 if (byGenre) genres.map { (g, n) -> OnDemandSection.Genre(g, n) } else visible
             val s = prefs.settings.first()
             excludedNow = user.vodHiddenCategories + all.filter { c ->
+                c.playlistId in user.hiddenPlaylists ||
                 ParentalControls.isLocked("vod:${c.uid}", c.name, s, user.lockedGroups)
             }.map { it.uid }
             val selected = _ui.value.selectedKey.takeIf { k -> keepSelection && sections.any { it.key == k } }
@@ -431,7 +536,8 @@ class OnDemandViewModel @Inject constructor(
             val ordered = cats.withIndex()
                 .sortedWith(compareBy({ orderIndex[it.value.uid] ?: Int.MAX_VALUE }, { it.index }))
                 .map { it.value }
-            val entries = ordered.map { c ->
+            // Groups of a playlist this profile doesn't show aren't listed at all.
+            val entries = ordered.filter { it.playlistId !in user.hiddenPlaylists }.map { c ->
                 VodGroupEntry(
                     uid = c.uid,
                     defaultName = c.name,
@@ -442,7 +548,7 @@ class OnDemandViewModel @Inject constructor(
                 )
             }
             val visible = ordered.filter { c ->
-                c.uid !in user.vodHiddenCategories &&
+                !user.hidesVodCategory(c.uid) &&
                     !ParentalControls.isLocked("vod:${c.uid}", c.name, settings.value, user.lockedGroups)
             }
             homeGroups = visible.map { it to (user.vodGroupNames[it.uid]?.takeIf { n -> n.isNotBlank() } ?: it.name) }
@@ -600,7 +706,17 @@ class OnDemandViewModel @Inject constructor(
                     gate.withPermit {
                         if (!homeTried.add(item.uid)) return@withPermit
                         // One title failing doesn't stop the others.
-                        try { enrichOne(item) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { }
+                        try {
+                            if (enrichOne(item)) {
+                                homeTried.remove(item.uid)
+                                retryLater.set(true)
+                            }
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            // Stopped part-way (the rows were reloaded): not counted as tried, so the
+                            // next pass looks it up (it used to be skipped until the app restarted).
+                            homeTried.remove(item.uid)
+                            throw e
+                        } catch (e: Exception) { }
                         dirty.set(true)
                     }
                 }
@@ -608,15 +724,74 @@ class OnDemandViewModel @Inject constructor(
             redraw.cancel()
         }
         if (dirty.get()) updateHomeRows()
+        // Titles whose lookups couldn't run (paused after your addons kept failing): once more
+        // after the pause, then the provider's own picture is saved for the rest.
+        if (retryLater.getAndSet(false)) scheduleRetry(queue)
+        savePictures(queue)
+    }
+
+    private val retryLater = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var retryJob: Job? = null
+
+    private fun scheduleRetry(queue: List<VodItem>) {
+        if (retryJob?.isActive == true) return
+        retryJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(RETRY_AFTER_MS)
+            enrichAll(queue.filter { it.uid !in homeTried })
+        }
+    }
+
+    // ------------------------------------------------------------------ provider pictures
+
+    /** Provider pictures saved on the device, by title (see [VodPictures]). */
+    private val icons = ConcurrentHashMap<String, String>()
+
+    /**
+     * The provider's own picture, saved on the device, for titles with nothing better: provider
+     * picture servers are slow and often tell apps not to keep a copy, so a card showed it once
+     * and went grey when it was drawn again.
+     */
+    private suspend fun savePictures(queue: List<VodItem>) {
+        val need = queue.filter { posters[it.uid] == null && homeMatched[it.uid] == null && icons[it.uid] == null && !it.icon.isNullOrBlank() }
+        if (need.isEmpty()) return
+        var got = 0
+        kotlinx.coroutines.coroutineScope {
+            val gate = kotlinx.coroutines.sync.Semaphore(4)
+            need.map { item ->
+                launch {
+                    gate.withPermit {
+                        VodPictures.save(appContext, item.icon!!)?.let { icons[item.uid] = it; got++ }
+                    }
+                }
+            }.joinAll()
+        }
+        if (got > 0) updateHomeRows()
     }
 
     fun stopSeeAll() { seeAllJob?.cancel() }
 
     /** Posters already found in earlier visits (saved on the device): shown straight away. */
     private suspend fun primePosters(items: List<VodItem>) {
+        // Matches saved on earlier visits: the card comes back complete (poster, backdrop, logo,
+        // details), with no lookup, like a row from your addons.
+        val saved = repository.savedMatches(items.filter { !homeMatched.containsKey(it.uid) })
         for (item in items) {
-            if (posters[item.uid] != null) continue
-            repository.cachedPoster(item)?.first?.takeIf { it.isNotBlank() }?.let { posters[item.uid] = it }
+            VodHomeIds.rememberReal(item, null)
+            (matchFixes.fixes.value[com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid)]?.let { it to true } ?: saved[item.uid])?.let { (hit, detailed) ->
+                homeHits[item.uid] = hit
+                homeMatched[item.uid] = hit.meta
+                homeTried += item.uid
+                if (detailed) homeDetailed += item.uid
+                hit.meta.name.takeIf { it.isNotBlank() }?.let { names[item.uid] = it }
+                (hit.meta.rawPosterUrl ?: hit.meta.poster)?.let { posters[item.uid] = it }
+                VodHomeIds.rememberReal(item, hit.meta.id)
+            }
+            if (posters[item.uid] == null) {
+                repository.cachedPoster(item)?.first?.takeIf { it.isNotBlank() }?.let { posters[item.uid] = it }
+            }
+            if (posters[item.uid] == null && icons[item.uid] == null) {
+                item.icon?.let { VodPictures.saved(appContext, it) }?.let { icons[item.uid] = it }
+            }
         }
     }
 
@@ -624,6 +799,175 @@ class OnDemandViewModel @Inject constructor(
     private suspend fun updateHomeRows() {
         val rows = buildHomeRows()
         _home.value = _home.value.copy(rows = rows)
+        if (homeRowSpecs.isNotEmpty()) publishHomeScreenRows()
+    }
+
+    // ============================================== On Demand rows on Nuvio's home screen
+
+    /** One On Demand row added to Home: what it shows (see HomeLiveRow.source) and how many titles. */
+    data class HomeScreenRowSpec(val rowId: String, val source: String, val limit: Int, val name: String, val wide: Boolean = false)
+
+    @Volatile private var homeRowSpecs: List<HomeScreenRowSpec> = emptyList()
+    private val homeRowKinds = ConcurrentHashMap<String, VodKind>()
+    private var homeRowsJob: Job? = null
+    private val _homeScreenRows = MutableStateFlow<Map<String, com.nuvio.tv.domain.model.CatalogRow>>(emptyMap())
+
+    /** Home's On Demand rows as Nuvio catalog rows, by row id (a row with no titles is left out). */
+    val homeScreenRows: StateFlow<Map<String, com.nuvio.tv.domain.model.CatalogRow>> = _homeScreenRows
+
+    /** The catalog's version: changes when a playlist's movies and series are read again. */
+    val catalogVersion: StateFlow<Int> = repository.version
+
+    private fun homeRowKey(rowId: String) = "homerow:$rowId"
+
+    /**
+     * Loads Home's On Demand rows: each one's first titles (a group, or the newest movies or
+     * series), with posters found the same way as on the On Demand page. Hidden and locked
+     * groups show nothing (their row is left off Home).
+     */
+    fun loadHomeScreenRows(specs: List<HomeScreenRowSpec>) {
+        homeRowsJob?.cancel()
+        homeRowsJob = viewModelScope.launch {
+            val user = prefs.userState.first()
+            val s = prefs.settings.first()
+            val cats = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
+            val excluded = user.vodHiddenCategories + cats.filter { c ->
+                c.playlistId in user.hiddenPlaylists ||
+                ParentalControls.isLocked("vod:${c.uid}", c.name, s, user.lockedGroups)
+            }.map { it.uid }
+            val merge = s.vodMergeDuplicates
+            homeItems.keys.filter { it.startsWith("homerow:") && specs.none { sp -> homeRowKey(sp.rowId) == it } }
+                .forEach { homeItems.remove(it) }
+            for (spec in specs) {
+                // A row set to show all its titles reads a page now and more as you scroll along it.
+                val size = if (spec.limit == 0) HOME_PAGE else spec.limit
+                val (kind, raw) = readHomeRow(spec, 0, size, user, s, cats, excluded, merge)
+                val page = dedupe(emptyList(), raw)
+                primePosters(page)
+                homeItems[homeRowKey(spec.rowId)] = page
+                homeRowRead[spec.rowId] = raw.size
+                if (spec.limit != 0 || raw.size < size || spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) homeRowEnded += spec.rowId
+                else homeRowEnded -= spec.rowId
+                if (kind != null) homeRowKinds[spec.rowId] = kind else homeRowKinds.remove(spec.rowId)
+            }
+            homeRowSpecs = specs
+            publishHomeScreenRows()
+            // Posters and names from your addons, the titles still showing the provider's picture first.
+            val queue = specs.flatMap { homeItems[homeRowKey(it.rowId)].orEmpty() }
+            enrichAll(queue.filter { posters[it.uid] == null } + queue.filter { posters[it.uid] != null })
+            // Full details (backdrop, clear logo) for the first titles of each row, so Home's hero
+            // has them as soon as a card is highlighted. Saved, so this happens once per title.
+            var detailed = 0
+            for (spec in specs) {
+                for (item in homeItems[homeRowKey(spec.rowId)].orEmpty().take(HOME_ROW_DETAILS)) {
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    if (!homeHits.containsKey(item.uid) || item.uid in homeDetailed) continue
+                    com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
+                    fetchDetails(item.uid)
+                    if (++detailed % 4 == 0) publishHomeScreenRows()
+                }
+            }
+            if (detailed > 0) publishHomeScreenRows()
+        }
+    }
+
+    /** One page of a Home row's titles: a group, the newest movies or series, or what you're watching. */
+    private suspend fun readHomeRow(
+        spec: HomeScreenRowSpec, offset: Int, size: Int,
+        user: LiveUserState, s: LiveTvSettings, cats: List<VodCategory>, excluded: Set<String>, merge: Boolean
+    ): Pair<VodKind?, List<VodItem>> {
+        val recentKind = when (spec.source) {
+            "recent:movie" -> VodKind.MOVIE
+            "recent:series" -> VodKind.SERIES
+            else -> null
+        }
+        return if (spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) {
+            if (offset > 0) null to emptyList()
+            else {
+                val started = continueWatching(user, if (spec.limit == 0) CONTINUE_ALL else spec.limit)
+                // A mix of movies and series: the row's own kind follows its first title.
+                (started.firstOrNull()?.kind ?: VodKind.MOVIE) to started
+            }
+        } else if (recentKind != null) {
+            recentKind to repository.items(recentKind, null, excluded, true, size, offset, VodSort.DEFAULT, merge = merge)
+        } else {
+            val uid = spec.source.removePrefix("group:")
+            val c = cats.firstOrNull { it.uid == uid }
+            if (c == null || c.uid in excluded) null to emptyList()
+            else {
+                val (sort, seed) = VodSort.parse(user.vodSorts[c.uid]) ?: VodSort.parse(s.vodDefaultSort) ?: (VodSort.DEFAULT to 1L)
+                c.kind to repository.items(c.kind, c, emptySet(), false, size, offset, sort, merge = merge, seed = seed)
+            }
+        }
+    }
+
+    /** How far each Home row has read, which rows have no more, and which are loading more. */
+    private val homeRowRead = ConcurrentHashMap<String, Int>()
+    private val homeRowEnded = ConcurrentHashMap.newKeySet<String>()
+    private val homeRowLoading = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * More titles for a Home row set to show all of them, as you scroll along it (like your
+     * addons' rows): the next page, read on from where the last one ended.
+     */
+    fun loadMoreHomeScreenRow(catalogId: String) {
+        val rowId = catalogId.removePrefix("home:")
+        val spec = homeRowSpecs.firstOrNull { it.rowId == rowId } ?: return
+        if (spec.limit != 0 || rowId in homeRowEnded || !homeRowLoading.add(rowId)) return
+        viewModelScope.launch {
+            try {
+                val user = prefs.userState.first()
+                val s = prefs.settings.first()
+                val cats = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
+                val excluded = user.vodHiddenCategories + cats.filter { c ->
+                    c.playlistId in user.hiddenPlaylists ||
+                        ParentalControls.isLocked("vod:${c.uid}", c.name, s, user.lockedGroups)
+                }.map { it.uid }
+                val key = homeRowKey(rowId)
+                val have = homeItems[key].orEmpty()
+                var offset = homeRowRead[rowId] ?: have.size
+                var more: List<VodItem>
+                var pages = 0
+                // A page of copies of titles already shown adds nothing: keep reading until
+                // there's something new or the row has ended.
+                while (true) {
+                    val (_, raw) = readHomeRow(spec, offset, HOME_PAGE, user, s, cats, excluded, s.vodMergeDuplicates)
+                    offset += raw.size
+                    if (raw.size < HOME_PAGE) homeRowEnded += rowId
+                    more = dedupe(have, raw)
+                    if (more.isNotEmpty() || rowId in homeRowEnded || ++pages >= 20) break
+                }
+                homeRowRead[rowId] = offset
+                primePosters(more)
+                homeItems[key] = have + more
+                publishHomeScreenRows()
+                enrichAll(more)
+            } finally {
+                homeRowLoading.remove(rowId)
+            }
+        }
+    }
+
+    private suspend fun publishHomeScreenRows() {
+        val specs = homeRowSpecs
+        _homeScreenRows.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            specs.mapNotNull { spec ->
+                val items = homeItems[homeRowKey(spec.rowId)].orEmpty()
+                val kind = homeRowKinds[spec.rowId]
+                if (items.isEmpty() || kind == null) return@mapNotNull null
+                spec.rowId to VodHomeIds.row(
+                    uid = "home:${spec.rowId}",
+                    name = spec.name,
+                    kind = kind,
+                    items = items.map { item ->
+                        VodHomeIds.toMeta(item, homeMatched[item.uid], posters[item.uid] ?: icons[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name), posterPattern, spec.wide)
+                            .let { if (spec.source == com.nuvio.tv.livetv.home.HomeLiveRow.VOD_CONTINUE) it.copy(id = VodHomeIds.continueMetaId(item.uid)) else it }
+                    },
+                    hasMore = spec.limit == 0 && spec.rowId !in homeRowEnded,
+                    page = (items.size + HOME_PAGE - 1) / HOME_PAGE
+                ).let { it.copy(supportsSkip = it.hasMore) }
+            }.toMap()
+        }
     }
 
     /**
@@ -643,7 +987,7 @@ class OnDemandViewModel @Inject constructor(
             kind = c.kind,
             items = items.map { item ->
                 val matched = homeMatched[item.uid]
-                VodHomeIds.toMeta(item, matched, posters[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name))
+                VodHomeIds.toMeta(item, matched, posters[item.uid] ?: icons[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name), posterPattern)
             },
             hasMore = c.uid !in homeEnded,
             page = (items.size + HOME_PAGE - 1) / HOME_PAGE
@@ -692,6 +1036,8 @@ class OnDemandViewModel @Inject constructor(
     private suspend fun fetchDetails(uid: String) {
         if (!homeDetailed.add(uid)) return
         val hit = homeHits[uid] ?: return
+        // Found on TMDB itself: its details came with it.
+        if (hit.addonBaseUrl == VodMatchJson.TMDB_SOURCE) return
         val full = runCatching {
             kotlinx.coroutines.withTimeoutOrNull(5_000) {
                 // The addon the match came from (one request, not one per addon).
@@ -708,31 +1054,52 @@ class OnDemandViewModel @Inject constructor(
             description = meta.description?.takeIf { it.isNotBlank() } ?: base.description,
             releaseInfo = meta.releaseInfo?.takeIf { it.isNotBlank() } ?: base.releaseInfo,
             imdbRating = meta.imdbRating ?: base.imdbRating,
-            genres = meta.genres.takeIf { it.isNotEmpty() } ?: base.genres
+            genres = meta.genres.takeIf { it.isNotEmpty() } ?: base.genres,
+            trailerYtIds = meta.trailerYtIds.takeIf { it.isNotEmpty() } ?: base.trailerYtIds
         )
+        // Saved complete, so the card comes back with its backdrop and logo straight away.
+        homeItemByUid(uid)?.let { item -> repository.saveMatch(item, VodMatchJson.encode(hit.copy(meta = homeMatched[uid] ?: base)), true) }
     }
 
-    private suspend fun enrichOne(item: VodItem, urgent: Boolean = false) {
+    private fun homeItemByUid(uid: String): VodItem? = homeItems.values.asSequence().flatten().firstOrNull { it.uid == uid }
+
+    /** Looks a title up; true when lookups couldn't run just now and it should be tried again later. */
+    private suspend fun enrichOne(item: VodItem, urgent: Boolean = false): Boolean {
         // Poster and title lookups (addon searches) wait while Nuvio's player is open.
         if (!urgent) com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
         // The provider's TMDB id picks out the right title among same-named ones (see posterFor).
-        val fixed = repository.posterFix(item) != null
+        val fixed = repository.posterFix(item) != null || pinned(item) != null
         val imdb = if (fixed) null else kotlinx.coroutines.withTimeoutOrNull(4_000) { runCatching { imdbFor(item) }.getOrNull() }
         val found = runCatching { matchAny(item, urgent = urgent, imdb = imdb) }.rethrowCancel().getOrNull()
         if (!fixed && (found == null || wrongTitle(found, imdb))) {
-            // Not in your addons (or only another title by that name): TMDB's poster for the id.
-            tmdbPosterById(item)?.let { p ->
-                posters[item.uid] = p
-                repository.cachePoster(item, p, null)
-                return
-            }
+            // Not in your addons (or only another title by that name): the title on TMDB, by the
+            // provider's TMDB id or by name and year (poster, backdrop and details in one request).
+            val t = tmdbMatch(item)
+            if (t != null) { useMatch(item, t, detailed = true); return false }
+            // Lookups paused or your addons not answering: tried again later (a title that came
+            // up during a pause used to keep the provider's picture until the app restarted).
+            if (found == null) return !matchAnswered(item, imdb)
         }
-        val hit = found ?: return
+        useMatch(item, found ?: return false, detailed = false)
+        return false
+    }
+
+    /** A title's match: on its card now, and saved for next time (see [VodMatchJson]). */
+    private suspend fun useMatch(item: VodItem, hit: LiveTvPosterResolver.Hit, detailed: Boolean) {
         homeHits[item.uid] = hit
         homeMatched[item.uid] = hit.meta
-        hit.meta.poster?.let { posters[item.uid] = it; repository.cachePoster(item, it, hit.meta.name) }
+        if (detailed) homeDetailed += item.uid
+        // The title's own poster (your poster provider's is made from it when the card is drawn).
+        (hit.meta.rawPosterUrl ?: hit.meta.poster)?.let { posters[item.uid] = it; repository.cachePoster(item, it, hit.meta.name) }
         hit.meta.name.takeIf { it.isNotBlank() }?.let { names[item.uid] = it }
-        hit.meta.genres.takeIf { it.isNotEmpty() }?.let { repository.fillGenres(item, it) }
+        hit.meta.genres.takeIf { it.isNotEmpty() && hit.addonBaseUrl != VodMatchJson.TMDB_SOURCE }?.let { repository.fillGenres(item, it) }
+        noteMatch(item, hit, detailed)
+    }
+
+    /** Saves a match (and the title's real id, for Home's trailers and details). */
+    private suspend fun noteMatch(item: VodItem, hit: LiveTvPosterResolver.Hit, detailed: Boolean) {
+        VodHomeIds.rememberReal(item, hit.meta.id)
+        repository.saveMatch(item, VodMatchJson.encode(hit), detailed)
     }
 
     /** A card was highlighted: its details right away (the hero), if not found yet. */
@@ -789,7 +1156,7 @@ class OnDemandViewModel @Inject constructor(
         val item = homeItem(metaId) ?: return null
         val t = targetFor(item) as? OnDemandTarget.Details ?: return null
         val isSeries = item.kind == VodKind.SERIES
-        val card = VodHomeIds.toMeta(item, homeMatched[uid], posters[item.uid], nameFor(item))
+        val card = VodHomeIds.toMeta(item, homeMatched[uid], posters[item.uid], nameFor(item), posterPattern)
         val meta = card.copy(
             id = t.itemId,
             type = if (isSeries) com.nuvio.tv.domain.model.ContentType.SERIES else com.nuvio.tv.domain.model.ContentType.MOVIE,
@@ -838,6 +1205,55 @@ class OnDemandViewModel @Inject constructor(
 
     /** Leaving the page: no trailer lookups carry on in the background. */
     fun stopTrailers() { trailerJob?.cancel() }
+
+    /** Changes when an On Demand title's saved place changes (Continue Watching On Demand refreshes). */
+    val continueChanges: kotlinx.coroutines.flow.Flow<Int> = watchProgressRepository.allProgress
+        .map { list -> list.filter { VodHomeIds.uidOf(it.contentId) != null }.map { it.contentId to it.lastWatched }.hashCode() }
+        .distinctUntilChanged()
+
+    /** Where each started On Demand title was left (by item uid), for Continue Watching On Demand. */
+    private val continueAt = ConcurrentHashMap<String, com.nuvio.tv.domain.model.WatchProgress>()
+
+    /**
+     * The provider titles played from On Demand (saved under their "nuviovod:" ids) that you
+     * started and haven't finished, last watched first: one card per movie or series, the series
+     * on the episode you watched last. Hidden groups and playlists (and locked ones) stay out.
+     */
+    private suspend fun continueWatching(user: com.nuvio.tv.livetv.model.LiveUserState, limit: Int): List<VodItem> {
+        val settings = prefs.settings.first()
+        val all = runCatching { watchProgressRepository.allProgress.first() }.getOrDefault(emptyList())
+        val latest = all.asSequence()
+            .filter { VodHomeIds.uidOf(it.contentId) != null }
+            .filter { p -> p.duration <= 0L || p.position < p.duration * 0.92 }
+            .filter { p -> p.position > 0L || (p.progressPercent ?: 0f) > 0f }
+            .sortedByDescending { it.lastWatched }
+            .distinctBy { it.contentId }
+            .toList()
+        continueAt.clear()
+        val out = ArrayList<VodItem>()
+        for (p in latest) {
+            if (out.size >= limit) break
+            val uid = VodHomeIds.uidOf(p.contentId) ?: continue
+            val item = repository.itemByUid(uid) ?: continue
+            val cat = "${item.kind.key}:${item.playlistId}:${item.categoryId}"
+            if (user.hidesVodCategory(cat)) continue
+            val catName = runCatching { repository.categories(item.kind).firstOrNull { it.uid == cat }?.name }.getOrNull().orEmpty()
+            if (ParentalControls.isLocked("vod:$cat", catName, settings, user.lockedGroups)) continue
+            // Adult titles never show here (and their saved place is taken out).
+            if (repository.isAdult(item)) continue
+            continueAt[item.uid] = p
+            out += item
+        }
+        return out
+    }
+
+    /** A Continue Watching On Demand card: the title and where it was left (null for any other card). */
+    fun continueTarget(metaId: String): Pair<VodItem, com.nuvio.tv.domain.model.WatchProgress>? {
+        if (!VodHomeIds.isContinue(metaId)) return null
+        val item = homeItem(metaId) ?: return null
+        val at = continueAt[item.uid] ?: return null
+        return item to at
+    }
 
     /** The title behind a card (for opening it). */
     fun homeItem(metaId: String): VodItem? {
@@ -903,6 +1319,12 @@ class OnDemandViewModel @Inject constructor(
         @Volatile var lastSort: VodSort = VodSort.DEFAULT
         const val PAGE = 120
         const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
+        /** Paused lookups (your addons kept failing) are tried again after this. */
+        const val RETRY_AFTER_MS = 75_000L
+        /** Titles per Home row given full details (backdrop, logo) ahead of being highlighted. */
+        const val HOME_ROW_DETAILS = 10
+        /** Continue Watching On Demand set to show all: everything you've started, up to this many. */
+        const val CONTINUE_ALL = 200
     }
 }
 

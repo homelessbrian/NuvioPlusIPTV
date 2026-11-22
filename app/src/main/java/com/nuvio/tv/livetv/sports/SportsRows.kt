@@ -29,6 +29,10 @@ internal object SportsRows {
     private const val DAY = 24 * HOUR
     /** Results kept at the start of a team's row. */
     private const val RESULTS = 5
+    /** Results kept at the start of a league's row: a full NFL week (16 games); busy leagues show their last few days. */
+    private const val LEAGUE_RESULTS = 16
+    /** Results kept in an event league's row (races, fight cards, tournaments): a whole season. */
+    private const val SEASON_RESULTS = 80
 
     /** The keys of My Sports' rows (not Live & Upcoming), in your order (see [SportsFollows.order]). */
     fun rowKeys(f: SportsFollows): List<String> {
@@ -111,15 +115,27 @@ internal object SportsRows {
         for (id in leagueIds) {
             val l = SportsCatalog.league(id) ?: continue
             val all = leagueGames[id].orEmpty()
-            // This week (with the last two days' results); a league between rounds: its next games.
-            // The last couple of days' results, then every game ahead we have (up to five weeks;
-            // capped so a busy league like MLB stays a row you can get through).
-            val recent = all.filter { it.startMs >= now - 2 * DAY && (it.state == GameState.POST || it.state == GameState.OFF) }
+            // The last week's results (a weekly league like the NFL keeps its whole last round,
+            // midweek too), or the last round when there were none this week; then every game
+            // ahead we have (up to five weeks; capped so a busy league like MLB stays a row you can get through).
+            val done = all.filter { (it.state == GameState.POST || it.state == GameState.OFF) && it.startMs < now }
+            // A league that hasn't played this week (Formula 1, the Champions League): its last
+            // race or round instead (the last results within a few days of the newest).
+            val eventLeague = l.kind == LeagueKind.EVENT
+            val recent = when {
+                // Races, fight cards and tournaments: the whole season back (a few dozen), so you
+                // can go back to any of them for its highlights and replays.
+                eventLeague -> done.filter { it.startMs >= now - SportsRepository.SEASON_MONTHS * 31L * DAY }
+                else -> done.filter { it.startMs >= now - 7 * DAY }.ifEmpty {
+                    val newest = done.maxOfOrNull { it.startMs } ?: 0L
+                    done.filter { it.startMs >= now - SportsRepository.LEAGUE_BACK_DAYS * DAY && it.startMs >= newest - 4 * DAY }
+                }
+            }
             val ahead = all.filter { it.state == GameState.LIVE || ((it.state == GameState.PRE || it.state == GameState.OFF) && it.startMs >= now - 3 * HOUR) }
                 .sortedBy { it.startMs }.take(60)
             val games = recent + ahead
             if (games.isEmpty()) continue
-            rows += timeline("l:$id", l.name, SportsRow.Kind.LEAGUE, games.distinctBy { it.id }, now, league = l, results = 8)
+            rows += timeline("l:$id", l.name, SportsRow.Kind.LEAGUE, games.distinctBy { it.id }, now, league = l, results = if (eventLeague) SEASON_RESULTS else LEAGUE_RESULTS)
         }
 
         // ---- names you follow

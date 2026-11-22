@@ -15,6 +15,10 @@ enum class VodKind(val key: String) { MOVIE("movie"), SERIES("series") }
  * What makes two catalog entries the same title: the TMDB id when there is one, otherwise the
  * name and year. Used to show each title once ("Merge duplicates").
  */
+/** items.fl: a title in another language for sure (TMDB, subtitles, another script), or only guessed (its group or label). */
+private const val FL_SURE = 1
+private const val FL_GUESS = 2
+
 private const val DUP_KEY = "CASE WHEN tmdb IS NOT NULL AND tmdb != '' THEN 't' || tmdb ELSE 'n' || norm || '|' || IFNULL(year, '') END"
 
 /** How On Demand lists are sorted (the bar above the posters). */
@@ -113,7 +117,7 @@ data class VodCategory(
  */
 @Singleton
 class OnDemandDatabase @Inject constructor(@ApplicationContext private val appContext: Context) :
-    SQLiteOpenHelper(appContext, "livetv_on_demand.db", null, 11) {
+    SQLiteOpenHelper(appContext, "livetv_on_demand.db", null, 12) {
 
     init {
         // Browsing On Demand doesn't wait while an import or genre lookup is writing.
@@ -127,6 +131,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 name TEXT NOT NULL, norm TEXT NOT NULL, icon TEXT, cat TEXT NOT NULL,
                 ext TEXT, tmdb TEXT, year INTEGER, rating TEXT, added INTEGER NOT NULL DEFAULT 0,
                 genre TEXT, h INTEGER, stalker_ref TEXT, stalker_variant TEXT, provider_plot TEXT, provider_duration INTEGER,
+                fl INTEGER,
                 PRIMARY KEY (pl, kind, id))"""
         )
         db.execSQL("CREATE INDEX items_cat ON items(kind, pl, cat)")
@@ -137,6 +142,8 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         createPrefixTable(db)
         createPosterFixTable(db)
         createM3uEpisodeTable(db)
+        createMatchTable(db)
+        createLanguageTable(db)
         db.execSQL(
             """CREATE TABLE categories (
                 pl TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL,
@@ -187,6 +194,171 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         // Version 11: episodes of series read from an M3U playlist's own entries (a new table;
         // everything already imported is kept).
         if (oldVersion < 11) createM3uEpisodeTable(db)
+        // Version 12: each title's match in your addons saved in full (so rows come back with
+        // their backdrops, logos and details straight away), each title's original language,
+        // and a mark on titles known to be in another language. New tables and one new column:
+        // everything already imported and every saved poster is kept.
+        if (oldVersion < 12) {
+            runCatching { db.execSQL("ALTER TABLE items ADD COLUMN fl INTEGER") }
+            // Titles are cleaned better now ("Elf 4K [4K]", "Barbie (Kor Sub)") and looked up on
+            // TMDB when your addons don't have them: forget the old "no poster found" answers.
+            runCatching { db.execSQL("DELETE FROM posters WHERE poster = ''") }
+            createMatchTable(db)
+            createLanguageTable(db)
+        }
+    }
+
+    private fun createMatchTable(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS matches (uid TEXT PRIMARY KEY, meta TEXT NOT NULL, detailed INTEGER NOT NULL DEFAULT 0)")
+    }
+
+    private fun createLanguageTable(db: SQLiteDatabase) {
+        // k: the title's key ([languageKey]); lang: its original language ("en", "fr"…), or "" when
+        // TMDB didn't know it (asked again after a month).
+        db.execSQL("CREATE TABLE IF NOT EXISTS langs (k TEXT PRIMARY KEY, lang TEXT NOT NULL, checked INTEGER NOT NULL)")
+    }
+
+    // ------------------------------------------------------------------ saved addon matches
+
+    /** Saved matches (see [VodMatchJson]) for these titles, by uid, with whether they're complete. */
+    fun savedMatches(uids: Collection<String>): Map<String, Pair<String, Boolean>> {
+        if (uids.isEmpty()) return emptyMap()
+        val out = HashMap<String, Pair<String, Boolean>>()
+        uids.distinct().chunked(400).forEach { part ->
+            readableDatabase.rawQuery(
+                "SELECT uid, meta, detailed FROM matches WHERE uid IN (${part.joinToString(",") { "?" }})",
+                part.toTypedArray()
+            ).use { c -> while (c.moveToNext()) out[c.getString(0)] = c.getString(1) to (c.getInt(2) != 0) }
+        }
+        return out
+    }
+
+    fun saveMatch(uid: String, meta: String, detailed: Boolean) {
+        writableDatabase.insertWithOnConflict("matches", null, ContentValues().apply {
+            put("uid", uid); put("meta", meta); put("detailed", if (detailed) 1 else 0)
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    // ------------------------------------------------------------------ original languages
+
+    /**
+     * Titles not checked yet (or not found a month ago), one per title: titles set aside only on a
+     * guess (a language group or label) first, so an English one among them comes back quickly,
+     * then the newest.
+     */
+    fun needingLanguage(limit: Int, retryBefore: Long): List<VodItem> =
+        query(
+            "SELECT * FROM items WHERE (fl IS NULL OR fl = $FL_GUESS) AND NOT EXISTS (SELECT 1 FROM langs l WHERE l.k = items.kind || $DUP_KEY AND (l.lang != '' OR l.checked > ?)) " +
+                "GROUP BY items.kind || $DUP_KEY ORDER BY MAX(IFNULL(fl, 0)) DESC, MAX(added) DESC LIMIT $limit",
+            arrayListOf(retryBefore.toString())
+        )
+
+    /** Which of these keys already have an answer (any language; "" counts only if recent). */
+    fun knownLanguages(keys: Collection<String>, retryBefore: Long): Set<String> {
+        if (keys.isEmpty()) return emptySet()
+        val out = HashSet<String>()
+        keys.distinct().chunked(400).forEach { part ->
+            readableDatabase.rawQuery(
+                "SELECT k FROM langs WHERE (lang != '' OR checked > ?) AND k IN (${part.joinToString(",") { "?" }})",
+                (listOf(retryBefore.toString()) + part).toTypedArray()
+            ).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        }
+        return out
+    }
+
+    /**
+     * Saves original languages ([languageKey] to "en", "fr"…, or "" for unknown) and marks every
+     * copy of a title in another language, so lists leave it out from now on; an English title
+     * set aside on a guess (its group or label) is put back. Returns how many titles changed.
+     */
+    fun saveLanguages(found: Map<String, String>): Int {
+        if (found.isEmpty()) return 0
+        val db = writableDatabase
+        val now = System.currentTimeMillis()
+        var marked = 0
+        db.beginTransaction()
+        try {
+            val put = db.compileStatement("INSERT OR REPLACE INTO langs (k, lang, checked) VALUES (?,?,?)")
+            // Another language: marked for sure (a guess becomes certain). English: a guess is undone.
+            val markTmdb = db.compileStatement("UPDATE items SET fl = $FL_SURE WHERE (fl IS NULL OR fl = $FL_GUESS) AND kind = ? AND tmdb = ?")
+            val markName = db.compileStatement("UPDATE items SET fl = $FL_SURE WHERE (fl IS NULL OR fl = $FL_GUESS) AND kind = ? AND norm = ? AND items.kind || $DUP_KEY = ?")
+            val backTmdb = db.compileStatement("UPDATE items SET fl = NULL WHERE fl = $FL_GUESS AND kind = ? AND tmdb = ?")
+            val backName = db.compileStatement("UPDATE items SET fl = NULL WHERE fl = $FL_GUESS AND kind = ? AND norm = ? AND items.kind || $DUP_KEY = ?")
+            for ((k, lang) in found) {
+                put.clearBindings(); put.bindString(1, k); put.bindString(2, lang); put.bindLong(3, now); put.executeInsert()
+                val foreign = isForeignLanguage(lang)
+                if (!foreign && !lang.equals("en", ignoreCase = true)) continue
+                val kind = if (k.startsWith(VodKind.SERIES.key)) VodKind.SERIES.key else VodKind.MOVIE.key
+                val rest = k.removePrefix(kind)
+                if (rest.startsWith("t")) {
+                    val stmt = if (foreign) markTmdb else backTmdb
+                    stmt.clearBindings(); stmt.bindString(1, kind); stmt.bindString(2, rest.substring(1))
+                    marked += stmt.executeUpdateDelete()
+                } else if (rest.startsWith("n")) {
+                    val norm = rest.substring(1).substringBeforeLast('|')
+                    val stmt = if (foreign) markName else backName
+                    stmt.clearBindings(); stmt.bindString(1, kind); stmt.bindString(2, norm); stmt.bindString(3, k)
+                    marked += stmt.executeUpdateDelete()
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return marked
+    }
+
+    /**
+     * Marks one provider's titles that are in another language: from saved languages, from its
+     * group names ("FR | Films", "Bollywood") and from its own title labels ("DE - …"). Run after
+     * every import (an import writes changed titles afresh, without their mark).
+     */
+    fun markForeign(playlistId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL(
+                "UPDATE items SET fl = $FL_SURE WHERE pl = ? AND (fl IS NULL OR fl = $FL_GUESS) AND items.kind || $DUP_KEY IN (SELECT k FROM langs WHERE lang != '' AND lang != 'en')",
+                arrayOf(playlistId)
+            )
+            val foreignGroups = ArrayList<Pair<String, String>>()
+            db.rawQuery("SELECT kind, id, name FROM categories WHERE pl = ?", arrayOf(playlistId)).use { c ->
+                while (c.moveToNext()) if (VodLanguageTags.groupIsForeign(c.getString(2))) foreignGroups += c.getString(0) to c.getString(1)
+            }
+            foreignGroups.forEach { (kind, cat) ->
+                // Only a guess: a group can hold the odd English title (an Australian film in "Netflix Asia").
+                db.execSQL("UPDATE items SET fl = $FL_GUESS WHERE pl = ? AND kind = ? AND cat = ? AND fl IS NULL", arrayOf(playlistId, kind, cat))
+            }
+            run {
+                val rows = ArrayList<Pair<Long, Int>>()
+                db.rawQuery("SELECT rowid, name, fl FROM items WHERE pl = ? AND (fl IS NULL OR fl = $FL_GUESS)", arrayOf(playlistId)).use { c ->
+                    while (c.moveToNext()) {
+                        val signal = VodLanguageTags.titleSignal(c.getString(1))
+                        val current = if (c.isNull(2)) 0 else c.getInt(2)
+                        if (signal == VodLanguageTags.SURE || (signal == VodLanguageTags.GUESS && current == 0)) rows += c.getLong(0) to signal
+                    }
+                }
+                if (rows.isNotEmpty()) {
+                    val stmt = db.compileStatement("UPDATE items SET fl = ? WHERE rowid = ?")
+                    rows.forEach { (id, fl) -> stmt.clearBindings(); stmt.bindLong(1, fl.toLong()); stmt.bindLong(2, id); stmt.executeUpdateDelete() }
+                }
+            }
+            // Guesses TMDB has already said are English stay on the lists.
+            db.execSQL(
+                "UPDATE items SET fl = NULL WHERE pl = ? AND fl = $FL_GUESS AND items.kind || $DUP_KEY IN (SELECT k FROM langs WHERE lang = 'en')",
+                arrayOf(playlistId)
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Every provider's titles, as [markForeign] (when the setting is switched on). */
+    fun markForeignAll() {
+        val ids = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT DISTINCT pl FROM categories", null).use { c -> while (c.moveToNext()) ids += c.getString(0) }
+        ids.forEach { runCatching { markForeign(it) } }
     }
 
     private fun fixYearsFromNames(db: SQLiteDatabase) {
@@ -335,6 +507,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             put("uid", uid); put("title", title.trim()); if (year != null) put("year", year) else putNull("year")
         }, SQLiteDatabase.CONFLICT_REPLACE)
         db.delete("posters", "uid = ?", arrayOf(uid))
+        db.delete("matches", "uid = ?", arrayOf(uid))
     }
 
     private fun createPosterTable(db: SQLiteDatabase) {
@@ -604,10 +777,11 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             if (it.moveToFirst()) it.getInt(0) else 0
         }
 
-    fun categories(kind: VodKind): List<VodCategory> {
+    fun categories(kind: VodKind, hideForeign: Boolean = false): List<VodCategory> {
         val out = ArrayList<VodCategory>()
+        val foreign = if (hideForeign) " AND i.fl IS NULL" else ""
         readableDatabase.rawQuery(
-            """SELECT c.pl, c.id, c.name, (SELECT COUNT(*) FROM items i WHERE i.pl = c.pl AND i.kind = c.kind AND i.cat = c.id)
+            """SELECT c.pl, c.id, c.name, (SELECT COUNT(*) FROM items i WHERE i.pl = c.pl AND i.kind = c.kind AND i.cat = c.id$foreign)
                FROM categories c WHERE c.kind = ? ORDER BY c.pl, c.position""",
             arrayOf(kind.key)
         ).use { c ->
@@ -630,10 +804,12 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         sort: VodSort = VodSort.DEFAULT,
         genre: String? = null,
         merge: Boolean = true,
-        seed: Long = 0
+        seed: Long = 0,
+        hideForeign: Boolean = false
     ): List<VodItem> {
         val where = StringBuilder("kind = ?")
         val args = arrayListOf(kind.key)
+        if (hideForeign) where.append(" AND fl IS NULL")
         if (genre != null) {
             where.append(" AND genre LIKE ?")
             args += "%$genre%"
@@ -668,8 +844,10 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
      */
     fun search(
         kind: VodKind, text: String, excludeCategories: Set<String>, limit: Int = 300,
-        sort: VodSort = VodSort.DEFAULT, merge: Boolean = true, signal: android.os.CancellationSignal? = null
+        sort: VodSort = VodSort.DEFAULT, merge: Boolean = true, signal: android.os.CancellationSignal? = null,
+        hideForeign: Boolean = false
     ): List<VodItem> {
+        val foreign = if (hideForeign) " AND fl IS NULL" else ""
         val words = normalizeWords(text)
         if (words.isEmpty()) return emptyList()
         try {
@@ -689,7 +867,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             // Best first: what you typed at the start of the name, then the shortest names.
             val first = if (sort == VodSort.DEFAULT && starts.isNotEmpty()) "(rowid IN (${starts.joinToString(",")})) DESC, " else ""
             return query(
-                "SELECT *$copies FROM items WHERE rowid IN (${ids.joinToString(",")})$group ORDER BY $first${sort.orderBy("length(name)")} LIMIT $limit",
+                "SELECT *$copies FROM items WHERE rowid IN (${ids.joinToString(",")})$foreign$group ORDER BY $first${sort.orderBy("length(name)")} LIMIT $limit",
                 emptyList(), signal
             ).filter { "${it.kind.key}:${it.playlistId}:${it.categoryId}" !in excludeCategories }
         } catch (e: android.os.OperationCanceledException) {
@@ -700,6 +878,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         val where = StringBuilder("kind = ?")
         val args = arrayListOf(kind.key)
         words.forEach { w -> where.append(" AND norm LIKE ?"); args += "%$w%" }
+        where.append(foreign)
         val group = if (merge) " GROUP BY $DUP_KEY" else ""
         val copies = if (merge) ", COUNT(*) AS copies" else ""
         return query("SELECT *$copies FROM items WHERE $where$group ORDER BY ${sort.orderBy("length(name)")} LIMIT $limit", args)
@@ -771,6 +950,13 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         /** Lower case, letters and digits only, with years and quality tags taken out. */
         fun normalize(s: String): String = normalizeWords(s).joinToString("")
 
+        /** A title's key for its original language: the same for every copy (as Merge duplicates). */
+        fun languageKey(item: VodItem): String =
+            item.kind.key + (item.tmdbId?.takeIf { it.isNotEmpty() }?.let { "t$it" } ?: ("n" + normalize(item.name) + "|" + (item.year?.toString() ?: "")))
+
+        /** Made in a language other than English ("" = not known: shown). */
+        fun isForeignLanguage(lang: String): Boolean = lang.isNotBlank() && !lang.equals("en", ignoreCase = true)
+
         private val PREFIX = Regex("""^(\[[^\]]*\]|\|[^|]*\||[A-Z]{2,4}\s*[-|:]\s+)+""")
         // Built once: building a pattern is slow, and these run for every title on screen.
         private val YEAR_IN_BRACKETS_TRAIL = Regex("""\s*\((19|20)\d{2}\)""")
@@ -822,6 +1008,8 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 if (seg.lowercase() in knownPrefixes || looksLikeTag(seg)) {
                     val rest = out.substring(m.range.last + 1).trim()
                     if (rest.isBlank()) return out
+                    // Only a year left after it ("X-Men - (2000)", "W.E. - (2011)"): that was the title.
+                    if (rest.replace(YEAR_IN_BRACKETS, " ").none { it.isLetterOrDigit() }) return out
                     out = rest
                 } else return out
             }
@@ -857,8 +1045,14 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             var t = stripTags(s).replace(PREFIX, "")
                 .replace(YEAR_IN_BRACKETS_TRAIL, "")
                 .replace(YEAR_AT_END, "")
-                .replace(QUALITY_AT_END, "")
+                // "(Kor Sub)", "(EN Subs)", "(CAM)", "(Telesync)": a whole bracket, before the
+                // quality tags below took just "Sub)" off and left "Barbie (Kor".
+                .replace(BRACKET_TAG) { m -> if (BRACKET_RELEASE.containsMatchIn(m.value)) " " else m.value }
                 .trim()
+            // Quality tags at the end, several deep: "Elf 4K [4K]" (a provider writes both) is "Elf".
+            repeat(3) { t = t.replace(QUALITY_AT_END, "").trim() }
+            // A name in another script after the English one ("Honeymoonish شهر زي العسل"): the English one.
+            if (t.any { it in 'A'..'Z' || it in 'a'..'z' }) t = t.replace(TRAILING_OTHER_SCRIPT, "").trim().ifBlank { t }
             // More of the decorations other IPTV apps take off (OwnTV's title cleaner): flags,
             // tags in brackets ("[MULTI-SUB]", "(VOSTFR)"), release words anywhere ("WEB-DL",
             // "x265", "5.1"), and a capital language tag at the very end ("Movie FR").
@@ -878,6 +1072,10 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         private val EMOJI_FLAG = Regex("[\\x{1F1E6}-\\x{1F1FF}]")
         private val BRACKET_TAG = Regex("""[\[{(][^\[\]{}()]*[\]})]""")
         private val SHORT_CAPS = Regex("""[\[{(]\s*[A-Z]{2,4}\s*[\]})]""")
+        /** Words that make a bracket a release note, never part of the name ("(EN Subs)", "(CAM)"). */
+        private val BRACKET_RELEASE = Regex("""(?i)^[\[{(]\s*(?:[a-z]{2,3}\s*)?(?:subs?|subtitled|cam|telesync|ts|hdts|hdcam|screener|scr|v)\s*(?:[a-z]{2,3})?\s*[\]})]$""")
+        /** Arabic, Hebrew, Cyrillic, Greek, Devanagari, Thai, CJK and Hangul letters at the end of a name. */
+        private val TRAILING_OTHER_SCRIPT = Regex("""[\s(（]*[\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF][\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF\s\p{P})）]*$""")
         private val RELEASE_WORDS = Regex(
             "(?i)\\b(uhd|fhd|hevc|h\\.?265|h\\.?264|x265|x264|hdr10\\+?|hdr|dolby\\s+vision|atmos|" +
                 "multi[- ]?subs?|multisub|dual[- ]?audio|remux|web[- ]?dl|webrip|bluray|blu-ray|bdrip|dvdrip|hdrip|" +
@@ -930,6 +1128,19 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         }
 
         private val TRAILING_YEAR = Regex("""(?:^|[\s\-|:,.])((?:19|20)\d{2})\s*$""")
+
+        /**
+         * A cleaned title without the release year some providers put at the end with just a
+         * space ("Troll 2 2025" -> "Troll 2"), or null when it doesn't end with one. Only used as
+         * a second try when looking a title up: "Wonder Woman 1984" is a real name.
+         */
+        fun withoutTrailingYear(title: String): String? {
+            val m = TRAILING_YEAR.find(title.trim()) ?: return null
+            val year = m.groupValues[1].toIntOrNull() ?: return null
+            if (year > latestYear()) return null
+            val before = title.trim().substring(0, m.range.first).trim().trimEnd('-', '–', '—', '|', ':', ',', '.').trim()
+            return before.takeIf { b -> b.length >= 2 && b.any { it.isLetter() } }
+        }
 
         fun normalizeWords(s: String): List<String> =
             s.replace(PREFIX, "")

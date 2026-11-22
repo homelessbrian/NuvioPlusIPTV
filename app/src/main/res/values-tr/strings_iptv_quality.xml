@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"En iyi kalite"</string>
+    <string name="autoplay_mode_quality_desc">"Kalite kurallarına göre en iyi kaynağı oynatır: çözünürlük, kaynak, güvenilir yayın grupları, HDR ve ses."</string>
+    <string name="quality_rules_title">"Kalite kuralları"</string>
+    <string name="quality_rules_subtitle">"En iyi kalitenin neyi seçtiği ve En iyi kalite önce sıralamasının nasıl yapıldığı, her kaynak için."</string>
+    <string name="quality_rules_open">"Göster"</string>
+    <string name="quality_rules_close">"Gizle"</string>
+    <string name="stream_sort_sources">"Kaynakları sırala"</string>
+    <string name="stream_sort_sources_sub">"Kaynak listesinin sırası."</string>
+    <string name="stream_sort_source_order">"Kaynak sırası"</string>
+    <string name="stream_sort_source_order_desc">"Her kaynağın gönderdiği gibi."</string>
+    <string name="stream_sort_best_first">"En iyi kalite önce"</string>
+    <string name="stream_sort_best_first_desc">"Kalite kurallarına göre sıralanır. Kuralların dışarıda bıraktığı bağlantılar listelenmez."</string>
+    <string name="quality_low_groups_title">"Düşük kaliteli yayın grupları"</string>
+    <string name="quality_low_groups_subtitle">"Kötü veya sahte yayınlarıyla bilinen gruplar (TRaSH Guides listesi)."</string>
+    <string name="quality_low_groups_push_down">"En alta taşı"</string>
+    <string name="quality_low_groups_hide">"Gizle"</string>
+    <string name="quality_low_groups_normal">"Diğerleri gibi davran"</string>
+    <string name="quality_trusted_groups_title">"Güvenilir yayın grupları"</string>
+    <string name="quality_trusted_groups_subtitle">"En iyiler önce. TRaSH Guides listesiyle başlar. O listeyi geri almak için temizle."</string>
+    <string name="quality_rules_reset_title">"Önerilene sıfırla"</string>
+    <string name="quality_rules_reset_subtitle">"Tüm kalite kurallarını önerilen kuruluma döndürür."</string>
+</resources>

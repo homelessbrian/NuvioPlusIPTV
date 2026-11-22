@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"TV ini tidak bisa memutar video ini. Coba sumber lain atau beralih ke MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Tampilkan di Profil"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Tampilkan di Profil: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Semua"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d dari %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Profil yang dimatikan di sini tidak mendapat saluran, On Demand, atau Sports dari %1$s. Playlist-nya tetap untuk semua orang"</string>
+    <string name="iptv_backup_file">"File Cadangan"</string>
+    <string name="iptv_backup_file_summary">"Simpan pengaturan sebagai file, atau pulihkan satu"</string>
+    <string name="iptv_backup_file_description">"Salinan pengaturan Live TV dalam satu file .nptv: playlist beserta loginnya, panduan, favorit, grup, Sports, dan pengaturan. Berguna tanpa Setup Sync, atau untuk menyimpan salinan sendiri."</string>
+    <string name="iptv_backup_with_phone">"Cadangkan atau Pulihkan dengan Ponsel"</string>
+    <string name="iptv_backup_with_phone_description">"Pindai kode untuk menyimpan file di ponsel, atau mengirimkan file kembali"</string>
+    <string name="iptv_backup_save_on_tv">"Simpan Cadangan di TV Ini"</string>
+    <string name="iptv_backup_save_on_tv_description">"Disimpan di Download › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Pulihkan dari TV Ini"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Cadangan yang tersimpan di TV ini, terbaru dulu"</string>
+    <string name="iptv_backup_none_on_tv">"Belum ada cadangan di TV ini. Simpan satu dulu, atau gunakan ponsel."</string>
+    <string name="iptv_backup_saving">"Menyimpan…"</string>
+    <string name="iptv_backup_saved_to">"Disimpan ke %1$s"</string>
+    <string name="iptv_backup_save_failed">"Cadangan tidak bisa disimpan di TV ini. Coba gunakan ponsel."</string>
+    <string name="iptv_backup_restoring">"Memulihkan…"</string>
+    <string name="iptv_backup_restored">"Cadangan dipulihkan. Playlist dan panduan yang berubah sedang dimuat."</string>
+    <string name="iptv_backup_restore_failed">"Cadangan itu tidak bisa dipulihkan (tidak ada playlist atau panduan)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Pulihkan Cadangan Ini?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Disimpan %1$s di %2$s. Ini menggantikan pengaturan Live TV di TV ini. Dengan Setup Sync aktif, TV Anda yang lain juga berubah."</string>
+    <string name="iptv_backup_restore_confirm_button">"Pulihkan"</string>
+    <string name="iptv_backup_not_a_backup">"Itu bukan file cadangan Nuvio + IPTV (.nptv)."</string>
+    <string name="iptv_backup_private_note">"File cadangan berisi login playlist Anda. Jaga kerahasiaannya."</string>
+    <string name="iptv_backup_phone_steps">"1. Sambungkan ponsel ke Wi-Fi yang sama dengan TV ini.\n2. Pindai kode dengan kamera ponsel.\n3. Simpan cadangan, atau pilih file cadangan untuk dikirim ke sini."</string>
+    <string name="iptv_backup_phone_check_tv">"Terkirim. Pilih Pulihkan di TV untuk menyelesaikan."</string>
+    <string name="iptv_backup_phone_title">"Cadangan Nuvio + IPTV"</string>
+    <string name="iptv_backup_phone_save_heading">"Simpan cadangan"</string>
+    <string name="iptv_backup_phone_save_text">"Menyimpan pengaturan Live TV TV ini di ponsel sebagai file .nptv."</string>
+    <string name="iptv_backup_phone_save_button">"Simpan file cadangan"</string>
+    <string name="iptv_backup_phone_restore_heading">"Pulihkan cadangan"</string>
+    <string name="iptv_backup_phone_restore_text">"Pilih file .nptv untuk dikirim ke TV. Tidak ada yang berubah sampai Anda mengonfirmasi di TV."</string>
+    <string name="iptv_backup_phone_choose_file">"Pilih file"</string>
+    <string name="iptv_backup_phone_restore_button">"Kirim ke TV"</string>
+</resources>

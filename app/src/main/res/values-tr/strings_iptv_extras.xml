@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"Bu TV bu videoyu oynatamadı. Başka bir kaynak deneyin veya MPV'ye geçin."</string>
+    <string name="iptv_settings_show_on_profiles">"Profillerde göster"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Profillerde göster: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Tümü"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d / %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Burada kapatılan profiller %1$s kaynağından kanal, On Demand veya Sports almaz. Listenin kendisi herkes için kalır"</string>
+    <string name="iptv_backup_file">"Yedek dosyası"</string>
+    <string name="iptv_backup_file_summary">"Kurulumunuzu dosyaya kaydedin veya geri yükleyin"</string>
+    <string name="iptv_backup_file_description">"Live TV kurulumunuzun tek bir .nptv dosyasındaki kopyası: girişleriyle listeler, rehberler, favoriler, gruplar, Sports ve ayarlar. Setup Sync olmadan veya kendi kopyanızı saklamak için kullanışlı."</string>
+    <string name="iptv_backup_with_phone">"Telefonla yedekle veya geri yükle"</string>
+    <string name="iptv_backup_with_phone_description">"Dosyayı telefonunuza kaydetmek veya geri göndermek için bir kod tarayın"</string>
+    <string name="iptv_backup_save_on_tv">"Bu TV'ye yedek kaydet"</string>
+    <string name="iptv_backup_save_on_tv_description">"İndirilenler › Nuvio + IPTV klasörüne kaydedilir"</string>
+    <string name="iptv_backup_restore_on_tv">"Bu TV'den geri yükle"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Bu TV'de kayıtlı yedekler, en yenisi önce"</string>
+    <string name="iptv_backup_none_on_tv">"Bu TV'de henüz yedek yok. Önce bir tane kaydedin veya telefonunuzu kullanın."</string>
+    <string name="iptv_backup_saving">"Kaydediliyor…"</string>
+    <string name="iptv_backup_saved_to">"%1$s konumuna kaydedildi"</string>
+    <string name="iptv_backup_save_failed">"Yedek bu TV'ye kaydedilemedi. Bunun yerine telefonunuzu deneyin."</string>
+    <string name="iptv_backup_restoring">"Geri yükleniyor…"</string>
+    <string name="iptv_backup_restored">"Yedek geri yüklendi. Değişen listeler ve rehberler yükleniyor."</string>
+    <string name="iptv_backup_restore_failed">"Bu yedek geri yüklenemedi (içinde liste veya rehber yok)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Bu yedek geri yüklensin mi?"</string>
+    <string name="iptv_backup_restore_confirm_message">"%1$s tarihinde %2$s üzerinde kaydedildi. Bu TV'nin Live TV kurulumunun yerine geçer. Setup Sync açıksa diğer TV'leriniz de değişir."</string>
+    <string name="iptv_backup_restore_confirm_button">"Geri yükle"</string>
+    <string name="iptv_backup_not_a_backup">"Bu bir Nuvio + IPTV yedek dosyası (.nptv) değil."</string>
+    <string name="iptv_backup_private_note">"Yedek dosyası liste girişlerinizi içerir. Gizli tutun."</string>
+    <string name="iptv_backup_phone_steps">"1. Telefonunuzu bu TV ile aynı Wi-Fi ağına bağlayın.\n2. Kodu telefonunuzun kamerasıyla tarayın.\n3. Yedeği kaydedin veya buraya göndermek için bir yedek dosyası seçin."</string>
+    <string name="iptv_backup_phone_check_tv">"Gönderildi. Bitirmek için TV'de Geri yükle'yi seçin."</string>
+    <string name="iptv_backup_phone_title">"Nuvio + IPTV yedeği"</string>
+    <string name="iptv_backup_phone_save_heading">"Yedek kaydet"</string>
+    <string name="iptv_backup_phone_save_text">"Bu TV'nin Live TV kurulumunu telefonunuza .nptv dosyası olarak kaydeder."</string>
+    <string name="iptv_backup_phone_save_button">"Yedek dosyasını kaydet"</string>
+    <string name="iptv_backup_phone_restore_heading">"Yedeği geri yükle"</string>
+    <string name="iptv_backup_phone_restore_text">"TV'ye göndermek için bir .nptv dosyası seçin. TV'de onaylayana kadar hiçbir şey değişmez."</string>
+    <string name="iptv_backup_phone_choose_file">"Dosya seç"</string>
+    <string name="iptv_backup_phone_restore_button">"TV'ye gönder"</string>
+</resources>

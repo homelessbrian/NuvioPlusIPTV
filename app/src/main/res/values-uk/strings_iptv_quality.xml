@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Найкраща якість"</string>
+    <string name="autoplay_mode_quality_desc">"Вмикає найкраще джерело за вашими правилами якості: роздільність, джерело, надійні релізні групи, HDR і звук."</string>
+    <string name="quality_rules_title">"Правила якості"</string>
+    <string name="quality_rules_subtitle">"Що вибирає «Найкраща якість» і як сортує «Спершу найкраща якість», для кожного джерела."</string>
+    <string name="quality_rules_open">"Показувати"</string>
+    <string name="quality_rules_close">"Приховувати"</string>
+    <string name="stream_sort_sources">"Сортування джерел"</string>
+    <string name="stream_sort_sources_sub">"Порядок списку джерел."</string>
+    <string name="stream_sort_source_order">"Порядок джерел"</string>
+    <string name="stream_sort_source_order_desc">"Як їх надсилає кожне джерело."</string>
+    <string name="stream_sort_best_first">"Спершу найкраща якість"</string>
+    <string name="stream_sort_best_first_desc">"За вашими правилами якості. Посилання, виключені правилами, не показуються."</string>
+    <string name="quality_low_groups_title">"Релізні групи низької якості"</string>
+    <string name="quality_low_groups_subtitle">"Групи, відомі поганими або підробленими релізами (список TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Переносити в кінець"</string>
+    <string name="quality_low_groups_hide">"Приховувати"</string>
+    <string name="quality_low_groups_normal">"Як решту"</string>
+    <string name="quality_trusted_groups_title">"Надійні релізні групи"</string>
+    <string name="quality_trusted_groups_subtitle">"Найкращі спершу. Починається зі списку TRaSH Guides. Очистьте його, щоб повернути цей список."</string>
+    <string name="quality_rules_reset_title">"Повернути рекомендовані"</string>
+    <string name="quality_rules_reset_subtitle">"Повертає всі правила якості до рекомендованих."</string>
+</resources>

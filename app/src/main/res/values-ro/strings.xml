@@ -355,7 +355,6 @@
 
     <!-- MDBListSettingsScreen -->
     <string name="mdblist_title">Evaluări MDBList</string>
-    <string name="mdblist_subtitle">Configurează ratingurile externe afișate în pagina de detaliu</string>
     <string name="mdblist_enable_title">Activează ratingurile MDBList</string>
     <string name="mdblist_enable_subtitle">Obține ratinguri de la furnizori externi în ecranul de detalii ale metadatelor</string>
     <string name="mdblist_api_key_title">Cheie API</string>
@@ -821,4 +820,6 @@
     <string name="update_ignore">Ignoră</string>
       <string name="playback_player_auto">Automat (Cel mai bun pentru conținut)</string>
     <string name="playback_player_auto_desc">ExoPlayer pentru Filme și Seriale · MPV pentru Anime</string>
+    <string name="settings_home_screen_rows">Rândurile ecranului de pornire</string>
+    <string name="settings_home_screen_rows_subtitle">Alege ordinea rândurilor de pe ecranul de pornire</string>
 </resources>

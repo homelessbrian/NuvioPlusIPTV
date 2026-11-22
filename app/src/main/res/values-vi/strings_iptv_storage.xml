@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_this_device">"Thiết bị này"</string>
+    <string name="iptv_storage_usb_drive">"Ổ USB"</string>
+    <string name="iptv_storage_read_only">"Chỉ đọc. Hộp này đọc được ổ nhưng không ghi được (thường là ổ NTFS). Định dạng exFAT sẽ cho phép ghi hình vào ổ."</string>
+    <string name="iptv_storage_unsupported_format">"Hộp này không đọc được định dạng của ổ. Định dạng exFAT thường khắc phục được."</string>
+    <string name="iptv_storage_not_ready">"Chưa sẵn sàng. Hãy chờ một chút rồi mở lại danh sách này."</string>
+    <string name="iptv_storage_no_app_folder">"Android chưa cấp cho ứng dụng thư mục trên ổ. Hãy rút ổ ra cắm lại, hoặc khởi động lại hộp."</string>
+    <string name="iptv_storage_unusable_state">"Hiện không dùng được (%1$s)."</string>
+</resources>

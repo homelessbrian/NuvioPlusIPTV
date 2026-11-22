@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.ui.screens.player.audiosync.AudioSyncTaps
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.RectF
@@ -273,7 +274,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                     "Tunneled playback skipped: media audio goes to USB (route=${currentAudioOutputRoute?.key})"
                 )
             }
-            val tunnelingActive = playerSettings.effectiveTunnelingEnabled && !tunnelingBlockedByUsbAudio
+            // Software decoders can't tunnel: a stream rebuilt on one plays untunneled.
+            val tunnelingActive = playerSettings.effectiveTunnelingEnabled && !tunnelingBlockedByUsbAudio &&
+                forceSoftwareVideoForStreamUrl != currentStreamUrl
             if (rememberAudioDelayPerDeviceEnabled) {
                 applyStoredAudioDelayForCurrentRouteIfEnabled()
             }
@@ -595,14 +598,10 @@ internal fun PlayerRuntimeController.initializePlayer(
                         .coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
                 }
                 val budgetBytes = budgetMbEffective.toLong() * 1024L * 1024L
-                // Build with the user's back buffer so seek-back works immediately, except on a heap
-                // bound device, where the load control would hold it for the whole session.
+                // Build with the user's back buffer so seek-back works immediately. First frame
+                // lowers it to 0 only for confirmed DV7 on low-RAM; everything else keeps it.
                 configuredBackBufferMs = bufferSettings.backBufferDurationMs
-                val backBufferMsAtBuild = if (libdoviConversionActive && MemoryBudget.isLowRamTier) {
-                    0
-                } else {
-                    configuredBackBufferMs
-                }
+                val backBufferMsAtBuild = configuredBackBufferMs
                 Log.i(
                     PlayerRuntimeController.TAG,
                     "BUFFER_GATE: engine=exo-custom master=on " +
@@ -926,7 +925,13 @@ internal fun PlayerRuntimeController.initializePlayer(
             isMapDv7ToHevcActiveForCurrentPlayback = mapDv7ToHevcEnabled
             val convertToDv81Active = !mapDv7ToHevcEnabled &&
                     dv7AutoResult?.decision == DolbyVisionBaseLayerPolicy.Decision.CONVERT_TO_DV81
-            val codecSelector = createDolbyVisionFallbackCodecSelector(convertToDv81Active = convertToDv81Active)
+            val forceSoftwareVideo = forceSoftwareVideoForStreamUrl == currentStreamUrl
+            if (forceSoftwareVideo) Log.i(PlayerRuntimeController.TAG, "VIDEO_DECODER: this stream uses a software decoder after a hardware failure")
+            val codecSelector = if (forceSoftwareVideo) {
+                softwareVideoCodecSelector(createDolbyVisionFallbackCodecSelector(convertToDv81Active = convertToDv81Active))
+            } else {
+                createDolbyVisionFallbackCodecSelector(convertToDv81Active = convertToDv81Active)
+            }
             scope.launch(kotlinx.coroutines.Dispatchers.Default) { softwareOnlyDecoderNames }
             // Bluetooth media sink (A2DP / LE Audio): Media3 only advertises PCM. Do not attempt
             // optical/HDMI passthrough — decode to PCM and let the BT stack encode SBC/AAC/aptX/LDAC.
@@ -1553,6 +1558,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         cancelFirstFrameWatchdog()
                         val detailedError = if (isStalker) "Stalker playback failed (${error.errorCodeName}). Retry playback to refresh the stream link."
                             else error.toDisplayMessage(context)
+                        val userFacingError = error.toUserFacingMessage(context, detailedError)
                         cancelStableProgressReset()
 
                         if (Vc1VideoFormatHeuristics.isVc1PlaybackFailure(
@@ -1720,6 +1726,11 @@ internal fun PlayerRuntimeController.initializePlayer(
                             return
                         }
 
+                        // A failed hardware video decoder gets one software-decoder rebuild first.
+                        if (trySoftwareVideoDecoderFallback(error)) {
+                            return
+                        }
+
                         // ── Main Engine Failover ──
                         if (!isStalker && maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
                             return
@@ -1767,11 +1778,12 @@ internal fun PlayerRuntimeController.initializePlayer(
                              error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
                              error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ||
                              error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES ||
+                             error.errorCode == PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED ||
                              error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
                              error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED)
                         _uiState.update {
                             it.copy(
-                                error = detailedError,
+                                error = userFacingError,
                                 showSwitchToMpvErrorAction = canSwitchToMpvOnFatal,
                                 showLoadingOverlay = false,
                                 showPauseOverlay = false,
@@ -2342,8 +2354,10 @@ private class SubtitleOffsetRenderersFactory(
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessors(arrayOf(gainAudioProcessor, nightModeAudioProcessor))
         val baseAudioSink = builder.build()
+        // Audio sync hook: tap the base sink so the returned sink stays a PlaybackSpeedAwareAudioSink
+        // and buildAudioRenderers keeps installing PlaybackSpeedAwareAudioRenderer.
         val playbackSpeedAwareAudioSink = PlaybackSpeedAwareAudioSink(
-            sink = baseAudioSink,
+            sink = AudioSyncTaps.wrapAudioSink(baseAudioSink),
             initialForcePcm = initialForcePcm,
             forcePcmForBluetooth = bluetoothForcePcm
         )
@@ -2723,6 +2737,17 @@ private fun createDolbyVisionFallbackCodecSelector(
     return MediaCodecSelector.DEFAULT
 }
 
+/** Only Android's software decoders for video; audio and everything else keep [base]. */
+private fun softwareVideoCodecSelector(base: MediaCodecSelector): MediaCodecSelector =
+    MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+        val all = base.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+        if (!MimeTypes.isVideo(mimeType)) return@MediaCodecSelector all
+        val software = all.filter { it.softwareOnly }
+        // Nothing in software (protected streams, Dolby Vision): keep the hardware list so the
+        // stream still gets its normal error and MPV button.
+        software.ifEmpty { all }
+    }
+
 private fun describeExtensionRendererMode(mode: Int): String {
     return when (mode) {
         DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF -> "off"
@@ -2862,7 +2887,7 @@ private fun PlayerRuntimeController.recordFirstFrameDiagnostics(
         val keepZeroForDv7 = conversionSucceeded > 0L && MemoryBudget.isLowRamTier
         val resolvedBackBufferMs = if (keepZeroForDv7) 0 else configuredBackBufferMs
         if (resolvedBackBufferMs != effectiveBackBufferDurationMs) {
-            lc.setBackBufferDurationOverrideMs(resolvedBackBufferMs)
+            lc.setBackBufferDurationOverrideMs(resolvedBackBufferMs, player)
             effectiveBackBufferDurationMs = resolvedBackBufferMs
         }
         // Shrinking the byte budget starves the forward buffer, so it stays tied to the budget
@@ -2872,7 +2897,8 @@ private fun PlayerRuntimeController.recordFirstFrameDiagnostics(
             val effectiveConversionMb = (MemoryBudget.conversionBudgetMb - currentParallelChunkOverheadMb)
                 .coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
             lc.setBudgetBytesOverride(
-                effectiveConversionMb.toLong() * 1024L * 1024L
+                effectiveConversionMb.toLong() * 1024L * 1024L,
+                player
             )
         }
         Log.i(

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"這台電視無法播放此影片。請換個來源，或切換到 MPV。"</string>
+    <string name="iptv_settings_show_on_profiles">"在哪些使用者中顯示"</string>
+    <string name="iptv_settings_show_on_profiles_value">"在哪些使用者中顯示：%1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"全部"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d / %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"在這裡關閉的使用者不會看到來自 %1$s 的頻道、On Demand 和 Sports。播放清單本身對所有人保留"</string>
+    <string name="iptv_backup_file">"備份檔案"</string>
+    <string name="iptv_backup_file_summary">"將設定儲存為檔案，或從檔案還原"</string>
+    <string name="iptv_backup_file_description">"把 Live TV 設定複製到一個 .nptv 檔案：播放清單及其登入資訊、節目表、收藏、群組、Sports 和設定。不用 Setup Sync 時或想自己保留一份時很方便。"</string>
+    <string name="iptv_backup_with_phone">"用手機備份或還原"</string>
+    <string name="iptv_backup_with_phone_description">"掃描 QR 碼，把檔案儲存到手機，或把檔案傳回來"</string>
+    <string name="iptv_backup_save_on_tv">"在這台電視上儲存備份"</string>
+    <string name="iptv_backup_save_on_tv_description">"儲存在 下載 › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"從這台電視還原"</string>
+    <string name="iptv_backup_restore_on_tv_description">"這台電視上儲存的備份，最新的在前"</string>
+    <string name="iptv_backup_none_on_tv">"這台電視上還沒有備份。請先儲存一個，或使用手機。"</string>
+    <string name="iptv_backup_saving">"正在儲存…"</string>
+    <string name="iptv_backup_saved_to">"已儲存到 %1$s"</string>
+    <string name="iptv_backup_save_failed">"無法在這台電視上儲存備份。請改用手機。"</string>
+    <string name="iptv_backup_restoring">"正在還原…"</string>
+    <string name="iptv_backup_restored">"備份已還原。有變更的播放清單和節目表正在載入。"</string>
+    <string name="iptv_backup_restore_failed">"無法還原該備份（其中沒有播放清單或節目表）。"</string>
+    <string name="iptv_backup_restore_confirm_title">"還原此備份？"</string>
+    <string name="iptv_backup_restore_confirm_message">"於 %1$s 在 %2$s 上儲存。它將取代這台電視的 Live TV 設定。開啟 Setup Sync 時，你的其他電視也會跟著變更。"</string>
+    <string name="iptv_backup_restore_confirm_button">"還原"</string>
+    <string name="iptv_backup_not_a_backup">"這不是 Nuvio + IPTV 備份檔案（.nptv）。"</string>
+    <string name="iptv_backup_private_note">"備份檔案包含你的播放清單登入資訊。請妥善保管。"</string>
+    <string name="iptv_backup_phone_steps">"1. 讓手機連上與這台電視相同的 Wi-Fi。\n2. 用手機相機掃描 QR 碼。\n3. 儲存備份，或選擇一個備份檔案傳送到這裡。"</string>
+    <string name="iptv_backup_phone_check_tv">"已傳送。在電視上選擇「還原」即可完成。"</string>
+    <string name="iptv_backup_phone_title">"Nuvio + IPTV 備份"</string>
+    <string name="iptv_backup_phone_save_heading">"儲存備份"</string>
+    <string name="iptv_backup_phone_save_text">"將這台電視的 Live TV 設定以 .nptv 檔案儲存到你的手機。"</string>
+    <string name="iptv_backup_phone_save_button">"儲存備份檔案"</string>
+    <string name="iptv_backup_phone_restore_heading">"還原備份"</string>
+    <string name="iptv_backup_phone_restore_text">"選擇一個 .nptv 檔案傳送到電視。在電視上確認之前不會有任何變更。"</string>
+    <string name="iptv_backup_phone_choose_file">"選擇檔案"</string>
+    <string name="iptv_backup_phone_restore_button">"傳送到電視"</string>
+</resources>

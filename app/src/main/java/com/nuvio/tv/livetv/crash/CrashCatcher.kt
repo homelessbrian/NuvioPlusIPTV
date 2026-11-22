@@ -71,7 +71,11 @@ object CrashCatcher {
                     parts += frozen.readText()
                     frozen.delete()
                 }
-                exitReport(app)?.let { parts += it }
+                val exit = exitReport(app)
+                exit?.let { parts += it }
+                // Android 10 and older keep no record of why the app closed; a crash in native
+                // code (video decoder, MPV, VLC) still leaves its last lines in the app's log.
+                if (exit == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) olderNativeCrashReport(app)?.let { parts += it }
                 if (parts.isNotEmpty()) {
                     val report = parts.joinToString("\n\n")
                     File(app.filesDir, FILE_NAME).writeText(report)
@@ -304,6 +308,12 @@ object CrashCatcher {
                 val mi = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
                 appendLine("Device memory: ${mi.totalMem / (1024 * 1024)} MB, app limit ${am.memoryClass} MB / large ${am.largeMemoryClass} MB")
             }
+            if (last.reason == ApplicationExitInfo.REASON_CRASH_NATIVE) {
+                runCatching { previousProcessLog() }.getOrNull()?.let { (_, lines) ->
+                    appendLine("Last lines before it closed:")
+                    append(lines)
+                }
+            }
             if (last.reason == ApplicationExitInfo.REASON_ANR) {
                 val stuck = runCatching { mainThreadFromAnr(last) }.getOrNull()
                 if (!stuck.isNullOrBlank()) {
@@ -311,6 +321,48 @@ object CrashCatcher {
                     append(stuck)
                 }
             }
+        }.trimEnd()
+    }
+
+    private const val KEY_NATIVE_SEEN = "native_crash_seen"
+
+    /**
+     * The last lines the app's previous run wrote before a crash in native code ("Fatal signal"),
+     * read from the app's own log (Android lets an app read only its own lines). Returns the
+     * crash line, used to tell crashes apart, and up to [keep] lines before it.
+     */
+    private fun previousProcessLog(keep: Int = 40): Pair<String, String>? {
+        val me = Process.myPid()
+        val proc = ProcessBuilder("logcat", "-d", "-v", "time", "-t", "4000").redirectErrorStream(true).start()
+        val all = proc.inputStream.bufferedReader().use { it.readLines() }
+        runCatching { proc.waitFor() }
+        // "11-20 08:40:01.123 F/libc    ( 1234): Fatal signal 11 (SIGSEGV) ..."
+        val pidOf = Regex("""\(\s*(\d+)\)""")
+        fun pid(line: String) = pidOf.find(line)?.groupValues?.get(1)
+        val crashAt = all.indexOfLast { line ->
+            line.contains("Fatal signal") && pid(line)?.toIntOrNull()?.let { it != me } == true
+        }
+        if (crashAt < 0) return null
+        val crashPid = pid(all[crashAt])
+        val before = all.subList(0, crashAt + 1).filter { pid(it) == crashPid }
+        // The signal's details, written just after, are kept too.
+        val after = all.subList(crashAt + 1, all.size).filter { pid(it) == crashPid }.take(10)
+        return all[crashAt] to (before.takeLast(keep) + after).joinToString("\n")
+    }
+
+    /** A native crash on Android 10 and older, from the previous run's log (once per crash). */
+    private fun olderNativeCrashReport(app: Context): String? {
+        val (crashLine, lines) = runCatching { previousProcessLog() }.getOrNull() ?: return null
+        val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getString(KEY_NATIVE_SEEN, null) == crashLine) return null
+        prefs.edit().putString(KEY_NATIVE_SEEN, crashLine).apply()
+        return buildString {
+            appendLine("Nuvio + IPTV ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · kit ${com.nuvio.tv.livetv.model.LiveTvLoadReport.KIT_STAMP}")
+            appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine()
+            appendLine("APP CRASHED IN NATIVE CODE (video decoder, graphics or a library)")
+            appendLine("Last lines before it closed:")
+            append(lines)
         }.trimEnd()
     }
 

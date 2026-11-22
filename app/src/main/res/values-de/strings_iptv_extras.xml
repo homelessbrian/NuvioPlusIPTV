@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">"Dieser Fernseher konnte das Video nicht abspielen. Versuche eine andere Quelle oder wechsle zu MPV."</string>
+    <string name="iptv_settings_show_on_profiles">"Auf Profilen zeigen"</string>
+    <string name="iptv_settings_show_on_profiles_value">"Auf Profilen zeigen: %1$s"</string>
+    <string name="iptv_settings_show_on_profiles_all">"Alle"</string>
+    <string name="iptv_settings_show_on_profiles_count">"%1$d von %2$d"</string>
+    <string name="iptv_settings_show_on_profiles_description">"Hier ausgeschaltete Profile bekommen keine Sender, kein On Demand und kein Sports aus %1$s. Die Playlist selbst bleibt für alle"</string>
+    <string name="iptv_backup_file">"Sicherungsdatei"</string>
+    <string name="iptv_backup_file_summary">"Einrichtung als Datei sichern oder eine wiederherstellen"</string>
+    <string name="iptv_backup_file_description">"Eine Kopie deiner Live-TV-Einrichtung in einer .nptv-Datei: Playlists mit ihren Logins, Guides, Favoriten, Gruppen, Sports und Einstellungen. Praktisch ohne Setup-Sync oder als eigene Kopie."</string>
+    <string name="iptv_backup_with_phone">"Mit dem Handy sichern oder wiederherstellen"</string>
+    <string name="iptv_backup_with_phone_description">"Code scannen, um die Datei aufs Handy zu laden oder eine zurückzuschicken"</string>
+    <string name="iptv_backup_save_on_tv">"Sicherung auf diesem Fernseher speichern"</string>
+    <string name="iptv_backup_save_on_tv_description">"Gespeichert unter Downloads › Nuvio + IPTV"</string>
+    <string name="iptv_backup_restore_on_tv">"Von diesem Fernseher wiederherstellen"</string>
+    <string name="iptv_backup_restore_on_tv_description">"Auf diesem Fernseher gespeicherte Sicherungen, neueste zuerst"</string>
+    <string name="iptv_backup_none_on_tv">"Noch keine Sicherungen auf diesem Fernseher. Speichere zuerst eine oder nutze dein Handy."</string>
+    <string name="iptv_backup_saving">"Wird gespeichert…"</string>
+    <string name="iptv_backup_saved_to">"Gespeichert unter %1$s"</string>
+    <string name="iptv_backup_save_failed">"Die Sicherung konnte auf diesem Fernseher nicht gespeichert werden. Versuche es stattdessen mit dem Handy."</string>
+    <string name="iptv_backup_restoring">"Wird wiederhergestellt…"</string>
+    <string name="iptv_backup_restored">"Sicherung wiederhergestellt. Geänderte Playlists und Guides werden geladen."</string>
+    <string name="iptv_backup_restore_failed">"Diese Sicherung konnte nicht wiederhergestellt werden (sie enthält keine Playlists oder Guides)."</string>
+    <string name="iptv_backup_restore_confirm_title">"Diese Sicherung wiederherstellen?"</string>
+    <string name="iptv_backup_restore_confirm_message">"Gespeichert am %1$s auf %2$s. Sie ersetzt die Live-TV-Einrichtung dieses Fernsehers. Mit Setup-Sync ändern sich auch deine anderen Fernseher."</string>
+    <string name="iptv_backup_restore_confirm_button">"Wiederherstellen"</string>
+    <string name="iptv_backup_not_a_backup">"Das ist keine Nuvio + IPTV-Sicherungsdatei (.nptv)."</string>
+    <string name="iptv_backup_private_note">"Die Sicherungsdatei enthält deine Playlist-Logins. Halte sie privat."</string>
+    <string name="iptv_backup_phone_steps">"1. Verbinde dein Handy mit demselben WLAN wie diesen Fernseher.\n2. Scanne den Code mit der Handykamera.\n3. Speichere die Sicherung oder wähle eine Sicherungsdatei zum Senden."</string>
+    <string name="iptv_backup_phone_check_tv">"Gesendet. Wähle am Fernseher „Wiederherstellen“, um fertig zu werden."</string>
+    <string name="iptv_backup_phone_title">"Nuvio + IPTV-Sicherung"</string>
+    <string name="iptv_backup_phone_save_heading">"Sicherung speichern"</string>
+    <string name="iptv_backup_phone_save_text">"Speichert die Live-TV-Einrichtung dieses Fernsehers als .nptv-Datei auf deinem Handy."</string>
+    <string name="iptv_backup_phone_save_button">"Sicherungsdatei speichern"</string>
+    <string name="iptv_backup_phone_restore_heading">"Sicherung wiederherstellen"</string>
+    <string name="iptv_backup_phone_restore_text">"Wähle eine .nptv-Datei zum Senden an den Fernseher. Erst nach deiner Bestätigung am Fernseher ändert sich etwas."</string>
+    <string name="iptv_backup_phone_choose_file">"Datei wählen"</string>
+    <string name="iptv_backup_phone_restore_button">"An den Fernseher senden"</string>
+</resources>

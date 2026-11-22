@@ -416,6 +416,7 @@ class DebridSettingsDataStore @Inject constructor(
         val requiredReleaseGroupsValue: List<String>? = requiredReleaseGroups
         val excludedReleaseGroupsValue: List<String>? = excludedReleaseGroups
         val sortCriteriaValue: List<DebridStreamSortCriterion>? = sortCriteria
+        val preferredReleaseGroupsValue: List<String>? = preferredReleaseGroups
         return copy(
             maxResults = normalizeDebridStreamMaxResults(maxResults),
             maxPerResolution = maxPerResolution.coerceIn(0, 100),
@@ -445,7 +446,8 @@ class DebridSettingsDataStore @Inject constructor(
             excludedLanguages = excludedLanguagesValue.orEmpty(),
             requiredReleaseGroups = requiredReleaseGroupsValue.orEmpty().map { it.trim() }.filter { it.isNotBlank() }.distinct(),
             excludedReleaseGroups = excludedReleaseGroupsValue.orEmpty().map { it.trim() }.filter { it.isNotBlank() }.distinct(),
-            sortCriteria = sortCriteriaValue ?: DebridStreamSortCriterion.originalOrder
+            sortCriteria = sortCriteriaValue ?: DebridStreamSortCriterion.originalOrder,
+            preferredReleaseGroups = preferredReleaseGroupsValue.orEmpty().map { it.trim() }.filter { it.isNotBlank() }.distinct()
         )
     }
 }

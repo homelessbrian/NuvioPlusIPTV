@@ -320,6 +320,16 @@ internal fun buildModernHomePresentation(
                     )
                     add(placeholderRow)
                 }
+
+                // Live TV fork: drawn by the Live TV row itself (no poster items here).
+                is HomeRow.LiveRow -> add(
+                    HeroCarouselRow(
+                        key = homeRow.key,
+                        title = homeRow.title,
+                        globalRowIndex = index,
+                        items = emptyList<ModernCarouselItem>().asStable()
+                    )
+                )
             }
         }
 
@@ -351,6 +361,7 @@ private fun resolveVisibleHomeRows(input: ModernHomePresentationInput): List<Hom
                     // Keep placeholder rows as-is — they'll be rendered as shimmer skeletons
                     homeRow
                 }
+                is HomeRow.LiveRow -> homeRow
             }
         }
     }
@@ -404,7 +415,9 @@ internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): Carou
                     itemIdentities += "folder:${payload.folderId}"
                 }
                 is ModernPayload.ContinueWatching -> {
-                    itemIdentities += "cw:${payload.item.hashCode()}"
+                    // The card's key, one per title: a hash of the item changes with its progress,
+                    // so a card that was just watched would not be found again when it moves.
+                    itemIdentities += "cw:${item.key}"
                 }
             }
         }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_settings_support_poster_searching">"検索中…"</string>
+    <string name="iptv_settings_support_poster_test_failed">"テスト失敗: %1$s"</string>
+    <string name="iptv_settings_support_playlist_fallback">"プレイリスト"</string>
+    <string name="iptv_settings_support_remote_title">"リモコンボタンのテスト"</string>
+    <string name="iptv_settings_support_remote_instructions">"ボタンを押してください。最新が一番上です。色付きの行は、直前のボタンから 250 ms 以内に送られた別のボタンです（例: 上／下と一緒に送られる OK）。戻るを 3 回続けて押すと閉じます。"</string>
+    <string name="iptv_settings_support_remote_waiting">"ボタンを待っています…"</string>
+    <string name="iptv_settings_support_remote_action_down">"押下"</string>
+    <string name="iptv_settings_support_remote_action_up">"解放"</string>
+    <string name="iptv_settings_support_remote_action_multiple">"複数"</string>
+    <string name="iptv_settings_support_remote_repeat">"リピート %1$d"</string>
+    <string name="iptv_settings_support_remote_long_press">"長押し"</string>
+    <string name="iptv_settings_support_remote_canceled">"キャンセル"</string>
+    <string name="iptv_settings_support_remote_held">"%1$d ms 押下"</string>
+    <string name="iptv_settings_support_remote_event">"%1$-5s %2$-16s code %3$-4d  +%4$5d ms  %5$s"</string>
+    <string name="iptv_settings_support_report_title">"Live TV 起動レポート"</string>
+    <string name="iptv_settings_support_report_subtitle">"アプリ起動からの記録。▲ ▼ でスクロール。"</string>
+    <string name="iptv_settings_support_report_empty">"まだありません: 先に Live TV を開いてください。"</string>
+    <string name="iptv_settings_support_report_send">"レポート全体を送信"</string>
+    <string name="iptv_settings_support_report_no_network">"スマホからレポートを送るには、このテレビを Wi-Fi に接続してください。"</string>
+    <string name="iptv_settings_support_report_phone_instructions">"1. スマホをこのテレビと同じ Wi-Fi に接続します。\n2. スマホのカメラでこのコードを読み取るか、下のアドレスを入力します。\n3. 「短いレポートをコピー」（Discord のメッセージ 1 件に収まります）をタップし、メッセージに貼り付けます。"</string>
+</resources>

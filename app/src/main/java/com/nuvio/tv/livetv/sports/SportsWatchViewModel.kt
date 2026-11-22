@@ -50,7 +50,7 @@ class SportsWatchViewModel @Inject constructor(
     private val rules: StateFlow<SportsWatchRules?> = combine(
         preferences.userState.distinctUntilChanged { a, b ->
             a.hiddenChannels == b.hiddenChannels && a.hiddenGroups == b.hiddenGroups &&
-                a.lockedGroups == b.lockedGroups
+                a.hiddenPlaylists == b.hiddenPlaylists && a.lockedGroups == b.lockedGroups
         },
         preferences.settings.distinctUntilChanged { a, b ->
             a.parentalPin == b.parentalPin && a.lockAdultContent == b.lockAdultContent
@@ -133,6 +133,11 @@ class SportsWatchViewModel @Inject constructor(
     /** Picking a chip: the list follows it until a filter is chosen on the Sports page again. */
     internal fun pickFilter(key: String) {
         if (profileStillCurrent()) selection.select(SportsWatchPolicy.filterQuery(key))
+    }
+
+    /** A game highlighted or picked here: its streams from your sports add-ons are looked for (see [SportsRepository.lookForLiveStreams]). */
+    fun lookForStreams(eventId: String) {
+        if (profileStillCurrent()) repo.lookForLiveStreams(eventId)
     }
 
     /** Resolve the requested broadcast at the press, or Sports' best allowed source when omitted. */

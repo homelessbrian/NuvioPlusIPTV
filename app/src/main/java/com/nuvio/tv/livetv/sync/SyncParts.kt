@@ -96,12 +96,12 @@ internal class SyncParts(private val store: SharedPreferences) {
         private const val BEHAVIOR_SEEN = "sync_part_behavior_seen"
         private val PROFILE_SUFFIX = Regex("""_p\d+$""")
 
-        private val LOGIN_KEYS = setOf("playlists", "epg_sources", "playlist_accounts", "epg_overrides")
+        private val LOGIN_KEYS = setOf("playlists", "epg_sources", "playlist_accounts", "epg_overrides", "network_folder")
         private val FAVORITE_KEYS = setOf(
-            "favorites", "hidden_channels", "hidden_groups", "channel_names", "channel_logos", "channel_numbers",
+            "favorites", "hidden_channels", "hidden_groups", "hidden_playlists", "channel_names", "channel_logos", "channel_numbers",
             "group_names", "group_order", "custom_groups", "channel_order", "channel_copies", "channel_audio",
-            "picture_shapes", "locked_groups", "name_removals", "reminders",
-            "vod_hidden_categories", "vod_group_order", "vod_group_names"
+            "picture_shapes", "locked_groups", "favorite_groups", "name_removals", "reminders",
+            "vod_hidden_categories", "vod_group_order", "vod_group_names", "title_match_fixes"
         )
         private val SPORTS_KEYS = setOf("sports", "sports_mine")
         private val CALENDAR_KEYS = setOf(
@@ -111,10 +111,10 @@ internal class SyncParts(private val store: SharedPreferences) {
         /** Options that act the same on any device (not how the app looks), so phones sync them too. */
         private val BEHAVIOR_KEYS = setOf(
             "playlist_refresh_hours", "epg_refresh_hours", "epg_future_days", "epg_past_hours", "epg_offset_minutes",
-            "record_pre_minutes", "record_post_minutes", "recording_space_rule", "record_series_keep", "reminder_lead_minutes",
+            "record_pre_minutes", "record_post_minutes", "recording_space_rule", "recording_keep_days", "record_series_keep", "reminder_lead_minutes",
             "catchup_prefer_hls", "catchup_cache", "catchup_shift_minutes", "timeshift_enabled", "timeshift_minutes",
             "auto_reconnect", "auto_backup_channel", "hide_stray_entries", "captions_by_default",
-            "channel_sort", "group_sort", "vod_default_sort", "vod_sorts", "vod_merge_duplicates",
+            "channel_sort", "group_sort", "vod_default_sort", "vod_sorts", "vod_merge_duplicates", "vod_hide_non_english",
             "calendar_hide_spoilers", "calendar_hide_watched", "calendar_skip_news_talk", "calendar_sports", "calendar_new_episode_cards",
             "guide_search_catalog", "guide_search_live", "guide_search_ondemand",
             "vod_search_catalog", "vod_search_live", "vod_search_ondemand", "search_order", "logo_sources_off",
@@ -124,7 +124,7 @@ internal class SyncParts(private val store: SharedPreferences) {
         )
 
         /** Always synced, whatever is switched off: the parental lock and the profile set-up marker. */
-        private val ALWAYS_KEYS = setOf("parental_pin", "lock_adult_content", "profile_seeded", "profile_match_groups")
+        private val ALWAYS_KEYS = setOf("parental_pin", "lock_adult_content", "lock_logins", "profile_seeded", "profile_match_groups")
 
         /** Which part a stored key belongs to, or null when it is always synced. Everything not named above is "Look and layout". */
         fun partOf(key: String): SyncPart? {

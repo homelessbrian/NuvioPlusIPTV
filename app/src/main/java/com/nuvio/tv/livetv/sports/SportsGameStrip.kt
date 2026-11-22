@@ -80,6 +80,8 @@ internal fun SportsGameStrip(
     onClose: () -> Unit,
     /** Multiview's channel picker: shows a small "Channels" button next to Close. */
     onChannels: (() -> Unit)? = null,
+    /** A game the highlight rests on: its add-on streams are looked for, so they show in its streams. */
+    onGameFocus: (SportsWatchGame) -> Unit = {},
     modifier: Modifier = Modifier,
     /** The play bar's darkness ("Bar darkness"): this panel floats over the video like the bar. */
     panelBackground: String = "darker",
@@ -128,6 +130,11 @@ internal fun SportsGameStrip(
         ?: if (chosenGameId == null) games.firstOrNull { game -> game.channels.any { it.channel.key == currentChannelKey } }
         else null
     val streams = streamGame?.channels.orEmpty().distinctBy { it.channel.key }
+    LaunchedEffect(lastGameId) {
+        val id = lastGameId ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(600L)
+        games.firstOrNull { it.event.id == id }?.let(onGameFocus)
+    }
     val streamTarget = focusedPane to streamGame?.event?.id
 
     suspend fun requestKeyboardFocus(requester: FocusRequester?): Boolean {
@@ -602,7 +609,7 @@ private fun StripStreamCard(
             ChannelLogo(match.channel.logo, 24.dp)
             LiveText(game.event.title, Modifier.weight(1f), size = 10.sp,
                 color = NuvioTheme.colors.TextSecondary)
-            if (playing) SportsBadge("PLAYING", accent, NuvioTheme.colors.OnSecondary)
+            if (playing) PlayingBadge(accent, "PLAYING")
             else if (best) SportsBadge("BEST MATCH", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
         }
         LiveText(match.channel.name, size = 13.sp, maxLines = 2, weight = FontWeight.ExtraBold)
@@ -638,6 +645,8 @@ internal fun StripGameCard(
     cursorOn: Boolean? = null,
     /** A card as wide as its list and this tall, instead of the strip's 250dp-wide, full-height card. */
     cardHeight: androidx.compose.ui.unit.Dp? = null,
+    /** A game coming up later (Home's Sports rows): when it starts ("Sat 3:00 PM"). */
+    upcoming: String? = null,
 ) {
     var ownFocus by remember { mutableStateOf(false) }
     val focused = cursorOn ?: ownFocus
@@ -654,7 +663,7 @@ internal fun StripGameCard(
     val available = channel != null
     val status = when (event.state) {
         GameState.LIVE -> if (!hideScores && event.hasScore) event.status ?: "Live" else "Live"
-        GameState.PRE -> "Starting soon"
+        GameState.PRE -> upcoming ?: "Starting soon"
         GameState.POST -> if (hideScores) "Ended" else event.status ?: "Final"
         GameState.OFF -> event.status ?: "Unavailable"
     }
@@ -678,8 +687,10 @@ internal fun StripGameCard(
                 color = Color.White.copy(alpha = 0.78f), size = 10.sp, weight = FontWeight.SemiBold)
             SportsBadge(
                 if (assignedPanes.isNotEmpty()) assignedPanes.joinToString(" · ") { "P${it + 1}" }
-                else if (event.state == GameState.LIVE) "LIVE" else "SOON",
-                if (assignedPanes.isNotEmpty()) NuvioTheme.colors.Secondary else SportsLook.Live.copy(alpha = 0.85f),
+                else if (event.state == GameState.LIVE) "LIVE" else if (upcoming != null) "NEXT" else "SOON",
+                if (assignedPanes.isNotEmpty()) NuvioTheme.colors.Secondary
+                else if (upcoming != null && event.state != GameState.LIVE) Color.White.copy(alpha = 0.14f)
+                else SportsLook.Live.copy(alpha = 0.85f),
                 if (assignedPanes.isNotEmpty()) NuvioTheme.colors.OnSecondary else Color.White,
             )
         }
@@ -695,7 +706,7 @@ internal fun StripGameCard(
             verticalArrangement = Arrangement.Center) {
             LiveText(status, size = 10.sp, color = Color.White.copy(alpha = 0.78f))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                LiveText(channel?.channel?.name ?: "No matched channel", Modifier.weight(1f, fill = false), size = 11.sp,
+                LiveText(channel?.channel?.name ?: (if (upcoming != null) event.broadcasts.take(3).joinToString(" · ") else "No matched channel"), Modifier.weight(1f, fill = false), size = 11.sp,
                     color = if (available) NuvioTheme.colors.TextPrimary else NuvioTheme.colors.TextSecondary,
                     weight = FontWeight.SemiBold)
                 if (otherStreams > 0) SportsBadge(if (otherStreams == 1) "+1 stream" else "+$otherStreams streams",

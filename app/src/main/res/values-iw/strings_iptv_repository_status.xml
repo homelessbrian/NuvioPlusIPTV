@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_repository_status_updating_playlist">"מעדכן את רשימת ההשמעה \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels">"קורא ערוצים…"</string>
+    <string name="iptv_repository_status_downloading_guide">"מוריד את המדריך \"%1$s\"…"</string>
+    <string name="iptv_repository_status_downloading_guide_label">"מוריד את המדריך \"%1$s\""</string>
+    <string name="iptv_repository_status_matching_data">"מתאים נתוני מדריך…"</string>
+    <string name="iptv_repository_status_updating_guide">"מעדכן מדריך…"</string>
+    <string name="iptv_repository_status_adding_playlist">"מוסיף ערוצים מ-\"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from">"קורא ערוצים מ-\"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_channels_from_numbered">"קורא ערוצים מ-\"%1$s\" (%2$d מתוך %3$d)…"</string>
+    <string name="iptv_repository_status_guide_memory_skipped">"אין מספיק זיכרון למדריך \"%1$s\" — דולג"</string>
+    <string name="iptv_repository_status_reading_guide">"קורא את המדריך \"%1$s\"…"</string>
+    <string name="iptv_repository_status_reading_guide_numbered">"קורא את המדריך \"%1$s\" (%2$d מתוך %3$d)…"</string>
+    <string name="iptv_repository_status_reading_guide_progress">"קורא את המדריך \"%1$s\"… %2$d%%"</string>
+    <string name="iptv_repository_status_reading_guide_progress_numbered">"קורא את המדריך \"%1$s\" (%2$d מתוך %3$d)… %4$d%%"</string>
+    <string name="iptv_repository_status_matching_guide">"מתאים את המדריך \"%1$s\"…"</string>
+    <string name="iptv_repository_status_matching_guide_numbered">"מתאים את המדריך \"%1$s\" (%2$d מתוך %3$d)…"</string>
+    <string name="iptv_repository_status_downloading_playlist_label">"מוריד את רשימת ההשמעה \"%1$s\""</string>
+    <string name="iptv_repository_status_download_progress">"%1$s… %2$s"</string>
+    <string name="iptv_repository_status_download_progress_total">"%1$s… %2$s מתוך %3$s"</string>
+    <string name="iptv_repository_status_loading_channels">"טוען ערוצים מ-%1$s… %2$,d"</string>
+    <string name="iptv_repository_status_size_gb">"%1$.1f GB"</string>
+    <string name="iptv_repository_status_size_mb">"%1$.1f MB"</string>
+    <string name="iptv_repository_status_size_kb">"%1$d KB"</string>
+    <string name="iptv_repository_status_unknown_host_short">"שרת הספק לא נמצא."</string>
+    <string name="iptv_repository_status_timeout_short">"הספק לא ענה בזמן."</string>
+    <string name="iptv_repository_status_generic_error">"משהו השתבש."</string>
+    <string name="iptv_repository_status_unknown_host_address">"שרת הספק לא נמצא (%1$s). בדקו את הכתובת או את האינטרנט, או נסו שוב מאוחר יותר."</string>
+    <string name="iptv_repository_status_provider_timeout">"הספק לא ענה בזמן (תם הזמן). ייתכן שהוא עמוס; נסו שוב מאוחר יותר."</string>
+    <string name="iptv_repository_status_address">"כתובת"</string>
+    <string name="iptv_repository_status_playlist_update_failed">"לא ניתן לעדכן את רשימת ההשמעה \"%1$s\". %2$s"</string>
+    <string name="iptv_repository_status_guide_update_failed">"לא ניתן לעדכן את המדריך \"%1$s\". %2$s"</string>
+    <string name="iptv_repository_status_expired">"התוקף של \"%1$s\" פג"</string>
+    <string name="iptv_repository_status_expires_today">"התוקף של \"%1$s\" פג היום"</string>
+    <string name="iptv_repository_status_expires_tomorrow">"התוקף של \"%1$s\" פג מחר"</string>
+    <plurals name="iptv_repository_status_adding_playlists">
+        <item quantity="one">"מוסיף ערוצים מרשימת השמעה חדשה אחת…"</item>
+        <item quantity="two">"מוסיף ערוצים מ-%1$d רשימות השמעה חדשות…"</item>
+        <item quantity="other">"מוסיף ערוצים מ-%1$d רשימות השמעה חדשות…"</item>
+    </plurals>
+    <plurals name="iptv_repository_status_expires_days">
+        <item quantity="one">"התוקף של \"%1$s\" פג בעוד יום (%2$d)"</item>
+        <item quantity="two">"התוקף של \"%1$s\" פג בעוד %2$d ימים"</item>
+        <item quantity="other">"התוקף של \"%1$s\" פג בעוד %2$d ימים"</item>
+    </plurals>
+    <string name="iptv_repository_status_storage_full_short">"אין מספיק שטח אחסון במכשיר הזה. המדריך הקודם נשמר."</string>
+</resources>

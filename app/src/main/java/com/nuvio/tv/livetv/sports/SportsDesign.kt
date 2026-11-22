@@ -243,6 +243,41 @@ internal fun SportsBadge(text: String, background: Color, color: Color, modifier
     )
 }
 
+/**
+ * PLAYING: an outline in the theme's colour, so it never reads as the solid red LIVE pill.
+ * Same height as the other badges (the border takes the place of some padding).
+ */
+@Composable
+internal fun PlayingBadge(color: Color = NuvioTheme.colors.Secondary, text: String = "▶ PLAYING", modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(5.dp)
+    LiveText(
+        text,
+        modifier = modifier.clip(shape).border(1.dp, color, shape).padding(horizontal = 5.dp, vertical = 0.5.dp),
+        color = color, size = 9.sp, weight = FontWeight.Black
+    )
+}
+
+/**
+ * The game the playing channel is for, out of [events]: the one picked to watch, or (started some
+ * other way) the one on that channel that's live, else the nearest in time. One channel often
+ * carries several games, and only one of them should say PLAYING.
+ */
+internal fun playingEventId(
+    playingKey: String?,
+    events: List<SportsEvent>,
+    matches: Map<String, List<ChannelMatch>>,
+    now: Long
+): String? {
+    if (playingKey == null) return null
+    SportsLaunch.pickedGame(playingKey)?.let { return it }
+    return events.asSequence()
+        .filter { e -> matches[e.id]?.any { it.channel.key == playingKey } == true }
+        .minWithOrNull(compareBy<SportsEvent>(
+            { if (it.state == GameState.LIVE) 0 else if (it.state == GameState.PRE) 1 else 2 },
+            { kotlin.math.abs(it.startMs - now) }
+        ))?.id
+}
+
 /** A score: fixed-width digits, dimmed when behind, and a short yellow flash when it changes. */
 @Composable
 internal fun ScoreLabel(score: String, dim: Boolean, size: TextUnit) {
@@ -312,7 +347,7 @@ internal fun TeamBand(
 internal fun StateBadge(ev: SportsEvent, playing: Boolean, use24h: Boolean) {
     val colors = NuvioTheme.colors
     when {
-        playing -> SportsBadge("▶ PLAYING", colors.Secondary, colors.OnSecondary)
+        playing -> PlayingBadge()
         ev.state == GameState.LIVE -> SportsBadge("● LIVE", SportsLook.Live, Color.White)
         ev.state == GameState.POST -> SportsBadge("FINAL", Color.White.copy(alpha = 0.12f), Color.White)
         ev.state == GameState.OFF -> SportsBadge((ev.status ?: "POSTPONED").uppercase(), Color(0x33FF8A80), Color(0xFFFF8A80))
@@ -441,13 +476,6 @@ internal fun GameCard(
 /** How an event without two teams is shown: its headline, colour, label and whether it's a big event. */
 internal class EventLook(val headline: String, val color: Color, val text: Color, val label: String?, val premium: Boolean)
 
-private val PREMIUM_EVENTS = listOf(
-    "wrestlemania", "royal rumble", "summerslam", "survivor series", "elimination chamber", "money in the bank",
-    "saturday night's main event", "saturday nights main event", "night of champions", "crown jewel", "backlash",
-    "bad blood", "clash in paris", "wrestlepalooza", "all in", "all out", "full gear", "revolution", "double or nothing",
-    "worlds end", "forbidden door", "grand slam", "bound for glory", "slammiversary", "hard to kill", "rebellion",
-    "halloween havoc", "wargames", "dynasty", "great american bash", "stand and deliver", "vengeance day"
-)
 
 
 /**
@@ -462,7 +490,9 @@ internal fun eventLook(ev: SportsEvent, league: League?): EventLook {
     if (sport == Sport.WRESTLING) {
         // "WWE Friday Night SmackDown" -> "Friday Night SmackDown": the promotion is in the logo column.
         val headline = wrestlingHeadline(ev.title)
-        val premium = PREMIUM_EVENTS.any { has(SportsCatalog.norm(it).trim()) }
+        // Not for looks back ("Greatest Moments - WrestleMania in the 80s").
+        val premium = SportsCatalog.PREMIUM_EVENTS.any { has(SportsCatalog.norm(it).trim()) } &&
+            SportsCatalog.WRESTLING_NOT_LIVE.none { has(SportsCatalog.norm(it).trim()) }
         val (color, text) = when {
             premium -> Color(0xFF5A1478) to Color.White
             has("smackdown") -> Color(0xFF0052CC) to Color.White
@@ -557,7 +587,7 @@ internal fun UpcomingRow(
             .fillMaxWidth()
             .height(50.dp)
             .sportsFrame(focused, false, accent, radius = 12.dp)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { focused = it.isFocused; if (it.isFocused) GameFocus.onGame?.invoke(ev) }
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -708,10 +738,31 @@ internal fun SportsAction(
     selected: Boolean = false,
     /** A coloured dot before the text (Record's red one). */
     dot: Color? = null,
+    /** A team's colour behind the button (a game page's follow buttons). */
+    tint: Color? = null,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(50)
+    if (tint != null && dot == null) {
+        LiveText(
+            text,
+            modifier = modifier
+                .clip(shape)
+                .background(tint.copy(alpha = if (selected) 0.95f else 0.55f))
+                .border(
+                    if (focused) NuvioTheme.focusRing.border(2.dp)
+                    else androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = if (selected) 0.45f else 0.22f)),
+                    shape
+                )
+                .onFocusChanged { focused = it.isFocused }
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 7.dp),
+            color = Color.White,
+            size = 12.sp, weight = FontWeight.ExtraBold
+        )
+        return
+    }
     if (dot != null) {
         Row(
             modifier
@@ -843,16 +894,19 @@ internal fun SportsChannelRow(
     use24h: Boolean = false,
     /** The same channel's other copies folded into this row (ESPN HD, ESPN SD): kept as backups. */
     copies: List<ChannelMatch> = emptyList(),
+    /** What the channel's guide says (on now, later, something else on): a coloured line of its own. */
+    guide: GuideLine? = null,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
     val accent = NuvioTheme.colors.Secondary
     val ink = Color.White
     val sub = SportsLook.Dim
+    val withGuide = guide != null && !finished
     Box(
         modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(if (withGuide) 66.dp else 56.dp)
             .sportsFrame(focused, false, accent, radius = 12.dp)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
@@ -888,11 +942,16 @@ internal fun SportsChannelRow(
                     if (p != null && eventStartMs != null && kotlin.math.abs(p.startMs - eventStartMs) > 20 * 60_000L)
                         "Airs ${com.nuvio.tv.livetv.ui.formatClock(p.startMs, use24h)} · $base" else base
                 }
-                LiveText(line, color = sub, size = 10.sp, maxLines = 1)
+                if (withGuide && guide != null) {
+                    GuideLineText(guide, modifier = Modifier.padding(vertical = 1.dp))
+                    LiveText(if (focused && !m.sure) line else guide.detail ?: line, color = sub, size = 10.sp, maxLines = 1)
+                } else LiveText(line, color = sub, size = 10.sp, maxLines = 1)
             }
             Spacer(Modifier.width(8.dp))
             when {
-                playing -> SportsBadge("▶ PLAYING", accent, NuvioTheme.colors.OnSecondary)
+                playing -> PlayingBadge(accent)
+                // The guide line already says whether it's on: the badge only flags a guess.
+                m.sure && withGuide -> Unit
                 m.sure -> SportsBadge("SHOWING IT", accent, NuvioTheme.colors.OnSecondary)
                 else -> LiveText(
                     "MAYBE",

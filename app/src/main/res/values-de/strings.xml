@@ -836,7 +836,6 @@
 
     <!-- MDBListSettingsScreen -->
     <string name="mdblist_title">MDBList-Bewertungen</string>
-    <string name="mdblist_subtitle">Externe Bewertungen konfigurieren, die im Detailbereich angezeigt werden</string>
     <string name="mdblist_enable_title">MDBList-Bewertungen aktivieren</string>
     <string name="mdblist_enable_subtitle">Bewertungen von externen Anbietern im Metadaten-Detailbildschirm abrufen</string>
     <string name="mdblist_api_key_title">API-Schlüssel</string>
@@ -2263,4 +2262,6 @@
     <string name="trakt_comments_error_request_failed">Trakt comments request failed</string>
     <string name="trakt_library_error_fetch_list_items">Failed to fetch list items</string>
 
+    <string name="settings_home_screen_rows">Startbildschirm-Reihen</string>
+    <string name="settings_home_screen_rows_subtitle">Lege die Reihenfolge der Reihen auf deinem Startbildschirm fest</string>
 </resources>

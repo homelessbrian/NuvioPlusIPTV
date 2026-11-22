@@ -108,6 +108,9 @@ import com.nuvio.tv.LocalContentFocusRequester
 import com.nuvio.tv.livetv.data.CatchupUrlBuilder
 import com.nuvio.tv.livetv.model.ChannelGroup
 import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.model.descriptionText
+import com.nuvio.tv.livetv.model.guideTitleWithSub
+import com.nuvio.tv.livetv.model.subTitle
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.effectiveGuideSize
@@ -174,7 +177,9 @@ fun LiveTvGuideScreen(
     onReturnTo: (String) -> Unit = {},
     viewModel: LiveTvViewModel = hiltViewModel(),
     onOpenMultiview: () -> Unit = {},
-    onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() }
+    onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() },
+    /** Full screen, the Channel Row's Games list: the game you're watching, on the Sports page. */
+    onOpenSportsGame: (String) -> Unit = {}
 ) {
     // Hold the first draw until the saved settings and menu look are read. Before that the guide
     // only has the built-in defaults, and it drew one frame of the old look, then redrew.
@@ -194,6 +199,7 @@ fun LiveTvGuideScreen(
         onOpenNuvioSearch = onOpenNuvioSearch,
         onReturnToSports = onReturnToSports,
         onReturnTo = onReturnTo,
+        onOpenSportsGame = onOpenSportsGame,
         viewModel = viewModel
     )
 }
@@ -211,6 +217,7 @@ private fun LiveTvGuideScreenBody(
     /** Full screen was opened from the Sports page: Back goes back there. */
     onReturnToSports: () -> Unit = {},
     onReturnTo: (String) -> Unit = {},
+    onOpenSportsGame: (String) -> Unit = {},
     viewModel: LiveTvViewModel = hiltViewModel()
 ) {
     // Full screen happens right here, TiviMate style: the same video view grows from the
@@ -359,6 +366,7 @@ private fun LiveTvGuideScreenBody(
             }
             viewModel.preview(channel)
             handoff.eventId?.let(com.nuvio.tv.livetv.sports.SportsLaunch::openedFromSports)
+            com.nuvio.tv.livetv.sports.SportsLaunch.pickGame(handoff.eventId, channel.key)
             fullscreenShown = true
             fullscreenComing = false
             com.nuvio.tv.livetv.sports.SportsWatchLaunch.finishSingleHandoff(handoff, source.currentProfile.value)
@@ -456,6 +464,9 @@ private fun LiveTvGuideScreenBody(
     /** Schedule a Recording (long-press menu): the channel it's for. */
     var manualRecordingFor by remember { mutableStateOf<LiveChannel?>(null) }
     var infoTarget by remember { mutableStateOf<MenuTarget?>(null) }
+    // Program info opened from the hold-OK menu: Back goes back to that menu (on Program info).
+    var infoFromMenu by remember { mutableStateOf(false) }
+    var menuOnInfo by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var textPrompt by remember { mutableStateOf<TextPrompt?>(null) }
     var groupMenu by remember { mutableStateOf<ChannelGroup?>(null) }
@@ -800,6 +811,15 @@ private fun LiveTvGuideScreenBody(
             }
             // Browse by channel name: from the shows, Back goes to the channel name first.
             settings.browseByChannelName && !nameFocus && !groupsOpen -> nameFocus = true
+            // Back from search results: the group you were in before searching.
+            ui.selectedGroupId == ChannelGroup.SEARCH && !groupsOpen -> {
+                viewModel.leaveSearch()
+                row = 0
+                column = GuideColumn.CHANNEL
+                windowStart = floorSlot(now)
+                cursorMs = now
+                scope.launch { delay(60); runCatching { gridFocus.requestFocus() } }
+            }
             // Back from the channels: the group list, with the group you're in highlighted.
             !groupsOpen -> focusGroups()
             else -> openSidebar()
@@ -853,7 +873,7 @@ private fun LiveTvGuideScreenBody(
     // While browsing the group list, the info panel stays on what's playing in the preview;
     // it only follows the highlight when you're moving through the channels themselves.
     val browsingGroups = groupsOpen && !gridFocused
-    val playingChannel = viewModel.channelByKey(playback.channelKey)
+    val playingChannel = viewModel.shownChannel(playback.channelKey)
     val headerChannel = if (browsingGroups && playingChannel != null) playingChannel else focusedChannel
     val headerBlock = if (browsingGroups && playingChannel != null) {
         val headerPrograms = if (playingChannel.key == focusedChannel?.key) focusedPrograms
@@ -930,7 +950,7 @@ private fun LiveTvGuideScreenBody(
                 CatchupUrlBuilder.isAvailable(ch, block.program, now) -> {
                 if (viewModel.playCatchup(ch, block.program)) goFullscreen()
             }
-            else -> infoTarget = MenuTarget(ch, block)
+            else -> { infoFromMenu = false; infoTarget = MenuTarget(ch, block) }
         }
     }
 
@@ -1525,7 +1545,7 @@ private fun LiveTvGuideScreenBody(
                                 if (isOk) {
                                     fun openMenu() {
                                         longPressFired = true
-                                        focusedChannel?.let { menuTarget = MenuTarget(it, focusedBlock) }
+                                        focusedChannel?.let { menuOnInfo = false; menuTarget = MenuTarget(it, focusedBlock) }
                                     }
                                     if (event.type == KeyEventType.KeyDown) {
                                         if (event.nativeKeyEvent.repeatCount == 0) {
@@ -1630,7 +1650,7 @@ private fun LiveTvGuideScreenBody(
                                     event.key == Key.MediaFastForward -> { repeat(4) { moveRight() }; true }
                                     event.key == Key.MediaRewind -> { repeat(4) { moveLeft(held = true) }; true }
                                     event.key == Key.Menu || event.key == Key.Info -> {
-                                        focusedChannel?.let { menuTarget = MenuTarget(it, focusedBlock) }
+                                        focusedChannel?.let { menuOnInfo = false; menuTarget = MenuTarget(it, focusedBlock) }
                                         true
                                     }
                                             event.key == Key.Search -> { LiveTvSearchBridge.origin.value = LiveTvSearchBridge.GUIDE; onOpenNuvioSearch(); true }
@@ -2210,7 +2230,8 @@ private fun LiveTvGuideScreenBody(
                     viewModel.hideGroup(target.channel.groupId)
                     menuTarget = null
                 },
-                onProgramInfo = { menuTarget = null; infoTarget = target },
+                onProgramInfo = { menuTarget = null; infoFromMenu = true; infoTarget = target },
+                focusProgramInfo = menuOnInfo,
                 streamProgram = target.block?.program ?: viewModel.currentProgram(target.channel.key),
                 onFindInNuvio = { p -> menuTarget = null; findInNuvio(p) },
                 onSearch = { menuTarget = null; LiveTvSearchBridge.origin.value = LiveTvSearchBridge.GUIDE; onOpenNuvioSearch() },
@@ -2233,7 +2254,10 @@ private fun LiveTvGuideScreenBody(
                 now = now,
                 use24h = settings.use24HourClock,
                 showEpisode = settings.showEpisodeNumbers,
-                onDismiss = { infoTarget = null },
+                onDismiss = {
+                    infoTarget = null
+                    if (infoFromMenu) { menuOnInfo = true; menuTarget = target }
+                },
                 onFind = { p -> infoTarget = null; findInNuvio(p) },
                 onWatch = { infoTarget = null; playChannel(target.channel) },
                 onCatchup = { p ->
@@ -2334,6 +2358,8 @@ private fun LiveTvGuideScreenBody(
         }
         groupMenu?.let { g ->
             val isCustom = g.id.startsWith(ChannelGroup.CUSTOM_PREFIX)
+            val favAddText = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_guide_add_favorite_group)
+            val favRemoveText = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_guide_remove_favorite_group)
             ActionMenuDialog(
                 title = g.title,
                 actions = buildList {
@@ -2345,6 +2371,11 @@ private fun LiveTvGuideScreenBody(
                             hint = if (isCustom) "Group name" else "Leave empty to use the playlist name",
                             onConfirm = { viewModel.renameGroup(g.id, it) }
                         )
+                    })
+                    if (viewModel.isGroupFavorite(g.id)) add(favRemoveText to {
+                        viewModel.setGroupFavorite(g.id, false); groupMenu = null
+                    }) else add(favAddText to {
+                        viewModel.setGroupFavorite(g.id, true); groupMenu = null
                     })
                     if (viewModel.parentalEnabled()) {
                         if (viewModel.isGroupLockSet(g.id)) add("Remove parental lock…" to {
@@ -2473,6 +2504,13 @@ private fun LiveTvGuideScreenBody(
                 onOpenSettings = onOpenSettings,
                 onOpenSportsMultiview = { panes -> onOpenSportsMultiview(panes, playback.channelKey) },
                 onOpenMultiview = onOpenMultiview,
+                onOpenSportsGame = { id ->
+                    // Leaving full screen for the Sports page: Back there comes back to full screen.
+                    com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn()
+                    com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn()
+                    fullscreenComing = false
+                    onOpenSportsGame(id)
+                },
                 viewModel = viewModel
             )
         }
@@ -2629,7 +2667,7 @@ private fun GuideHeader(
                 val p = rememberShowDetails(channel.key, block?.program)
                 if (GuideInfoPart.TITLE !in hid) {
                     LiveText(
-                        text = p?.title?.let { titleMarks(it).title } ?: channel.name,
+                        text = p?.title?.let { guideTitleWithSub(titleMarks(it).title, p.subTitle) } ?: channel.name,
                         modifier = Modifier.fillMaxWidth(),
                         size = if (small) 22.sp else 28.sp,
                         weight = FontWeight.ExtraBold,
@@ -2673,7 +2711,7 @@ private fun GuideHeader(
                     val lines = (maxHeight / lineHeight).toInt().coerceIn(1, 8)
                     ScrollingDescription(
                         text = about?.description?.takeIf { it.isNotBlank() }
-                            ?: p?.description ?: if (p == null) "No program information" else "",
+                            ?: p?.descriptionText ?: if (p == null) "No program information" else "",
                         color = NuvioTheme.colors.TextSecondary,
                         size = textSize,
                         maxLines = lines
@@ -3274,13 +3312,14 @@ private fun GroupColumn(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // The rows of the list below, in order (what Up / Down step through).
     val listed = groups.filter { it.id != ChannelGroup.SEARCH }
-    val sources = listed.mapNotNull { it.sourceId }.distinct()
-    val sectioned = showPlaylistHeadings && !reorderMode && hiddenPending == null && sources.size > 1
+    // Favorite groups sit at the top, outside their playlist's heading.
+    val sources = listed.mapNotNull { it.section }.distinct()
+    val sectioned = showPlaylistHeadings && !reorderMode && hiddenPending == null && listed.mapNotNull { it.sourceId }.distinct().size > 1
     val rowKeys: List<String> = if (!sectioned) listed.map { it.id } else buildList {
-        listed.filter { it.sourceId == null }.forEach { add(it.id) }
+        listed.filter { it.section == null }.forEach { add(it.id) }
         sources.forEach { src ->
             add("header:$src")
-            if (src !in collapsed) listed.filter { it.sourceId == src }.forEach { add(it.id) }
+            if (src !in collapsed) listed.filter { it.section == src }.forEach { add(it.id) }
         }
     }
     val hasSearch = searchFocusRequester != null && groups.any { it.id == ChannelGroup.SEARCH }
@@ -3460,9 +3499,9 @@ private fun GroupColumn(
             if (!sectioned) {
                 listed.forEach { groupItem(it) }
             } else {
-                listed.filter { it.sourceId == null }.forEach { groupItem(it) }
+                listed.filter { it.section == null }.forEach { groupItem(it) }
                 sources.forEach { src ->
-                    val inSource = listed.filter { it.sourceId == src }
+                    val inSource = listed.filter { it.section == src }
                     val isCollapsed = src in collapsed
                     item(key = "header:$src") {
                         PlaylistHeader(
@@ -3498,14 +3537,14 @@ private object NoBringIntoView : androidx.compose.foundation.gestures.BringIntoV
  */
 private fun groupListIndex(groups: List<ChannelGroup>, id: String, headings: Boolean, collapsed: Set<String>): Int {
     val listed = groups.filter { it.id != ChannelGroup.SEARCH }
-    val sources = listed.mapNotNull { it.sourceId }.distinct()
-    if (!headings || sources.size <= 1) return listed.indexOfFirst { it.id == id }
+    val sources = listed.mapNotNull { it.section }.distinct()
+    if (!headings || listed.mapNotNull { it.sourceId }.distinct().size <= 1) return listed.indexOfFirst { it.id == id }
     var i = 0
-    for (g in listed) if (g.sourceId == null) { if (g.id == id) return i; i++ }
+    for (g in listed) if (g.section == null) { if (g.id == id) return i; i++ }
     for (src in sources) {
         i++ // the playlist's heading
         if (src in collapsed) continue
-        for (g in listed) if (g.sourceId == src) { if (g.id == id) return i; i++ }
+        for (g in listed) if (g.section == src) { if (g.id == id) return i; i++ }
     }
     return -1
 }
@@ -3661,8 +3700,19 @@ private fun GroupItem(
             Icon(Icons.Default.Lock, contentDescription = "Locked", tint = focusedSecondaryTextColor(focused), modifier = Modifier.size(gdp(14f)))
         } else if (moving) {
             LiveText("⇅", color = colors.text, size = gsp(16f), weight = FontWeight.Bold)
-        } else if (showCount && group.id != ChannelGroup.SEARCH) {
-            LiveText(group.count.toString(), color = focusedSecondaryTextColor(focused), size = gsp(12f))
+        } else {
+            // A favorite group's star, beside its count.
+            if (group.favorite) {
+                Icon(
+                    Icons.Default.Star, contentDescription = null,
+                    tint = if (focused) colors.text else NuvioTheme.colors.Secondary,
+                    modifier = Modifier.size(gdp(14f))
+                )
+            }
+            if (showCount && group.id != ChannelGroup.SEARCH) {
+                if (group.favorite) Spacer(Modifier.width(6.dp))
+                LiveText(group.count.toString(), color = focusedSecondaryTextColor(focused), size = gsp(12f))
+            }
         }
     }
 }
@@ -3700,6 +3750,8 @@ private fun ChannelContextMenu(
     onPickFavorites: () -> Unit,
     onHideGroup: () -> Unit,
     onProgramInfo: () -> Unit,
+    /** Back from Program info: open with Program info highlighted. */
+    focusProgramInfo: Boolean = false,
     streamProgram: EpgProgram?,
     onFindInNuvio: (EpgProgram) -> Unit,
     reminderSet: Boolean = false,
@@ -3724,6 +3776,7 @@ private fun ChannelContextMenu(
     onSettings: () -> Unit
 ) {
     val first = remember { FocusRequester() }
+    val infoItem = remember { FocusRequester() }
     val ch = target.channel
     val program = target.block?.program
     val canCatchup = program != null && program.stopMs <= now && CatchupUrlBuilder.isAvailable(ch, program, now)
@@ -3741,13 +3794,13 @@ private fun ChannelContextMenu(
             if (canRestart && (program == null || (now >= program.startMs && now < program.stopMs))) item {
                 MenuItem(restartLabel, onClick = onRestart)
             }
-            if (canCatchup) item { MenuItem("Play from archive: ${program!!.title}", onClick = { onCatchup(program!!) }) }
+            if (canCatchup) item { MenuItem("Play from archive: ${titleMarks(program!!.title).title}", onClick = { onCatchup(program!!) }) }
             if (program != null || streamProgram != null) {
                 item { MenuHeader("This show") }
-                if (program != null) item { MenuItem("Program info", onClick = onProgramInfo) }
+                if (program != null) item { MenuItem("Program info", Modifier.focusRequester(infoItem), onClick = onProgramInfo) }
                 if (bell != null) item { MenuItem(bell.label, onClick = { bell.toggle(); onDismiss() }) }
                 if (streamProgram != null) {
-                    item { MenuItem("Find & stream \"${streamProgram.title}\" in Nuvio", onClick = { onFindInNuvio(streamProgram) }) }
+                    item { MenuItem("Find & stream \"${titleMarks(streamProgram.title).title}\" in Nuvio", onClick = { onFindInNuvio(streamProgram) }) }
                 }
                 // Upcoming show: Remind me (or Cancel reminder), right in the long-press menu.
                 if (program != null && program.startMs > now) item {
@@ -3790,7 +3843,11 @@ private fun ChannelContextMenu(
             item { MenuItem("Live TV settings…", onClick = onSettings) }
         }
     }
-    LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
+    LaunchedEffect(Unit) {
+        delay(60)
+        val onInfo = focusProgramInfo && program != null
+        runCatching { (if (onInfo) infoItem else first).requestFocus() }.onFailure { runCatching { first.requestFocus() } }
+    }
 }
 
 private data class EpgRow(
@@ -4448,8 +4505,12 @@ private fun ProgramInfoDialog(
     val block = target.block
     val p = rememberShowDetails(target.channel.key, block?.program)
     val infoBell = com.nuvio.tv.livetv.calendar.rememberLiveBell(p, target.channel)
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { (16.sp * 1.3f).toPx() } * 3
     LiveDialog(onDismiss = onDismiss, width = 640.dp) {
-        LiveText(p?.title ?: target.channel.name, size = 24.sp, weight = FontWeight.Bold, maxLines = 2)
+      Column(Modifier.dpadScrollsText(scroll, scope, stepPx)) {
+        LiveText(p?.title?.let { guideTitleWithSub(titleMarks(it).title, p.subTitle) } ?: target.channel.name, size = 24.sp, weight = FontWeight.Bold, maxLines = 2)
         Spacer(Modifier.height(6.dp))
         if (block != null) {
             val meta = listOfNotNull(
@@ -4460,7 +4521,8 @@ private fun ProgramInfoDialog(
             LiveText(meta, color = NuvioTheme.colors.TextSecondary, size = 14.sp, maxLines = 2)
         }
         Spacer(Modifier.height(12.dp))
-        ScrollingDescription(p?.description ?: "No description available.", color = NuvioTheme.colors.TextSecondary, size = 16.sp, maxLines = 10)
+        // The whole description, read with Up/Down (Left/Right still move between the buttons).
+        ReadableDescription(p?.descriptionText?.takeIf { it.isNotBlank() } ?: "No description available.", scroll, size = 16.sp, maxLines = 12)
         Spacer(Modifier.height(18.dp))
         // Scrolls sideways if the buttons don't all fit.
         Row(
@@ -4510,6 +4572,7 @@ private fun ProgramInfoDialog(
             }
             LiveFocusRow(onClick = onDismiss) { f -> LiveText("Close", color = focusedTextColor(f)) }
         }
+      }
     }
     LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
 }

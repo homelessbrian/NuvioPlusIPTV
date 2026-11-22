@@ -35,6 +35,13 @@ class StalkerGuideReaderTest {
         assertEquals("1700003600", actual!!.stopTimestamp)
     }
 
+    @Test fun emptyChannelsAndOddEntriesAreSkippedNotFatal() {
+        val rows = mutableListOf<String?>()
+        val error = StalkerGuideReader.read(StringReader("""{"js":{"data":{"10":[$programme,5,null],"11":null,"12":false,"13":""}}}""")) { channel, row -> rows += row.id ?: channel }
+        assertNull(error)
+        assertEquals(listOf<String?>("p1"), rows)
+    }
+
     @Test fun emptyIsDifferentFromMalformedOrErrorResponse() {
         listOf("""{"js":[]}""", """{"js":{}}""", """{"js":{"data":[]}}""").forEach { input ->
             assertNull(StalkerGuideReader.read(StringReader(input)) { _, _ -> fail("Unexpected row") })

@@ -31,11 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.compose.ui.ExperimentalComposeUiApi
 import coil3.imageLoader
-import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import com.nuvio.tv.domain.model.ContinueWatchingCardStyle
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
@@ -90,7 +89,6 @@ internal fun ModernHomeRowsList(
     contentFocusRequester: FocusRequester,
     rowsViewportHeight: Dp,
     catalogBottomPadding: Dp,
-    trailerContentAlpha: () -> Float,
     verticalRowBringIntoViewSpec: BringIntoViewSpec,
     onRowItemFocusedInternal: (String, Int, Boolean) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -172,7 +170,7 @@ internal fun ModernHomeRowsList(
         verticalRowListState,
         density,
         useLandscapePosters,
-        effectiveExpandEnabled,
+        alwaysShowLandscapeClearlogo,
         portraitCatalogCardWidth,
         portraitCatalogCardHeight,
         landscapeCatalogCardWidth,
@@ -198,14 +196,15 @@ internal fun ModernHomeRowsList(
                                 portraitCardWidth = portraitCatalogCardWidth,
                                 portraitCardHeight = portraitCatalogCardHeight,
                                 landscapeCardWidth = landscapeCatalogCardWidth,
-                                landscapeCardHeight = landscapeCatalogCardHeight,
-                                expandEnabled = effectiveExpandEnabled
+                                landscapeCardHeight = landscapeCatalogCardHeight
                             )
                             val wPx = with(density) { metrics.width.roundToPx() }
                             val hPx = with(density) { metrics.height.roundToPx() }
                             if (wPx <= 0 || hPx <= 0) continue
-                            val cacheKey = "${url}_${wPx}x${hPx}"
-                            if (verticalPrefetchImageLoader.memoryCache?.get(MemoryCache.Key(cacheKey)) != null) continue
+                            val landscapeCustomPoster = useLandscapePosters && !alwaysShowLandscapeClearlogo &&
+                                !item.metaPreview?.landscapePoster.isNullOrBlank()
+                            val cacheKey = cardImageMemoryCacheKey(url, wPx, hPx, item.cardImageFallbackUrl(landscapeCustomPoster))
+                            if (verticalPrefetchImageLoader.memoryCache?.get(cacheKey) != null) continue
                             verticalPrefetchImageLoader.enqueue(
                                 ImageRequest.Builder(context)
                                     .data(url)
@@ -290,7 +289,6 @@ internal fun ModernHomeRowsList(
                 .height(rowsViewportHeight)
                 .padding(bottom = catalogBottomPadding)
                 .clipToBounds()
-                .graphicsLayer { alpha = trailerContentAlpha() }
                 .focusRequester(contentFocusRequester)
                 .focusRestorer { focusRestorerRequester() }
                 .onPreviewKeyEvent { event ->
@@ -355,7 +353,13 @@ internal fun ModernHomeRowsList(
                                     ?: visibleItems.firstOrNull()?.index
                                     ?: verticalRowListState.firstVisibleItemIndex
                         }
-                        val targetRow = carouselRows.list.getOrNull(targetRowIndex)
+                        // Live TV fork: land on the next poster row, not on a Live TV row.
+                        val targetRow = carouselRows.list.getOrNull(targetRowIndex)?.let { r ->
+                            if (!com.nuvio.tv.livetv.home.isLiveHomeRowKey(r.key)) r
+                            else (if (sign < 0) carouselRows.list.subList(0, targetRowIndex).lastOrNull { !com.nuvio.tv.livetv.home.isLiveHomeRowKey(it.key) }
+                                else carouselRows.list.drop(targetRowIndex + 1).firstOrNull { !com.nuvio.tv.livetv.home.isLiveHomeRowKey(it.key) })
+                                ?: carouselRows.list.firstOrNull { !com.nuvio.tv.livetv.home.isLiveHomeRowKey(it.key) }
+                        }
                         if (targetRow == null) null
                         else {
                             val savedIdx = (focusedItemByRowMap[targetRow.key] ?: 0)
@@ -439,6 +443,28 @@ internal fun ModernHomeRowsList(
                     com.nuvio.tv.livetv.home.LiveTvHomeRow(hideUnlessFocused = true, above = liveTvRowAbove == true, startPadding = 52.dp, titleStyle = androidx.tv.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold))
                 }
                 androidx.compose.runtime.CompositionLocalProvider(com.nuvio.tv.livetv.home.LocalLiveTvHintHere provides (liveTvHere && liveTvRowAbove == true)) {
+                // Live TV fork: a Live TV or Sports row, sized like this layout's cards.
+                if (com.nuvio.tv.livetv.home.isLiveHomeRowKey(row.key)) {
+                    com.nuvio.tv.livetv.home.HomeLiveRowSection(
+                        rowKey = row.key,
+                        style = com.nuvio.tv.livetv.home.HomeLiveRowStyle(
+                            landscape = useLandscapePosters,
+                            portraitWidth = portraitCatalogCardWidth,
+                            portraitHeight = portraitCatalogCardHeight,
+                            landscapeWidth = landscapeCatalogCardWidth,
+                            landscapeHeight = landscapeCatalogCardHeight,
+                            startPadding = 52.dp,
+                            cornerRadius = posterCardCornerRadius,
+                            titleStyle = androidx.tv.material3.MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+                            titleBottom = 14.dp
+                        ),
+                        // The row Home goes back to (from the side menu, or back from a page) is
+                        // this one when a card here was the last one highlighted.
+                        modifier = Modifier
+                            .focusRequester(rowFocusRequesters.getOrPut(row.key) { FocusRequester() })
+                            .onFocusChanged { if (it.hasFocus && activeRowKey.value != row.key) onActiveRowKeyChange(row.key) }
+                    )
+                } else
                 ModernRowSection(
                     row = row,
                     isActiveRow = isActiveRowLambda,

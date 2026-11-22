@@ -73,7 +73,7 @@ class LiveTvPosterResolver @Inject constructor(
         if (System.currentTimeMillis() < pausedUntil) return null
         val query = LiveTvSearchBridge.cleanTitle(title).ifBlank { title.trim() }
         if (query.length < 2) return null
-        val key = normalize(query) + "|" + series + "|" + (year ?: "") + "|" + (imdbId ?: "")
+        val key = matchKey(query, series, year, imdbId)
         matchCache[key]?.let { return it }
         if (key in noMatch) return null
         // On Demand has its own small queue, so browsing movies never holds up the guide's posters.
@@ -91,17 +91,33 @@ class LiveTvPosterResolver @Inject constructor(
         } }
     }
 
+    private fun matchKey(query: String, series: Boolean, year: Int?, imdbId: String?) =
+        normalize(query) + "|" + series + "|" + (year ?: "") + "|" + (imdbId ?: "")
+
+    /**
+     * Whether [matchFor] gave a real answer for this title (found, or none of your catalogs has
+     * it), rather than nothing because lookups were paused or the addons couldn't be reached.
+     * A title with no real answer should be tried again later, not remembered as having none.
+     */
+    fun answered(title: String, series: Boolean, year: Int?, imdbId: String? = null): Boolean {
+        val query = LiveTvSearchBridge.cleanTitle(title).ifBlank { title.trim() }
+        if (query.length < 2) return true
+        val key = matchKey(query, series, year, imdbId)
+        return matchCache[key] != null || key in noMatch
+    }
+
     private val titleHits = boundedCache<String, Hit>(500)
 
     /**
      * Recordings: the title in your addons' catalogs that a recorded show's name matches (movie
      * or series), so its artwork (backdrop and logo) can be shown. Null if there's no good match.
      */
-    suspend fun titleFor(name: String): Hit? {
+    suspend fun titleFor(name: String, hint: TypeHint? = null): Hit? {
         if (LiveTvRepository.isPlaceholderTitle(name) || isGenericName(name)) return null
         val query = LiveTvSearchBridge.cleanTitle(name).ifBlank { name.trim() }
         if (query.length < 2) return null
-        val key = normalize(query)
+        // A recording with an episode number is a show: only shows are looked at (a same-named film can't win).
+        val key = normalize(query) + (hint?.let { "|" + it.kind + it.strong } ?: "")
         titleHits[key]?.let { return it }
         val clues = LiveTvSearchBridge.yearInTitle(name)?.let { Clues(year = it) } ?: Clues()
         val hit = withContext(Urgency(false)) {
@@ -111,7 +127,7 @@ class LiveTvPosterResolver @Inject constructor(
                 var found: Hit? = null
                 for (q in queries) {
                     found = try {
-                        lookup(q, null, if (q == query) clues else Clues(), attempt)
+                        lookup(q, hint, if (q == query) clues else Clues(), attempt)
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {

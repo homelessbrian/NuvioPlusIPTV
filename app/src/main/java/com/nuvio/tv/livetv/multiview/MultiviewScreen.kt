@@ -329,10 +329,16 @@ fun MultiviewScreen(
                 sportsSeeded = true
             }
         }
-        if (!seeded && allowedChannels.isNotEmpty()) {
+        // A game's add-on stream set aside (from the player's Games list or backups) waits for Sports' list.
+        val waitsForSports = queued.any { it.startsWith(ADDON_KEY) } && sportsAllowed.isEmpty() &&
+            sports?.settings?.value?.showInSidebar == true
+        if (!seeded && allowedChannels.isNotEmpty() && !waitsForSports) {
             // Channels set aside with "Add to Multiview" start in the first panes.
             seeded = true
-            val chosen = queued.mapNotNull { key -> allowedChannels.firstOrNull { it.key == key } }
+            val chosen = queued.mapNotNull { key ->
+                allowedChannels.firstOrNull { it.key == key }
+                    ?: validChannels.firstOrNull { it.key == key }?.takeIf { sports?.mayPlay(it) == true }
+            }
             if (chosen.isNotEmpty()) {
                 val count = chosen.size.coerceIn(2, 4)
                 session.setLayout(MultiviewLayout.entries.first { it.paneCount == count })
@@ -626,6 +632,7 @@ fun MultiviewScreen(
                 ?: games.firstOrNull { game -> game.channels.any { it.channel.key == state.panes.getOrNull(pane)?.channelKey } }?.event?.id,
             hideScores = hideScores,
             onGame = { game -> sports?.resolve(game.event.id) != null },
+            onGameFocus = { game -> sports?.lookForStreams(game.event.id) },
             onPlayGame = { game -> playGame(game.event.id) },
             onStream = { game, channelKey -> playGame(game.event.id, channelKey) },
             onGameInfo = { game ->
@@ -705,3 +712,6 @@ internal object MultiviewReturn {
 
 /** Key repeats come about every 50 ms; a longer pause after a picker closed means OK was let go. */
 private const val OK_LEFTOVER_GAP_MS = 300L
+
+/** Keys of the streams from your sports add-ons (see SportsAddonSource). */
+private const val ADDON_KEY = "addon:"

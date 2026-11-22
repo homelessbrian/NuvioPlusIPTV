@@ -75,10 +75,15 @@ internal sealed class CardSpec {
         val home: Team,
         /** "NFL · Started 1:00 PM". */
         val status: String?,
-        override val tags: List<CardTag>
+        override val tags: List<CardTag>,
+        /**
+         * "78 – 81" in place of "vs" on the seam. Only for Home's own rows, which redraw as the
+         * score changes; launcher rows leave it out (they refresh too rarely to stay right).
+         */
+        val score: String? = null
     ) : CardSpec() {
         override fun signature() = listOf(
-            "game", channelName, away.sig(), home.sig(), status, tags.joinToString()
+            "game", channelName, away.sig(), home.sig(), status, tags.joinToString(), score
         ).joinToString("\u0001")
     }
 
@@ -307,7 +312,7 @@ internal object LauncherCards {
             drawName(c, s.away.name, f.cx, topA + 2 * r + nameGap - nameAscent, nameSize, f.width)
             badge(c, s.home, homeLogo, b, f.cx, topB + r, r)
             drawName(c, s.home.name, f.cx, topB + 2 * r + nameGap - nameAscent, nameSize, f.width)
-            vsBox(c, vsPaint, f.cx, h / 2f, q)
+            vsBox(c, vsPaint, f.cx, h / 2f, q, s.score, maxW = f.width)
         } else {
             val off = w * 0.25f
             val nameMax = w * 0.40f
@@ -318,19 +323,22 @@ internal object LauncherCards {
             val baseline = top + 2 * r + nameGap - nameAscent
             drawName(c, s.away.name, f.cx - off, baseline, nameSize, nameMax)
             drawName(c, s.home.name, f.cx + off, baseline, nameSize, nameMax)
-            vsBox(c, vsPaint, f.cx, cy, q)
+            vsBox(c, vsPaint, f.cx, cy, q, s.score, maxW = 2 * (w * 0.25f - r) - 2f * q)
         }
     }
 
-    /** "vs" in a dark rounded box, centred on ([cx], [cy]). */
-    private fun vsBox(c: Canvas, p: TextPaint, cx: Float, cy: Float, q: Float) {
-        val bw = p.measureText("vs") + 5f * q
+    /** "vs" (or the score, when given) in a dark rounded box, centred on ([cx], [cy]). */
+    private fun vsBox(c: Canvas, p: TextPaint, cx: Float, cy: Float, q: Float, score: String? = null, maxW: Float = Float.MAX_VALUE) {
+        val text = score?.takeIf { it.isNotBlank() } ?: "vs"
+        // A long score ("105 – 102") is set smaller so its box stays clear of the badges.
+        if (p.measureText(text) + 5f * q > maxW) p.textSize = p.textSize * ((maxW - 5f * q) / p.measureText(text)).coerceIn(0.5f, 1f)
+        val bw = p.measureText(text) + 5f * q
         val bh = p.fontSpacing + 1.2f * q
         c.drawRoundRect(
             RectF(cx - bw / 2f, cy - bh / 2f, cx + bw / 2f, cy + bh / 2f), 2.5f * q, 2.5f * q,
             Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xE60B0D11.toInt() }
         )
-        c.drawText("vs", cx, cy - (p.descent() + p.ascent()) / 2f, p)
+        c.drawText(text, cx, cy - (p.descent() + p.ascent()) / 2f, p)
     }
 
     private fun drawName(c: Canvas, name: String, cx: Float, baseline: Float, size: Float, maxW: Float) {

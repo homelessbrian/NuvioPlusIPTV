@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_error_decoder_message">This TV couldn\'t play this video. Try another source, or switch to MPV.</string>
+    <string name="iptv_settings_show_on_profiles">Show on Profiles</string>
+    <string name="iptv_settings_show_on_profiles_value">Show on Profiles: %1$s</string>
+    <string name="iptv_settings_show_on_profiles_all">All</string>
+    <string name="iptv_settings_show_on_profiles_count">%1$d of %2$d</string>
+    <string name="iptv_settings_show_on_profiles_description">Profiles switched off here get no channels, On Demand or Sports from %1$s. The playlist itself stays for everyone</string>
+    <string name="iptv_backup_file">Backup File</string>
+    <string name="iptv_backup_file_summary">Save your setup as a file, or restore one</string>
+    <string name="iptv_backup_file_description">A copy of your Live TV setup in one .nptv file: playlists and their logins, guides, favorites, groups, Sports and settings. Handy without Setup Sync, or to keep a copy of your own.</string>
+    <string name="iptv_backup_with_phone">Back Up or Restore with Your Phone</string>
+    <string name="iptv_backup_with_phone_description">Scan a code to save the file on your phone, or send one back</string>
+    <string name="iptv_backup_save_on_tv">Save a Backup on This TV</string>
+    <string name="iptv_backup_save_on_tv_description">Saved in Downloads › Nuvio + IPTV</string>
+    <string name="iptv_backup_restore_on_tv">Restore from This TV</string>
+    <string name="iptv_backup_restore_on_tv_description">Backups saved on this TV, newest first</string>
+    <string name="iptv_backup_none_on_tv">No backups saved on this TV yet. Save one first, or use your phone.</string>
+    <string name="iptv_backup_saving">Saving…</string>
+    <string name="iptv_backup_saved_to">Saved to %1$s</string>
+    <string name="iptv_backup_save_failed">The backup couldn\'t be saved on this TV. Try your phone instead.</string>
+    <string name="iptv_backup_restoring">Restoring…</string>
+    <string name="iptv_backup_restored">Backup restored. Playlists and guides that changed are loading.</string>
+    <string name="iptv_backup_restore_failed">That backup couldn\'t be restored (it has no playlists or guides).</string>
+    <string name="iptv_backup_restore_confirm_title">Restore This Backup?</string>
+    <string name="iptv_backup_restore_confirm_message">Saved %1$s on %2$s. It replaces this TV\'s Live TV setup. With Setup Sync on, your other TVs change too.</string>
+    <string name="iptv_backup_restore_confirm_button">Restore</string>
+    <string name="iptv_backup_not_a_backup">That isn\'t a Nuvio + IPTV backup file (.nptv).</string>
+    <string name="iptv_backup_private_note">The backup file holds your playlist logins. Keep it private.</string>
+    <string name="iptv_backup_phone_steps">1. Put your phone on the same Wi-Fi as this TV.\n2. Scan the code with your phone\'s camera.\n3. Save the backup, or choose a backup file to send here.</string>
+    <string name="iptv_backup_phone_check_tv">Sent. Choose Restore on your TV to finish.</string>
+    <string name="iptv_backup_phone_title">Nuvio + IPTV backup</string>
+    <string name="iptv_backup_phone_save_heading">Save a backup</string>
+    <string name="iptv_backup_phone_save_text">Saves this TV\'s Live TV setup on your phone as a .nptv file.</string>
+    <string name="iptv_backup_phone_save_button">Save backup file</string>
+    <string name="iptv_backup_phone_restore_heading">Restore a backup</string>
+    <string name="iptv_backup_phone_restore_text">Choose a .nptv file to send to the TV. Nothing changes until you confirm on the TV.</string>
+    <string name="iptv_backup_phone_choose_file">Choose file</string>
+    <string name="iptv_backup_phone_restore_button">Send to TV</string>
+</resources>

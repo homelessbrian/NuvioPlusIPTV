@@ -165,6 +165,8 @@ internal fun MultiviewChannelPicker(
     selectedEventId: String?,
     hideScores: Boolean,
     onGame: (SportsWatchGame) -> Boolean,
+    /** A game the cursor rests on: its add-on streams are looked for, so they're there when it's picked. */
+    onGameFocus: (SportsWatchGame) -> Unit = {},
     onPlayGame: (SportsWatchGame) -> Boolean,
     onStream: (SportsWatchGame, String) -> Unit,
     /** Hold OK on a game: its page in the Sports hub (Back there comes back to this panel). */
@@ -267,7 +269,11 @@ internal fun MultiviewChannelPicker(
     val sportsState = rememberLazyListState()
     var gameCursor by remember { mutableIntStateOf(0) }
     var gamePlaced by remember { mutableStateOf(false) }
-    var streamsGame by remember { mutableStateOf<SportsWatchGame?>(null) }
+    var streamOpenGame by remember { mutableStateOf<SportsWatchGame?>(null) }
+    // The open game as the list has it now: add-on streams found after it was opened show too.
+    val streamsGame: SportsWatchGame? = streamOpenGame?.let { g ->
+        rows.firstNotNullOfOrNull { r -> r.games.firstOrNull { it.event.id == g.event.id } } ?: g
+    }
     var streamIndex by remember { mutableIntStateOf(0) }
     val streamState = rememberLazyListState()
     val streams = streamsGame?.channels.orEmpty().distinctBy { it.channel.key }
@@ -347,6 +353,13 @@ internal fun MultiviewChannelPicker(
         // Moving up to a section's first game shows its title too.
         sportsState.keepRowVisible(if (items.getOrNull(at - 1) is PanelItem.Title) at - 1 else at)
     }
+    val restingGameId = if (sportsMode) (items.getOrNull(gameAt.getOrNull(gameCursor) ?: -1) as? PanelItem.Game)?.game?.event?.id else null
+    LaunchedEffect(restingGameId) {
+        val id = restingGameId ?: return@LaunchedEffect
+        delay(600L)
+        (items.getOrNull(gameAt.getOrNull(gameCursor) ?: -1) as? PanelItem.Game)?.game
+            ?.takeIf { it.event.id == id }?.let(onGameFocus)
+    }
     LaunchedEffect(streamIndex) { streamState.keepRowVisible(streamIndex) }
     LaunchedEffect(Unit) {
         delay(60L)
@@ -408,7 +421,7 @@ internal fun MultiviewChannelPicker(
     }
     fun openStreams(game: SportsWatchGame) {
         if (game.channels.isNotEmpty() && onGame(game)) {
-            streamsGame = game
+            streamOpenGame = game
             streamIndex = game.channels.distinctBy { it.channel.key }
                 .indexOfFirst { it.channel.key == selectedPane?.channelKey }.coerceAtLeast(0)
         } else com.nuvio.tv.livetv.record.LiveTvNotice.show("No other streams for this game right now.")
@@ -417,7 +430,7 @@ internal fun MultiviewChannelPicker(
         when {
             searching -> closeSearch()
             sportsMode && optionsGame != null -> optionsGame = null
-            sportsMode && streamsGame != null -> streamsGame = null
+            sportsMode && streamsGame != null -> streamOpenGame = null
             else -> onClose()
         }
     }
@@ -596,7 +609,7 @@ internal fun MultiviewChannelPicker(
                                 sportsMode && streamsGame != null -> if (down) when {
                                     event.key == Key.DirectionDown -> { if (streamIndex < streams.lastIndex) streamIndex++ }
                                     event.key == Key.DirectionUp -> { if (streamIndex > 0) streamIndex-- else upFromList() }
-                                    event.key == Key.DirectionLeft -> streamsGame = null
+                                    event.key == Key.DirectionLeft -> streamOpenGame = null
                                     ok && event.nativeKeyEvent.repeatCount == 0 -> streams.getOrNull(streamIndex)?.let { m ->
                                         streamsGame?.let { g -> onStream(g, m.channel.key); onClose() }
                                     }
@@ -863,7 +876,7 @@ private fun PickerStreamRow(
                 color = NuvioTheme.colors.TextSecondary, size = 11.sp
             )
         }
-        if (playing) SportsBadge("PLAYING", NuvioTheme.colors.Secondary, NuvioTheme.colors.OnSecondary)
+        if (playing) com.nuvio.tv.livetv.sports.PlayingBadge(text = "PLAYING")
         else if (best) SportsBadge("BEST MATCH", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
     }
 }

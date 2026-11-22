@@ -71,14 +71,14 @@ import java.util.Locale
 /** What the Tables page opens on: a league (null: the first of yours) and teams to mark. */
 data class TableRequest(val leagueId: String?, val mark: Set<String> = emptySet())
 
-private val POS_W = 34.dp
+internal val POS_W = 34.dp
 private val FORM_W = 70.dp
 
 /** A column's width: small counts narrow, so the team names have room. */
-private fun cellWidth(key: String) = when (key) {
+internal fun cellWidth(key: String) = when (key) {
     "gamesPlayed", "wins", "ties", "losses", "otLosses" -> 28.dp
     "pointDifferential", "points", "gamesBehind" -> 38.dp
-    "winPercent" -> 44.dp
+    "winPercent", "conf" -> 44.dp
     "behind" -> 56.dp
     else -> 40.dp
 }
@@ -144,6 +144,10 @@ internal fun TablesPage(
         val t = table ?: return@LaunchedEffect
         if (conference == null && t.hasDivisions) {
             conference = marked.firstNotNullOfOrNull { id -> t.find(id)?.first?.parent } ?: t.conferences.first()
+        }
+        // College: your team's conference, else the first.
+        if (conference == null && t.groupTabs) {
+            conference = marked.firstNotNullOfOrNull { id -> t.find(id)?.first?.let(t::tabOf) } ?: t.tabs.first()
         }
     }
 
@@ -331,6 +335,33 @@ private fun TableView(
     }
 
     Column(modifier) {
+        if (table.groupTabs) {
+            // College: the conferences as tabs, opening scrolled to the one showing.
+            val shownName = table.tabName(conference)
+            val tabState = rememberLazyListState()
+            val tabReqs = remember(table.leagueId) { HashMap<String, FocusRequester>() }
+            fun tabReq(name: String) = tabReqs.getOrPut(name) { FocusRequester() }
+            LaunchedEffect(table.leagueId, shownName) {
+                val i = table.tabs.indexOf(shownName)
+                if (i >= 0 && tabState.layoutInfo.visibleItemsInfo.none { it.index == i }) runCatching { tabState.scrollToItem((i - 1).coerceAtLeast(0)) }
+            }
+            LazyRow(
+                Modifier.fillMaxWidth().padding(top = SportsSpace.RowGap)
+                    .focusRestorer { tabReq(shownName) }
+                    .keepFocusWhileHeld(vertical = false),
+                state = tabState,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)
+            ) {
+                items(table.tabs, key = { "g$it" }) { tab ->
+                    DayTab(
+                        table.tabLabel(tab),
+                        selected = tab == shownName,
+                        modifier = Modifier.focusRequester(tabReq(tab))
+                    ) { onConference(tab) }
+                }
+            }
+        }
         if (table.hasDivisions) {
             LazyRow(
                 Modifier.fillMaxWidth().padding(top = SportsSpace.RowGap).keepFocusWhileHeld(vertical = false),
@@ -351,7 +382,10 @@ private fun TableView(
                 }
             }
         }
-        val season = listOfNotNull(table.season?.let { "Season $it" }, "from ${table.source}").joinToString(" · ")
+        val season = listOfNotNull(
+            if (table.groupTabs) table.tabName(conference) else null,
+            table.season?.let { "Season $it" }, "from ${table.source}"
+        ).joinToString(" · ")
         LiveText(season, color = SportsLook.Faint, size = 10.sp, modifier = Modifier.padding(start = 6.dp, top = 6.dp))
         // Column headings.
         // The last five as squares (every team sport); US tables' streak column gives way to them.
@@ -411,7 +445,7 @@ private fun TableView(
 
 /** One team's line: place (and how it moved), its colour edge, logo and name, the numbers, form. */
 @Composable
-private fun StandingsLine(
+internal fun StandingsLine(
     table: Standings,
     columns: List<StandingsColumn>,
     row: StandingsRow,
@@ -421,7 +455,10 @@ private fun StandingsLine(
     showForm: Boolean,
     modifier: Modifier,
     onFocus: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    /** False: shown only (the Sports page's small table beside the games), never highlighted. */
+    selectable: Boolean = true,
+    height: androidx.compose.ui.unit.Dp = 32.dp
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
@@ -433,7 +470,7 @@ private fun StandingsLine(
     Row(
         modifier
             .fillMaxWidth()
-            .height(32.dp)
+            .height(height)
             .clip(shape)
             .background(SportsLook.Card)
             .background(
@@ -454,8 +491,12 @@ private fun StandingsLine(
                 },
                 shape
             )
-            .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocus() }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
+            .then(
+                if (selectable) Modifier
+                    .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocus() }
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+                else Modifier
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // The zone's colour down the left edge (Champions League, relegation…), or the division leader's.
@@ -886,12 +927,12 @@ private fun PlayerList(roster: Roster, first: FocusRequester, onPick: (Player) -
 
 /** A player's photo (initials when there isn't one), the facts we have and a short bio. */
 @Composable
-private fun PlayerProfile(p: Player, team: TeamInfo) {
+internal fun PlayerProfile(p: Player, team: TeamInfo, photo: String? = p.smallPhoto()) {
     val c = bandColor(teamColor(team))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(92.dp).clip(CircleShape).background(c), contentAlignment = Alignment.Center) {
             LiveText(p.initials(), size = 28.sp, weight = FontWeight.Black)
-            p.smallPhoto()?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(92.dp)) }
+            photo?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, alignment = Alignment.TopCenter, modifier = Modifier.size(92.dp)) }
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {

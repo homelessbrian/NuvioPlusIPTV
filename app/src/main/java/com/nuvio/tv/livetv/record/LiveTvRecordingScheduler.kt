@@ -535,7 +535,8 @@ class LiveTvRecordingScheduler @Inject constructor(
         val keep = _series.value.firstOrNull { it.id == seriesId }?.keepLast ?: return
         if (keep <= 0) return
         recorder.recordings.value
-            .filter { it.seriesId == seriesId && !it.isRecording }
+            // Another TV's recordings (on the network folder) are that TV's to keep or drop.
+            .filter { it.seriesId == seriesId && !it.isRecording && !it.fromOtherTv }
             .sortedByDescending { it.programStartMs.takeIf { s -> s > 0 } ?: it.startedAtMs }
             .drop(keep)
             .forEach { recorder.delete(it.id) }

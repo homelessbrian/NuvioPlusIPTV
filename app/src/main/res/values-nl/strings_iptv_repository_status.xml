@@ -42,4 +42,5 @@
         <item quantity="one">"\"%1$s\" verloopt over %2$d dag"</item>
         <item quantity="other">"\"%1$s\" verloopt over %2$d dagen"</item>
     </plurals>
+    <string name="iptv_repository_status_storage_full_short">"Niet genoeg opslagruimte op dit apparaat. De vorige gids blijft bewaard."</string>
 </resources>

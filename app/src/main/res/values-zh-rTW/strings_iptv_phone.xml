@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"新增到 Nuvio + IPTV"</string>
+    <string name="iptv_phone_connected_to">"已連線到 %1$s"</string>
+    <string name="iptv_phone_heading">"新增到你的電視"</string>
+    <string name="iptv_phone_instructions">"填寫後點選“傳送到電視”，它會立即出現在電視上。"</string>
+    <string name="iptv_phone_what_to_add">"要新增什麼"</string>
+    <string name="iptv_phone_m3u_tab">"M3U 連結"</string>
+    <string name="iptv_phone_epg_tab">"僅 EPG"</string>
+    <string name="iptv_phone_name_label">"名稱（選填）"</string>
+    <string name="iptv_phone_provider_placeholder">"我的供應商"</string>
+    <string name="iptv_phone_playlist_label">"播放清單連結"</string>
+    <string name="iptv_phone_epg_optional_label">"EPG 連結（選填）"</string>
+    <string name="iptv_phone_user_agent_label">"使用者代理（選填）"</string>
+    <string name="iptv_phone_user_agent_placeholder">"留空則使用預設值"</string>
+    <string name="iptv_phone_server_label">"伺服器"</string>
+    <string name="iptv_phone_username_label">"使用者名稱"</string>
+    <string name="iptv_phone_password_label">"密碼"</string>
+    <string name="iptv_phone_include_live">"包含電影片道"</string>
+    <string name="iptv_phone_include_vod">"包含電影和劇集（On Demand）"</string>
+    <string name="iptv_phone_epg_label">"EPG 連結"</string>
+    <string name="iptv_phone_send">"傳送到電視"</string>
+    <string name="iptv_phone_network_note">"僅在與電視相同的 Wi‑Fi 下有效。關閉電視上的該介面後，此頁面將停止工作。"</string>
+    <string name="iptv_phone_guide_placeholder">"節目指南"</string>
+    <string name="iptv_phone_sending">"正在傳送…"</string>
+    <string name="iptv_phone_unreachable">"無法連線到電視。請確認電視上的“從手機新增”介面仍然開啟，並且你在同一 Wi‑Fi 下。"</string>
+    <string name="iptv_phone_not_found">"未找到"</string>
+    <string name="iptv_phone_nothing_to_send">"沒有可傳送的內容。"</string>
+    <string name="iptv_phone_missing">"缺少一些資訊。"</string>
+    <string name="iptv_phone_could_not_add">"電視無法新增。請重試。"</string>
+    <string name="iptv_phone_playlist_missing">"貼上播放清單連結。"</string>
+    <string name="iptv_phone_playlist_scheme">"播放清單連結應以 http:// 或 https:// 開頭。"</string>
+    <string name="iptv_phone_epg_scheme">"EPG 連結應以 http:// 或 https:// 開頭。"</string>
+    <string name="iptv_phone_server_missing">"輸入伺服器地址。"</string>
+    <string name="iptv_phone_server_invalid">"這看起來不像伺服器地址。"</string>
+    <string name="iptv_phone_credentials_missing">"輸入使用者名稱和密碼。"</string>
+    <string name="iptv_phone_inclusion_missing">"請開啟電影片道或電影和劇集。"</string>
+    <string name="iptv_phone_epg_missing">"貼上 EPG 連結。"</string>
+    <string name="iptv_phone_kind_missing">"選擇要新增的內容。"</string>
+</resources>

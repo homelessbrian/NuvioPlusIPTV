@@ -236,6 +236,13 @@ class PlayerViewModel @Inject constructor(
 
     fun stopAndRelease() {
         postPlayRecommendationController.stop()
+        // Let go of the picture before the player is shut down. On some boxes (Xiaomi and
+        // other Amlogic ones) a video view still tied to a shut-down player keeps its picture
+        // layer on screen, so the next page stays black or grey until the app is restarted.
+        controller.exoPlayerView?.let { view ->
+            runCatching { view.player = null }
+            runCatching { view.visibility = android.view.View.GONE }
+        }
         controller.stopAndRelease()
     }
 

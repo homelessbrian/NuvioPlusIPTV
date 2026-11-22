@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"拖動預覽圖"</string>
+    <string name="playback_section_seek_thumbnails_desc">"拖動進度條時在上方顯示預覽圖"</string>
+    <string name="iptv_thumbs_title">"拖動預覽圖"</string>
+    <string name="iptv_thumbs_subtitle">"拖動時在進度條上方顯示預覽圖。預覽圖由這臺電視根據影片本身生成"</string>
+    <string name="iptv_thumbs_works_on">"適用於：主播放器中的電影和節目（包括 HLS 流連結）、你的錄製、體育回放和集錦、回看，以及倒回 Live TV（暫停緩衝）。\n回看：預覽圖來自“更快的回看跳轉”儲存的部分，或對於流式（HLS）回看直接來自供應商。\n不適用於：種子、DASH 連結或受保護的流。"</string>
+    <string name="iptv_thumbs_low_memory_note">"此裝置記憶體有限。預覽圖可能導致卡頓。如果出現卡頓，會自動暫停，進度條上也會提示。"</string>
+    <string name="iptv_thumbs_include_4k">"包括 4K 和 HDR"</string>
+    <string name="iptv_thumbs_include_4k_desc">"也為 4K 和 HDR 影片生成預覽圖。記憶體充足的裝置預設開啟，低端裝置預設關閉，但你可以在任何裝置上開啟嘗試。4K 預覽圖在低端裝置上可能卡頓或無法使用，並會消耗更多流量。HDR 影片的預覽圖可能顏色發白。流連結使用最小的版本，因此對其影響很小"</string>
+    <string name="iptv_thumbs_when_to_make">"何時生成預覽圖"</string>
+    <string name="iptv_thumbs_when_seeking">"僅在暫停或拖動時"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"最輕量的選項：正常播放時不生成"</string>
+    <string name="iptv_thumbs_when_watching">"觀看時"</string>
+    <string name="iptv_thumbs_when_watching_desc">"在影片已提前載入充足時，也會在播放過程中於後臺生成"</string>
+    <string name="iptv_thumbs_when_right_away">"立即"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"影片一開啟就從頭生成整個影片。消耗流量最多"</string>
+    <string name="iptv_thumbs_storage_limit">"儲存上限"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"儲存的預覽圖最多佔用這麼多空間；最久之前觀看的影片會先被清除"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s MB"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s KB"</string>
+    <string name="iptv_thumbs_clear">"清除已儲存的預覽圖"</string>
+    <string name="iptv_thumbs_clear_desc">"刪除所有已儲存的預覽圖。需要時會重新生成"</string>
+    <string name="iptv_thumbs_last_paused">"上次因記憶體不足暫停：%1$s，%2$s"</string>
+    <string name="iptv_thumbs_msg_making">"正在生成預覽圖…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"預覽圖已暫停：記憶體不足"</string>
+    <string name="iptv_thumbs_msg_live">"Live TV 不生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_dash">"DASH 連結不生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"開啟“更快的回看跳轉”以使用預覽圖"</string>
+    <string name="iptv_thumbs_msg_protected">"此流受保護：無預覽圖"</string>
+    <string name="iptv_thumbs_msg_torrent">"種子不生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_link_kind">"此類連結不生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_unreadable">"無法讀取此流以生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"此流的分段太大，無法生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_stopped">"此影片的預覽圖已停止工作"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"伺服器未傳送預覽圖片"</string>
+    <string name="iptv_thumbs_msg_format">"此影片的格式在本裝置上無法生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_open_failed">"無法開啟此影片以生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"此回看流不生成預覽圖"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"無縮圖：這台電視需要用它唯一的影片解碼器播放影片"</string>
+</resources>

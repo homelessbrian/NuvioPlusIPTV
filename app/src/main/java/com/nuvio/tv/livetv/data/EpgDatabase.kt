@@ -441,6 +441,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         private val meta = HashMap<String, LongArray>() // count, lastStop, placeholders
         private val countedOnly = HashSet<String>()
         private var open = true
+        /** [finish] went all the way through: nothing left for [abort] to clear. */
+        private var stored = false
 
         init {
             // A read that never finished (the app was closed part-way): what it left goes first.
@@ -462,6 +464,17 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
          * can still be compared with other guides, without its listings being written and then
          * deleted again at every update.
          */
+        /** How many shows this read has stored so far, and when the last of them ends. */
+        fun progress(): Pair<Long, Long> {
+            var count = 0L
+            var lastStop = 0L
+            meta.forEach { (xid, m) ->
+                if (xid in countedOnly) return@forEach // only counted, not stored
+                count += m[0]; if (m[1] > lastStop) lastStop = m[1]
+            }
+            return count to lastStop
+        }
+
         fun add(xid: String, programs: List<EpgProgram>, isPlaceholder: (String) -> Boolean, keepRows: Boolean = true) {
             if (programs.isEmpty()) return
             val gid = gidFor(xid)
@@ -509,6 +522,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             }
             upd.close()
             changes++
+            var ok = false
             try {
                 // The guide channels this file had before: channels pointing at them now point at
                 // the new ones (or at nothing, when the file no longer has that guide channel).
@@ -549,11 +563,14 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                 }, SQLiteDatabase.CONFLICT_REPLACE)
                 putRevision(db)
                 db.setTransactionSuccessful()
+                ok = true
             } finally {
-                db.endTransaction()
                 open = false
                 changes++
+                db.endTransaction()
             }
+            // Only once the save really went through (it can still fail here when storage is full).
+            stored = ok
             runCatching { stmt.close() }
             // The listings this file had before, a batch at a time.
             runCatching { purgeDead() }
@@ -565,9 +582,12 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
 
         /** Something went wrong: what this read wrote is dropped, and the guide stays as it was. */
         fun abort() {
-            if (!open) return
+            // Also after a [finish] that failed part-way (storage full): its new rows were left
+            // waiting to be deleted until the next update, taking up the space that ran out.
+            if (stored) return
+            val wasOpen = open
             open = false
-            runCatching { db.endTransaction() }
+            if (wasOpen) runCatching { db.endTransaction() }
             runCatching { stmt.close() }
             runCatching { markUnfinishedDead(db, src); purgeDead() }
         }

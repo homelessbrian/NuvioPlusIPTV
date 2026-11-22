@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_section_seek_thumbnails">"Мініатюри перемотування"</string>
+    <string name="playback_section_seek_thumbnails_desc">"Кадри попереднього перегляду над смугою перемотування"</string>
+    <string name="iptv_thumbs_title">"Мініатюри перемотування"</string>
+    <string name="iptv_thumbs_subtitle">"Показує кадр попереднього перегляду над смугою під час перемотування. Кадри створюються на цьому телевізорі з самого відео"</string>
+    <string name="iptv_thumbs_works_on">"Працює з: фільмами й передачами в основному плеєрі (зокрема потоковими посиланнями HLS), вашими записами, спортивними повторами й найкращими моментами, архівом і перемотуванням Live TV (буфер паузи).\nАрхів: кадри беруться з частини, збереженої функцією «Швидше перемотування архіву», або прямо від провайдера для потокового (HLS) архіву.\nНе працює з: торентами, посиланнями DASH і захищеними потоками."</string>
+    <string name="iptv_thumbs_low_memory_note">"У цього пристрою обмежена пам’ять. Мініатюри можуть спричиняти ривки. Тоді вони самі ставляться на паузу, і смуга перемотування про це повідомляє."</string>
+    <string name="iptv_thumbs_include_4k">"Включати 4K і HDR"</string>
+    <string name="iptv_thumbs_include_4k_desc">"Створює мініатюри й для відео 4K і HDR. Спочатку ввімкнено на пристроях із великою пам’яттю й вимкнено на слабших, але можна ввімкнути будь-де й спробувати. На слабших пристроях мініатюри 4K можуть смикатися чи не працювати й витрачають більше трафіку. Кадри HDR-відео можуть виглядати блідими. Потокові посилання використовують найменшу версію, тож для них це майже не важливо"</string>
+    <string name="iptv_thumbs_when_to_make">"Коли створювати мініатюри"</string>
+    <string name="iptv_thumbs_when_seeking">"Лише на паузі чи під час перемотування"</string>
+    <string name="iptv_thumbs_when_seeking_desc">"Найлегший варіант: під час звичайного відтворення нічого не створюється"</string>
+    <string name="iptv_thumbs_when_watching">"Під час перегляду"</string>
+    <string name="iptv_thumbs_when_watching_desc">"Також створюються у фоні під час відтворення, коли відео добре завантажилося наперед"</string>
+    <string name="iptv_thumbs_when_right_away">"Одразу"</string>
+    <string name="iptv_thumbs_when_right_away_desc">"Усе відео з початку, щойно воно відкриється. Витрачає найбільше трафіку"</string>
+    <string name="iptv_thumbs_storage_limit">"Ліміт сховища"</string>
+    <string name="iptv_thumbs_storage_limit_desc">"Збережені мініатюри займають не більше цього; спершу видаляються відео, переглянуті найдавніше"</string>
+    <string name="iptv_thumbs_size_mb">"%1$s МБ"</string>
+    <string name="iptv_thumbs_size_kb">"%1$s КБ"</string>
+    <string name="iptv_thumbs_clear">"Очистити збережені мініатюри"</string>
+    <string name="iptv_thumbs_clear_desc">"Видаляє всі збережені мініатюри. Вони створюються знову за потреби"</string>
+    <string name="iptv_thumbs_last_paused">"Остання пауза через нестачу пам’яті: %1$s, %2$s"</string>
+    <string name="iptv_thumbs_msg_making">"Створення мініатюр…"</string>
+    <string name="iptv_thumbs_msg_low_memory">"Мініатюри на паузі: мало пам’яті"</string>
+    <string name="iptv_thumbs_msg_live">"Для Live TV мініатюр немає"</string>
+    <string name="iptv_thumbs_msg_dash">"Для посилань DASH мініатюр немає"</string>
+    <string name="iptv_thumbs_msg_catchup_save">"Увімкніть «Швидше перемотування архіву» для мініатюр"</string>
+    <string name="iptv_thumbs_msg_protected">"Цей потік захищено: мініатюр немає"</string>
+    <string name="iptv_thumbs_msg_torrent">"Для торентів мініатюр немає"</string>
+    <string name="iptv_thumbs_msg_link_kind">"Для такого типу посилань мініатюр немає"</string>
+    <string name="iptv_thumbs_msg_unreadable">"Не вдалося прочитати цей потік для мініатюр"</string>
+    <string name="iptv_thumbs_msg_pieces_large">"Частини цього потоку завеликі для мініатюр"</string>
+    <string name="iptv_thumbs_msg_stopped">"Мініатюри для цього відео перестали працювати"</string>
+    <string name="iptv_thumbs_msg_no_pictures">"Сервер не надіслав кадрів для мініатюр"</string>
+    <string name="iptv_thumbs_msg_format">"Формат цього відео не дозволяє створювати мініатюри на цьому пристрої"</string>
+    <string name="iptv_thumbs_msg_open_failed">"Не вдалося відкрити це відео для мініатюр"</string>
+    <string name="iptv_thumbs_msg_catchup_stream">"Для цього потоку архіву мініатюр немає"</string>
+    <string name="iptv_thumbs_msg_one_decoder">"Без мініатюр: телевізору потрібен його єдиний відеодекодер для відео"</string>
+</resources>

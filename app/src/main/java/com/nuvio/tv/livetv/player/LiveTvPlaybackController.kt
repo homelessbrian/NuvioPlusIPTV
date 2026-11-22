@@ -159,10 +159,7 @@ class LiveTvPlaybackController @Inject constructor(
         val first = bufferStorageId == null
         bufferStorageId = id
         val old = timeshift.baseDir
-        timeshift.baseDir = java.io.File(
-            com.nuvio.tv.livetv.record.RecordingStorage.resolve(context, id).dir.parentFile ?: context.cacheDir,
-            "timeshift"
-        )
+        timeshift.baseDir = com.nuvio.tv.livetv.record.RecordingStorage.resolve(context, id).timeshiftDir
         // The drive's own leftovers on first use this session (nothing is recording yet), and
         // the old place's when the setting changes.
         timeshift.cleanLeftovers(listOf(timeshift.baseDir), olderThanMs = if (first) 60_000L else 15 * 60_000L)
@@ -342,20 +339,70 @@ class LiveTvPlaybackController @Inject constructor(
      * through: a fixed length, and never live. A live game that drops (even one whose provider
      * closes its list) keeps retrying as before.
      */
-    private fun clipFinished(): Boolean {
+    /** A sports addon replay or official highlight (a fixed-length video, never live) is playing. */
+    private fun playingClip(): Boolean {
         val p = _player ?: return false
         val ch = currentChannel ?: return false
         if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
             ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) return false
+        if (ch.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) return true
+        return !sawLive && !p.isCurrentMediaItemDynamic
+    }
+
+    /** The clip [setPictureHidden] paused, by channel key (it plays on when the picture is back). */
+    @Volatile private var pausedWhileHidden: String? = null
+
+    /**
+     * The Sports page's video window has nowhere to go (Follow Teams & Leagues and the like): a
+     * replay or highlight waits paused until it's back, rather than playing on unseen (some boxes
+     * lost their picture altogether doing that). A live channel keeps playing; only its picture stops.
+     */
+    fun setPictureHidden(hidden: Boolean) {
+        val p = _player ?: return
+        if (hidden) {
+            if (playingClip() && p.playWhenReady) {
+                pausedWhileHidden = currentChannel?.key
+                p.playWhenReady = false
+            }
+        } else {
+            val key = pausedWhileHidden ?: return
+            pausedWhileHidden = null
+            if (currentChannel?.key == key) p.playWhenReady = true
+        }
+    }
+
+    private fun clipFinished(): Boolean {
+        val p = _player ?: return false
+        val ch = currentChannel ?: return false
+        // Official highlights and condensed games (ESPN, NHL, MLB, YouTube) are never live.
+        if (ch.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) return true
+        if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) return false
         if (sawLive || p.isCurrentMediaItemDynamic) return false
         val d = p.duration
         return d != C.TIME_UNSET && d > 0
     }
 
+    /** An official highlight failed in its last few seconds: it has finished, not dropped. */
+    private fun clipFailedAtEnd(): Boolean {
+        val p = _player ?: return false
+        if (currentChannel?.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) return false
+        val d = p.duration
+        return d != C.TIME_UNSET && d > 0 && p.currentPosition >= d - 3_000L
+    }
+
+    private fun finishClip() {
+        com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Video ${currentChannel?.name} finished")
+        _videoFinished.tryEmit(Unit)
+        stop()
+    }
+
     private fun updateOwnTimeline() {
         val p = _player
         val ch = currentChannel
-        if (p != null && p.isCurrentMediaItemDynamic) sawLive = true
+        // The stand-in timeline the player shows before the stream answers always says "live";
+        // only the real one counts (it made every replay and highlight look live, so they
+        // reconnected at the end instead of finishing).
+        if (p != null && p.isCurrentMediaItemDynamic && !currentWindowIsPlaceholder(p)) sawLive = true
         _ownTimeline.value = p != null &&
             (ch?.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID ||
                 ch?.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) &&
@@ -364,6 +411,13 @@ class LiveTvPlaybackController @Inject constructor(
             // Live: only with a real rewind window (a short one would run out while paused, so
             // those keep the pause buffer). A replay: any real length.
             p.duration >= (if (p.isCurrentMediaItemDynamic) OWN_LIVE_WINDOW_MS else OWN_MIN_MS)
+    }
+
+    private fun currentWindowIsPlaceholder(p: ExoPlayer): Boolean {
+        val t = p.currentTimeline
+        if (t.isEmpty) return true
+        val i = p.currentMediaItemIndex.coerceIn(0, t.windowCount - 1)
+        return t.getWindow(i, androidx.media3.common.Timeline.Window()).isPlaceholder
     }
 
     // ---------------------------------------------------------------- watching while recording
@@ -562,7 +616,9 @@ class LiveTvPlaybackController @Inject constructor(
      */
     internal fun localRecordingSource(uri: android.net.Uri, offsetMs: Long = 8_000): androidx.media3.exoplayer.source.MediaSource {
         val item = MediaItem.Builder()
-            .setUri(uri)
+            // A network folder recording's pieces leave this box once copied: played through the
+            // recordings server, which fetches those from the network folder.
+            .setUri(com.nuvio.tv.livetv.record.NetworkFolderStore.playUriFor(uri) ?: uri)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setLiveConfiguration(
                 // "Live" here means a few seconds behind the newest piece (not 3 target lengths).
@@ -811,6 +867,8 @@ class LiveTvPlaybackController @Inject constructor(
         wrongShowSkips = 0
         wallCheckedFor = null
         if (previousChannelKey != channel.key) {
+            // A new channel starts on the hardware decoder again.
+            softwareVideoChannel = null
             neverStartedCount = 0
             sawLive = false
             audioHandled = false
@@ -1035,6 +1093,7 @@ class LiveTvPlaybackController @Inject constructor(
             PlaybackException.ERROR_CODE_DECODING_FAILED,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED ->
                 "This TV couldn't play this channel's picture or sound"
@@ -1102,10 +1161,13 @@ class LiveTvPlaybackController @Inject constructor(
     private var stallJob: Job? = null
     private var lastPosition = -1L
     private var lastProgressAt = 0L
+    /** How much was loaded at the last check (to tell "slow to start" from "nothing coming in"). */
+    private var lastBuffered = -1L
 
     private fun startStallWatch() {
         lastProgressAt = android.os.SystemClock.elapsedRealtime()
         lastPosition = -1L
+        lastBuffered = -1L
         if (stallJob?.isActive == true) return
         stallJob = scope.launch {
             while (true) {
@@ -1131,11 +1193,19 @@ class LiveTvPlaybackController @Inject constructor(
         val pos = p.currentPosition
         val moving = p.playbackState == Player.STATE_READY && p.isPlaying && pos != lastPosition
         lastPosition = pos
+        // Still loading, with more of the stream arriving since the last check.
+        val buffered = p.bufferedPosition
+        val stillLoading = p.playbackState == Player.STATE_BUFFERING && lastBuffered >= 0 && buffered > lastBuffered
+        lastBuffered = buffered
         if (moving) {
             lastProgressAt = now
             if (_state.value.catchupTitle != null) { archiveStarted = true; catchupRestarts = 0 }
             return
         }
+        // A Dispatcharr channel that's slow to load but still coming in gets extra time before
+        // it's reloaded: a reload drops the connection, and Dispatcharr can then move to the
+        // channel's next, lower-quality stream. Other channels reload on time, as before.
+        if (stillLoading && slowStarter() && now - lastProgressAt < STALL_MS + SLOW_START_EXTRA_MS) return
         if (now - lastProgressAt < STALL_MS || !autoReconnect) return
         lastProgressAt = now
         val archive = _state.value.catchupTitle != null
@@ -1274,6 +1344,7 @@ class LiveTvPlaybackController @Inject constructor(
         val title = _state.value.catchupTitle
         val start = archiveStartWallMs
         val pos = p.currentPosition
+        val clip = playingClip()
         resumeAfterBackground = {
             if (title != null) {
                 // Catch-up: the same replay, back where you were.
@@ -1286,6 +1357,15 @@ class LiveTvPlaybackController @Inject constructor(
             } else {
                 currentUrl = null
                 play(ch, overrideUrl = url.takeIf { it != ch.url })
+                // A replay or highlight: back where it was, and still paused if it was.
+                if (clip) {
+                    if (!wasPlaying) _player?.playWhenReady = false
+                    scope.launch {
+                        var waited = 0
+                        while (waited < 15_000 && _player?.playbackState != Player.STATE_READY) { delay(200); waited += 200 }
+                        _player?.let { pl -> if (pos > 0) pl.seekTo(pos); if (!wasPlaying) pl.pause() }
+                    }
+                }
             }
         }
         stopShift()
@@ -1642,6 +1722,9 @@ class LiveTvPlaybackController @Inject constructor(
         return ((heapMb shl 20) * 3 / 10).coerceIn(32L shl 20, 160L shl 20).toInt()
     }
 
+    /** The channel playing on a software video decoder after its hardware decoder failed. */
+    @Volatile private var softwareVideoChannel: String? = null
+
     private fun buildPlayer(): ExoPlayer {
         val passthrough = audioPassthrough
         val renderers = object : DefaultRenderersFactory(context) {
@@ -1662,6 +1745,14 @@ class LiveTvPlaybackController @Inject constructor(
         }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
+            // Asked each time a decoder opens: software only for a channel whose hardware
+            // decoder failed (see onPlayerError), hardware as normal everywhere else.
+            .setMediaCodecSelector { mime, secure, tunneling ->
+                val all = androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling)
+                if (softwareVideoChannel == null || softwareVideoChannel != currentChannel?.key ||
+                    !androidx.media3.common.MimeTypes.isVideo(mime)
+                ) all else all.filter { it.softwareOnly }.ifEmpty { all }
+            }
         // Buffer size setting: how much is downloaded ahead. Bigger rides out a shaky connection or
         // a slow provider; smaller starts channels a little faster.
         val (minMs, maxMs, startMs, rebufferMs) = when (bufferSize) {
@@ -1744,17 +1835,28 @@ class LiveTvPlaybackController @Inject constructor(
             // Sound playing but no picture: frozen video. A channel that's simply still loading
             // gets longer before we step in (it may just be slow to start).
             delay(FRAME_TIMEOUT_MS)
+            // Dispatcharr, 4K/HDR: the picture takes longer to appear after the sound.
+            if (stuck(p, requireReady = true) && slowStarter() && (p.videoFormat?.height ?: 0) > 1080) delay(BIG_PICTURE_EXTRA_MS)
             if (!stuck(p, requireReady = true)) {
+                val bufferedBefore = p.bufferedPosition
                 delay(LOADING_AFTER_MOVE_MS - FRAME_TIMEOUT_MS)
                 if (!stuck(p, requireReady = false)) return@launch
+                // Dispatcharr, still loading but the stream keeps coming in: just slow to start
+                // (it buffers first), not stuck. Restarting would drop the connection, and
+                // Dispatcharr may then hand over the channel's next, lower-quality stream. The
+                // stall check still steps in if it never gets going. Everything else restarts
+                // straight away, as before.
+                if (slowStarter() && p.playbackState == Player.STATE_BUFFERING && p.bufferedPosition > bufferedBefore) return@launch
             }
             Log.w(TAG, "No picture after moving the video; restarting the stream")
             val archive = _state.value.catchupTitle != null
             val pos = p.currentPosition
+            // A replay or highlight carries on where it was, as catch-up does.
+            val ownAt = ownReplayResumeAt(p)
             p.stop()
             archiveStartPending = false
             p.prepare()
-            if (archive && pos > 0) p.seekTo(pos)
+            if (archive && pos > 0) p.seekTo(pos) else if (ownAt != C_TIME_UNSET && ownAt > 0) p.seekTo(ownAt)
             p.playWhenReady = true
         }
     }
@@ -1905,9 +2007,7 @@ class LiveTvPlaybackController @Inject constructor(
             if (playbackState == Player.STATE_ENDED && _state.value.catchupTitle == null) {
                 // A replay or highlight from Sports that played to its end: done, not a dropout.
                 if (clipFinished()) {
-                    com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Video ${currentChannel?.name} finished")
-                    _videoFinished.tryEmit(Unit)
-                    stop()
+                    finishClip()
                     return
                 }
                 // A live stream should never end; treat it as a dropped connection.
@@ -2032,6 +2132,18 @@ class LiveTvPlaybackController @Inject constructor(
                 p.playWhenReady = true
                 return
             }
+            // The TV's hardware video decoder failed on this channel: play it once more on
+            // Android's software decoder before showing an error (a decoder taken away for a
+            // moment just reconnects as usual).
+            if (ch != null && p != null && error.errorCode in VIDEO_DECODER_ERRORS && softwareVideoChannel != ch.key) {
+                softwareVideoChannel = ch.key
+                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Channel ${ch.name}: video decoder failed (${error.errorCodeName}); trying the software decoder")
+                val url = currentUrl ?: ch.url
+                p.setMediaSource(buildMediaSource(url, ch.headers, isLive = _state.value.catchupTitle == null))
+                p.prepare()
+                p.playWhenReady = true
+                return
+            }
             if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW && p != null) {
                 p.seekToDefaultPosition()
                 p.prepare()
@@ -2040,6 +2152,7 @@ class LiveTvPlaybackController @Inject constructor(
             if (_state.value.catchupTitle != null) com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
                 "Catch-up failed on ${ch?.name} (${error.errorCodeName}); no other links left to try"
             )
+            if (clipFailedAtEnd()) { finishClip(); return }
             scheduleReconnect(describe(error), error)
         }
     }
@@ -2179,6 +2292,19 @@ class LiveTvPlaybackController @Inject constructor(
      * channel. True when it did, and this channel isn't tried again.
      */
     var onLiveFailure: ((channelKey: String) -> Boolean)? = null
+
+    /** Playlist ids served by Dispatcharr (see [com.nuvio.tv.livetv.model.PlaylistSource.isDispatcharr]). */
+    var dispatcharrSources: () -> Set<String> = { emptySet() }
+
+    /**
+     * The channel playing comes from Dispatcharr, which buffers before sending and moves to a
+     * channel's next stream when a viewer reconnects: given longer to start before a reconnect.
+     */
+    private fun slowStarter(): Boolean {
+        val ch = currentChannel ?: return false
+        return ch.sourceId in dispatcharrSources() ||
+            com.nuvio.tv.livetv.model.PlaylistSource.isDispatcharrLink(currentUrl ?: ch.url)
+    }
 
     /**
      * Sports: the next channel showing the same live game, when [failedKey] won't play or keeps
@@ -2345,10 +2471,21 @@ class LiveTvPlaybackController @Inject constructor(
         /** Two freezes within this long: the channel counts as failing (live games only). */
         private const val FREEZE_WINDOW_MS = 3 * 60_000L
         private val FORMAT_GUESSES = LiveStreamFormats.FORMAT_GUESSES
+        /** Hardware decoder failures worth one try on a software decoder (not "taken away"). */
+        private val VIDEO_DECODER_ERRORS = setOf(
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+        )
         /** No picture this long after the video moved to a new screen = stuck. */
         private const val FRAME_TIMEOUT_MS = 2_500L
         /** Still loading this long after the video moved to a new screen = stuck. */
         private const val LOADING_AFTER_MOVE_MS = 7_000L
+        /** Extra wait for a first picture on Dispatcharr 4K/HDR channels after the video moved. */
+        private const val BIG_PICTURE_EXTRA_MS = 3_000L
+        /** Extra time to start for a Dispatcharr channel that's still coming in (on top of [STALL_MS]). */
+        private const val SLOW_START_EXTRA_MS = 15_000L
         private const val C_TIME_UNSET = Long.MIN_VALUE + 1
         private const val TAG = "LiveTvPlayback"
     }

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_phone_title">"הוספה ל-Nuvio + IPTV"</string>
+    <string name="iptv_phone_connected_to">"מחובר אל %1$s"</string>
+    <string name="iptv_phone_heading">"הוספה לטלוויזיה"</string>
+    <string name="iptv_phone_instructions">"ממלאים כאן ומקישים על שליחה לטלוויזיה. זה מופיע בטלוויזיה מיד."</string>
+    <string name="iptv_phone_what_to_add">"מה להוסיף"</string>
+    <string name="iptv_phone_m3u_tab">"קישור M3U"</string>
+    <string name="iptv_phone_epg_tab">"EPG בלבד"</string>
+    <string name="iptv_phone_name_label">"שם (לא חובה)"</string>
+    <string name="iptv_phone_provider_placeholder">"הספק שלי"</string>
+    <string name="iptv_phone_playlist_label">"קישור לרשימת ההשמעה"</string>
+    <string name="iptv_phone_epg_optional_label">"קישור EPG (לא חובה)"</string>
+    <string name="iptv_phone_user_agent_label">"User agent (לא חובה)"</string>
+    <string name="iptv_phone_user_agent_placeholder">"השאירו ריק לברירת המחדל"</string>
+    <string name="iptv_phone_server_label">"שרת"</string>
+    <string name="iptv_phone_username_label">"שם משתמש"</string>
+    <string name="iptv_phone_password_label">"סיסמה"</string>
+    <string name="iptv_phone_include_live">"לכלול ערוצי טלוויזיה"</string>
+    <string name="iptv_phone_include_vod">"לכלול סרטים וסדרות (On Demand)"</string>
+    <string name="iptv_phone_epg_label">"קישור EPG"</string>
+    <string name="iptv_phone_send">"שליחה לטלוויזיה"</string>
+    <string name="iptv_phone_network_note">"עובד רק באותה רשת Wi‑Fi של הטלוויזיה. הדף מפסיק לעבוד כשסוגרים את המסך בטלוויזיה."</string>
+    <string name="iptv_phone_guide_placeholder">"מדריך"</string>
+    <string name="iptv_phone_sending">"שולח…"</string>
+    <string name="iptv_phone_unreachable">"אין חיבור לטלוויזיה. ודאו שמסך ההוספה מהטלפון עדיין פתוח ושאתם באותה רשת Wi‑Fi."</string>
+    <string name="iptv_phone_not_found">"לא נמצא"</string>
+    <string name="iptv_phone_nothing_to_send">"אין מה לשלוח."</string>
+    <string name="iptv_phone_missing">"משהו חסר."</string>
+    <string name="iptv_phone_could_not_add">"הטלוויזיה לא הצליחה להוסיף את זה. נסו שוב."</string>
+    <string name="iptv_phone_playlist_missing">"הדביקו את הקישור לרשימת ההשמעה."</string>
+    <string name="iptv_phone_playlist_scheme">"הקישור לרשימת ההשמעה צריך להתחיל ב-http:// או https://."</string>
+    <string name="iptv_phone_epg_scheme">"קישור ה-EPG צריך להתחיל ב-http:// או https://."</string>
+    <string name="iptv_phone_server_missing">"הזינו את כתובת השרת."</string>
+    <string name="iptv_phone_server_invalid">"זו לא נראית כמו כתובת שרת."</string>
+    <string name="iptv_phone_credentials_missing">"הזינו שם משתמש וסיסמה."</string>
+    <string name="iptv_phone_inclusion_missing">"הפעילו ערוצי טלוויזיה או סרטים וסדרות."</string>
+    <string name="iptv_phone_epg_missing">"הדביקו את קישור ה-EPG."</string>
+    <string name="iptv_phone_kind_missing">"בחרו מה להוסיף."</string>
+</resources>

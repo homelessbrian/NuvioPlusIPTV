@@ -714,6 +714,8 @@ class PlayerRuntimeController(
     internal var pendingAudioPcmFallbackRebuild: Boolean = false
     internal var hasTriedDv7HevcFallback: Boolean = false
     internal var forceDv7ToHevc: Boolean = false
+    /** The stream link last rebuilt on a software video decoder (see trySoftwareVideoDecoderFallback). */
+    internal var forceSoftwareVideoForStreamUrl: String? = null
     internal var startupRetryCount: Int = 0
     internal var parsingErrorProbeAttempted: Boolean = false
     internal var hasRetriedCurrentStreamAfterUnexpectedNpe: Boolean = false

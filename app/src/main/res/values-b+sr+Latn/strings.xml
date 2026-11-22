@@ -1096,7 +1096,6 @@
 
 
     <string name="mdblist_title">MDBList ocene</string>
-    <string name="mdblist_subtitle">Konfigurišite eksterne ocene prikazane u glavnoj sekciji detalja</string>
     <string name="mdblist_enable_title">Omogući MDBList ocene</string>
     <string name="mdblist_enable_subtitle">Preuzmi ocene od eksternih provajdera na ekranu detalja metapodataka</string>
     <string name="mdblist_api_key_title">API Ključ</string>
@@ -3159,4 +3158,6 @@
     <string name="stream_test_video_bitrate">Prosečni video bitrejt: %1$s</string>
     <string name="stream_test_error_connection">Povezivanje nije uspelo. Veza poslednje puštenog strima je možda istekla ili je nedostupna. Pustite video ponovo i pokušajte opet.</string>
 
+    <string name="settings_home_screen_rows">Redovi početnog ekrana</string>
+    <string name="settings_home_screen_rows_subtitle">Izaberite redosled redova na početnom ekranu</string>
 </resources>

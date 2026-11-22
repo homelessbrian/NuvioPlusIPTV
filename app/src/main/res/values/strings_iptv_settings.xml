@@ -701,4 +701,17 @@
     <string name="iptv_settings_dns_service_desc">"Gets around internet companies that block IPTV servers. Goes around home ad blockers and family filters."</string>
     <string name="iptv_settings_hide_stray_entries">"Hide Stray Entries"</string>
     <string name="iptv_settings_hide_stray_entries_desc">"Leaves out odd leftovers some providers add to their playlists, like a show episode sitting in its own one-item group. Real channels are never hidden"</string>
+    <string name="iptv_settings_hide_non_english_titles">"Hide Non-English Titles"</string>
+    <string name="iptv_settings_hide_non_english_titles_sub">"Leaves out movies and series made in another language (checked with TMDB, plus your provider\'s own language groups and labels). Hidden titles are never loaded or looked up."</string>
+    <string name="iptv_settings_number_of_channels">"Number of channels"</string>
+    <string name="iptv_settings_lock_playlist_logins">"Lock Playlist Logins"</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"Editing playlists, guides and the network folder, and making backups, need the PIN. Passwords show as dots."</string>
+    <string name="iptv_settings_enter_pin_for_logins">"Enter your PIN to see playlist logins"</string>
+    <string name="iptv_settings_delete_recordings_after">"Delete Recordings After"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"Recordings are kept until you delete them"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Finished recordings older than this are deleted by themselves"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Recordings already older than this are deleted straight away. Ones marked Keep Forever (in a recording\'s menu), partly watched or still recording are never deleted."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d days"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Picture, sound and pausing"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Where recordings are saved, the network folder and how long they\'re kept"</string>
 </resources>

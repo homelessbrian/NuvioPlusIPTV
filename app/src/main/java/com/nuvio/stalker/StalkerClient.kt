@@ -3,6 +3,10 @@ package com.nuvio.stalker
 import io.ktor.http.Url
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
@@ -29,6 +33,9 @@ class StalkerClient(
     private var session: Session? = null
     private var generation = 0L
     private var invalidated = false
+    // The series import pages through the same VOD list the movie import just read; reuse it briefly.
+    private val vodListMutex = Mutex()
+    private var vodList: Pair<Long, List<JsonObject>>? = null
 
     /** Validates the account profile as well as obtaining a token. */
     suspend fun authenticate() { acquireSession() }
@@ -86,10 +93,24 @@ class StalkerClient(
         }
     }
 
-    suspend fun movies(categoryId: String? = null): List<StalkerMovie> {
-        val rows = pages("vod", categoryParameters(categoryId))
+    suspend fun movies(categoryId: String? = null): List<StalkerMovie> = vodMovies(categoryId, release = false)
+
+    private suspend fun vodMovies(categoryId: String?, release: Boolean): List<StalkerMovie> {
+        val rows = if (categoryId.isNullOrBlank()) allVodRows(release) else pages("vod", categoryParameters(categoryId))
         val endpoint = acquireSession().endpoint
-        return rows.map { movie(it, endpoint) }
+        return rows.mapNotNull { row ->
+            try { movie(row, endpoint) } catch (e: StalkerException) {
+                if (e.error == StalkerError.INVALID_RESPONSE) null else throw e
+            }
+        }
+    }
+
+    /** [release]: the last reader (the series import) lets the kept copy go so it isn't held in memory. */
+    private suspend fun allVodRows(release: Boolean): List<JsonObject> = vodListMutex.withLock {
+        val now = nowEpochMillis()
+        val kept = vodList?.takeIf { now - it.first in 0..VOD_LIST_REUSE_MS }?.second
+        vodList = null
+        kept ?: pages("vod", emptyMap()).also { if (!release) vodList = now to it }
     }
 
     /** Both native series and VOD catalogues containing is_series items are supported. */
@@ -110,7 +131,7 @@ class StalkerClient(
                 info.text("description", "plot"), info.text("genre"), info.text("rating_imdb", "rating"))
         }
         val vod = try {
-            movies(categoryId).also { supported = true }.filter { it.isSeries }.map {
+            vodMovies(categoryId, release = true).also { supported = true }.filter { it.isSeries }.map {
                 StalkerSeries(it.id, it.title, it.stream.copy(kind = StalkerContentKind.SERIES),
                     StalkerSeriesVariant.VOD, it.categoryId, it.year, it.poster, it.plot, it.genre, it.rating)
             }
@@ -174,32 +195,45 @@ class StalkerClient(
 
     /** Returns the complete supplied bulk guide; it never silently shortens the requested coverage. */
     suspend fun guide(hours: Int = 168): List<StalkerProgramme> {
-        if (hours <= 0 || hours > limits.maxGuideHours) throw StalkerException(StalkerError.TOO_LARGE)
-        val value = authenticated(mapOf("type" to "itv", "action" to "get_epg_info", "period" to hours.toString()))
+        if (hours <= 0) throw StalkerException(StalkerError.TOO_LARGE)
+        val period = hours.coerceAtMost(limits.maxGuideHours)
+        val value = authenticated(mapOf("type" to "itv", "action" to "get_epg_info", "period" to period.toString()))
         return parseGuide(value)
     }
 
     /** Serial streaming callback. Callers publish staging output only after this returns successfully. */
     suspend fun forEachProgramme(hours: Int = 168, onProgramme: (StalkerProgramme) -> Unit) {
-        if (hours <= 0 || hours > limits.maxGuideHours) throw StalkerException(StalkerError.TOO_LARGE)
+        if (hours <= 0) throw StalkerException(StalkerError.TOO_LARGE)
+        val period = hours.coerceAtMost(limits.maxGuideHours)
         val streaming = transport as? StalkerStreamingGuideTransport
         if (streaming == null) {
-            guide(hours).forEach(onProgramme)
+            guide(period).forEach(onProgramme)
             return
         }
         var active = acquireSession()
-        val parameters = mapOf("type" to "itv", "action" to "get_epg_info", "period" to hours.toString())
+        val parameters = mapOf("type" to "itv", "action" to "get_epg_info", "period" to period.toString())
         val context = currentCoroutineContext()
         val importedAt = nowEpochMillis()
         var emitted = 0
+        var skippedForTime = 0
         repeat(2) { attempt ->
             checkGeneration(active.generation)
             val response = try {
                 streaming.getGuide(StalkerWire.requestUrl(active.endpoint, parameters), requestHeaders(active.token, active.endpoint)) { channel, row ->
                     context.ensureActive()
                     if (emitted >= limits.maxGuideProgrammes) throw StalkerException(StalkerError.TOO_LARGE)
-                    onProgramme(decodeProgramme(row, channel, importedAt))
-                    emitted++
+                    // A bad listing (no times, zero length, odd date) is dropped; the rest of the guide is kept.
+                    val programme = try { decodeProgramme(row, channel, importedAt) } catch (e: StalkerException) {
+                        when (e.error) {
+                            StalkerError.GUIDE_TIMEZONE_UNSUPPORTED -> { skippedForTime++; null }
+                            StalkerError.INVALID_RESPONSE -> null
+                            else -> throw e
+                        }
+                    }
+                    if (programme != null) {
+                        onProgramme(programme)
+                        emitted++
+                    }
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: StalkerException) { throw e }
@@ -213,8 +247,9 @@ class StalkerClient(
                 active = acquireSession()
             } else {
                 if (response.status in setOf(404, 405, 501)) throw StalkerException(StalkerError.UNSUPPORTED)
-                if (response.status !in 200..299) throw StalkerException(StalkerError.NETWORK)
+                if (response.status !in 200..299) throw StalkerException(StalkerError.SERVER_ERROR, response.status)
                 response.error?.let { throw StalkerException(it) }
+                if (emitted == 0 && skippedForTime > 0) throw StalkerException(StalkerError.GUIDE_TIMEZONE_UNSUPPORTED)
                 return
             }
         }
@@ -233,34 +268,46 @@ class StalkerClient(
     private fun parseGuide(value: JsonElement): List<StalkerProgramme> {
         val programmes = ArrayList<StalkerProgramme>()
         val importedAt = nowEpochMillis()
-        fun append(row: JsonObject, channel: String?) {
-            programmes.add(decodeProgramme(StalkerGuideRow(row.text("ch_id", "channel_id"), row.text("id", "program_id"),
+        var skippedForTime = 0
+        fun append(element: JsonElement, channel: String?) {
+            // Bad listings are dropped one by one, never the whole guide.
+            val row = element as? JsonObject ?: return
+            val programme = try { decodeProgramme(StalkerGuideRow(row.text("ch_id", "channel_id"), row.text("id", "program_id"),
                 row.text("name", "title"), row.text("start_timestamp"), row.text("stop_timestamp", "end_timestamp"),
                 row.text("start", "time"), row.text("stop", "time_to"), row.text("descr", "description", "plot"),
-                row.text("category"), row.flag("mark_archive", "is_archive", "archive")), channel, importedAt))
+                row.text("category"), row.flag("mark_archive", "is_archive", "archive")), channel, importedAt) }
+            catch (e: StalkerException) {
+                when (e.error) {
+                    StalkerError.GUIDE_TIMEZONE_UNSUPPORTED -> { skippedForTime++; return }
+                    StalkerError.INVALID_RESPONSE -> return
+                    else -> throw e
+                }
+            }
+            programmes.add(programme)
             if (programmes.size > limits.maxGuideProgrammes) throw StalkerException(StalkerError.TOO_LARGE)
         }
         fun channelRows(channel: String, data: JsonElement) {
             val rows = when (data) {
                 is JsonArray -> data
-                is JsonObject -> (data["data"] ?: data["epg"] ?: data["items"]) as? JsonArray
-                    ?: if (data.isEmpty()) JsonArray(emptyList()) else throw StalkerException(StalkerError.INVALID_RESPONSE)
-                else -> throw StalkerException(StalkerError.INVALID_RESPONSE)
+                is JsonObject -> (data["data"] ?: data["epg"] ?: data["items"]) as? JsonArray ?: return
+                // A channel with no listings (null, false, ""): nothing to add.
+                else -> return
             }
-            rows.forEach { append(it as? JsonObject ?: throw StalkerException(StalkerError.INVALID_RESPONSE), channel) }
+            rows.forEach { append(it, channel) }
         }
         when (value) {
-            is JsonArray -> value.forEach { append(it as? JsonObject ?: throw StalkerException(StalkerError.INVALID_RESPONSE), null) }
+            is JsonArray -> value.forEach { append(it, null) }
             is JsonObject -> {
                 val data = value["data"] ?: value
                 when (data) {
-                    is JsonArray -> data.forEach { append(it as? JsonObject ?: throw StalkerException(StalkerError.INVALID_RESPONSE), null) }
+                    is JsonArray -> data.forEach { append(it, null) }
                     is JsonObject -> data.forEach { (channel, rows) -> channelRows(channel, rows) }
                     else -> throw StalkerException(StalkerError.INVALID_RESPONSE)
                 }
             }
             else -> throw StalkerException(StalkerError.INVALID_RESPONSE)
         }
+        if (programmes.isEmpty() && skippedForTime > 0) throw StalkerException(StalkerError.GUIDE_TIMEZONE_UNSUPPORTED)
         return programmes
     }
 
@@ -343,51 +390,94 @@ class StalkerClient(
     )
 
     private fun requiredId(row: JsonObject): String = row.text("id") ?: throw StalkerException(StalkerError.INVALID_RESPONSE)
-    private fun selectors(row: JsonObject): List<String> = (row["series"] as? JsonArray)?.map {
+    // An odd episode number in the list is left out rather than failing the whole catalogue.
+    private fun selectors(row: JsonObject): List<String> = (row["series"] as? JsonArray)?.mapNotNull {
         (it as? JsonPrimitive)?.contentOrNull?.takeIf { s -> s.toIntOrNull()?.let { number -> number > 0 } == true }
-            ?: throw StalkerException(StalkerError.INVALID_RESPONSE)
     } ?: emptyList()
     private fun categoryParameters(categoryId: String?) = categoryId?.takeIf { it.isNotBlank() }?.let { mapOf("category" to it) } ?: emptyMap()
     private fun validArchiveId(id: String): Boolean = id.isNotEmpty() && id.length <= 256 && id.all { it.isLetterOrDigit() && it.code < 128 || it == '_' || it == '-' }
     private fun checkItemCount(count: Int) { if (count > limits.maxItems) throw StalkerException(StalkerError.TOO_LARGE) }
 
+    /**
+     * Portals are untidy: titles repeat across pages, totals shift while paging, the odd row has no ID.
+     * Those are skipped instead of failing the whole list. Once the first page says how many pages there
+     * are, the rest are fetched a few at a time (a 14-per-page catalogue can be thousands of pages).
+     */
     private suspend fun pages(type: String, extra: Map<String, String>, action: String = "get_ordered_list"): List<JsonObject> {
         val result = ArrayList<JsonObject>()
         val seen = HashSet<String>()
-        var total: Long? = null
-        var pageSize: Long? = null
-        var rawCount = 0L
-        for (page in 1..limits.maxPages) {
-            currentCoroutineContext().ensureActive()
-            val value = authenticated(mapOf("type" to type, "action" to action, "p" to page.toString()) + extra)
-            val envelope = value as? JsonObject
-            val rows = StalkerWire.list(value)
-            val reportedTotal = envelope?.integer("total_items")
-            val reportedSize = envelope?.integer("max_page_items")
-            if (reportedTotal != null) {
-                if (reportedTotal < 0 || reportedTotal > limits.maxItems) throw StalkerException(StalkerError.TOO_LARGE)
-                if (total != null && reportedTotal != total) throw StalkerException(StalkerError.PAGINATION_FAILED)
-                total = reportedTotal
+        suspend fun fetch(page: Int): JsonElement {
+            val parameters = mapOf("type" to type, "action" to action, "p" to page.toString()) + extra
+            return try { authenticated(parameters) } catch (e: StalkerException) {
+                if (e.error !in RETRYABLE) throw e
+                delay(PAGE_RETRY_DELAY_MS)
+                authenticated(parameters)
             }
-            if (reportedSize != null) {
-                if (reportedSize <= 0 || reportedSize > limits.maxItems) throw StalkerException(StalkerError.PAGINATION_FAILED)
-                if (pageSize != null && reportedSize != pageSize) throw StalkerException(StalkerError.PAGINATION_FAILED)
-                pageSize = reportedSize
-            }
-            if (rows.isEmpty()) {
-                if (total != null && rawCount < total!!) throw StalkerException(StalkerError.PAGINATION_FAILED)
-                return result
-            }
-            rows.forEach { if (!seen.add(requiredId(it))) throw StalkerException(StalkerError.PAGINATION_FAILED) }
-            rawCount += rows.size
-            checkItemCount(rawCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
-            result.addAll(rows)
-            if (total != null) {
-                if (rawCount > total!!) throw StalkerException(StalkerError.PAGINATION_FAILED)
-                if (rawCount == total) return result
-            } else if (value is JsonArray || pageSize != null && rows.size < pageSize!!) return result
         }
-        throw StalkerException(StalkerError.PAGINATION_FAILED)
+        /** Adds the page's new rows; returns how many were new. */
+        fun add(rows: List<JsonObject>): Int {
+            var added = 0
+            rows.forEach { row ->
+                val id = row.text("id") ?: return@forEach
+                if (seen.add(id)) { result.add(row); added++ }
+            }
+            checkItemCount(result.size)
+            return added
+        }
+
+        currentCoroutineContext().ensureActive()
+        val first = fetch(1)
+        val firstRows = StalkerWire.list(first)
+        val envelope = first as? JsonObject
+        val total = envelope?.integer("total_items")
+        if (total != null && total > limits.maxItems) throw StalkerException(StalkerError.TOO_LARGE)
+        val pageSize = envelope?.integer("max_page_items")?.takeIf { it in 1..limits.maxItems.toLong() }
+        if (firstRows.isEmpty()) {
+            if (total != null && total > 0) throw StalkerException(StalkerError.PAGINATION_FAILED)
+            return result
+        }
+        add(firstRows)
+        if (first is JsonArray) return result
+        if (total == null && pageSize == null) return sequentialPages(2, { fetch(it) }, { add(it) }, result)
+        if (total == null) {
+            if (firstRows.size < pageSize!!) return result
+            return sequentialPages(2, { fetch(it) }, { add(it) }, result)
+        }
+        val size = pageSize ?: firstRows.size.toLong()
+        val lastPage = ((total + size - 1) / size).coerceAtMost(limits.maxPages.toLong()).toInt()
+        var next = 2
+        while (next <= lastPage) {
+            currentCoroutineContext().ensureActive()
+            val batch = (next..minOf(lastPage, next + PARALLEL_PAGES - 1)).toList()
+            val responses = coroutineScope { batch.map { page -> async { fetch(page) } }.awaitAll() }
+            var ended = false
+            for (response in responses) {
+                val rows = StalkerWire.list(response)
+                if (rows.isEmpty()) { ended = true; break }
+                add(rows)
+            }
+            if (ended) return result
+            next += batch.size
+        }
+        return result
+    }
+
+    private suspend fun sequentialPages(
+        from: Int, fetch: suspend (Int) -> JsonElement, add: (List<JsonObject>) -> Int,
+        result: ArrayList<JsonObject>,
+    ): List<JsonObject> {
+        for (page in from..limits.maxPages) {
+            currentCoroutineContext().ensureActive()
+            val value = fetch(page)
+            val rows = StalkerWire.list(value)
+            if (rows.isEmpty()) return result
+            // A portal that keeps answering with the same last page brings nothing new: stop there.
+            if (add(rows) == 0) return result
+            if (value is JsonArray) return result
+            val size = (value as? JsonObject)?.integer("max_page_items")
+            if (size != null && rows.size < size) return result
+        }
+        return result
     }
 
     private suspend fun acquireSession(): Session {
@@ -403,6 +493,12 @@ class StalkerClient(
             val supplied = StalkerWire.configUrl(config)
             val candidates = StalkerWire.endpoints(supplied)
             var failure: StalkerException? = null
+            fun keep(e: StalkerException) {
+                val rank = { x: StalkerException? -> x?.let { DISCOVERY_RANK.indexOf(it.error).takeIf { i -> i >= 0 } } ?: Int.MAX_VALUE }
+                if (rank(e) < rank(failure)) failure = e
+            }
+            // Each login path is tried before giving up: a portal whose portal.php answers with an
+            // error, a refusal or a redirect loop may still work at server/load.php.
             for (endpoint in candidates) {
                 checkGeneration(expectedGeneration)
                 try {
@@ -414,12 +510,12 @@ class StalkerClient(
                     }
                     return@withLock authenticated
                 } catch (_: EndpointMissing) {
-                    failure = StalkerException(StalkerError.UNSUPPORTED)
+                    keep(StalkerException(StalkerError.UNSUPPORTED))
                 } catch (_: AuthenticationFailure) {
-                    throw StalkerException(StalkerError.AUTHENTICATION_FAILED)
+                    keep(StalkerException(StalkerError.AUTHENTICATION_FAILED))
                 } catch (e: StalkerException) {
-                    if (e.error !in setOf(StalkerError.INVALID_RESPONSE, StalkerError.UNSUPPORTED)) throw e
-                    failure = e
+                    if (e.error in HOST_UNREACHABLE || e.error !in DISCOVERY_RANK) throw e
+                    keep(e)
                 }
             }
             throw failure ?: StalkerException(StalkerError.UNSUPPORTED)
@@ -508,7 +604,7 @@ class StalkerClient(
         checkFinalUrl(endpoint, response.finalUrl)
         if (response.status in setOf(401, 403)) throw AuthenticationFailure()
         if (response.status in setOf(404, 405, 501)) throw EndpointMissing()
-        if (response.status !in 200..299) throw StalkerException(StalkerError.NETWORK)
+        if (response.status !in 200..299) throw StalkerException(StalkerError.SERVER_ERROR, response.status)
         if (response.body.length > limits.maxResponseChars) throw StalkerException(StalkerError.TOO_LARGE)
         val trimmed = response.body.trim()
         if (isAuthMessage(trimmed)) throw AuthenticationFailure()
@@ -543,9 +639,9 @@ class StalkerClient(
 
     private fun checkFinalUrl(endpoint: String, finalUrl: String?) {
         finalUrl?.let { redirected ->
-            if (!StalkerWire.sameOrigin(Url(endpoint), StalkerWire.httpUrl(redirected, StalkerError.INVALID_RESPONSE))) {
-                throw StalkerException(StalkerError.INVALID_RESPONSE)
-            }
+            // A portal may hand us on to another server (the transport only follows safe hand-offs).
+            val target = StalkerWire.httpUrl(redirected, StalkerError.INVALID_RESPONSE)
+            if (Url(endpoint).protocol.name == "https" && target.protocol.name != "https") throw StalkerException(StalkerError.INVALID_RESPONSE)
         }
     }
 
@@ -561,5 +657,18 @@ class StalkerClient(
         checkNotInvalidated()
         if (generation != epoch) throw StalkerException(StalkerError.STALE_SESSION)
     }
+    private companion object {
+        const val PARALLEL_PAGES = 4
+        const val PAGE_RETRY_DELAY_MS = 750L
+        const val VOD_LIST_REUSE_MS = 10 * 60_000L
+        val RETRYABLE = setOf(StalkerError.NETWORK, StalkerError.TIMED_OUT, StalkerError.SERVER_ERROR)
+        // Same address for every login path: no point trying the others.
+        val HOST_UNREACHABLE = setOf(StalkerError.PORTAL_NOT_FOUND, StalkerError.CONNECTION_FAILED,
+            StalkerError.TIMED_OUT, StalkerError.SECURE_CONNECTION_FAILED)
+        // When no login path works, the most telling failure is reported.
+        val DISCOVERY_RANK = listOf(StalkerError.AUTHENTICATION_FAILED, StalkerError.SERVER_ERROR,
+            StalkerError.TOO_MANY_REDIRECTS, StalkerError.NETWORK, StalkerError.INVALID_RESPONSE, StalkerError.UNSUPPORTED)
+    }
+
     private fun checkNotInvalidated() { if (invalidated) throw StalkerException(StalkerError.STALE_SESSION) }
 }

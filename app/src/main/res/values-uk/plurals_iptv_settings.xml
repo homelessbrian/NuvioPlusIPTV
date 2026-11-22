@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="iptv_settings_playlist_count">
+        <item quantity="one">"%1$d плейлист"</item>
+        <item quantity="few">"%1$d плейлисти"</item>
+        <item quantity="many">"%1$d плейлистів"</item>
+        <item quantity="other">"%1$d плейлиста"</item>
+    </plurals>
+    <plurals name="iptv_settings_guide_count">
+        <item quantity="one">"%1$d телегід"</item>
+        <item quantity="few">"%1$d телегіди"</item>
+        <item quantity="many">"%1$d телегідів"</item>
+        <item quantity="other">"%1$d телегіда"</item>
+    </plurals>
+    <plurals name="iptv_settings_channel_count">
+        <item quantity="one">"%1$d канал"</item>
+        <item quantity="few">"%1$d канали"</item>
+        <item quantity="many">"%1$d каналів"</item>
+        <item quantity="other">"%1$d каналу"</item>
+    </plurals>
+    <plurals name="iptv_settings_program_count">
+        <item quantity="one">"Зіставлено %1$d передачу"</item>
+        <item quantity="few">"Зіставлено %1$d передачі"</item>
+        <item quantity="many">"Зіставлено %1$d передач"</item>
+        <item quantity="other">"Зіставлено %1$d передачі"</item>
+    </plurals>
+    <plurals name="iptv_settings_removed_count">
+        <item quantity="one">"Видалено %1$d"</item>
+        <item quantity="few">"Видалено %1$d"</item>
+        <item quantity="many">"Видалено %1$d"</item>
+        <item quantity="other">"Видалено %1$d"</item>
+    </plurals>
+    <plurals name="iptv_settings_minutes_short">
+        <item quantity="one">"%1$d хв"</item>
+        <item quantity="few">"%1$d хв"</item>
+        <item quantity="many">"%1$d хв"</item>
+        <item quantity="other">"%1$d хв"</item>
+    </plurals>
+    <plurals name="iptv_settings_days">
+        <item quantity="one">"%1$d день"</item>
+        <item quantity="few">"%1$d дні"</item>
+        <item quantity="many">"%1$d днів"</item>
+        <item quantity="other">"%1$d дня"</item>
+    </plurals>
+    <plurals name="iptv_settings_hours">
+        <item quantity="one">"%1$d година"</item>
+        <item quantity="few">"%1$d години"</item>
+        <item quantity="many">"%1$d годин"</item>
+        <item quantity="other">"%1$d години"</item>
+    </plurals>
+    <plurals name="iptv_settings_seconds">
+        <item quantity="one">"%1$d секунда"</item>
+        <item quantity="few">"%1$d секунди"</item>
+        <item quantity="many">"%1$d секунд"</item>
+        <item quantity="other">"%1$d секунди"</item>
+    </plurals>
+    <plurals name="iptv_settings_days_ago">
+        <item quantity="one">"%1$d день тому"</item>
+        <item quantity="few">"%1$d дні тому"</item>
+        <item quantity="many">"%1$d днів тому"</item>
+        <item quantity="other">"%1$d дня тому"</item>
+    </plurals>
+    <plurals name="iptv_settings_weeks_ago">
+        <item quantity="one">"%1$d тиждень тому"</item>
+        <item quantity="few">"%1$d тижні тому"</item>
+        <item quantity="many">"%1$d тижнів тому"</item>
+        <item quantity="other">"%1$d тижня тому"</item>
+    </plurals>
+    <plurals name="iptv_settings_months_ago">
+        <item quantity="one">"%1$d місяць тому"</item>
+        <item quantity="few">"%1$d місяці тому"</item>
+        <item quantity="many">"%1$d місяців тому"</item>
+        <item quantity="other">"%1$d місяця тому"</item>
+    </plurals>
+</resources>

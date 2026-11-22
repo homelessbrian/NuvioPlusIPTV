@@ -28,6 +28,10 @@
     <!-- Android 13+: granted automatically (SCHEDULE_EXACT_ALARM isn't on Android 14+), so
          recordings start on time and can run in the background with the app closed. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Live TV fork: recordings to a folder the user picks on a USB drive (Android 11+), for boxes
+         that don't give apps their own folder on the drive. Only asked for when a folder is picked. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <uses-feature
         android:name="android.hardware.touchscreen"
