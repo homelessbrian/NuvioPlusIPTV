@@ -927,12 +927,12 @@ private fun PlayerList(roster: Roster, first: FocusRequester, onPick: (Player) -
 
 /** A player's photo (initials when there isn't one), the facts we have and a short bio. */
 @Composable
-private fun PlayerProfile(p: Player, team: TeamInfo) {
+internal fun PlayerProfile(p: Player, team: TeamInfo, photo: String? = p.smallPhoto()) {
     val c = bandColor(teamColor(team))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(92.dp).clip(CircleShape).background(c), contentAlignment = Alignment.Center) {
             LiveText(p.initials(), size = 28.sp, weight = FontWeight.Black)
-            p.smallPhoto()?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(92.dp)) }
+            photo?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, alignment = Alignment.TopCenter, modifier = Modifier.size(92.dp)) }
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {

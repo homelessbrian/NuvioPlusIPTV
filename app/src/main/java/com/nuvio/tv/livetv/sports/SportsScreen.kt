@@ -1883,7 +1883,7 @@ private fun GamePage(
 
     // The tabs under the game: Overview (the score by period, the scoring, a race's order…), then
     // every panel the game has (stats, line-ups, the table, head to head…). Moving onto a tab shows it.
-    val tabs = gameExtrasTabs(ev, extras, settings)
+    val tabs = gameExtrasTabs(ev, extras, settings, viewModel)
     var tab by remember(ev.id) { mutableStateOf("overview") }
     val tabKey = tab.takeIf { k -> k == "overview" || tabs.any { it.second.key == k } } ?: "overview"
     val showVideo = videoOn && windowInUse

@@ -76,7 +76,8 @@ internal fun gameExtrasPanels(
     x: GameExtras?,
     settings: SportsSettings,
     /** OK on the Table panel: the league's whole table (see SportsTables). */
-    onTable: (() -> Unit)? = null
+    onTable: (() -> Unit)? = null,
+    viewModel: SportsViewModel? = null
 ): List<ExtrasPanel> {
     if (x == null) return emptyList()
     val sport = SportsCatalog.league(ev.leagueId)?.sport ?: Sport.OTHER
@@ -94,7 +95,7 @@ internal fun gameExtrasPanels(
     } else {
         if (x.stats.isNotEmpty()) out += ExtrasPanel("stats") { StatsPanel(x, sides, awayColor, homeColor) }
         when {
-            x.performers.isNotEmpty() -> out += ExtrasPanel("leaders") { LeadersPanel(x, ev, awayColor, homeColor) }
+            x.performers.isNotEmpty() -> out += ExtrasPanel("leaders") { TopPlayersPanel(x, ev, sides, awayColor, homeColor, viewModel) }
             x.lineups.isNotEmpty() -> out += ExtrasPanel("lineups") { LineupsPanel(x) }
         }
         if (x.winHistory.size >= 2 || x.hasOdds) out += ExtrasPanel("chance") { ChancePanel(ev, x, awayColor, homeColor) }
@@ -108,7 +109,7 @@ internal fun gameExtrasPanels(
  * same panels as [gameExtrasPanels] with none left out; the Table tab's OK is the page's own.
  */
 @Composable
-internal fun gameExtrasTabs(ev: SportsEvent, x: GameExtras?, settings: SportsSettings): List<Pair<String, ExtrasPanel>> {
+internal fun gameExtrasTabs(ev: SportsEvent, x: GameExtras?, settings: SportsSettings, viewModel: SportsViewModel? = null): List<Pair<String, ExtrasPanel>> {
     if (x == null) return emptyList()
     val sport = SportsCatalog.league(ev.leagueId)?.sport ?: Sport.OTHER
     val sides = ev.ordered(sport)
@@ -127,7 +128,7 @@ internal fun gameExtrasTabs(ev: SportsEvent, x: GameExtras?, settings: SportsSet
     val out = ArrayList<Pair<String, ExtrasPanel>>()
     if (x.stats.isNotEmpty()) out += "Stats" to ExtrasPanel("stats") { StatsPanel(x, sides, awayColor, homeColor) }
     if (x.lineups.isNotEmpty()) out += "Line-ups" to ExtrasPanel("lineups") { LineupsPanel(x) }
-    if (x.performers.isNotEmpty()) out += "Top Players" to ExtrasPanel("leaders") { LeadersPanel(x, ev, awayColor, homeColor) }
+    if (x.performers.isNotEmpty()) out += "Top Players" to ExtrasPanel("leaders") { TopPlayersPanel(x, ev, sides, awayColor, homeColor, viewModel) }
     listOfNotNull(table).forEach { out += it }
     if (x.winHistory.size >= 2 || x.hasOdds) out += "Win Chance" to ExtrasPanel("chance") { ChancePanel(ev, x, awayColor, homeColor) }
     listOfNotNull(info, form).forEach { out += it }
@@ -312,22 +313,6 @@ private fun StatsPanel(x: GameExtras, sides: List<Side>, awayColor: Color, homeC
                 val lw = if (total > 0) ((ln ?: 0.0) / total).toFloat().coerceIn(0.03f, 0.97f) else 0.5f
                 Box(Modifier.weight(lw).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(lc))
                 Box(Modifier.weight(1f - lw).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(rc))
-            }
-        }
-    }
-}
-
-@Composable
-private fun LeadersPanel(x: GameExtras, ev: SportsEvent, awayColor: Color, homeColor: Color) {
-    PanelTitle("TOP PERFORMERS")
-    x.performers.forEach { p ->
-        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            LiveText(p.category, color = SportsLook.Dim, size = 9.sp, weight = FontWeight.Black, modifier = Modifier.width(76.dp), maxLines = 1)
-            Box(Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(if (p.teamId == ev.home?.team?.id) homeColor else awayColor))
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                LiveText(p.name, color = Color.White, size = 12.sp, weight = FontWeight.ExtraBold, maxLines = 1)
-                LiveText(p.line, color = Color(0xFFC9CCD6), size = 10.sp, maxLines = 1)
             }
         }
     }
