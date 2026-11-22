@@ -39,6 +39,8 @@ class SportsViewModel @Inject constructor(
     val loading = repo.loading
     val matching = repo.matching
     val problem = repo.problem
+    val extrasBusy = repo.extrasBusy
+    val updatedAt = repo.updatedAt
 
     val use24h: StateFlow<Boolean> = livePrefs.settings.map { it.use24HourClock }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
