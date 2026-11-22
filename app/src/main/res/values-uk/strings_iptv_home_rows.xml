@@ -87,4 +87,35 @@
     <string name="home_rows_playlist_names">"Назва плейлиста в заголовках рядів"</string>
     <string name="home_rows_playlist_names_hint">"Ряди ТБ і відео за запитом із групи плейлиста показують, з якого він плейлиста (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"Усі"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · до %2$d позицій"</string>
+    <string name="home_rows_hidden_empty">"Зараз нічого показати – приховано на головній"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"Категорія фільмів або серіалів"</string>
+    <string name="home_rows_pick_vod_group_title">"Виберіть категорію"</string>
+    <string name="home_rows_pick_vod_none">"Категорій On Demand ще немає. Увімкніть On Demand для плейлиста в Налаштування → Live TV або покажіть групи в «Керуванні групами VOD»."</string>
+    <string name="home_rows_pick_vod_recent">"Нещодавно додані"</string>
+    <string name="home_rows_pick_vod_recent_hint">"Фільми або серіали"</string>
+    <string name="home_rows_vod_movies">"Фільми"</string>
+    <string name="home_rows_vod_series">"Серіали"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="one">"%1$d позиція"</item>
+        <item quantity="few">"%1$d позиції"</item>
+        <item quantity="many">"%1$d позицій"</item>
+        <item quantity="other">"%1$d позиції"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"Нещодавно додані фільми"</string>
+    <string name="home_rows_vod_recent_series_title">"Нещодавно додані серіали"</string>
+    <string name="home_rows_upcoming_today">"Сьогодні %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"Завтра %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"Ряд On Demand"</string>
+    <string name="home_rows_option_vod">"Позиції з"</string>
+    <string name="home_hero_live">"НАЖИВО"</string>
+    <string name="home_hero_min_left">"Лишилося %1$d хв"</string>
+    <string name="home_hero_starting">"Починається зараз"</string>
+    <string name="home_hero_starts_in_min">"За %1$d хв"</string>
+    <string name="home_hero_starts_in_hours">"За %1$d год %2$d хв"</string>
+    <string name="home_hero_watch_on">"Дивитися на"</string>
+    <string name="home_hero_next">"ДАЛІ"</string>
 </resources>

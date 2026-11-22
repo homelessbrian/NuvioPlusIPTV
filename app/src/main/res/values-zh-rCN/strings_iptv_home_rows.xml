@@ -87,4 +87,32 @@
     <string name="home_rows_playlist_names">"行标题中显示播放列表名称"</string>
     <string name="home_rows_playlist_names_hint">"来自播放列表分组的直播和点播行会显示所属播放列表（UK: Entertainment - HBStrong）。"</string>
     <string name="home_rows_limit_all">"全部"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · 最多 %2$d 部"</string>
+    <string name="home_rows_hidden_empty">"目前没有可显示的内容 – 已在首页隐藏"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"一个电影或剧集分类"</string>
+    <string name="home_rows_pick_vod_group_title">"选择分类"</string>
+    <string name="home_rows_pick_vod_none">"还没有 On Demand 分类。请在 设置 → Live TV 中为播放列表打开 On Demand，或在“管理 VOD 分组”中显示一些分组。"</string>
+    <string name="home_rows_pick_vod_recent">"最近添加"</string>
+    <string name="home_rows_pick_vod_recent_hint">"电影或剧集"</string>
+    <string name="home_rows_vod_movies">"电影"</string>
+    <string name="home_rows_vod_series">"剧集"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="other">"%1$d 部"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"最近添加的电影"</string>
+    <string name="home_rows_vod_recent_series_title">"最近添加的剧集"</string>
+    <string name="home_rows_upcoming_today">"今天 %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"明天 %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"On Demand 行"</string>
+    <string name="home_rows_option_vod">"内容来源"</string>
+    <string name="home_hero_live">"直播"</string>
+    <string name="home_hero_min_left">"剩余 %1$d 分钟"</string>
+    <string name="home_hero_starting">"即将开始"</string>
+    <string name="home_hero_starts_in_min">"%1$d 分钟后开始"</string>
+    <string name="home_hero_starts_in_hours">"%1$d 小时 %2$d 分钟后开始"</string>
+    <string name="home_hero_watch_on">"观看频道"</string>
+    <string name="home_hero_next">"接下来"</string>
 </resources>
