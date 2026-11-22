@@ -674,9 +674,6 @@ class SportsRepository @Inject constructor(
     private val _problem = MutableStateFlow<String?>(null)
     /** Something went wrong getting scores (shown quietly on the page). */
     val problem: StateFlow<String?> = _problem.asStateFlow()
-    /** The slower background work (the week ahead, team schedules, past days) is running: Sports shows an "Updating" note while it is. */
-    private val _extrasBusy = MutableStateFlow(false)
-    val extrasBusy: StateFlow<Boolean> = _extrasBusy.asStateFlow()
     private val _updatedAt = MutableStateFlow(0L)
     val updatedAt: StateFlow<Long> = _updatedAt.asStateFlow()
 
@@ -847,8 +844,6 @@ class SportsRepository @Inject constructor(
             // Week, past, and non-league requests can take minutes. Keep the live-score
             // round on its own clock even while those requests are still in progress.
             if (active && !com.nuvio.tv.livetv.data.BackgroundWork.onDemandPlaying.value && extrasJob?.isActive != true) extrasJob = scope.launch {
-                _extrasBusy.value = true
-                try {
                 val force = forceExtras.also { forceExtras = false }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
                 sportsCatching { updateWeek(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Sports week update failed", it) }
@@ -875,7 +870,6 @@ class SportsRepository @Inject constructor(
                     lastFixtures = System.currentTimeMillis()
                     sportsCatching { updateFixtures() }
                 }
-                } finally { _extrasBusy.value = false }
             }
             val wait = if (viewers.value > 0) 10_000L else 30_000L
             lastKick = kick.value
