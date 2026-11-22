@@ -705,6 +705,6 @@
     <string name="iptv_settings_hide_non_english_titles_sub">"Laat films en series weg die in een andere taal zijn gemaakt (gecontroleerd met TMDB en de taalgroepen en -labels van je provider). Verborgen titels worden nooit geladen of opgezocht."</string>
     <string name="iptv_settings_number_of_channels">"Aantal zenders"</string>
     <string name="iptv_settings_lock_playlist_logins">"Inloggegevens van playlists vergrendelen"</string>
-    <string name="iptv_settings_lock_playlist_logins_description">"Voor het bewerken van playlists en gidsen en het maken van back-ups is de pincode nodig. Wachtwoorden worden als puntjes getoond."</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"Voor het bewerken van playlists, gidsen en de netwerkmap en het maken van back-ups is de pincode nodig. Wachtwoorden worden als puntjes getoond."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Voer je pincode in om de inloggegevens van playlists te zien"</string>
 </resources>

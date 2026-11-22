@@ -705,6 +705,6 @@
     <string name="iptv_settings_hide_non_english_titles_sub">"يستبعد الأفلام والمسلسلات المصنوعة بلغة أخرى (يتم التحقق عبر TMDB وعبر مجموعات وتسميات اللغة لدى مزوّدك). العناوين المخفية لا يتم تحميلها أو البحث عنها أبدًا."</string>
     <string name="iptv_settings_number_of_channels">"عدد القنوات"</string>
     <string name="iptv_settings_lock_playlist_logins">"قفل بيانات دخول قوائم التشغيل"</string>
-    <string name="iptv_settings_lock_playlist_logins_description">"تعديل قوائم التشغيل والأدلة وإنشاء النسخ الاحتياطية يتطلب رمز PIN. تظهر كلمات المرور كنقاط."</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"تعديل قوائم التشغيل والأدلة ومجلد الشبكة وإنشاء النسخ الاحتياطية يتطلب رمز PIN. تظهر كلمات المرور كنقاط."</string>
     <string name="iptv_settings_enter_pin_for_logins">"أدخل رمز PIN لعرض بيانات دخول قوائم التشغيل"</string>
 </resources>

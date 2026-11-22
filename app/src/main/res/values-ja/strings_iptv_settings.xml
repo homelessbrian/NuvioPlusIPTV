@@ -705,6 +705,6 @@
     <string name="iptv_settings_hide_non_english_titles_sub">"英語以外の言語で制作された映画やシリーズを除外します（TMDB とプロバイダーの言語グループ・ラベルで判定）。非表示の作品は読み込みも検索もされません。"</string>
     <string name="iptv_settings_number_of_channels">"チャンネル数"</string>
     <string name="iptv_settings_lock_playlist_logins">"プレイリストのログイン情報をロック"</string>
-    <string name="iptv_settings_lock_playlist_logins_description">"プレイリストやガイドの編集、バックアップの作成に PIN が必要になります。パスワードは点で表示されます。"</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"プレイリスト、ガイド、ネットワークフォルダの編集やバックアップの作成に PIN が必要になります。パスワードは点で表示されます。"</string>
     <string name="iptv_settings_enter_pin_for_logins">"プレイリストのログイン情報を見るには PIN を入力"</string>
 </resources>

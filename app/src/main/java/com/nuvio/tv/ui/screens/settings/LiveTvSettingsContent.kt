@@ -1736,7 +1736,7 @@ internal fun LiveTvSettingsContent(
                             title = context.getString(R.string.iptv_settings_network_folder),
                             subtitle = context.getString(R.string.iptv_settings_network_folder_row_subtitle),
                             value = networkConfig?.label.orEmpty(),
-                            onClick = { editingNetwork = true }
+                            onClick = { withLogins { editingNetwork = true } }
                         )
                         SettingsActionRow(
                             title = context.getString(R.string.iptv_settings_network_space),
@@ -1785,7 +1785,7 @@ internal fun LiveTvSettingsContent(
                                 else R.string.iptv_settings_network_folder_set_up
                             ) to {
                                 pickingDrive = false
-                                editingNetwork = true
+                                withLogins { editingNetwork = true }
                             }
                         ) + driveProblems.map { p ->
                             // Plugged in but not usable: say why instead of leaving it out.

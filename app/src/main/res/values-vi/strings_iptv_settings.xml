@@ -705,6 +705,6 @@
     <string name="iptv_settings_hide_non_english_titles_sub">"Ẩn phim và series làm bằng ngôn ngữ khác (kiểm tra qua TMDB và các nhóm, nhãn ngôn ngữ của nhà cung cấp). Phim bị ẩn sẽ không bao giờ được tải hay tra cứu."</string>
     <string name="iptv_settings_number_of_channels">"Số kênh"</string>
     <string name="iptv_settings_lock_playlist_logins">"Khóa thông tin đăng nhập danh sách phát"</string>
-    <string name="iptv_settings_lock_playlist_logins_description">"Cần mã PIN để sửa danh sách phát, lịch phát sóng và tạo bản sao lưu. Mật khẩu hiển thị dưới dạng dấu chấm."</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"Cần mã PIN để sửa danh sách phát, lịch phát sóng, thư mục mạng và tạo bản sao lưu. Mật khẩu hiển thị dưới dạng dấu chấm."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Nhập mã PIN để xem thông tin đăng nhập danh sách phát"</string>
 </resources>

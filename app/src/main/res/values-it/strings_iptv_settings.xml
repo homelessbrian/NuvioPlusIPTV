@@ -705,6 +705,6 @@
     <string name="iptv_settings_hide_non_english_titles_sub">"Esclude film e serie girati in un\'altra lingua (verificato con TMDB e con i gruppi e le etichette di lingua del tuo provider). I titoli nascosti non vengono mai caricati né cercati."</string>
     <string name="iptv_settings_number_of_channels">"Numero di canali"</string>
     <string name="iptv_settings_lock_playlist_logins">"Blocca credenziali delle playlist"</string>
-    <string name="iptv_settings_lock_playlist_logins_description">"Per modificare playlist e guide e per creare backup serve il PIN. Le password appaiono come puntini."</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"Per modificare playlist, guide e cartella di rete e per creare backup serve il PIN. Le password appaiono come puntini."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Inserisci il PIN per vedere le credenziali delle playlist"</string>
 </resources>

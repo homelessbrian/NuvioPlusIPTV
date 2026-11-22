@@ -705,6 +705,6 @@
     <string name="iptv_settings_hide_non_english_titles_sub">"משמיט סרטים וסדרות שנעשו בשפה אחרת (נבדק מול TMDB ומול קבוצות ותוויות השפה של הספק שלך). כותרים מוסתרים לעולם לא נטענים או נבדקים."</string>
     <string name="iptv_settings_number_of_channels">"מספר ערוצים"</string>
     <string name="iptv_settings_lock_playlist_logins">"נעילת פרטי התחברות של רשימות השמעה"</string>
-    <string name="iptv_settings_lock_playlist_logins_description">"עריכת רשימות השמעה ומדריכים ויצירת גיבויים דורשות קוד PIN. סיסמאות מוצגות כנקודות."</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"עריכת רשימות השמעה, מדריכים ותיקיית הרשת, ויצירת גיבויים, דורשות קוד PIN. סיסמאות מוצגות כנקודות."</string>
     <string name="iptv_settings_enter_pin_for_logins">"הזן את קוד ה-PIN כדי לראות את פרטי ההתחברות"</string>
 </resources>

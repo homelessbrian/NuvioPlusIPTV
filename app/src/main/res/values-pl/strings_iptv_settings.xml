@@ -705,6 +705,6 @@
     <string name="iptv_settings_hide_non_english_titles_sub">"Pomija filmy i seriale nakręcone w innym języku (sprawdzane w TMDB oraz w grupach i oznaczeniach językowych dostawcy). Ukryte tytuły nigdy nie są wczytywane ani wyszukiwane."</string>
     <string name="iptv_settings_number_of_channels">"Liczba kanałów"</string>
     <string name="iptv_settings_lock_playlist_logins">"Zablokuj dane logowania playlist"</string>
-    <string name="iptv_settings_lock_playlist_logins_description">"Edycja playlist i przewodników oraz tworzenie kopii zapasowych wymaga PIN-u. Hasła są wyświetlane jako kropki."</string>
+    <string name="iptv_settings_lock_playlist_logins_description">"Edycja playlist, przewodników i folderu sieciowego oraz tworzenie kopii zapasowych wymaga PIN-u. Hasła są wyświetlane jako kropki."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Wpisz PIN, aby zobaczyć dane logowania playlist"</string>
 </resources>
