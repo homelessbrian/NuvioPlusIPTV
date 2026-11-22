@@ -144,7 +144,11 @@ class LiveTvRecorder @Inject constructor(
         if (storage.id != settings.recordingStorage) {
             LiveTvNotice.show("The drive for recordings isn't plugged in, so \"$title\" is saved to this device")
         }
-        val dir = File(storage.dir, id).apply { mkdirs() }
+        val dir = File(storage.dir, id).apply {
+            // A USB drive that's been idle for hours can be slow to wake: a few tries.
+            var tries = 0
+            while (!mkdirs() && !exists() && ++tries < 4) runCatching { Thread.sleep(250) }
+        }
         val rec = LiveTvRecording(
             id = id,
             channelKey = channel.key,
@@ -428,15 +432,22 @@ class LiveTvRecorder @Inject constructor(
                         c.inputStream.use { input ->
                             val buf = ByteArray(64 * 1024)
                             var lastSave = 0L
+                            // The size so far, counted as it's written: adding up every piece on the
+                            // drive every 5 s got slower the longer it recorded (slow on USB drives).
+                            var sizeNow = dirSize(dir)
+                            var lowChecks = 0
                             while (scope.isActive && rec.id !in stopRequested && System.currentTimeMillis() < currentStop(rec.id)) {
                                 val n = input.read(buf)
                                 if (n < 0) break
                                 segmenter.write(buf, 0, n)
+                                sizeNow += n
                                 val now = System.currentTimeMillis()
                                 if (now - lastSave > 5_000) {
                                     lastSave = now
-                                    rec = progress(rec, segmenter.totalSec, dirSize(dir))
-                                    if (!ensureSpace(dir, protect = rec.id)) {
+                                    rec = progress(rec, segmenter.totalSec, sizeNow)
+                                    // Low three checks running (15 s), not one odd answer from the drive.
+                                    if (ensureSpace(dir, protect = rec.id)) lowChecks = 0
+                                    else if (++lowChecks >= 3) {
                                         problem = "Storage ran out, so it stopped early"
                                         stopRequested += rec.id
                                     }
@@ -464,9 +475,18 @@ class LiveTvRecorder @Inject constructor(
                         throw e
                     } catch (e: Exception) {
                         if (!dir.exists() || !dir.canWrite()) {
-                            // The drive it was recording to was taken out.
-                            problem = "The drive it was recording to was removed"
-                            break
+                            // A USB drive waking up (or briefly busy) can look gone for a few
+                            // seconds: give it up to 30 s to come back before calling it removed.
+                            var back = false
+                            for (i in 0 until 10) {
+                                delay(3_000)
+                                if (dir.exists() && dir.canWrite()) { back = true; break }
+                            }
+                            if (!back) {
+                                // The drive it was recording to was taken out.
+                                problem = "The drive it was recording to was removed"
+                                break
+                            }
                         }
                         problem = dropped(if (resolveStream != null) "The Stalker stream connection dropped" else "The connection dropped (${e.message ?: e.javaClass.simpleName})") + "; it reconnected where it could"
                         rec = noteProblem(rec, problem)
@@ -602,6 +622,15 @@ class LiveTvRecorder @Inject constructor(
             if (vm.encrypted || am?.encrypted == true) throw IllegalStateException("Encrypted portal streams cannot be recorded.")
             lastProgressAt = System.currentTimeMillis()
         }
+        // The size so far: the whole folder is added up at most once a minute (every few seconds
+        // got slow on USB drives as a long recording's pieces piled up).
+        var sizeAt = 0L
+        var sizeKnown = 0L
+        fun sizeSoFar(): Long {
+            val t = System.currentTimeMillis()
+            if (t - sizeAt >= 60_000L) { sizeAt = t; sizeKnown = dirSize(dir) }
+            return sizeKnown
+        }
         while (scope.isActive && rec.id !in stopRequested && System.currentTimeMillis() < currentStop(rec.id)) {
             if (nothingYet()) return HLS_SENT_NOTHING
             // A live channel starts with a short lead-in before now; a catch-up show from its start.
@@ -614,13 +643,13 @@ class LiveTvRecorder @Inject constructor(
                 if (t - shownAt > 5_000) {
                     shownAt = t
                     writePlaylists(ended = false)
-                    onProgress(video.totalSec, dirSize(dir))
+                    onProgress(video.totalSec, sizeSoFar())
                 }
             })
             video.saveNew(vm, tries, shown) { m -> if (finite) 0 else hls.startIndex(m.pieces, LIVE_LEAD_MS) }
             if (audio != null && am != null) audio.saveNew(am!!, tries, shown) { a -> if (finite) 0 else hls.matchingStart(a.pieces, video) }
             writePlaylists(ended = false)
-            onProgress(video.totalSec, dirSize(dir))
+            onProgress(video.totalSec, sizeSoFar())
             if (video.totalSec > lastProgressSec) { lastProgressSec = video.totalSec; lastProgressAt = System.currentTimeMillis() }
             else if (resolveStream != null && !finite && System.currentTimeMillis() - lastProgressAt > 20_000L) refreshPortalPlaylist()
             // A finished playlist (a catch-up show): everything's saved.
@@ -683,7 +712,17 @@ class LiveTvRecorder @Inject constructor(
      * oldest finished recordings on that drive (if set to) or says no. [protect]: never deleted.
      */
     private fun ensureSpace(dir: File, protect: String): Boolean {
-        fun free() = runCatching { dir.usableSpace }.getOrDefault(Long.MAX_VALUE)
+        // A USB drive that's asleep or busy can answer "0 free" for a moment (and a folder that
+        // couldn't be made yet always does): that's "can't tell", not "full", so it doesn't stop
+        // or refuse a recording. Only a drive that really says how big it is counts as full.
+        fun free(): Long {
+            var f: File? = dir
+            while (f != null && !f.exists()) f = f.parentFile
+            val at = f ?: return Long.MAX_VALUE
+            val total = runCatching { at.totalSpace }.getOrDefault(0L)
+            if (total <= 0L) return Long.MAX_VALUE
+            return runCatching { at.usableSpace }.getOrDefault(Long.MAX_VALUE)
+        }
         if (free() >= MIN_FREE) return true
         if (settings.recordingSpaceRule != "DELETE_OLDEST") return false
         val drive = dir.parentFile?.absolutePath ?: return false

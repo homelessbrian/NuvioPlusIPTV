@@ -269,6 +269,10 @@ private fun TablePanel(x: GameExtras, opens: Boolean) {
         x.tableHead.forEach { LiveText(it, color = SportsLook.Dim, size = 9.sp, weight = FontWeight.Black, modifier = Modifier.width(34.dp)) }
     }
     x.table.forEach { r ->
+        r.group?.let { g ->
+            LiveText(g.uppercase(Locale.ROOT), color = SportsLook.Dim, size = 9.sp, weight = FontWeight.Black,
+                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
+        }
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp))
                 .background(if (r.mine) Color.White.copy(alpha = 0.10f) else Color.Transparent)

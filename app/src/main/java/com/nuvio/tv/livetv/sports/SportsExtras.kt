@@ -25,7 +25,11 @@ data class FormRow(val teamId: String?, val team: String, val results: List<Stri
 data class Meeting(val dateMs: Long?, val text: String)
 
 /** A line of the league table. [mine]: one of this game's teams. */
-data class TableRow(val pos: String, val team: String, val a: String, val b: String, val c: String, val mine: Boolean)
+data class TableRow(
+    val pos: String, val team: String, val a: String, val b: String, val c: String, val mine: Boolean,
+    /** Set on the first row of a second group (the other team's division): its name, shown above it. */
+    val group: String? = null
+)
 
 /** A team's starting line-up (football). */
 data class Lineup(val team: String, val teamId: String?, val formation: String?, val players: List<String>)
@@ -199,27 +203,41 @@ internal object SportsExtras {
         val groups = st.optJSONArray("groups").objs()
         fun entries(g: JSONObject) = g.optJSONObject("standings")?.optJSONArray("entries").objs()
         fun isMine(en: JSONObject) = en.s("id") in ids || (en.s("team") ?: en.optJSONObject("team")?.s("displayName")) in teamNames
-        val group = groups.firstOrNull { g -> entries(g).any(::isMine) } ?: groups.firstOrNull() ?: return e
-        val all = entries(group)
-        if (all.isEmpty()) return e
+        // Each team's own group: two divisions when the teams are in different ones (an NFL game
+        // between two divisions used to show only the first team's).
+        val mineGroups = groups.filter { g -> entries(g).any(::isMine) }.take(2)
+            .ifEmpty { listOfNotNull(groups.firstOrNull()) }
+        if (mineGroups.isEmpty() || mineGroups.all { entries(it).isEmpty() }) return e
         fun stat(en: JSONObject, vararg n: String): String? {
             val stats = en.optJSONArray("stats").objs()
             for (name in n) stats.firstOrNull { it.s("name") == name || it.s("type") == name }?.let { s -> s.s("displayValue")?.let { return it } }
             return null
         }
-        val soccerLike = all.any { stat(it, "points") != null && stat(it, "gamesPlayed") != null }
+        val sample = mineGroups.flatMap { entries(it) }
+        val soccerLike = sample.any { stat(it, "points") != null && stat(it, "gamesPlayed") != null }
         val head = if (soccerLike) listOf("P", "GD", "Pts") else listOf("W", "L", "PCT")
-        val rows = all.mapIndexed { i, en ->
+        fun rowsOf(g: JSONObject) = entries(g).mapIndexed { i, en ->
             val name = en.s("team") ?: en.optJSONObject("team")?.s("displayName") ?: "?"
             val pos = stat(en, "rank", "position") ?: (i + 1).toString()
             if (soccerLike) TableRow(pos, name, stat(en, "gamesPlayed") ?: "", stat(en, "pointDifferential", "differential") ?: "", stat(en, "points") ?: "", isMine(en))
             else TableRow(pos, name, stat(en, "wins") ?: "", stat(en, "losses") ?: "", stat(en, "winPercent", "leagueWinPercent") ?: "", isMine(en))
         }
-        // The top three, and one either side of each of this game's teams (in table order).
-        val keep = sortedSetOf(0, 1, 2)
-        rows.forEachIndexed { i, r -> if (r.mine) { keep += i - 1; keep += i; keep += i + 1 } }
-        val slice = keep.filter { it in rows.indices }.map { rows[it] }.take(8)
-        val title = group.s("header") ?: st.s("header")
+        // A small group (a division of four) is shown whole. A bigger one: the top three, and one
+        // either side of this game's teams (in table order), within [limit] rows.
+        fun cut(rows: List<TableRow>, limit: Int): List<TableRow> {
+            if (rows.size <= limit) return rows
+            val keep = sortedSetOf(0, 1, 2)
+            rows.forEachIndexed { i, r -> if (r.mine) { keep += i - 1; keep += i; keep += i + 1 } }
+            return keep.filter { it in rows.indices }.map { rows[it] }.take(limit)
+        }
+        val limit = if (mineGroups.size > 1) 5 else 8
+        val slice = mineGroups.flatMapIndexed { gi, g ->
+            val rows = cut(rowsOf(g), limit)
+            if (gi == 0 || rows.isEmpty()) rows
+            else listOf(rows[0].copy(group = g.s("header") ?: g.s("name") ?: "")) + rows.drop(1)
+        }
+        if (slice.isEmpty()) return e
+        val title = mineGroups[0].s("header") ?: st.s("header")
         return e.copy(tableTitle = title, tableHead = head, table = slice)
     }
 

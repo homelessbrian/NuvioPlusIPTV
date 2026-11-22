@@ -408,7 +408,10 @@ private class AndroidMultiviewPanePlayer(
     val player: ExoPlayer = ExoPlayer.Builder(context, renderers)
         .setLoadControl(
             DefaultLoadControl.Builder()
-                .setBufferDurationsMs(1_500, 10_000, 500, 1_000)
+                // Enough ahead to ride out a provider's small hiccups. It used to keep only 1.5 s
+                // (like the "None" buffer size), so with two or more streams sharing the
+                // connection the panes took turns stuttering. The memory cap below still applies.
+                .setBufferDurationsMs(12_000, 30_000, 1_500, 3_000)
                 .setBackBuffer(0, false)
                 .setTargetBufferBytes(bufferBytes)
                 .setPrioritizeTimeOverSizeThresholds(false)

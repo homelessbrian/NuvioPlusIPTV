@@ -188,8 +188,24 @@ internal class SportsMatcher(
         var byGuide = 0; var byName = 0; var byNetwork = 0
 
         // Shows found in the guide already know their channels.
-        wanted.filter { it.source == EventSource.GUIDE }.forEach { ev ->
+        val guideWanted = wanted.filter { it.source == EventSource.GUIDE }
+        guideWanted.forEach { ev ->
             ev.guideHits.forEach { (key, p) -> add(ev.id, key, 100, "Guide: ${p.title}", p) }
+        }
+        // A race, show or fight night from a schedule (TheSportsDB's "Portugal Sprint Race") also
+        // gets the channels of a guide listing of the same competition that's on air when it
+        // starts ("MOTOGP | ROUND 21 | PORTUGAL" on an event channel all day, or TNT Sports 2's
+        // coverage): the two cards are one weekend, and the schedule's card used to show none.
+        if (guideWanted.isNotEmpty()) {
+            val guideByLeague = guideWanted.groupBy { it.leagueId }
+            for (ev in wanted) {
+                if (ev.source == EventSource.GUIDE || !ev.hasTime || ev.home != null || ev.away != null) continue
+                if (SportsCatalog.league(ev.leagueId)?.kind != LeagueKind.EVENT) continue
+                for (g in guideByLeague[ev.leagueId].orEmpty()) for ((key, p) in g.guideHits) {
+                    if (ev.startMs >= p.startMs - 15 * MINUTE && ev.startMs < p.stopMs)
+                        add(ev.id, key, 95, "Guide: ${p.title}", p)
+                }
+            }
         }
 
         val teamEvents = wanted.filter { it.source != EventSource.GUIDE }

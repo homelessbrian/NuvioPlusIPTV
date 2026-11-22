@@ -201,8 +201,10 @@ private fun MiniTable(table: Standings, marked: Set<String>, league: League?, mo
     BoxWithConstraints(modifier) {
         val rowH = 26.dp
         val gap = 3.dp
-        // Room for the heading line and the column headings (and a group name or two).
-        val fit = (((maxHeight - 44.dp) / (rowH + gap)).toInt()).coerceIn(3, 14)
+        // Room for the heading line, the column headings and the first group's name. (A second
+        // group's name is taken off the rows in windowsFor; it used to be left out of the sums,
+        // so the second team's division ran off the bottom of the panel.)
+        val fit = (((maxHeight - 56.dp) / (rowH + gap)).toInt()).coerceIn(3, 14)
         val windows = remember(table, marked, fit) { windowsFor(table, marked, fit) }
         // The columns that fit beside a readable team name (the first ones go first: games played…).
         val all = remember(table) { table.columns.filter { it.key != "streak" } }
@@ -290,10 +292,14 @@ private fun windowsFor(table: Standings, marked: Set<String>, fit: Int): List<Ta
                 )
             }
         }
-        // In different groups (two divisions): each team's group, around it.
+        // In different groups (two divisions): each team's group, around it. The second group's
+        // name takes about a row; a small group (an NFL division of 4) is shown whole when both fit.
         else -> {
-            val half = (fit - 2) / 2
-            hits.take(2).map { (g, at) -> TableWindow(title(g), around(g, at, half)) }
+            val two = hits.take(2)
+            val room = (fit - 1).coerceAtLeast(2)
+            val whole = two.sumOf { it.first.rows.size } <= room
+            val half = (room / 2).coerceAtLeast(1)
+            two.map { (g, at) -> TableWindow(title(g), if (whole) g.rows else around(g, at, half)) }
         }
     }
 }
