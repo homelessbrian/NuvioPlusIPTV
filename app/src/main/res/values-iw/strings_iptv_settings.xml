@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"נעילת פרטי התחברות של רשימות השמעה"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"עריכת רשימות השמעה, מדריכים ותיקיית הרשת, ויצירת גיבויים, דורשות קוד PIN. סיסמאות מוצגות כנקודות."</string>
     <string name="iptv_settings_enter_pin_for_logins">"הזן את קוד ה-PIN כדי לראות את פרטי ההתחברות"</string>
+    <string name="iptv_settings_delete_recordings_after">"מחיקת הקלטות אחרי"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"ההקלטות נשמרות עד שתמחק אותן"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"הקלטות שהסתיימו וישנות יותר נמחקות אוטומטית"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"הקלטות שכבר ישנות יותר נמחקות מיד. הקלטות שסומנו \"שמור לתמיד\" (בתפריט ההקלטה), שנצפו חלקית או שעדיין מוקלטות לעולם לא נמחקות."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d ימים"</string>
 </resources>

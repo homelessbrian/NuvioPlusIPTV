@@ -22,6 +22,12 @@ object LiveTvRecordingServer {
     @Volatile private var server: ServerSocket? = null
     /** Recording id -> its folder (recordings can be on different drives). */
     private val dirs = java.util.concurrent.ConcurrentHashMap<String, File>()
+    /** Recording id -> when it was last played from here (so it isn't cleared away while watched). */
+    private val lastServed = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Played in the last [withinMs] (or being played now). */
+    fun playedRecently(id: String, withinMs: Long): Boolean =
+        (lastServed[id] ?: 0L) > System.currentTimeMillis() - withinMs
 
     /** The link for a recording's playlist (starts the server if needed). */
     fun urlFor(id: String, dir: File): String {
@@ -64,6 +70,7 @@ object LiveTvRecordingServer {
         val method = parts.getOrNull(0) ?: "GET"
         val path = URLDecoder.decode(parts.getOrNull(1)?.substringBefore('?') ?: "/", "UTF-8").trimStart('/')
         val base = dirs[path.substringBefore('/')] ?: return@use
+        lastServed[path.substringBefore('/')] = System.currentTimeMillis()
         val file = File(base, path.substringAfter('/', ""))
         val out = sock.getOutputStream()
         // Another TV's recording that's still being made: its newest playlist from the network folder.

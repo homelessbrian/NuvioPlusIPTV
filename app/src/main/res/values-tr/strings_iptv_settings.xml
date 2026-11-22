@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"Oynatma listesi giriş bilgilerini kilitle"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"Oynatma listelerini, rehberleri ve ağ klasörünü düzenlemek ve yedek almak için PIN gerekir. Şifreler nokta olarak gösterilir."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Giriş bilgilerini görmek için PIN\'inizi girin"</string>
+    <string name="iptv_settings_delete_recordings_after">"Kayıtları şu süre sonra sil"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"Kayıtlar siz silene kadar kalır"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Bundan eski bitmiş kayıtlar kendiliğinden silinir"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Zaten daha eski olan kayıtlar hemen silinir. Sonsuza Kadar Sakla olarak işaretlenenler (kaydın menüsünden), kısmen izlenenler veya hâlâ kaydedilenler asla silinmez."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d gün"</string>
 </resources>

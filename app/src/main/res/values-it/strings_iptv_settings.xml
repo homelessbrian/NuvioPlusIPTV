@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"Blocca credenziali delle playlist"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"Per modificare playlist, guide e cartella di rete e per creare backup serve il PIN. Le password appaiono come puntini."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Inserisci il PIN per vedere le credenziali delle playlist"</string>
+    <string name="iptv_settings_delete_recordings_after">"Elimina registrazioni dopo"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"Le registrazioni restano finché non le elimini"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Le registrazioni finite più vecchie vengono eliminate da sole"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Le registrazioni già più vecchie vengono eliminate subito. Quelle segnate Conserva per sempre (nel menu della registrazione), viste in parte o ancora in corso non vengono mai eliminate."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d giorni"</string>
 </resources>

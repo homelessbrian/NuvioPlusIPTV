@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"Zablokuj dane logowania playlist"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"Edycja playlist, przewodników i folderu sieciowego oraz tworzenie kopii zapasowych wymaga PIN-u. Hasła są wyświetlane jako kropki."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Wpisz PIN, aby zobaczyć dane logowania playlist"</string>
+    <string name="iptv_settings_delete_recordings_after">"Usuwaj nagrania po"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"Nagrania zostają, dopóki ich nie usuniesz"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Zakończone nagrania starsze niż to są usuwane same"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Nagrania, które już są starsze, zostaną usunięte od razu. Nagrania oznaczone Zachowaj na zawsze (w menu nagrania), obejrzane częściowo lub wciąż nagrywane nigdy nie są usuwane."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d dniach"</string>
 </resources>

@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"Блокировать данные входа плейлистов"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"Для изменения плейлистов, телегидов и сетевой папки, а также для создания резервных копий нужен PIN-код. Пароли показываются точками."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Введите PIN-код, чтобы увидеть данные входа плейлистов"</string>
+    <string name="iptv_settings_delete_recordings_after">"Удалять записи через"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"Записи хранятся, пока вы их не удалите"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Завершённые записи старше этого срока удаляются сами"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Записи, которые уже старше, удаляются сразу. Записи с отметкой «Хранить всегда» (в меню записи), просмотренные частично или ещё идущие никогда не удаляются."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d дн."</string>
 </resources>

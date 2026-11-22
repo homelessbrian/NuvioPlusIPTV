@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"Khóa thông tin đăng nhập danh sách phát"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"Cần mã PIN để sửa danh sách phát, lịch phát sóng, thư mục mạng và tạo bản sao lưu. Mật khẩu hiển thị dưới dạng dấu chấm."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Nhập mã PIN để xem thông tin đăng nhập danh sách phát"</string>
+    <string name="iptv_settings_delete_recordings_after">"Xóa bản ghi sau"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"Bản ghi được giữ cho đến khi bạn xóa"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Bản ghi đã xong cũ hơn mức này sẽ tự động bị xóa"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Bản ghi đã cũ hơn mức này sẽ bị xóa ngay. Bản ghi được đánh dấu Giữ mãi mãi (trong menu của bản ghi), đã xem dở hoặc đang ghi sẽ không bao giờ bị xóa."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d ngày"</string>
 </resources>

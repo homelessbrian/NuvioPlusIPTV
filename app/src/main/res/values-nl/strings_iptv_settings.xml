@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"Inloggegevens van playlists vergrendelen"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"Voor het bewerken van playlists, gidsen en de netwerkmap en het maken van back-ups is de pincode nodig. Wachtwoorden worden als puntjes getoond."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Voer je pincode in om de inloggegevens van playlists te zien"</string>
+    <string name="iptv_settings_delete_recordings_after">"Opnames verwijderen na"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"Opnames blijven staan tot je ze verwijdert"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Klaar opnames die ouder zijn worden vanzelf verwijderd"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Opnames die al ouder zijn worden meteen verwijderd. Opnames met Altijd bewaren (in het menu van een opname), deels bekeken of nog bezig worden nooit verwijderd."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d dagen"</string>
 </resources>

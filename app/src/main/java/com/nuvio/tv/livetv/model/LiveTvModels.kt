@@ -626,6 +626,8 @@ data class LiveTvSettings(
     val recordingStorage: String = "",
     /** Recordings: when storage runs low, "STOP" (stop recording) or "DELETE_OLDEST". */
     val recordingSpaceRule: String = "STOP",
+    /** Recordings: finished ones older than this many days are deleted by themselves (0 = never). */
+    val recordingKeepDays: Int = 0,
     /** Recordings start this many minutes before the show and keep going this many after. */
     val recordPreMinutes: Int = 2,
     val recordPostMinutes: Int = 5,

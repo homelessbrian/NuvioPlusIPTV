@@ -1712,6 +1712,10 @@ internal fun LiveTvSettingsContent(
                 var pickingDrive by remember { mutableStateOf(false) }
                 var editingNetwork by remember { mutableStateOf(false) }
                 var pickingNetworkSpace by remember { mutableStateOf(false) }
+                var pickingKeepDays by remember { mutableStateOf(false) }
+                fun keepDaysLabel(days: Int) =
+                    if (days <= 0) context.getString(R.string.iptv_settings_never)
+                    else context.getString(R.string.iptv_settings_recording_keep_days_n, days)
                 var networkSpaceMb by remember { mutableStateOf(com.nuvio.tv.livetv.record.NetworkFolderStore.bufferMb(recContext)) }
                 fun networkSpaceLabel(mb: Int) = com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(mb.toLong() * 1024 * 1024, context.settingsLocale)
                 LiveSection(
@@ -1770,6 +1774,24 @@ internal fun LiveTvSettingsContent(
                                 context.getString(R.string.iptv_settings_turn_on)
                             ) { update { it.copy(recordingSpaceRule = "DELETE_OLDEST") } }
                         }
+                    )
+                    SettingsActionRow(
+                        title = context.getString(R.string.iptv_settings_delete_recordings_after),
+                        subtitle = if (s.recordingKeepDays > 0) context.getString(R.string.iptv_settings_delete_recordings_after_on)
+                        else context.getString(R.string.iptv_settings_delete_recordings_after_off),
+                        value = keepDaysLabel(s.recordingKeepDays),
+                        onClick = { pickingKeepDays = true }
+                    )
+                    if (pickingKeepDays) SettingsSingleChoiceDialog(
+                        title = context.getString(R.string.iptv_settings_delete_recordings_after),
+                        options = listOf(0, 3, 5, 7, 10, 14, 30).map { SettingsPickerOption(it, keepDaysLabel(it)) },
+                        selectedValue = s.recordingKeepDays,
+                        onOptionSelected = { days ->
+                            pickingKeepDays = false
+                            update { it.copy(recordingKeepDays = days) }
+                        },
+                        onDismiss = { pickingKeepDays = false },
+                        subtitle = context.getString(R.string.iptv_settings_delete_recordings_after_note)
                     )
                     if (pickingDrive) ActionListDialog(
                         title = context.getString(R.string.iptv_settings_save_recordings_to),

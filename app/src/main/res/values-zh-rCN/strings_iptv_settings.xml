@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"锁定播放列表登录信息"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"编辑播放列表、节目指南和网络文件夹以及创建备份时需要输入 PIN。密码以圆点显示。"</string>
     <string name="iptv_settings_enter_pin_for_logins">"输入 PIN 以查看播放列表登录信息"</string>
+    <string name="iptv_settings_delete_recordings_after">"录像保留时间"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"录像会一直保留，直到你删除"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"超过此时间的已完成录像会自动删除"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"已经超过此时间的录像会立即删除。标记为“永久保留”（在录像菜单中）、看了一部分或仍在录制的录像永远不会被删除。"</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d 天"</string>
 </resources>

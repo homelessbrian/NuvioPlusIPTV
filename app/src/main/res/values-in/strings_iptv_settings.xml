@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"Kunci Info Login Playlist"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"Mengedit playlist, panduan, dan folder jaringan, serta membuat cadangan, memerlukan PIN. Kata sandi ditampilkan sebagai titik."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Masukkan PIN untuk melihat info login playlist"</string>
+    <string name="iptv_settings_delete_recordings_after">"Hapus rekaman setelah"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"Rekaman disimpan sampai Anda menghapusnya"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Rekaman selesai yang lebih lama dari ini dihapus otomatis"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Rekaman yang sudah lebih lama dari ini langsung dihapus. Rekaman bertanda Simpan Selamanya (di menu rekaman), yang sudah ditonton sebagian, atau masih merekam tidak pernah dihapus."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d hari"</string>
 </resources>

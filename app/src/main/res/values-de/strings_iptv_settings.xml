@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"Playlist-Zugangsdaten sperren"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"Zum Bearbeiten von Playlists, Guides und dem Netzwerkordner sowie für Backups wird die PIN benötigt. Passwörter werden als Punkte angezeigt."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Gib deine PIN ein, um die Playlist-Zugangsdaten zu sehen"</string>
+    <string name="iptv_settings_delete_recordings_after">"Aufnahmen löschen nach"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"Aufnahmen bleiben, bis du sie löschst"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Fertige Aufnahmen, die älter sind, werden automatisch gelöscht"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Aufnahmen, die schon älter sind, werden sofort gelöscht. Aufnahmen mit „Für immer behalten“ (im Menü einer Aufnahme), teilweise angesehene und laufende Aufnahmen werden nie gelöscht."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d Tagen"</string>
 </resources>

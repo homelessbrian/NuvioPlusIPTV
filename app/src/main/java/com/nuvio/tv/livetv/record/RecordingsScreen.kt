@@ -320,6 +320,7 @@ class RecordingsViewModel @Inject constructor(
         runCatching { artPrefs.edit().remove(rec.id).apply() }
     }
     fun freeBytes(): Long = recorder.freeBytes()
+    fun setKeepForever(rec: LiveTvRecording, keep: Boolean) = recorder.setKeepForever(rec.id, keep)
     fun isWatched(rec: LiveTvRecording): Boolean = RecordingResume.isWatched(recorder.appContext, rec.id)
     fun markWatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.markWatched(recorder.appContext, it.id) }
     fun markUnwatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.clear(recorder.appContext, it.id) }
@@ -742,6 +743,10 @@ fun RecordingsScreen(
                 if (viewModel.isWatched(rec)) add("Mark as Unwatched" to { menuFor = null; viewModel.markUnwatched(listOf(rec)); resumeTick++ })
                 else add("Mark as Watched" to { menuFor = null; viewModel.markWatched(listOf(rec)); resumeTick++ })
                 if (RecordingStorage.choices(recContext).size > 1) add("Move To…" to { menuFor = null; movePick = listOf(rec) })
+                // Never removed by "Delete recordings after" (Settings › Live TV › Recordings).
+                if (!rec.fromOtherTv) add((if (rec.keepForever) "Keep Forever  ✓" else "Keep Forever") to {
+                    menuFor = null; viewModel.setKeepForever(rec, !rec.keepForever)
+                })
             }
             add("Information" to { menuFor = null; infoFor = rec })
             // Wrong poster or artwork (a film instead of the show, the US version of a UK show):
@@ -1495,6 +1500,7 @@ private fun RecordingInfoDialog(rec: LiveTvRecording, savedOn: String, playlist:
             else -> "Live, as it aired"
         })
         add("Saved on" to savedOn)
+        if (rec.keepForever) add("Kept" to "Forever (never deleted by age)")
         rec.problem?.let { add("Note" to it) }
     }
     com.nuvio.tv.livetv.ui.LiveDialog(onDismiss = onDismiss, width = 520.dp) {

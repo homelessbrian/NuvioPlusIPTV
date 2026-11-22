@@ -111,7 +111,7 @@ internal class SyncParts(private val store: SharedPreferences) {
         /** Options that act the same on any device (not how the app looks), so phones sync them too. */
         private val BEHAVIOR_KEYS = setOf(
             "playlist_refresh_hours", "epg_refresh_hours", "epg_future_days", "epg_past_hours", "epg_offset_minutes",
-            "record_pre_minutes", "record_post_minutes", "recording_space_rule", "record_series_keep", "reminder_lead_minutes",
+            "record_pre_minutes", "record_post_minutes", "recording_space_rule", "recording_keep_days", "record_series_keep", "reminder_lead_minutes",
             "catchup_prefer_hls", "catchup_cache", "catchup_shift_minutes", "timeshift_enabled", "timeshift_minutes",
             "auto_reconnect", "auto_backup_channel", "hide_stray_entries", "captions_by_default",
             "channel_sort", "group_sort", "vod_default_sort", "vod_sorts", "vod_merge_duplicates", "vod_hide_non_english",

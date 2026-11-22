@@ -707,4 +707,9 @@
     <string name="iptv_settings_lock_playlist_logins">"Bloquear dados de acesso das listas"</string>
     <string name="iptv_settings_lock_playlist_logins_description">"Editar listas, guias e a pasta de rede, e criar cópias de segurança, exige o PIN. As senhas aparecem como pontos."</string>
     <string name="iptv_settings_enter_pin_for_logins">"Digite seu PIN para ver os dados de acesso das listas"</string>
+    <string name="iptv_settings_delete_recordings_after">"Apagar gravações após"</string>
+    <string name="iptv_settings_delete_recordings_after_off">"As gravações ficam até você apagá-las"</string>
+    <string name="iptv_settings_delete_recordings_after_on">"Gravações concluídas mais antigas que isso são apagadas sozinhas"</string>
+    <string name="iptv_settings_delete_recordings_after_note">"Gravações que já são mais antigas são apagadas na hora. As marcadas como Manter para sempre (no menu da gravação), assistidas em parte ou ainda gravando nunca são apagadas."</string>
+    <string name="iptv_settings_recording_keep_days_n">"%1$d dias"</string>
 </resources>

@@ -86,7 +86,19 @@ class LiveTvRecorder @Inject constructor(
         scope.launch {
             settings = runCatching { prefs.currentSettings() }.getOrDefault(settings)
             load()
-            prefs.settings.collect { settings = it }
+            clearOld()
+            prefs.settings.collect {
+                val daysChanged = it.recordingKeepDays != settings.recordingKeepDays
+                settings = it
+                if (daysChanged) clearOld()
+            }
+        }
+        // "Delete recordings after": checked when the app opens (above) and then twice a day.
+        scope.launch {
+            while (true) {
+                delay(CLEAR_OLD_EVERY_MS)
+                runCatching { clearOld() }
+            }
         }
         // Other TVs' recordings on the network folder: now, then every few minutes.
         scope.launch {
@@ -314,6 +326,37 @@ class LiveTvRecorder @Inject constructor(
             }
         } }
         stopServiceIfIdle()
+    }
+
+    /** Keeps [id] for good (never removed by "Delete recordings after"), or lets it go again. */
+    fun setKeepForever(id: String, keep: Boolean) {
+        val rec = _recordings.value.firstOrNull { it.id == id && !it.fromOtherTv } ?: return
+        val changed = rec.copy(keepForever = keep)
+        update(changed)
+        scope.launch { save(changed) }
+    }
+
+    /**
+     * "Delete recordings after": deletes this TV's finished recordings older than the chosen
+     * number of days. Never one that's still recording, kept for good, partly watched, being
+     * played, or another TV's on the network folder.
+     */
+    private fun clearOld() {
+        val days = settings.recordingKeepDays
+        if (days <= 0) return
+        val cutoff = System.currentTimeMillis() - days * DAY_MS
+        val old = _recordings.value.filter { r ->
+            !r.isRecording && !r.fromOtherTv && !r.keepForever &&
+                (r.endedAtMs ?: r.startedAtMs).let { it in 1L until cutoff } &&
+                RecordingResume.load(context, RecordingResume.contentIdFor(r.id)) == null &&
+                !LiveTvRecordingServer.playedRecently(r.id, PLAYING_GRACE_MS)
+        }
+        if (old.isEmpty()) return
+        old.forEach { delete(it.id) }
+        LiveTvNotice.show(
+            if (old.size == 1) "Deleted \"${old.first().title}\": it was older than $days days"
+            else "Deleted ${old.size} recordings older than $days days"
+        )
     }
 
     /** How far a move between drives has got (null when nothing is being moved). */
@@ -911,6 +954,11 @@ class LiveTvRecorder @Inject constructor(
         const val MIN_FREE = 500L * 1024 * 1024
         /** How often other TVs' recordings on the network folder are checked for. */
         const val LIBRARY_SYNC_MS = 3L * 60_000
+        const val DAY_MS = 24L * 60 * 60_000
+        /** How often "Delete recordings after" checks again while the app stays open. */
+        const val CLEAR_OLD_EVERY_MS = 12L * 60 * 60_000
+        /** A recording played this recently counts as being watched (not deleted for its age). */
+        const val PLAYING_GRACE_MS = 6L * 60 * 60_000
         /** Network recordings: the least free room on this device to start or keep going. */
         const val NETWORK_MIN_FREE = 100L * 1024 * 1024
         /** Below this much free on the network folder, a new recording warns it may stop early. */

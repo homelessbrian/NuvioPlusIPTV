@@ -192,6 +192,7 @@ class LiveTvPreferences @Inject constructor(
         val vodDefaultSort = stringPreferencesKey("vod_default_sort")
         val recordingStorage = stringPreferencesKey("recording_storage")
         val recordingSpaceRule = stringPreferencesKey("recording_space_rule")
+        val recordingKeepDays = intPreferencesKey("recording_keep_days")
         val recordPre = intPreferencesKey("record_pre_minutes")
         val recordPost = intPreferencesKey("record_post_minutes")
         val vodSorts = stringPreferencesKey("vod_sorts")
@@ -683,6 +684,7 @@ class LiveTvPreferences @Inject constructor(
             vodDefaultSort = p[Keys.vodDefaultSort] ?: d.vodDefaultSort,
             recordingStorage = p[Keys.recordingStorage] ?: d.recordingStorage,
             recordingSpaceRule = p[Keys.recordingSpaceRule] ?: d.recordingSpaceRule,
+            recordingKeepDays = p[Keys.recordingKeepDays] ?: d.recordingKeepDays,
             recordPreMinutes = p[Keys.recordPre] ?: d.recordPreMinutes,
             recordPostMinutes = p[Keys.recordPost] ?: d.recordPostMinutes,
             // The row used to be on/off for the whole app. Turned off before (with no per-profile
@@ -1034,6 +1036,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.vodDefaultSort] = s.vodDefaultSort
         p[Keys.recordingStorage] = s.recordingStorage
         p[Keys.recordingSpaceRule] = s.recordingSpaceRule
+        p[Keys.recordingKeepDays] = s.recordingKeepDays
         p[Keys.recordPre] = s.recordPreMinutes
         p[Keys.recordPost] = s.recordPostMinutes
         p[Keys.homeRowEnabled] = s.homeRowEnabled
