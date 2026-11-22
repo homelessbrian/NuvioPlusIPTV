@@ -20,6 +20,7 @@
     <string name="iptv_network_save_anyway">Save Anyway</string>
     <string name="iptv_network_remove">Remove</string>
     <string name="iptv_network_checking">Checking the folder…</string>
+    <string name="iptv_network_checking_vpn">Letting the folder past the VPN (it reconnects), then checking…</string>
     <string name="iptv_network_works">It works: %1$s free.</string>
     <string name="iptv_network_works_no_size">It works.</string>
     <string name="iptv_network_bad_address">Type the computer\'s address and the shared folder\'s name, like \\\\192.168.1.20\\Recordings</string>

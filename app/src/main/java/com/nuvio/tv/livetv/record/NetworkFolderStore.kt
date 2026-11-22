@@ -34,8 +34,21 @@ object NetworkFolderStore {
     internal fun appContext(): Context? = appContext
 
     fun init(context: Context) {
-        if (appContext == null) appContext = context.applicationContext
+        if (appContext == null) {
+            appContext = context.applicationContext
+            // A Full app VPN lets the network folder through (in case it was set up before that existed).
+            runCatching { tellVpn(context, config(context)) }
+        }
         root(context)
+    }
+
+    /** Back to the saved folder's address for the VPN (a Test of another address was left unsaved). */
+    fun restoreVpn(context: Context) { runCatching { tellVpn(context, config(context)) } }
+
+    /** The VPN's Full app mode reaches this address directly (home network only; see VpnHomeBypass). */
+    internal fun tellVpn(context: Context, config: NetworkFolderConfig?) {
+        val host = config?.host?.trim()?.let { h -> if (h.count { it == ':' } == 1) h.substringBefore(':') else h }
+        com.nuvio.vpn.android.VpnHomeBypass.set(context.applicationContext, listOfNotNull(host))
     }
 
     private fun secure(context: Context) =
@@ -64,6 +77,7 @@ object NetworkFolderStore {
             folder?.let { old -> if (old.config != config) { runCatching { old.close() }; folder = null } }
             if (config == null) info(context).edit().remove("free").remove("total").apply()
         }
+        runCatching { tellVpn(context, config) }
         return true
     }
 

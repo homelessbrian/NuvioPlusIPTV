@@ -38,7 +38,9 @@ final class OpenVpnTun {
                 builder.addAddress(cidr.substring(0, slash), Integer.parseInt(cidr.substring(slash + 1)));
             }
             for (String server : dns) builder.addDnsServer(server);
-            if (ipv4) builder.addRoute("0.0.0.0", 0);
+            // Everything, except a home network folder the app saves recordings to (see VpnHomeBypass).
+            if (ipv4) for (HomeBypassRoutes.Cidr route : VpnHomeBypass.ipv4Routes(service, java.util.Arrays.asList(addresses), java.util.Arrays.asList(dns)))
+                builder.addRoute(HomeBypassRoutes.format(route.network), route.prefix);
             if (ipv6) builder.addRoute("::", 0);
             ParcelFileDescriptor tun = builder.establish();
             if (tun == null) VpnConnectionService.noteFailure("Android would not set up the VPN connection.");

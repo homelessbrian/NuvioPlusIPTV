@@ -16,7 +16,9 @@ import java.io.IOException;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /** Real WireGuard parsing and app-scope normalization. Does not start a VPN. */
 public final class WireGuardProfiles {
@@ -120,6 +122,44 @@ public final class WireGuardProfiles {
         if (scope != null && scope.isPlaybackScoped() && !config.getInterface().getDnsSearchDomains().isEmpty()) {
             throw new IOException("Streams-only modes do not support DNS search domains. "
                     + "Use Full app mode or a profile with DNS server IP addresses only.");
+        }
+    }
+
+    /**
+     * Full app: the default IPv4 route (0.0.0.0/0) becomes routes to every address except a home
+     * network folder the app saves recordings to ([VpnHomeBypass]), when it doesn't clash with
+     * the profile's own addresses, routes or DNS. Everything else is unchanged.
+     */
+    static Config withHomeBypass(Context context, Config config) throws IOException {
+        List<String> own = new ArrayList<>();
+        for (InetNetwork n : config.getInterface().getAddresses()) own.add(n.getAddress().getHostAddress() + "/" + n.getMask());
+        for (Peer peer : config.getPeers()) for (InetNetwork n : peer.getAllowedIps())
+            if (n.getMask() > 0) own.add(n.getAddress().getHostAddress() + "/" + n.getMask());
+        List<String> dns = new ArrayList<>();
+        for (InetAddress a : config.getInterface().getDnsServers()) dns.add(a.getHostAddress());
+        List<HomeBypassRoutes.Cidr> routes = VpnHomeBypass.ipv4Routes(context, own, dns);
+        if (routes.size() == 1 && routes.get(0).prefix == 0) return config;
+        try {
+            Config.Builder out = new Config.Builder().setInterface(config.getInterface());
+            for (Peer peer : config.getPeers()) {
+                boolean fullV4 = false;
+                List<InetNetwork> allowed = new ArrayList<>();
+                for (InetNetwork n : peer.getAllowedIps()) {
+                    if (n.getMask() == 0 && !(n.getAddress() instanceof Inet6Address)) fullV4 = true;
+                    else allowed.add(n);
+                }
+                if (!fullV4) { out.addPeer(peer); continue; }
+                for (HomeBypassRoutes.Cidr r : routes) allowed.add(InetNetwork.parse(r.toString()));
+                Peer.Builder b = new Peer.Builder().setPublicKey(peer.getPublicKey()).addAllowedIps(allowed);
+                if (peer.getEndpoint().isPresent()) b.setEndpoint(peer.getEndpoint().get());
+                if (peer.getPreSharedKey().isPresent()) b.setPreSharedKey(peer.getPreSharedKey().get());
+                if (peer.getPersistentKeepalive().isPresent()) b.setPersistentKeepalive(peer.getPersistentKeepalive().get());
+                out.addPeer(b.build());
+            }
+            return out.build();
+        } catch (BadConfigException | com.wireguard.config.ParseException e) {
+            // Never risk the connection over this: the profile as it was.
+            return config;
         }
     }
 

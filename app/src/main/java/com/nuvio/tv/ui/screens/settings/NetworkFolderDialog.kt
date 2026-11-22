@@ -70,6 +70,10 @@ internal fun NetworkFolderDialog(
         else { failed = true; status = context.getString(R.string.iptv_network_save_failed) }
     }
 
+    // Closed without saving: the VPN goes back to the saved folder's address.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { NetworkFolderStore.restoreVpn(context) } }
+    }
     NuvioDialog(
         onDismiss = { if (!checking) onDismiss() },
         title = context.getString(R.string.iptv_network_title),
@@ -145,8 +149,20 @@ internal fun NetworkFolderDialog(
                     status = context.getString(R.string.iptv_network_checking)
                     scope.launch {
                         val result = withContext(Dispatchers.IO) {
+                            // VPN in Full app mode: let this address past it first (it reconnects).
+                            runCatching {
+                                if (com.nuvio.vpn.android.VpnHomeBypass.fullAppOn(context)) {
+                                    withContext(Dispatchers.Main) { status = context.getString(R.string.iptv_network_checking_vpn) }
+                                    NetworkFolderStore.tellVpn(context, config)
+                                    com.nuvio.vpn.android.VpnHomeBypass.awaitConnected(context, 20_000)
+                                }
+                            }
                             runCatching { SmbFolder(config).use { it.test() } }
                         }
+                        // The VPN in Full app mode can be why: say so (and what to do).
+                        val vpnTip = if (result.isFailure) withContext(Dispatchers.IO) {
+                            runCatching { com.nuvio.vpn.android.VpnHomeBypass.hint(context, config.host) }.getOrNull()
+                        } else null
                         checking = false
                         result.onSuccess { space ->
                             NetworkFolderStore.rememberSpace(context, space)
@@ -155,7 +171,7 @@ internal fun NetworkFolderDialog(
                             save(config)
                         }.onFailure { e ->
                             failed = true
-                            status = SmbFolder.describe(e, config)
+                            status = SmbFolder.describe(e, config) + (vpnTip?.let { "\n$it" } ?: "")
                         }
                     }
                 }

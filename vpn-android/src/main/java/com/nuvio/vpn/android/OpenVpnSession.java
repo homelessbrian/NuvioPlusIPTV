@@ -85,7 +85,9 @@ final class OpenVpnSession implements OpenVpnEngine {
                 if (server.contains(":") ? !ipv6 : !ipv4) return -1;
                 builder.addDnsServer(server);
             }
-            if (ipv4) builder.addRoute("0.0.0.0",0);
+            // Everything, except a home network folder the app saves recordings to (see VpnHomeBypass).
+            if (ipv4) for (HomeBypassRoutes.Cidr route : VpnHomeBypass.ipv4Routes(service, java.util.Arrays.asList(addresses), java.util.Arrays.asList(dns)))
+                builder.addRoute(HomeBypassRoutes.format(route.network), route.prefix);
             if (ipv6) builder.addRoute("::",0);
             ParcelFileDescriptor tun = builder.establish();
             if (tun == null) VpnConnectionService.noteFailure("Android would not set up the VPN connection.");
