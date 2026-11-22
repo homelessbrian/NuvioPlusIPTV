@@ -1205,10 +1205,10 @@ class LiveTvPlaybackController @Inject constructor(
             if (_state.value.catchupTitle != null) { archiveStarted = true; catchupRestarts = 0 }
             return
         }
-        // A channel that's slow to load but still coming in (4K, or Dispatcharr buffering
-        // first) gets extra time before it's reloaded: a reload drops the connection, and
-        // Dispatcharr can then move to the channel's next, lower-quality stream.
-        if (stillLoading && now - lastProgressAt < STALL_MS + SLOW_START_EXTRA_MS) return
+        // A Dispatcharr channel that's slow to load but still coming in gets extra time before
+        // it's reloaded: a reload drops the connection, and Dispatcharr can then move to the
+        // channel's next, lower-quality stream. Other channels reload on time, as before.
+        if (stillLoading && slowStarter() && now - lastProgressAt < STALL_MS + SLOW_START_EXTRA_MS) return
         if (now - lastProgressAt < STALL_MS || !autoReconnect) return
         lastProgressAt = now
         val archive = _state.value.catchupTitle != null
@@ -1838,17 +1838,18 @@ class LiveTvPlaybackController @Inject constructor(
             // Sound playing but no picture: frozen video. A channel that's simply still loading
             // gets longer before we step in (it may just be slow to start).
             delay(FRAME_TIMEOUT_MS)
-            // 4K/HDR pictures take longer to appear after the sound: a little more time first.
-            if (stuck(p, requireReady = true) && (p.videoFormat?.height ?: 0) > 1080) delay(BIG_PICTURE_EXTRA_MS)
+            // Dispatcharr, 4K/HDR: the picture takes longer to appear after the sound.
+            if (stuck(p, requireReady = true) && slowStarter() && (p.videoFormat?.height ?: 0) > 1080) delay(BIG_PICTURE_EXTRA_MS)
             if (!stuck(p, requireReady = true)) {
                 val bufferedBefore = p.bufferedPosition
                 delay(LOADING_AFTER_MOVE_MS - FRAME_TIMEOUT_MS)
                 if (!stuck(p, requireReady = false)) return@launch
-                // Still loading but the stream keeps coming in: just slow to start (4K, or a
-                // server like Dispatcharr that buffers first), not stuck. Restarting it would
-                // drop the connection, and such servers may then hand over a lower-quality
-                // stream. The stall check still steps in if it never gets going.
-                if (p.playbackState == Player.STATE_BUFFERING && p.bufferedPosition > bufferedBefore) return@launch
+                // Dispatcharr, still loading but the stream keeps coming in: just slow to start
+                // (it buffers first), not stuck. Restarting would drop the connection, and
+                // Dispatcharr may then hand over the channel's next, lower-quality stream. The
+                // stall check still steps in if it never gets going. Everything else restarts
+                // straight away, as before.
+                if (slowStarter() && p.playbackState == Player.STATE_BUFFERING && p.bufferedPosition > bufferedBefore) return@launch
             }
             Log.w(TAG, "No picture after moving the video; restarting the stream")
             val archive = _state.value.catchupTitle != null
@@ -2295,6 +2296,19 @@ class LiveTvPlaybackController @Inject constructor(
      */
     var onLiveFailure: ((channelKey: String) -> Boolean)? = null
 
+    /** Playlist ids served by Dispatcharr (see [com.nuvio.tv.livetv.model.PlaylistSource.isDispatcharr]). */
+    var dispatcharrSources: () -> Set<String> = { emptySet() }
+
+    /**
+     * The channel playing comes from Dispatcharr, which buffers before sending and moves to a
+     * channel's next stream when a viewer reconnects: given longer to start before a reconnect.
+     */
+    private fun slowStarter(): Boolean {
+        val ch = currentChannel ?: return false
+        return ch.sourceId in dispatcharrSources() ||
+            com.nuvio.tv.livetv.model.PlaylistSource.isDispatcharrLink(currentUrl ?: ch.url)
+    }
+
     /**
      * Sports: the next channel showing the same live game, when [failedKey] won't play or keeps
      * freezing ([tried]: channels already tried for it). Null when it isn't a live game's channel,
@@ -2471,9 +2485,9 @@ class LiveTvPlaybackController @Inject constructor(
         private const val FRAME_TIMEOUT_MS = 2_500L
         /** Still loading this long after the video moved to a new screen = stuck. */
         private const val LOADING_AFTER_MOVE_MS = 7_000L
-        /** Extra wait for a first picture on 4K/HDR channels after the video moved. */
+        /** Extra wait for a first picture on Dispatcharr 4K/HDR channels after the video moved. */
         private const val BIG_PICTURE_EXTRA_MS = 3_000L
-        /** Extra time to start for a channel that's still coming in (on top of [STALL_MS]). */
+        /** Extra time to start for a Dispatcharr channel that's still coming in (on top of [STALL_MS]). */
         private const val SLOW_START_EXTRA_MS = 15_000L
         private const val C_TIME_UNSET = Long.MIN_VALUE + 1
         private const val TAG = "LiveTvPlayback"

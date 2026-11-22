@@ -3455,6 +3455,7 @@ class LiveTvRepository @Inject constructor(
             }
             info.optJSONObject("user_info")?.let { ui ->
                 accountOf(ui)?.let { saveAccount(pl, it) }
+                noteDispatcharr(pl, ui)
                 if (ui.optString("auth") == "0") throw XtreamLoginError("Login failed: check the username and password")
                 val status = ui.optString("status")
                 if (status.isNotBlank() && !status.equals("Active", ignoreCase = true)) {
@@ -3778,6 +3779,13 @@ class LiveTvRepository @Inject constructor(
      * for short links that hide it, from the playlist's channel links (…/live/user/pass/123.ts);
      * one found in the channel links is only kept once the provider accepts it.
      */
+    /** Remembers whether a playlist's server is Dispatcharr (from its Xtream login reply). */
+    private suspend fun noteDispatcharr(pl: PlaylistSource, userInfo: JSONObject) {
+        val isIt = PlaylistSource.isDispatcharrReply(userInfo)
+        if (isIt == pl.dispatcharr) return
+        prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(dispatcharr = isIt) else it } }
+    }
+
     /** M3U playlists already looked at for movies, series and a login since the app started. */
     private val linkLoginChecked: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
 
@@ -3805,6 +3813,7 @@ class LiveTvRepository @Inject constructor(
             checked.onSuccess { ui ->
                 kept = login
                 accountOf(ui)?.let { saveAccount(pl, it) }
+                noteDispatcharr(pl, ui)
             }.onFailure { e ->
                 LIVE_REPORT.add(
                     "Playlist \"${pl.name}\": couldn't check the Xtream login with ${server.substringAfter("://")} (${e.message ?: e.javaClass.simpleName})" +

@@ -1849,6 +1849,7 @@ class LiveTvPreferences @Inject constructor(
                                     r.copy(
                                         lastUpdatedMs = l.lastUpdatedMs, lastError = l.lastError, channelCount = l.channelCount,
                                         serverTimezone = l.serverTimezone, catchupNoHlsSince = l.catchupNoHlsSince,
+                                        dispatcharr = l.dispatcharr || r.dispatcharr,
                                         fallbackUserAgent = l.fallbackUserAgent.ifBlank { r.fallbackUserAgent }
                                     )
                                 } ?: r
@@ -1918,7 +1919,8 @@ class LiveTvPreferences @Inject constructor(
                     linkServer = o.optString("linkServer"),
                     linkUsername = o.optString("linkUsername"),
                     linkPassword = o.optString("linkPassword"),
-                    vodInPlaylist = o.optBoolean("vodInPlaylist", false)
+                    vodInPlaylist = o.optBoolean("vodInPlaylist", false),
+                    dispatcharr = o.optBoolean("dispatcharr", false)
                 )
             }
         }.getOrDefault(emptyList())
@@ -1949,6 +1951,7 @@ class LiveTvPreferences @Inject constructor(
                     .put("guideShiftMinutes", s.guideShiftMinutes)
                     .put("catchupShiftMinutes", s.catchupShiftMinutes)
                     .apply {
+                        if (s.dispatcharr) put("dispatcharr", true)
                         if (s.guidesOff.isNotEmpty()) put("guidesOff", JSONArray(s.guidesOff.sorted()))
                         val type = if (s.isStalker) "stalker" else s.sourceType
                         if (type.isNotBlank()) put("sourceType", type)
