@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"Klaar opnames die ouder zijn worden vanzelf verwijderd"</string>
     <string name="iptv_settings_delete_recordings_after_note">"Opnames die al ouder zijn worden meteen verwijderd. Opnames met Altijd bewaren (in het menu van een opname), deels bekeken of nog bezig worden nooit verwijderd."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d dagen"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Beeld, geluid en pauzeren"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Waar opnames worden opgeslagen, de netwerkmap en hoe lang ze bewaard blijven"</string>
 </resources>

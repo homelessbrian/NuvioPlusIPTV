@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"Les enregistrements terminés plus anciens sont supprimés automatiquement"</string>
     <string name="iptv_settings_delete_recordings_after_note">"Les enregistrements déjà plus anciens sont supprimés tout de suite. Ceux marqués Garder pour toujours (dans le menu d\'un enregistrement), en partie regardés ou en cours ne sont jamais supprimés."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d jours"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Image, son et pause"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Où les enregistrements sont stockés, le dossier réseau et leur durée de conservation"</string>
 </resources>

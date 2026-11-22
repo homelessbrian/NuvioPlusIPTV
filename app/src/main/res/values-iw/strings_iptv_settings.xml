@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"הקלטות שהסתיימו וישנות יותר נמחקות אוטומטית"</string>
     <string name="iptv_settings_delete_recordings_after_note">"הקלטות שכבר ישנות יותר נמחקות מיד. הקלטות שסומנו \"שמור לתמיד\" (בתפריט ההקלטה), שנצפו חלקית או שעדיין מוקלטות לעולם לא נמחקות."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d ימים"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"תמונה, צליל והשהיה"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"היכן נשמרות ההקלטות, תיקיית הרשת וכמה זמן הן נשמרות"</string>
 </resources>

@@ -181,7 +181,7 @@ class IptvSettingsLocaleTest {
         val setup = spanish.getString(LiveTvPage.MAIN.tab)
         val integration = spanish.getString(LiveTvPage.INTEGRATION.tab)
         composeRule.onNodeWithText(setup).performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-        repeat(3) {
+        repeat(4) {
             composeRule.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
             composeRule.waitForIdle()
         }

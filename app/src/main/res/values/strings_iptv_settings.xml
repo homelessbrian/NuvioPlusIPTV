@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"Finished recordings older than this are deleted by themselves"</string>
     <string name="iptv_settings_delete_recordings_after_note">"Recordings already older than this are deleted straight away. Ones marked Keep Forever (in a recording\'s menu), partly watched or still recording are never deleted."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d days"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Picture, sound and pausing"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Where recordings are saved, the network folder and how long they\'re kept"</string>
 </resources>

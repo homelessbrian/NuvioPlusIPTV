@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"Fertige Aufnahmen, die älter sind, werden automatisch gelöscht"</string>
     <string name="iptv_settings_delete_recordings_after_note">"Aufnahmen, die schon älter sind, werden sofort gelöscht. Aufnahmen mit „Für immer behalten“ (im Menü einer Aufnahme), teilweise angesehene und laufende Aufnahmen werden nie gelöscht."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d Tagen"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Bild, Ton und Pausieren"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Wo Aufnahmen gespeichert werden, der Netzwerkordner und wie lange sie bleiben"</string>
 </resources>

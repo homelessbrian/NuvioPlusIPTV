@@ -96,7 +96,7 @@ private val LIVE_TV_SUBTITLE = R.string.iptv_settings_playlists_tv_guide_and_cha
 
 /**
  * Live TV settings are one place in Settings with a row of tabs across the top of it (Setup,
- * Guide, Playback, Integration): [HUB] is that tabbed page. [ALL] is the old single
+ * Guide, Playback, Recordings, Integration): [HUB] is that tabbed page. [ALL] is the old single
  * long list, kept for the guide's long-press menu. The others are the tabs themselves.
  */
 internal enum class LiveTvPage(
@@ -108,12 +108,13 @@ internal enum class LiveTvPage(
     HUB(R.string.iptv_settings_live_tv, R.string.iptv_settings_playlists_tv_guide_and_channel_options),
     MAIN(R.string.iptv_settings_live_tv, R.string.iptv_settings_your_playlists_guides_channels_groups_and_parental_controls, R.string.iptv_settings_setup),
     GUIDE(R.string.iptv_settings_live_tv, R.string.iptv_settings_how_the_guide_looks_and_behaves_while_you, R.string.iptv_settings_guide),
-    PLAYBACK(R.string.iptv_settings_live_tv, R.string.iptv_settings_picture_sound_pausing_and_recording, R.string.iptv_settings_playback),
+    PLAYBACK(R.string.iptv_settings_live_tv, R.string.iptv_settings_picture_sound_and_pausing, R.string.iptv_settings_playback),
+    RECORDINGS(R.string.iptv_settings_live_tv, R.string.iptv_settings_recordings_tab_subtitle, R.string.iptv_settings_recordings),
     ON_DEMAND(R.string.iptv_settings_on_demand, R.string.iptv_settings_movies_and_shows_from_your_provider, R.string.iptv_settings_on_demand),
     INTEGRATION(R.string.iptv_settings_live_tv, R.string.iptv_settings_how_live_tv_shows_up_in_the_rest, R.string.iptv_settings_integration)
 }
 
-private val LIVE_TABS = listOf(LiveTvPage.MAIN, LiveTvPage.GUIDE, LiveTvPage.PLAYBACK, LiveTvPage.INTEGRATION)
+private val LIVE_TABS = listOf(LiveTvPage.MAIN, LiveTvPage.GUIDE, LiveTvPage.PLAYBACK, LiveTvPage.RECORDINGS, LiveTvPage.INTEGRATION)
 
 /** The row of tabs across the top of Live TV settings; moving onto one shows it. */
 @Composable
@@ -158,7 +159,7 @@ internal fun LiveTabRow(selected: LiveTvPage, first: FocusRequester?, onSelect: 
 }
 
 
-/** On the four sub-tabs the sections sit open (there are only a few per tab), not folded. */
+/** On the sub-tabs the sections sit open (there are only a few per tab), not folded. */
 private val LocalLiveFlat = androidx.compose.runtime.compositionLocalOf { false }
 
 /** Standalone version, opened from the guide's long-press menu. */
@@ -170,6 +171,25 @@ fun LiveTvSettingsScreen(
     val context = LocalContext.current
     SettingsStandaloneScaffold(title = context.getString(LIVE_TV_TITLE), subtitle = context.getString(LIVE_TV_SUBTITLE)) {
         LiveTvSettingsContent(viewModel = viewModel, page = LiveTvPage.ALL)
+    }
+}
+
+/**
+ * Recordings settings on their own, opened from the gear on the Recordings page; Back goes
+ * back to Recordings.
+ */
+@Composable
+fun RecordingSettingsScreen(
+    viewModel: LiveTvSettingsViewModel = hiltViewModel()
+) {
+    val context = LocalContext.current
+    val first = androidx.compose.runtime.remember { FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(150)
+        runCatching { first.requestFocus() }
+    }
+    SettingsStandaloneScaffold(title = context.getString(R.string.iptv_settings_recordings), subtitle = context.getString(R.string.iptv_settings_recordings_tab_subtitle)) {
+        LiveTvSettingsContent(viewModel = viewModel, initialFocusRequester = first, page = LiveTvPage.RECORDINGS)
     }
 }
 
@@ -1698,7 +1718,7 @@ internal fun LiveTvSettingsContent(
             }
 
             // ------------------------------------------------------------ Recordings
-            if (show(LiveTvPage.PLAYBACK)) item(key = "recordings") {
+            if (show(LiveTvPage.RECORDINGS)) item(key = "recordings") {
                 val recContext = androidx.compose.ui.platform.LocalContext.current
                 // Drives come and go: read again whenever the section is opened (or the network folder changes).
                 var networkVersion by remember { mutableStateOf(0) }
@@ -1723,7 +1743,8 @@ internal fun LiveTvSettingsContent(
                     summary = context.getString(R.string.iptv_settings_saved_to) + (chosen?.label ?: if (s.recordingStorage.isEmpty()) context.getString(R.string.iptv_settings_this_device) else context.getString(R.string.iptv_settings_a_drive_that_isn_t_plugged_in)),
                     icon = Icons.Default.FiberManualRecord,
                     open = "recordings" in open,
-                    onToggle = { toggle("recordings") }
+                    onToggle = { toggle("recordings") },
+                    focusFirst = firstFocus(LiveTvPage.RECORDINGS)
                 ) {
                     SettingsActionRow(
                         title = context.getString(R.string.iptv_settings_save_recordings_to),

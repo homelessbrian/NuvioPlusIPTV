@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"Bundan eski bitmiş kayıtlar kendiliğinden silinir"</string>
     <string name="iptv_settings_delete_recordings_after_note">"Zaten daha eski olan kayıtlar hemen silinir. Sonsuza Kadar Sakla olarak işaretlenenler (kaydın menüsünden), kısmen izlenenler veya hâlâ kaydedilenler asla silinmez."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d gün"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Görüntü, ses ve duraklatma"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Kayıtların kaydedildiği yer, ağ klasörü ve ne kadar süre tutulacakları"</string>
 </resources>

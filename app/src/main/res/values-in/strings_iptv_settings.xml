@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"Rekaman selesai yang lebih lama dari ini dihapus otomatis"</string>
     <string name="iptv_settings_delete_recordings_after_note">"Rekaman yang sudah lebih lama dari ini langsung dihapus. Rekaman bertanda Simpan Selamanya (di menu rekaman), yang sudah ditonton sebagian, atau masih merekam tidak pernah dihapus."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d hari"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Gambar, suara, dan jeda"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Tempat rekaman disimpan, folder jaringan, dan berapa lama disimpan"</string>
 </resources>

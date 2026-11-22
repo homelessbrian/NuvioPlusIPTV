@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"Zakończone nagrania starsze niż to są usuwane same"</string>
     <string name="iptv_settings_delete_recordings_after_note">"Nagrania, które już są starsze, zostaną usunięte od razu. Nagrania oznaczone Zachowaj na zawsze (w menu nagrania), obejrzane częściowo lub wciąż nagrywane nigdy nie są usuwane."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d dniach"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Obraz, dźwięk i pauza"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Gdzie zapisywane są nagrania, folder sieciowy i jak długo są przechowywane"</string>
 </resources>

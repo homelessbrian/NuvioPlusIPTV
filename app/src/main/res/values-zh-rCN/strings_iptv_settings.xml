@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"超过此时间的已完成录像会自动删除"</string>
     <string name="iptv_settings_delete_recordings_after_note">"已经超过此时间的录像会立即删除。标记为“永久保留”（在录像菜单中）、看了一部分或仍在录制的录像永远不会被删除。"</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d 天"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"画面、声音和暂停"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"录制的保存位置、网络文件夹以及保留时长"</string>
 </resources>

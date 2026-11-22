@@ -38,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -338,6 +340,8 @@ class RecordingsViewModel @Inject constructor(
 @Composable
 fun RecordingsScreen(
     onPlay: (url: String, title: String, poster: String?, recordingId: String, fromStart: Boolean) -> Unit,
+    /** The gear by the title: Recordings settings (where they're saved, the network folder…). */
+    onOpenSettings: () -> Unit = {},
     viewModel: RecordingsViewModel = hiltViewModel()
 ) {
     val recordings by viewModel.recordings.collectAsStateWithLifecycle()
@@ -458,6 +462,9 @@ fun RecordingsScreen(
                 .padding(start = 56.dp, end = 48.dp, top = 32.dp)
         ) {
             Row(verticalAlignment = Alignment.Bottom) {
+                // Recordings settings; Up or Left from the page reaches it, the page keeps the first highlight.
+                RecordingsGearButton(onClick = onOpenSettings)
+                Spacer(Modifier.width(14.dp))
                 LiveText("Recordings", size = 30.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 val free = viewModel.freeBytes()
                 if (free != Long.MAX_VALUE) LiveText(
@@ -1059,6 +1066,35 @@ internal fun PillButton(
         contentAlignment = Alignment.Center
     ) {
         LiveText(label, size = 16.sp, weight = FontWeight.SemiBold, color = fg)
+    }
+}
+
+/** A round gear button the height of [PillButton], in the same look. */
+@Composable
+private fun RecordingsGearButton(onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val colors = NuvioTheme.colors
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(if (focused) colors.TextPrimary else com.nuvio.tv.livetv.ui.guideSurfaceVariant())
+            .border(2.dp, if (focused) colors.FocusRing else com.nuvio.tv.livetv.ui.GuideGlassEdge, androidx.compose.foundation.shape.CircleShape)
+            .semantics { contentDescription = "Recording settings" }
+            .onFocusChanged { focused = it.isFocused }
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.tv.material3.Icon(
+            androidx.compose.material.icons.Icons.Default.Settings,
+            contentDescription = null,
+            tint = if (focused) colors.Background else colors.TextPrimary,
+            modifier = Modifier.size(22.dp)
+        )
     }
 }
 

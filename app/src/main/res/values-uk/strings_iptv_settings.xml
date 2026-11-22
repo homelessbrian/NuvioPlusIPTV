@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"Завершені записи, старші за цей термін, видаляються самі"</string>
     <string name="iptv_settings_delete_recordings_after_note">"Записи, які вже старші, видаляються одразу. Записи з позначкою «Зберігати завжди» (у меню запису), переглянуті частково або ще в процесі ніколи не видаляються."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d дн."</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Зображення, звук і пауза"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Де зберігаються записи, мережева тека і як довго їх тримати"</string>
 </resources>

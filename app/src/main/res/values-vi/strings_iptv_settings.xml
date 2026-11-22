@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"Bản ghi đã xong cũ hơn mức này sẽ tự động bị xóa"</string>
     <string name="iptv_settings_delete_recordings_after_note">"Bản ghi đã cũ hơn mức này sẽ bị xóa ngay. Bản ghi được đánh dấu Giữ mãi mãi (trong menu của bản ghi), đã xem dở hoặc đang ghi sẽ không bao giờ bị xóa."</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d ngày"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"Hình ảnh, âm thanh và tạm dừng"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"Nơi lưu bản ghi, thư mục mạng và thời gian giữ lại"</string>
 </resources>

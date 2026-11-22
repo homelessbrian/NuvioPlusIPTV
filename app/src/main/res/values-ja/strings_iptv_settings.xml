@@ -712,4 +712,6 @@
     <string name="iptv_settings_delete_recordings_after_on">"この期間より古い録画は自動で削除されます"</string>
     <string name="iptv_settings_delete_recordings_after_note">"すでにこの期間より古い録画はすぐに削除されます。「ずっと残す」にした録画（録画のメニューから）、途中まで見た録画、録画中のものは削除されません。"</string>
     <string name="iptv_settings_recording_keep_days_n">"%1$d日"</string>
+    <string name="iptv_settings_picture_sound_and_pausing">"映像、音声、一時停止"</string>
+    <string name="iptv_settings_recordings_tab_subtitle">"録画の保存先、ネットワークフォルダ、保存期間"</string>
 </resources>

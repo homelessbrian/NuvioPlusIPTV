@@ -1567,8 +1567,13 @@ private fun PlaybackNavHost(
                 onPlay = { _, _, _, recordingId, fromStart ->
                     com.nuvio.tv.livetv.record.RecordingLaunch.open(recordingId, fromStart, Screen.Recordings.route)
                     navController.navigate(Screen.LiveTvPlayer.route) { launchSingleTop = true }
-                }
+                },
+                onOpenSettings = { navController.navigate(Screen.RecordingSettings.route) { launchSingleTop = true } }
             )
+        }
+
+        composable(Screen.RecordingSettings.route) {
+            com.nuvio.tv.ui.screens.settings.RecordingSettingsScreen()
         }
 
         forkPageComposable(Screen.Calendar.route) {
