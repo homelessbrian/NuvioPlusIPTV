@@ -560,6 +560,7 @@ Nuvio + IPTV is free. If it's made your TV better and you'd like to say thanks, 
 - **🙌 [ghbarker](https://github.com/ghbarker): a huge thank you.** He built the **built-in VPN** (WireGuard and OpenVPN playback protection), **Multiview** and **Stalker / Ministra portals**, and contributed them to this project, along with a lot of speed work. He also made the original [phone port](https://github.com/ghbarker/NuvioMobile-IPTV) that the phone app is built on.
 - **[Nuvio](https://github.com/NuvioMedia/NuvioTV)** by the NuvioMedia team: Nuvio + IPTV is built on their work and follows their releases.
 - Guide and overlay design inspired by **TiviMate**.
+- **[Nuvio Arc](https://github.com/Ysosrs123)** by Ysosrs123: thanks for the ideas behind best-quality source sorting and auto-play, "Set up for this TV" and fast seek thumbnails.
 - Channel logo libraries from **[iptv-org](https://github.com/iptv-org)** and **[tv-logos](https://github.com/tv-logo/tv-logos)**.
 - Sports data from **ESPN**'s public feed, **[TheSportsDB](https://www.thesportsdb.com)**, **HockeyTech**, **MLB**'s stats service and **sporting-events.org**. Show schedules from **[TVmaze](https://www.tvmaze.com)**, and pictures and logos from **[TMDB](https://www.themoviedb.org)**. Nuvio + IPTV isn't affiliated with any of them, and team and league names and logos belong to their owners.
 - Built with Kotlin, Jetpack Compose, TV Material 3 and Media3 / ExoPlayer.
