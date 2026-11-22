@@ -554,6 +554,12 @@ dependencies {
     implementation(libs.okhttp.logging)
     // Live TV: recording to a network folder (NAS / shared folder on a computer)
     implementation(libs.smbj)
+    constraints {
+        // smbj pulls in BouncyCastle 1.85, whose Java 25 classes break the release build's Compose mapping step
+        implementation(libs.bouncycastle.bcprov) {
+            version { strictly(libs.versions.bouncycastle.get()) }
+        }
+    }
     implementation(libs.moshi)
     ksp(libs.moshi.codegen)
 
