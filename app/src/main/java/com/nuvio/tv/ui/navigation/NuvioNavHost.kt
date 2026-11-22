@@ -363,11 +363,12 @@ private fun PlaybackNavHost(
                         Screen.Player.createRoute(
                             streamUrl = url,
                             title = title,
-                            contentId = contentId,
+                            // A blank id (adult titles): played without saving its place.
+                            contentId = contentId.ifBlank { null },
                             contentType = type,
                             contentName = contentName,
                             poster = poster,
-                            videoId = if (type == "series" && season != null && episode != null) "$contentId:$season:$episode" else contentId,
+                            videoId = if (contentId.isBlank()) null else if (type == "series" && season != null && episode != null) "$contentId:$season:$episode" else contentId,
                             season = season,
                             episode = episode,
                             episodeTitle = episodeName,
@@ -1423,11 +1424,12 @@ private fun PlaybackNavHost(
                         Screen.Player.createRoute(
                             streamUrl = url,
                             title = title,
-                            contentId = contentId,
+                            // A blank id (adult titles): played without saving its place.
+                            contentId = contentId.ifBlank { null },
                             contentType = type,
                             contentName = contentName,
                             poster = poster,
-                            videoId = if (type == "series" && season != null && episode != null) "$contentId:$season:$episode" else contentId,
+                            videoId = if (contentId.isBlank()) null else if (type == "series" && season != null && episode != null) "$contentId:$season:$episode" else contentId,
                             season = season,
                             episode = episode,
                             episodeTitle = episodeName,
@@ -1709,11 +1711,12 @@ private fun PlaybackNavHost(
                         Screen.Player.createRoute(
                             streamUrl = url,
                             title = title,
-                            contentId = contentId,
+                            // A blank id (adult titles): played without saving its place.
+                            contentId = contentId.ifBlank { null },
                             contentType = type,
                             contentName = contentName,
                             poster = poster,
-                            videoId = if (type == "series" && season != null && episode != null) "$contentId:$season:$episode" else contentId,
+                            videoId = if (contentId.isBlank()) null else if (type == "series" && season != null && episode != null) "$contentId:$season:$episode" else contentId,
                             season = season,
                             episode = episode,
                             episodeTitle = episodeName,

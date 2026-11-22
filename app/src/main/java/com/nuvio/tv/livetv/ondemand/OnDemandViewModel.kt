@@ -443,6 +443,9 @@ class OnDemandViewModel @Inject constructor(
     private fun withProvider(item: VodItem, poster: String, matched: com.nuvio.tv.domain.model.MetaPreview? = null): String =
         VodHomeIds.customPoster(item, matched ?: homeMatched[item.uid], posterPattern) ?: poster
 
+    /** Adult titles (by their own name or their category's): played without saving their place. */
+    suspend fun isAdult(item: VodItem): Boolean = runCatching { repository.isAdult(item) }.getOrDefault(false)
+
     suspend fun targetFor(item: VodItem): OnDemandTarget {
         // Adult titles never open Nuvio's details page (which would put them in Continue watching).
         if (repository.isAdult(item)) return OnDemandTarget.Provider(item)
@@ -1236,6 +1239,8 @@ class OnDemandViewModel @Inject constructor(
             if (user.hidesVodCategory(cat)) continue
             val catName = runCatching { repository.categories(item.kind).firstOrNull { it.uid == cat }?.name }.getOrNull().orEmpty()
             if (ParentalControls.isLocked("vod:$cat", catName, settings, user.lockedGroups)) continue
+            // Adult titles never show here (and their saved place is taken out).
+            if (repository.isAdult(item)) continue
             continueAt[item.uid] = p
             out += item
         }

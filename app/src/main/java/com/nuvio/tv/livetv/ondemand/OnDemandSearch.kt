@@ -126,12 +126,12 @@ fun OnDemandSearchRow(
             viewModel = viewModel,
             onDismiss = { providerItem = null },
             onFixMatch = { providerItem = null; fixMatchItem = item },
-            onPlay = { url, title, poster, season, episode, episodeName ->
+            onPlay = { url, title, poster, season, episode, episodeName, adult ->
                 providerItem = null
                 // Played with the title's id, so Nuvio tracks progress: resumes, and Continue Watching.
                 onPlay(
                     url, title, if (item.kind == VodKind.SERIES) "series" else "movie", poster,
-                    VodHomeIds.metaId(item.uid), OnDemandDatabase.displayTitle(item.name), season, episode, episodeName
+                    if (adult) "" else VodHomeIds.metaId(item.uid), OnDemandDatabase.displayTitle(item.name), season, episode, episodeName
                 )
             }
         )
