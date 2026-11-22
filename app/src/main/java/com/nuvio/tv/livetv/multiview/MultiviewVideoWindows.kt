@@ -7,36 +7,22 @@ import com.nuvio.tv.livetv.model.LiveTvLoadReport
 /**
  * How Multiview panes put their picture on screen.
  *
- * Normally each pane plays in one of the TV's own video windows: the box shows the decoded
- * picture directly, which keeps every pane smooth even on modest hardware.
+ * The way that works on every box is to draw each pane with the rest of the screen. Some
+ * boxes (operator boxes from cable/fibre companies, Broadcom chips) only have one or two of
+ * the TV's own video windows, so panes played there showed a black picture with sound.
  *
- * Some operator boxes (cable/fibre company boxes) only have one or two of those windows, so
- * the other panes played sound over a black picture. On those boxes the panes are drawn with
- * the rest of the screen instead. That costs more work per frame, so it is only used where
- * it is needed. Protected (DRM) channels always use a video window.
+ * Drawing with the screen costs the video chip more, and on Amlogic boxes several panes can
+ * turn into a slide show. Amlogic boxes show extra video windows fine, so only they play
+ * panes in video windows. Every other box, and any box nobody has tried, keeps the way that
+ * always shows a picture. Protected (DRM) channels can only be shown in a video window.
  */
 internal object MultiviewVideoWindows {
-    /** Operator boxes reported to show too few video windows (maker, or part of the model name). */
-    private val knownMakers = listOf("arris", "commscope")
-    private val knownModels = listOf("fibe", "vip5", "vip6", "vip7")
+    /** Operator boxes reported to show too few video windows, whatever chip is inside. */
+    private val fewWindowMakers = listOf("arris", "commscope")
+    private val fewWindowModels = listOf("fibe", "vip5", "vip6", "vip7")
 
-    /**
-     * Why this box draws panes with the screen, or null when it plays them in video windows.
-     * Besides the reported boxes, every box built on a Broadcom chip counts: those have one
-     * main video window and one small extra one, whatever name is on the box.
-     */
-    private val reason: String? by lazy {
-        val maker = "${Build.MANUFACTURER} ${Build.BRAND}".lowercase()
-        val model = "${Build.MODEL} ${Build.DEVICE} ${Build.PRODUCT}".lowercase()
-        when {
-            knownMakers.any { it in maker } || knownModels.any { it in model } -> "a box known to show few video windows"
-            broadcomChip() -> "Broadcom chip, which shows few video windows"
-            else -> null
-        }
-    }
-
-    private fun broadcomChip(): Boolean {
-        fun named(text: String?) = text != null && text.lowercase().let { "broadcom" in it || "brcm" in it }
+    private fun chipNamed(vararg names: String): Boolean {
+        fun named(text: String?) = text != null && text.lowercase().let { t -> names.any { it in t } }
         if (Build.VERSION.SDK_INT >= 31 && named(Build.SOC_MANUFACTURER)) return true
         if (named(Build.HARDWARE) || named(Build.BOARD)) return true
         return try {
@@ -46,11 +32,17 @@ internal object MultiviewVideoWindows {
         }
     }
 
-    /** True when this box needs panes drawn with the screen (see above). */
-    val drawWithScreen: Boolean get() = reason != null
+    /** True only on boxes known to show several video windows properly. */
+    val useVideoWindows: Boolean by lazy {
+        val maker = "${Build.MANUFACTURER} ${Build.BRAND}".lowercase()
+        val model = "${Build.MODEL} ${Build.DEVICE} ${Build.PRODUCT}".lowercase()
+        val fewWindows = fewWindowMakers.any { it in maker } || fewWindowModels.any { it in model } ||
+            chipNamed("broadcom", "brcm")
+        !fewWindows && chipNamed("amlogic")
+    }
 
     /** Whether a pane plays in a video window (otherwise it is drawn with the screen). */
-    fun inVideoWindow(protected: Boolean): Boolean = protected || !drawWithScreen
+    fun inVideoWindow(protected: Boolean): Boolean = protected || useVideoWindows
 
     private var reported = false
 
@@ -60,8 +52,8 @@ internal object MultiviewVideoWindows {
         reported = true
         val box = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
         LiveTvLoadReport.add(
-            reason?.let { "Multiview: panes drawn with the screen on this box ($box: $it)" }
-                ?: "Multiview: panes play in the TV's video windows ($box)"
+            if (useVideoWindows) "Multiview: panes play in the TV's video windows ($box, Amlogic chip)"
+            else "Multiview: panes drawn with the screen, the way that works on every box ($box)"
         )
     }
 }

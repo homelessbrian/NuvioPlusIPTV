@@ -58,10 +58,10 @@ data class MultiviewPaneState(
     /** A protected (DRM) channel: its picture can only be shown through the TV's video window. */
     val isProtected: Boolean = false,
     /**
-     * The picture plays in one of the TV's own video windows (smooth, the usual way). False on
-     * the few boxes that have too few of them, where it is drawn with the rest of the screen.
+     * The picture plays in one of the TV's own video windows (only on boxes known to show several
+     * of them, and for protected channels). Otherwise it is drawn with the rest of the screen.
      */
-    val inVideoWindow: Boolean = true,
+    val inVideoWindow: Boolean = false,
 )
 
 data class MultiviewState(

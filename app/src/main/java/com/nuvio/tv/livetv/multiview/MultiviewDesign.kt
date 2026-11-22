@@ -186,9 +186,9 @@ internal fun MultiviewPane(
             .clickable(onClick = onClick)
     ) {
         if (pane.player != null) {
-            // Panes play in the TV's own video windows, which keeps them smooth. Only boxes known
-            // to have too few of those windows (the other panes played sound over a black
-            // picture) draw them like the rest of the screen instead; see MultiviewVideoWindows.
+            // Panes are drawn like the rest of the screen, which shows a picture on every box (some
+            // have only one or two video windows, so other panes played sound over black). Only
+            // boxes known to show several video windows use those; see MultiviewVideoWindows.
             // The kind is fixed when the view is made, so a change makes a new one.
             androidx.compose.runtime.key(pane.inVideoWindow) {
                 val layout = if (pane.inVideoWindow) R.layout.live_tv_surface_player_view else R.layout.live_tv_texture_player_view
