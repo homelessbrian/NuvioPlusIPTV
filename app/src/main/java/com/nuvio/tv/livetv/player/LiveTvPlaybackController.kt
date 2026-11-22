@@ -619,7 +619,9 @@ class LiveTvPlaybackController @Inject constructor(
      */
     internal fun localRecordingSource(uri: android.net.Uri, offsetMs: Long = 8_000): androidx.media3.exoplayer.source.MediaSource {
         val item = MediaItem.Builder()
-            .setUri(uri)
+            // A network folder recording's pieces leave this box once copied: played through the
+            // recordings server, which fetches those from the network folder.
+            .setUri(com.nuvio.tv.livetv.record.NetworkFolderStore.playUriFor(uri) ?: uri)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setLiveConfiguration(
                 // "Live" here means a few seconds behind the newest piece (not 3 target lengths).

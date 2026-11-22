@@ -24,6 +24,8 @@ object RecordingStorage {
         val totalBytes: Long
     ) {
         val isDevice: Boolean get() = id.isEmpty()
+        /** The network folder (its free space is what it last said; total 0 = not known). */
+        val isNetwork: Boolean get() = id == NetworkFolderStore.STORAGE_ID
     }
 
     /** Every place recordings can go right now (this device first). */
@@ -70,6 +72,17 @@ object RecordingStorage {
         if (out.none { it.isDevice }) {
             val f = File(context.filesDir, "recordings")
             out.add(0, Choice("", displayContext.getString(R.string.iptv_storage_this_device), f, runCatching { context.filesDir.usableSpace }.getOrDefault(0L), runCatching { context.filesDir.totalSpace }.getOrDefault(0L)))
+        }
+        // The network folder, when one is set up (Settings › Live TV › Recordings).
+        NetworkFolderStore.config(context)?.let { cfg ->
+            val space = NetworkFolderStore.cachedSpace(context)
+            out += Choice(
+                id = NetworkFolderStore.STORAGE_ID,
+                label = displayContext.getString(R.string.iptv_storage_network_folder, cfg.host),
+                dir = NetworkFolderStore.root(context),
+                freeBytes = space?.first ?: 0L,
+                totalBytes = space?.second ?: 0L
+            )
         }
         return out.distinctBy { it.id }
     }

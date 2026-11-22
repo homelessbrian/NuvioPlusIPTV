@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_storage_network_folder">Network Folder (%1$s)</string>
+    <string name="iptv_settings_network_folder">Network Folder</string>
+    <string name="iptv_settings_network_folder_set_up">Network Folder (NAS or Computer)…</string>
+    <string name="iptv_settings_network_folder_change">Change Network Folder…</string>
+    <string name="iptv_settings_network_folder_row_subtitle">Each recording is saved here first; every finished part is copied to the network folder, checked, and then removed from this device.</string>
+    <string name="iptv_settings_network_space">Space to Use on This Device</string>
+    <string name="iptv_settings_network_space_subtitle">The newest part of each recording waits here until it\'s copied. If the network folder can\'t be reached for a while, a recording stops cleanly once this fills up, keeping what it has.</string>
+    <string name="iptv_settings_network_space_smallest">%1$s (almost straight to the network folder)</string>
+    <string name="iptv_network_title">Network Folder</string>
+    <string name="iptv_network_subtitle">A shared folder on a computer or NAS on your home network. Recordings go in it.</string>
+    <string name="iptv_network_address">Address</string>
+    <string name="iptv_network_address_hint">\\\\192.168.1.20\\Recordings</string>
+    <string name="iptv_network_username">Username</string>
+    <string name="iptv_network_username_hint">Leave empty for guest access</string>
+    <string name="iptv_network_password">Password</string>
+    <string name="iptv_network_tips">Use the computer\'s IP address (names often aren\'t found). On Windows, share the folder with Read/Write for that user and set the network to Private. If this box\'s VPN is on, it may need your home network let through.</string>
+    <string name="iptv_network_test_save">Test and Save</string>
+    <string name="iptv_network_save_anyway">Save Anyway</string>
+    <string name="iptv_network_remove">Remove</string>
+    <string name="iptv_network_checking">Checking the folder…</string>
+    <string name="iptv_network_works">It works: %1$s free.</string>
+    <string name="iptv_network_works_no_size">It works.</string>
+    <string name="iptv_network_bad_address">Type the computer\'s address and the shared folder\'s name, like \\\\192.168.1.20\\Recordings</string>
+    <string name="iptv_network_save_failed">Couldn\'t save it on this device. Try again.</string>
+</resources>

@@ -72,8 +72,19 @@ object LiveTvRecordingServer {
             var waited = 0
             while (!file.isFile && waited < 15_000) { Thread.sleep(250); waited += 250 }
         }
+        if (path.contains("..") || !file.canonicalPath.startsWith(base.canonicalPath)) {
+            out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+            return@use
+        }
+        // A network recording's piece that's already been copied across: from the network folder.
+        if (!file.isFile && !file.extension.equals("m3u8", true) && file.parentFile == base) {
+            NetworkFolderStore.remotePiece(base, file.name)?.let { (folder, rel) ->
+                serveRemote(folder, rel, file.extension, method, rangeStart, rangeEnd, out)
+                return@use
+            }
+        }
         // Only files inside the recordings folder.
-        if (path.contains("..") || !file.canonicalPath.startsWith(base.canonicalPath) || !file.isFile) {
+        if (!file.isFile) {
             out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
             return@use
         }
@@ -112,7 +123,14 @@ object LiveTvRecordingServer {
         head.append("Connection: close\r\n\r\n")
         out.write(head.toString().toByteArray())
         if (method.equals("HEAD", ignoreCase = true)) return@use
-        RandomAccessFile(file, "r").use { raf ->
+        // Copied across to the network folder (and removed here) just now: from there instead.
+        val raf = try { RandomAccessFile(file, "r") } catch (e: java.io.FileNotFoundException) {
+            val remote = NetworkFolderStore.remotePiece(base, file.name) ?: throw e
+            remote.first.read(remote.second, start, count, out)
+            out.flush()
+            return@use
+        }
+        raf.use { _ ->
             raf.seek(start)
             val buf = ByteArray(64 * 1024)
             var left = count
@@ -123,6 +141,42 @@ object LiveTvRecordingServer {
                 left -= n
             }
         }
+        out.flush()
+    }
+
+    private fun contentType(extension: String): String = when (extension.lowercase()) {
+        "m3u8" -> "application/vnd.apple.mpegurl"
+        "ts" -> "video/mp2t"
+        "m4s", "mp4" -> "video/mp4"
+        else -> "application/octet-stream"
+    }
+
+    /** Serves a piece from the network folder (with byte ranges, like a file here). */
+    private fun serveRemote(
+        folder: SmbFolder, rel: String, extension: String, method: String,
+        rangeStart: Long, rangeEnd: Long, out: java.io.OutputStream
+    ) {
+        val length = try { folder.size(rel) } catch (e: Exception) {
+            Log.w(TAG, "network folder: ${SmbFolder.describe(e, folder.config)}")
+            out.write("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+            return
+        }
+        if (length == null) {
+            out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+            return
+        }
+        val start = if (rangeStart >= 0) rangeStart.coerceAtMost(length) else 0L
+        val end = if (rangeEnd >= 0) rangeEnd.coerceAtMost(length - 1) else length - 1
+        val count = (end - start + 1).coerceAtLeast(0)
+        val head = StringBuilder()
+        head.append(if (rangeStart >= 0) "HTTP/1.1 206 Partial Content\r\n" else "HTTP/1.1 200 OK\r\n")
+        head.append("Content-Type: ").append(contentType(extension)).append("\r\n")
+        head.append("Content-Length: ").append(count).append("\r\n")
+        head.append("Accept-Ranges: bytes\r\n")
+        if (rangeStart >= 0) head.append("Content-Range: bytes ").append(start).append('-').append(end).append('/').append(length).append("\r\n")
+        head.append("Connection: close\r\n\r\n")
+        out.write(head.toString().toByteArray())
+        if (!method.equals("HEAD", ignoreCase = true) && count > 0) folder.read(rel, start, count, out)
         out.flush()
     }
 }

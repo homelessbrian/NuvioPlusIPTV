@@ -16,6 +16,7 @@ hilt = "2.58"
 hiltNavigationCompose = "1.2.0"
 retrofit = "2.9.0"
 okhttp = "4.12.0"
+smbj = "0.15.0"
 moshi = "1.15.1"
 coroutines = "1.8.1"
 coil = "3.3.0"
@@ -72,6 +73,8 @@ retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = 
 retrofit-moshi = { group = "com.squareup.retrofit2", name = "converter-moshi", version.ref = "retrofit" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+# Recording to a network folder (Windows file sharing / SMB)
+smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
 moshi = { group = "com.squareup.moshi", name = "moshi-kotlin", version.ref = "moshi" }
 moshi-codegen = { group = "com.squareup.moshi", name = "moshi-kotlin-codegen", version.ref = "moshi" }
 

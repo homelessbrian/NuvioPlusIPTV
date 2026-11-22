@@ -364,8 +364,9 @@ fun RecordingsScreen(
         ) {
             Row(verticalAlignment = Alignment.Bottom) {
                 LiveText("Recordings", size = 30.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                LiveText(
-                    "${sizeLabel(viewModel.freeBytes())} free",
+                val free = viewModel.freeBytes()
+                if (free != Long.MAX_VALUE) LiveText(
+                    "${sizeLabel(free)} free",
                     size = 15.sp,
                     color = colors.TextSecondary
                 )
@@ -658,7 +659,7 @@ fun RecordingsScreen(
             detail = "Copies to the place you choose, checks the copy, then removes it from where it was. " +
                 "Leave the app open until it finishes.",
             actions = places.map { c ->
-                val label = c.label + " · " + RecordingStorage.sizeLabel(c.freeBytes) + " free" +
+                val label = c.label + (if (c.isNetwork && c.totalBytes <= 0) "" else " · " + RecordingStorage.sizeLabel(c.freeBytes) + " free") +
                     if (here.size == 1 && here.first() == c.id) "  (already here)" else ""
                 label to { movePick = null; viewModel.moveTo(recs, c) }
             } + listOf("Cancel" to { movePick = null }),

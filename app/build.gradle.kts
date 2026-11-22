@@ -552,6 +552,8 @@ dependencies {
     implementation(libs.retrofit.moshi)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    // Live TV: recording to a network folder (NAS / shared folder on a computer)
+    implementation(libs.smbj)
     implementation(libs.moshi)
     ksp(libs.moshi.codegen)
 

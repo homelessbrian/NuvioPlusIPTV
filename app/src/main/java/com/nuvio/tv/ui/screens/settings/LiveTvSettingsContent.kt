@@ -1700,13 +1700,20 @@ internal fun LiveTvSettingsContent(
             // ------------------------------------------------------------ Recordings
             if (show(LiveTvPage.PLAYBACK)) item(key = "recordings") {
                 val recContext = androidx.compose.ui.platform.LocalContext.current
-                // Drives come and go: read again whenever the section is opened.
-                val drives = remember("recordings" in open) { com.nuvio.tv.livetv.record.RecordingStorage.choices(recContext) }
+                // Drives come and go: read again whenever the section is opened (or the network folder changes).
+                var networkVersion by remember { mutableStateOf(0) }
+                val drives = remember("recordings" in open, networkVersion) { com.nuvio.tv.livetv.record.RecordingStorage.choices(recContext) }
                 val driveProblems = remember("recordings" in open) { com.nuvio.tv.livetv.record.RecordingStorage.problems(recContext) }
                 val chosen = drives.firstOrNull { it.id == s.recordingStorage }
                 fun driveLabel(c: com.nuvio.tv.livetv.record.RecordingStorage.Choice) =
-                    c.label + " · " + com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(c.freeBytes, context.settingsLocale) + context.getString(R.string.iptv_settings_free)
+                    // A network folder that hasn't said how big it is: no "0 MB free".
+                    if (c.isNetwork && c.totalBytes <= 0) c.label
+                    else c.label + " · " + com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(c.freeBytes, context.settingsLocale) + context.getString(R.string.iptv_settings_free)
                 var pickingDrive by remember { mutableStateOf(false) }
+                var editingNetwork by remember { mutableStateOf(false) }
+                var pickingNetworkSpace by remember { mutableStateOf(false) }
+                var networkSpaceMb by remember { mutableStateOf(com.nuvio.tv.livetv.record.NetworkFolderStore.bufferMb(recContext)) }
+                fun networkSpaceLabel(mb: Int) = com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(mb.toLong() * 1024 * 1024, context.settingsLocale)
                 LiveSection(
                     title = context.getString(R.string.iptv_settings_recordings),
                     summary = context.getString(R.string.iptv_settings_saved_to) + (chosen?.label ?: if (s.recordingStorage.isEmpty()) context.getString(R.string.iptv_settings_this_device) else context.getString(R.string.iptv_settings_a_drive_that_isn_t_plugged_in)),
@@ -1722,6 +1729,22 @@ internal fun LiveTvSettingsContent(
                         value = chosen?.label ?: context.getString(R.string.iptv_settings_this_device),
                         onClick = { pickingDrive = true }
                     )
+                    // Saving to the network folder: which folder, and how much may wait on this device.
+                    if (chosen?.isNetwork == true) {
+                        val networkConfig = remember(networkVersion) { com.nuvio.tv.livetv.record.NetworkFolderStore.config(recContext) }
+                        SettingsActionRow(
+                            title = context.getString(R.string.iptv_settings_network_folder),
+                            subtitle = context.getString(R.string.iptv_settings_network_folder_row_subtitle),
+                            value = networkConfig?.label.orEmpty(),
+                            onClick = { editingNetwork = true }
+                        )
+                        SettingsActionRow(
+                            title = context.getString(R.string.iptv_settings_network_space),
+                            subtitle = context.getString(R.string.iptv_settings_network_space_subtitle),
+                            value = networkSpaceLabel(networkSpaceMb),
+                            onClick = { pickingNetworkSpace = true }
+                        )
+                    }
                     SettingsActionRow(
                         title = context.getString(R.string.iptv_settings_start_recording_early),
                         subtitle = context.getString(R.string.iptv_settings_starts_this_long_before_the_show_in_case),
@@ -1755,7 +1778,16 @@ internal fun LiveTvSettingsContent(
                                 pickingDrive = false
                                 update { it.copy(recordingStorage = c.id) }
                             }
-                        } + driveProblems.map { p ->
+                        } + listOf(
+                            // Set one up (or change it); saving it makes it where recordings go.
+                            context.getString(
+                                if (drives.any { it.isNetwork }) R.string.iptv_settings_network_folder_change
+                                else R.string.iptv_settings_network_folder_set_up
+                            ) to {
+                                pickingDrive = false
+                                editingNetwork = true
+                            }
+                        ) + driveProblems.map { p ->
                             // Plugged in but not usable: say why instead of leaving it out.
                             context.getString(R.string.iptv_settings_1_s_can_t_be_used, p.label) to {
                                 pickingDrive = false
@@ -1772,6 +1804,37 @@ internal fun LiveTvSettingsContent(
                             }
                         ),
                         onDismiss = { pickingDrive = false }
+                    )
+                    if (editingNetwork) NetworkFolderDialog(
+                        onDismiss = { editingNetwork = false },
+                        onSaved = {
+                            editingNetwork = false
+                            networkVersion++
+                            update { it.copy(recordingStorage = com.nuvio.tv.livetv.record.NetworkFolderStore.STORAGE_ID) }
+                        },
+                        onRemoved = {
+                            editingNetwork = false
+                            networkVersion++
+                            if (s.recordingStorage == com.nuvio.tv.livetv.record.NetworkFolderStore.STORAGE_ID) update { it.copy(recordingStorage = "") }
+                        }
+                    )
+                    if (pickingNetworkSpace) SettingsSingleChoiceDialog(
+                        title = context.getString(R.string.iptv_settings_network_space),
+                        options = com.nuvio.tv.livetv.record.NetworkFolderStore.BUFFER_CHOICES_MB.map { mb ->
+                            SettingsPickerOption(
+                                mb,
+                                if (mb == com.nuvio.tv.livetv.record.NetworkFolderStore.BUFFER_CHOICES_MB.first())
+                                    context.getString(R.string.iptv_settings_network_space_smallest, networkSpaceLabel(mb))
+                                else networkSpaceLabel(mb)
+                            )
+                        },
+                        selectedValue = networkSpaceMb,
+                        onOptionSelected = { mb ->
+                            com.nuvio.tv.livetv.record.NetworkFolderStore.setBufferMb(recContext, mb)
+                            networkSpaceMb = mb
+                            pickingNetworkSpace = false
+                        },
+                        onDismiss = { pickingNetworkSpace = false }
                     )
                 }
             }
