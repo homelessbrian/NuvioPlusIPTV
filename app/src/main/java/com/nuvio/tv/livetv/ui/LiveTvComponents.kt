@@ -1012,10 +1012,17 @@ internal fun Modifier.glassTile(
  */
 @Composable
 internal fun FrameMeter(label: String) {
-    androidx.compose.runtime.DisposableEffect(label) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(label, view) {
         val choreographer = android.view.Choreographer.getInstance()
         var last = 0L
         var total = 0; var slow = 0; var bad = 0; var worst = 0L
+        // Times the screen was really redrawn. [total] counts every screen refresh while the
+        // screen is open, so an idle screen still showed about 60 a second there.
+        var drawn = 0
+        val onDraw = android.view.ViewTreeObserver.OnDrawListener { drawn++ }
+        val observer = view.viewTreeObserver
+        runCatching { observer.addOnDrawListener(onDraw) }
         var reportedAt = System.currentTimeMillis()
         // Where the screen was stuck: while a frame is held up, the main thread's current
         // position in the code is noted (a few times a second at most), and the most common
@@ -1044,7 +1051,7 @@ internal fun FrameMeter(label: String) {
         fun flush(final: Boolean) {
             if (total >= 30) {
                 com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
-                    "$label frames: $total drawn, $slow slower than 35 ms, $bad slower than 100 ms, worst $worst ms" + if (final) " (screen closed)" else ""
+                    "$label frames: $drawn drawn of $total screen refreshes, $slow slower than 35 ms, $bad slower than 100 ms, worst $worst ms" + if (final) " (screen closed)" else ""
                 )
                 // How full the app's memory is (a full one makes everything stall while it cleans up).
                 val rt = Runtime.getRuntime()
@@ -1056,7 +1063,7 @@ internal fun FrameMeter(label: String) {
                 }
             }
             stuckAt.clear()
-            total = 0; slow = 0; bad = 0; worst = 0
+            total = 0; slow = 0; bad = 0; worst = 0; drawn = 0
             reportedAt = System.currentTimeMillis()
         }
         cb = android.view.Choreographer.FrameCallback { nanos ->
@@ -1075,7 +1082,11 @@ internal fun FrameMeter(label: String) {
             choreographer.postFrameCallback(cb)
         }
         choreographer.postFrameCallback(cb)
-        onDispose { alive.set(false); watcher.interrupt(); choreographer.removeFrameCallback(cb); flush(true) }
+        onDispose {
+            alive.set(false); watcher.interrupt(); choreographer.removeFrameCallback(cb)
+            runCatching { if (observer.isAlive) observer.removeOnDrawListener(onDraw) else view.viewTreeObserver.removeOnDrawListener(onDraw) }
+            flush(true)
+        }
     }
 }
 

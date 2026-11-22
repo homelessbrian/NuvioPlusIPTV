@@ -274,6 +274,8 @@ fun MultiviewScreen(
     }
 
     KeepScreenAwake(on = true)
+    // How often this screen is really redrawn (it should sit still while the panes play).
+    com.nuvio.tv.livetv.ui.FrameMeter("Multiview")
     DisposableEffect(sports) {
         val lease = sports?.acquireViewing()
         onDispose { lease?.close() }
