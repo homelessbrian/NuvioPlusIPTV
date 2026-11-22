@@ -1571,7 +1571,7 @@ private fun GamePage(
     val plays = rememberScoringPlays(ev, settings.hideScores, viewModel)
     LaunchedEffect(ev.id) {
         delay(120)
-        runCatching { if (matches.isNotEmpty()) first.requestFocus() else firstAction.requestFocus() }
+        runCatching { if (matches.isNotEmpty() && ev.state != GameState.POST) first.requestFocus() else firstAction.requestFocus() }
     }
 
     // More about the game, in the space under it all (see SportsGameExtras), and before it
@@ -1675,11 +1675,12 @@ private fun GamePage(
         }
         Spacer(Modifier.height(6.dp))
     }
-    // "Watch on": the right-hand column. Replays first once it's over, then your channels, each with
-    // what its guide says.
+    // "Watch on": the right-hand column. Once it's over, only the replays and highlights (your
+    // channels have moved on; "From start" still plays it from a channel that keeps catch-up).
+    // Before and during the game, your channels, each with what its guide says.
     val watchOn: @Composable (Modifier) -> Unit = { mod ->
         Column(mod) {
-            if (ev.state == GameState.POST) replaysBlock()
+            if (ev.state == GameState.POST) { replaysBlock(); return@Column }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectionHeader("WATCH ON YOUR CHANNELS", modifier = Modifier.weight(1f))
                 if (regionButton) RegionButton(
@@ -2286,11 +2287,16 @@ internal fun ChannelLine(
                 Box(Modifier.weight(1f).fillMaxHeight().background(teams[0]))
                 Box(Modifier.weight(1f).fillMaxHeight().background(teams[1]))
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(10.dp))
         }
-        ChannelLogo(channel.logo, 22.dp)
+        // Highlights and replays have no logo: the team colours stand in, so no empty space for one.
+        if (teams == null || !channel.logo.isNullOrBlank()) {
+            ChannelLogo(channel.logo, 22.dp)
+            Spacer(Modifier.width(10.dp))
+        }
+        // Long names scroll on the highlighted line so the whole thing can be read.
+        LiveText(channel.name, color = Color.White, size = 14.sp, weight = FontWeight.SemiBold, marquee = focused, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(10.dp))
-        LiveText(channel.name, color = Color.White, size = 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         LiveText(detail, color = SportsLook.Dim, size = 11.sp)
     }
 }
