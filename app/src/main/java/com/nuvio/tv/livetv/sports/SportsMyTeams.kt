@@ -143,7 +143,8 @@ internal fun MyTeamsRows(
     onQuickWatch: (SportsEvent) -> Unit,
     onPick: () -> Unit
 ) {
-    fun playing(ev: SportsEvent) = playingKey != null && matches[ev.id]?.any { it.channel.key == playingKey } == true
+    val playingId = playingEventId(playingKey, page.heroes + page.rows.flatMap { it.events }, matches, now)
+    fun playing(ev: SportsEvent) = ev.id == playingId
     fun channelOf(ev: SportsEvent) = matches[ev.id]?.firstOrNull()?.channel?.name ?: ev.broadcasts.firstOrNull()
     val heroes = page.heroes
     var heroIndex by remember { mutableStateOf(0) }
@@ -494,7 +495,7 @@ private fun CornerBadge(ev: SportsEvent, now: Long, playing: Boolean) {
     val colors = NuvioTheme.colors
     val rec = isRecording(ev)
     when {
-        playing -> SportsBadge("▶ PLAYING", colors.Secondary, colors.OnSecondary)
+        playing -> PlayingBadge()
         rec -> RecBadge()
         ev.state == GameState.LIVE -> SportsBadge("● LIVE", SportsLook.Live, Color.White)
         ev.state == GameState.PRE -> when (dayWord(ev.startMs, now)) {

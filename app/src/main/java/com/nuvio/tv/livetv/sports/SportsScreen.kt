@@ -138,6 +138,18 @@ object SportsLaunch {
     fun watchedReplay(channelKey: String) { lastReplay = channelKey }
     fun takeLastReplay(): String? = lastReplay.also { lastReplay = null }
 
+    /**
+     * The game picked to watch and its channel. One channel often carries several games (a league
+     * channel, a network's whole afternoon), so only the picked game's card says PLAYING.
+     */
+    private var picked by mutableStateOf<Pair<String, String>?>(null)
+    fun pickGame(eventId: String?, channelKey: String?) {
+        picked = if (eventId != null && channelKey != null) channelKey to eventId else null
+    }
+    /** The game picked on [channelKey], or null when that channel wasn't started from a game. */
+    fun pickedGame(channelKey: String?): String? =
+        picked?.takeIf { channelKey != null && it.first == channelKey }?.second
+
     @Volatile private var catchup: Catchup? = null
     fun catchup(c: Catchup) { catchup = c }
     fun takeCatchup(): Catchup? = catchup.also { catchup = null }
@@ -283,6 +295,7 @@ fun SportsScreen(
             return
         }
         SportsLaunch.openedFromSports(ev.id)
+        SportsLaunch.pickGame(ev.id, m.channel.key)
         if (ev.state == GameState.POST) {
             if (viewModel.watchFromStart(ev, m)) onOpenLive()
             else LiveTvNotice.show("${ev.title} has finished, and ${m.channel.name} can't replay it")
@@ -302,7 +315,7 @@ fun SportsScreen(
             !videoOn -> watch(ev, m)
             ev.state == GameState.POST -> watch(ev, m)
             playingKey == m.channel.key -> watch(ev, m)
-            else -> viewModel.playHere(m)
+            else -> { SportsLaunch.pickGame(ev.id, m.channel.key); viewModel.playHere(m) }
         }
     }
     /** Hold OK on a game: its best channel, straight away. */
@@ -310,7 +323,7 @@ fun SportsScreen(
         val m = matches[ev.id]?.firstOrNull()
         when {
             m == null -> LiveTvNotice.show("No channel found for ${ev.title}. Open it and use Fix Channel to pick one.")
-            videoOn && ev.state != GameState.POST -> viewModel.playHere(m)
+            videoOn && ev.state != GameState.POST -> { SportsLaunch.pickGame(ev.id, m.channel.key); viewModel.playHere(m) }
             else -> watch(ev, m)
         }
     }
@@ -330,7 +343,7 @@ fun SportsScreen(
     var backStartedHere by remember { mutableStateOf(false) }
     fun backToFullscreen() {
         val key = playingKey ?: return
-        SportsLaunch.openedFromSports(events.firstOrNull { ev -> matches[ev.id]?.any { it.channel.key == key } == true }?.id)
+        SportsLaunch.openedFromSports(playingEventId(key, events, matches, System.currentTimeMillis()))
         onOpenLive()
     }
     com.nuvio.tv.livetv.ui.FrameMeter("Sports")
@@ -1124,7 +1137,8 @@ private fun GameList(
     leaguesBarReq: FocusRequester? = null,
     onChooseLeagues: () -> Unit = {}
 ) {
-    fun playing(ev: SportsEvent) = playingKey != null && matches[ev.id]?.any { it.channel.key == playingKey } == true
+    val playingId = playingEventId(playingKey, sections.live + sections.upcoming + sections.weekLong + sections.finished, matches, now)
+    fun playing(ev: SportsEvent) = ev.id == playingId
     LazyColumn(
         state = listState,
         // Nothing to the right of the list (the video window isn't a button): Right stays put
@@ -1327,12 +1341,8 @@ private fun NowPlayingPanel(
     playingKey: String?,
     viewModel: SportsViewModel
 ) {
-    val ev = remember(playingKey, events, matches) {
-        if (playingKey == null) null
-        else events.filter { e -> matches[e.id]?.any { it.channel.key == playingKey } == true }
-            .sortedBy { if (it.state == GameState.LIVE) 0 else if (it.state == GameState.PRE) 1 else 2 }
-            .firstOrNull()
-    }
+    val playingId = playingEventId(playingKey, events, matches, now)
+    val ev = remember(playingId, events) { events.firstOrNull { it.id == playingId } }
     val match = ev?.let { e -> matches[e.id]?.firstOrNull { it.channel.key == playingKey } }
     if (ev == null) {
         Box(Modifier.fillMaxWidth().sportsFrame(false, accent = NuvioTheme.colors.Secondary).padding(14.dp)) {
@@ -1694,7 +1704,7 @@ private fun GamePage(
                         SportsChannelRow(
                             m = m,
                             finished = ev.state == GameState.POST,
-                            playing = videoOn && playingKey == m.channel.key,
+                            playing = videoOn && playingKey == m.channel.key && (SportsLaunch.pickedGame(playingKey) ?: ev.id) == ev.id,
                             now = now,
                             eventStartMs = ev.startMs,
                             use24h = use24h,

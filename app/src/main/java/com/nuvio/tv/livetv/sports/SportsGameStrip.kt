@@ -609,7 +609,7 @@ private fun StripStreamCard(
             ChannelLogo(match.channel.logo, 24.dp)
             LiveText(game.event.title, Modifier.weight(1f), size = 10.sp,
                 color = NuvioTheme.colors.TextSecondary)
-            if (playing) SportsBadge("PLAYING", accent, NuvioTheme.colors.OnSecondary)
+            if (playing) PlayingBadge(accent, "PLAYING")
             else if (best) SportsBadge("BEST MATCH", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
         }
         LiveText(match.channel.name, size = 13.sp, maxLines = 2, weight = FontWeight.ExtraBold)

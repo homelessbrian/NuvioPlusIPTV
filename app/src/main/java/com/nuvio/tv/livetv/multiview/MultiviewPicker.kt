@@ -876,7 +876,7 @@ private fun PickerStreamRow(
                 color = NuvioTheme.colors.TextSecondary, size = 11.sp
             )
         }
-        if (playing) SportsBadge("PLAYING", NuvioTheme.colors.Secondary, NuvioTheme.colors.OnSecondary)
+        if (playing) com.nuvio.tv.livetv.sports.PlayingBadge(text = "PLAYING")
         else if (best) SportsBadge("BEST MATCH", MultiviewNeutralTag, NuvioTheme.colors.TextPrimary)
     }
 }

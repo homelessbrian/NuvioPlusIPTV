@@ -496,6 +496,7 @@ fun LiveTvPlayerScreen(
     fun playSportsGame(eventId: String, channelKey: String? = null): Boolean {
         val match = sports.resolve(eventId, channelKey) ?: return false
         com.nuvio.tv.livetv.sports.SportsLaunch.openedFromSports(eventId)
+        com.nuvio.tv.livetv.sports.SportsLaunch.pickGame(eventId, match.channel.key)
         viewModel.preview(match.channel)
         selectedSportsSelection = com.nuvio.tv.livetv.sports.SportsWatchLaunch.SingleSelection(
             match.channel.key, eventId)

@@ -243,6 +243,41 @@ internal fun SportsBadge(text: String, background: Color, color: Color, modifier
     )
 }
 
+/**
+ * PLAYING: an outline in the theme's colour, so it never reads as the solid red LIVE pill.
+ * Same height as the other badges (the border takes the place of some padding).
+ */
+@Composable
+internal fun PlayingBadge(color: Color = NuvioTheme.colors.Secondary, text: String = "▶ PLAYING", modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(5.dp)
+    LiveText(
+        text,
+        modifier = modifier.clip(shape).border(1.dp, color, shape).padding(horizontal = 5.dp, vertical = 0.5.dp),
+        color = color, size = 9.sp, weight = FontWeight.Black
+    )
+}
+
+/**
+ * The game the playing channel is for, out of [events]: the one picked to watch, or (started some
+ * other way) the one on that channel that's live, else the nearest in time. One channel often
+ * carries several games, and only one of them should say PLAYING.
+ */
+internal fun playingEventId(
+    playingKey: String?,
+    events: List<SportsEvent>,
+    matches: Map<String, List<ChannelMatch>>,
+    now: Long
+): String? {
+    if (playingKey == null) return null
+    SportsLaunch.pickedGame(playingKey)?.let { return it }
+    return events.asSequence()
+        .filter { e -> matches[e.id]?.any { it.channel.key == playingKey } == true }
+        .minWithOrNull(compareBy<SportsEvent>(
+            { if (it.state == GameState.LIVE) 0 else if (it.state == GameState.PRE) 1 else 2 },
+            { kotlin.math.abs(it.startMs - now) }
+        ))?.id
+}
+
 /** A score: fixed-width digits, dimmed when behind, and a short yellow flash when it changes. */
 @Composable
 internal fun ScoreLabel(score: String, dim: Boolean, size: TextUnit) {
@@ -312,7 +347,7 @@ internal fun TeamBand(
 internal fun StateBadge(ev: SportsEvent, playing: Boolean, use24h: Boolean) {
     val colors = NuvioTheme.colors
     when {
-        playing -> SportsBadge("▶ PLAYING", colors.Secondary, colors.OnSecondary)
+        playing -> PlayingBadge()
         ev.state == GameState.LIVE -> SportsBadge("● LIVE", SportsLook.Live, Color.White)
         ev.state == GameState.POST -> SportsBadge("FINAL", Color.White.copy(alpha = 0.12f), Color.White)
         ev.state == GameState.OFF -> SportsBadge((ev.status ?: "POSTPONED").uppercase(), Color(0x33FF8A80), Color(0xFFFF8A80))
@@ -914,7 +949,7 @@ internal fun SportsChannelRow(
             }
             Spacer(Modifier.width(8.dp))
             when {
-                playing -> SportsBadge("▶ PLAYING", accent, NuvioTheme.colors.OnSecondary)
+                playing -> PlayingBadge(accent)
                 // The guide line already says whether it's on: the badge only flags a guess.
                 m.sure && withGuide -> Unit
                 m.sure -> SportsBadge("SHOWING IT", accent, NuvioTheme.colors.OnSecondary)
