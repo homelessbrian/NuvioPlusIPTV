@@ -3,6 +3,7 @@
 package com.nuvio.tv.livetv.record
 
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
