@@ -172,6 +172,82 @@ class SmbFolder(val config: NetworkFolderConfig) : Closeable {
         expected
     }
 
+    /**
+     * Writes all of [local] into [rel] starting at [offset] (making [rel] if it isn't there),
+     * then checks [rel] reaches at least that far. Writing at a set place means a try that broke
+     * part way is simply written over by the next one. Returns the bytes written.
+     */
+    fun writeAt(rel: String, offset: Long, local: File): Long = call { d ->
+        val expected = local.length()
+        d.openFile(
+            p(rel),
+            EnumSet.of(AccessMask.GENERIC_WRITE, AccessMask.GENERIC_READ),
+            EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
+            SMB2ShareAccess.ALL,
+            SMB2CreateDisposition.FILE_OPEN_IF,
+            EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE)
+        ).use { f ->
+            local.inputStream().use { input ->
+                val buf = ByteArray(BUFFER)
+                var at = offset
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    var off = 0
+                    while (off < n) {
+                        val w = f.write(buf, at, off, n - off).toInt()
+                        if (w <= 0) throw java.io.IOException("the network folder stopped taking data")
+                        off += w; at += w
+                    }
+                }
+            }
+            val got = f.fileInformation.standardInformation.endOfFile
+            if (got < offset + expected) throw java.io.IOException("the network folder kept only $got of ${offset + expected} bytes")
+        }
+        expected
+    }
+
+    /** Cuts (or grows) [rel] to exactly [length] bytes. */
+    fun setLength(rel: String, length: Long) = call { d ->
+        d.openFile(
+            p(rel),
+            EnumSet.of(AccessMask.GENERIC_WRITE, AccessMask.GENERIC_READ),
+            EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
+            SMB2ShareAccess.ALL,
+            SMB2CreateDisposition.FILE_OPEN,
+            EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE)
+        ).use { f -> f.setLength(length) }
+    }
+
+    /** Renames (or moves, within the shared folder) [from] to [to]; fails if [to] is there. */
+    fun rename(from: String, to: String) = call { d ->
+        d.openFile(
+            p(from),
+            EnumSet.of(AccessMask.DELETE, AccessMask.GENERIC_READ),
+            EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
+            SMB2ShareAccess.ALL,
+            SMB2CreateDisposition.FILE_OPEN,
+            EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE)
+        ).use { f -> f.rename(p(to), false) }
+    }
+
+    /** True if the file [rel] is there. */
+    fun fileExists(rel: String): Boolean = call { d -> fileThere(d, p(rel)) }
+
+    /** The names of the folders in the folder [rel]; empty if it isn't there. */
+    fun listFolders(rel: String): List<String> = call { d ->
+        if (!folderThere(d, p(rel))) emptyList()
+        else d.list(p(rel))
+            .filter { it.fileName != "." && it.fileName != ".." }
+            .filter { (it.fileAttributes and FileAttributes.FILE_ATTRIBUTE_DIRECTORY.value) != 0L }
+            .map { it.fileName }
+    }
+
+    /** The folder [rel], only if it's empty (a show's folder once its last episode is deleted). */
+    fun deleteFolderIfEmpty(rel: String) = call { d ->
+        if (folderThere(d, p(rel)) && d.list(p(rel)).none { it.fileName != "." && it.fileName != ".." }) d.rmdir(p(rel), false)
+    }
+
     /** Writes [bytes] to [rel], replacing what's there. */
     fun writeBytes(rel: String, bytes: ByteArray) = call { d ->
         d.openFile(

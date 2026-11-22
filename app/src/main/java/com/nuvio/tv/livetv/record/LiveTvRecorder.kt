@@ -55,8 +55,11 @@ class LiveTvRecorder @Inject constructor(
     private val forced = ConcurrentHashMap.newKeySet<String>()
     /** Why a recording was stopped by the app (storage ran out, network folder full…), kept for its end. */
     private val stopReasons = ConcurrentHashMap<String, String>()
-    /** Copies network folder recordings across as they're made. */
-    private val network = NetworkRecordings(context, scope)
+    /**
+     * Joins each recording into one file per show as it records, copies network folder
+     * recordings across, and keeps other TVs' recordings on the network folder in the list.
+     */
+    private val recordingFiles = RecordingFiles(context, scope) { load() }
     /** Catch-up downloads going on: recording id -> the provider (playlist) it's from. */
     private val catchupSources = ConcurrentHashMap<String, String>()
 
@@ -81,9 +84,14 @@ class LiveTvRecorder @Inject constructor(
         scope.launch {
             settings = runCatching { prefs.currentSettings() }.getOrDefault(settings)
             load()
-            // Network recordings with pieces still waiting here (the app closed mid-copy).
-            network.kick()
             prefs.settings.collect { settings = it }
+        }
+        // Other TVs' recordings on the network folder: now, then every few minutes.
+        scope.launch {
+            while (true) {
+                runCatching { recordingFiles.syncLibrary() }
+                delay(LIBRARY_SYNC_MS)
+            }
         }
         // A drive plugged in or taken out: its recordings appear or go from the list.
         runCatching {
@@ -101,9 +109,14 @@ class LiveTvRecorder @Inject constructor(
         }
     }
 
-    /** The recording running on [channelKey], if any. */
+    /** The recording running on [channelKey] on this TV, if any. */
     fun activeFor(channelKey: String): LiveTvRecording? =
-        _recordings.value.firstOrNull { it.channelKey == channelKey && it.isRecording }
+        _recordings.value.firstOrNull { it.channelKey == channelKey && it.isRecording && !it.fromOtherTv }
+
+    /** Checks the network folder for other TVs' recordings now (the Recordings page opened). */
+    fun refreshLibrary() {
+        scope.launch { runCatching { recordingFiles.syncLibrary() } }
+    }
 
     fun playlistFile(rec: LiveTvRecording): File = File(rec.dir, "index.m3u8")
 
@@ -166,6 +179,8 @@ class LiveTvRecorder @Inject constructor(
             // A USB drive that's been idle for hours can be slow to wake: a few tries.
             var tries = 0
             while (!mkdirs() && !exists() && ++tries < 4) runCatching { Thread.sleep(250) }
+            // Joined into one file per show as it records (if its pieces allow).
+            JoinIndex.start(this)
         }
         val rec = LiveTvRecording(
             id = id,
@@ -196,6 +211,7 @@ class LiveTvRecorder @Inject constructor(
         update(rec)
         LiveTvRecordingService.start(context)
         if (finite) channel.sourceId?.let { catchupSources[id] = it }
+        recordingFiles.track(dir)
         jobs[id] = scope.launch {
             if (toNetwork) launch { checkNetworkFolder(title) }
             // Accounts with one connection can refuse a new one while the old is still closing.
@@ -205,8 +221,8 @@ class LiveTvRecorder @Inject constructor(
                     stalkerStream?.let { ref -> { stalker.prepare(channel.sourceId, ref) } })
             } finally {
                 catchupSources.remove(id)
-                // Its last pieces, playlists and details go across now.
-                if (toNetwork) network.kick()
+                // Its last pieces are joined (and go across) now, and the file gets its name.
+                recordingFiles.track(dir)
             }
         }
         com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording \"$title\" on ${channel.name} until ${java.util.Date(stopAtMs)}")
@@ -231,6 +247,10 @@ class LiveTvRecorder @Inject constructor(
 
     /** Stops a recording now (what's recorded is kept). */
     fun stop(id: String) {
+        if (_recordings.value.firstOrNull { it.id == id }?.fromOtherTv == true) {
+            LiveTvNotice.show("That's being recorded on another TV: stop it there")
+            return
+        }
         stopRequested += id
         val job = jobs[id]
         job?.cancel()
@@ -257,6 +277,7 @@ class LiveTvRecorder @Inject constructor(
         forced += id
         stopReasons.remove(id)
         save(done); update(done)
+        recordingFiles.track(dir)
         jobs.remove(id)?.cancel()
         catchupSources.remove(id)
         stopRequested.remove(id)
@@ -266,18 +287,26 @@ class LiveTvRecorder @Inject constructor(
 
     /** Deletes a recording (stopping it first if it's still going). */
     fun delete(id: String) {
-        stop(id)
+        val target = _recordings.value.firstOrNull { it.id == id }
+        if (target?.fromOtherTv == true && target.isRecording) {
+            LiveTvNotice.show("That's still being recorded on another TV: delete it once it's finished")
+            return
+        }
+        if (target?.fromOtherTv != true) stop(id)
         RecordingResume.clear(context, id)
         val rec = _recordings.value.firstOrNull { it.id == id }
         _recordings.value = _recordings.value.filterNot { it.id == id }
         rec?.let { r -> scope.launch {
             val d = File(r.dir)
+            val net = NetworkFolderStore.isNetworkDir(d)
+            // What it has on the network folder, read before its folder here goes.
+            val remoteFiles = if (net) recordingFiles.remoteFilesOf(d) else emptyList()
+            recordingFiles.untrack(d)
             runCatching { d.deleteRecursively() }
-            if (NetworkFolderStore.isNetworkDir(d)) {
-                network.forget(d)
+            if (net) {
                 // A copy that was under way finishes first.
                 delay(2_000)
-                if (!network.deleteRemote(r.id)) LiveTvNotice.show(
+                if (!recordingFiles.deleteRemote(r.id, remoteFiles)) LiveTvNotice.show(
                     "\"${r.title}\" was deleted here, but the network folder couldn't be reached to delete it there. Delete its folder (${r.id}) on the network folder yourself"
                 )
             }
@@ -359,11 +388,13 @@ class LiveTvRecorder @Inject constructor(
     private fun moveOne(rec: LiveTvRecording, target: RecordingStorage.Choice, onCopied: (Long) -> Unit): Boolean {
         val src = File(rec.dir)
         if (!src.isDirectory) return false
+        // Its pieces are still being joined (or copied across) just after it finished.
+        if (recordingFiles.isBusy(src)) throw IllegalStateException("\"${rec.title}\" is still being saved. Try again in a minute")
         // To or from the network folder: copied across (or down) and checked, then removed from where it was.
         val fromNetwork = NetworkFolderStore.isNetworkDir(src)
         if (target.id == NetworkFolderStore.STORAGE_ID || fromNetwork) {
-            if (fromNetwork && network.waitingBytes(src) > 0) throw IllegalStateException("\"${rec.title}\" is still being copied to the network folder. Try again in a minute")
-            val dst = if (target.id == NetworkFolderStore.STORAGE_ID) network.moveIn(src, onCopied) else network.moveOut(src, target.dir, onCopied)
+            if (fromNetwork && recordingFiles.waitingBytes(src) > 0) throw IllegalStateException("\"${rec.title}\" is still being copied to the network folder. Try again in a minute")
+            val dst = if (target.id == NetworkFolderStore.STORAGE_ID) recordingFiles.moveIn(src, onCopied) else recordingFiles.moveOut(src, target.dir, onCopied)
             update(rec.copy(dir = dst.absolutePath))
             runCatching { src.deleteRecursively() }
             return true
@@ -625,9 +656,9 @@ class LiveTvRecorder @Inject constructor(
         save(r); update(r)
         val dir = File(r.dir)
         if (NetworkFolderStore.isNetworkDir(dir)) {
-            network.kick()
+            recordingFiles.kick()
             // Pieces piling up here because the network folder isn't taking them: stop cleanly.
-            network.stopReason(dir)?.let { why ->
+            recordingFiles.stopReason(dir)?.let { why ->
                 if (stopReasons.putIfAbsent(r.id, why) == null) {
                     stopRequested += r.id
                     LiveTvNotice.show("\"${r.title}\": $why")
@@ -840,7 +871,11 @@ class LiveTvRecorder @Inject constructor(
             NetworkFolderStore.root(context)
         folders.distinctBy { it.absolutePath }.flatMap { root -> root.listFiles()?.filter { it.isDirectory }.orEmpty() }.forEach { d ->
             val info = File(d, "info.json")
-            val rec = runCatching { LiveTvRecording.fromJson(JSONObject(info.readText()), d.absolutePath) }.getOrNull() ?: return@forEach
+            val read = runCatching { LiveTvRecording.fromJson(JSONObject(info.readText()), d.absolutePath) }.getOrNull() ?: return@forEach
+            // Another TV's recording on the network folder: shown as it is there, never changed here.
+            if (NetworkFolderStore.isNetworkDir(d) && NetworkMarker.isMirror(d)) { out += read.copy(fromOtherTv = true); return@forEach }
+            val rec = read
+            if (!jobs.containsKey(rec.id) && recordingFiles.needsWork(d)) recordingFiles.track(d)
             if (rec.isRecording && !jobs.containsKey(rec.id)) {
                 val playlist = playlistFileOf(d)
                 val fixed = if (playlist.exists()) {
@@ -852,7 +887,8 @@ class LiveTvRecorder @Inject constructor(
                 out += fixed
             } else out += rec
         }
-        val running = _recordings.value.filter { it.isRecording }
+        // This TV's recordings under way (another TV's come from the folder as they are now).
+        val running = _recordings.value.filter { it.isRecording && !it.fromOtherTv }
         _recordings.value = (out.filterNot { o -> running.any { it.id == o.id } } + running).sortedByDescending { it.startedAtMs }
     }
 
@@ -871,6 +907,8 @@ class LiveTvRecorder @Inject constructor(
         const val TAG = "LiveTvRecorder"
         /** Below this much free space, recording stops (or the oldest recordings make room). */
         const val MIN_FREE = 500L * 1024 * 1024
+        /** How often other TVs' recordings on the network folder are checked for. */
+        const val LIBRARY_SYNC_MS = 3L * 60_000
         /** Network recordings: the least free room on this device to start or keep going. */
         const val NETWORK_MIN_FREE = 100L * 1024 * 1024
         /** Below this much free on the network folder, a new recording warns it may stop early. */

@@ -91,6 +91,9 @@ class RecordingsViewModel @Inject constructor(
     /** How far a move between drives has got (null when nothing is moving). */
     val move = recorder.move
 
+    // Other TVs' recordings on the network folder show up as soon as the page opens.
+    init { recorder.refreshLibrary() }
+
     /** New Recording's channel list: favorites, then channels watched recently. */
     val pickerChannels: kotlinx.coroutines.flow.StateFlow<List<com.nuvio.tv.livetv.model.LiveChannel>> =
         kotlinx.coroutines.flow.combine(liveRepository.channels, livePrefs.userState) { all, user ->
@@ -640,7 +643,8 @@ fun RecordingsScreen(
                 add((if (resumeAt != null) "Resume" else "Play") to { menuFor = null; onPlay(viewModel.playUrl(rec), rec.title, posters[rec.id], rec.id, false) })
                 if (resumeAt != null) add("Play from Beginning" to { menuFor = null; onPlay(viewModel.playUrl(rec), rec.title, posters[rec.id], rec.id, true) })
             }
-            if (rec.isRecording) add("Stop Recording" to { menuFor = null; viewModel.stop(rec) })
+            // Another TV's recording is stopped on that TV.
+            if (rec.isRecording && !rec.fromOtherTv) add("Stop Recording" to { menuFor = null; viewModel.stop(rec) })
             if (!rec.isRecording && rec.status != RecordingStatus.FAILED) {
                 if (viewModel.isWatched(rec)) add("Mark as Unwatched" to { menuFor = null; viewModel.markUnwatched(listOf(rec)); resumeTick++ })
                 else add("Mark as Watched" to { menuFor = null; viewModel.markWatched(listOf(rec)); resumeTick++ })
@@ -1372,8 +1376,10 @@ private fun RecordingInfoDialog(rec: LiveTvRecording, savedOn: String, playlist:
         add("Size" to if (rec.sizeBytes > 0) sizeLabel(rec.sizeBytes) + (if (rec.isRecording) " so far" else "") else "—")
         add("Recorded" to when {
             rec.isRecording && rec.fromCatchup -> "Saving from catch-up now"
+            rec.isRecording && rec.fromOtherTv -> "Recording now, on another TV"
             rec.isRecording -> "Recording now"
             rec.fromCatchup -> "From catch-up"
+            rec.fromOtherTv -> "Live, as it aired, on another TV"
             else -> "Live, as it aired"
         })
         add("Saved on" to savedOn)

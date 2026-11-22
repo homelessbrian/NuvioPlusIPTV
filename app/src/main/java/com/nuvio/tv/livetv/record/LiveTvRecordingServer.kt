@@ -66,6 +66,8 @@ object LiveTvRecordingServer {
         val base = dirs[path.substringBefore('/')] ?: return@use
         val file = File(base, path.substringAfter('/', ""))
         val out = sock.getOutputStream()
+        // Another TV's recording that's still being made: its newest playlist from the network folder.
+        if (file.extension.equals("m3u8", true) && file.parentFile == base) RecordingFiles.current?.refreshMirror(base)
         // A recording that has only just started: its playlist appears with the first piece, a
         // few seconds in. Wait for it rather than answering "not found" straight away.
         if (file.extension.equals("m3u8", true) && !file.isFile) {
@@ -76,10 +78,15 @@ object LiveTvRecordingServer {
             out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
             return@use
         }
-        // A network recording's piece that's already been copied across: from the network folder.
+        // A piece that's been joined into the show's file, or copied to the network folder.
         if (!file.isFile && !file.extension.equals("m3u8", true) && file.parentFile == base) {
-            NetworkFolderStore.remotePiece(base, file.name)?.let { (folder, rel) ->
-                serveRemote(folder, rel, file.extension, method, rangeStart, rangeEnd, out)
+            val source = try { RecordingPieces.find(base, file.name) } catch (e: Exception) {
+                Log.w(TAG, "piece ${file.name}: ${e.message}")
+                out.write("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                return@use
+            }
+            if (source != null) {
+                servePiece(source, file.extension, method, rangeStart, rangeEnd, out)
                 return@use
             }
         }
@@ -123,10 +130,15 @@ object LiveTvRecordingServer {
         head.append("Connection: close\r\n\r\n")
         out.write(head.toString().toByteArray())
         if (method.equals("HEAD", ignoreCase = true)) return@use
-        // Copied across to the network folder (and removed here) just now: from there instead.
+        // Joined or copied across (and removed here) just now: from there instead.
         val raf = try { RandomAccessFile(file, "r") } catch (e: java.io.FileNotFoundException) {
-            val remote = NetworkFolderStore.remotePiece(base, file.name) ?: throw e
-            remote.first.read(remote.second, start, count, out)
+            when (val source = RecordingPieces.find(base, file.name) ?: throw e) {
+                is RecordingPieces.Source.Local -> RandomAccessFile(source.file, "r").use { r ->
+                    r.seek(source.offset + start)
+                    copy(r, count, out)
+                }
+                is RecordingPieces.Source.Remote -> source.folder.read(source.path, source.offset + start, count, out)
+            }
             out.flush()
             return@use
         }
@@ -151,20 +163,23 @@ object LiveTvRecordingServer {
         else -> "application/octet-stream"
     }
 
-    /** Serves a piece from the network folder (with byte ranges, like a file here). */
-    private fun serveRemote(
-        folder: SmbFolder, rel: String, extension: String, method: String,
+    private fun copy(raf: RandomAccessFile, count: Long, out: java.io.OutputStream) {
+        val buf = ByteArray(64 * 1024)
+        var left = count
+        while (left > 0) {
+            val n = raf.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+            if (n < 0) break
+            out.write(buf, 0, n)
+            left -= n
+        }
+    }
+
+    /** Serves a piece that's part of a bigger file, here or on the network folder (with byte ranges, like a file of its own). */
+    private fun servePiece(
+        source: RecordingPieces.Source, extension: String, method: String,
         rangeStart: Long, rangeEnd: Long, out: java.io.OutputStream
     ) {
-        val length = try { folder.size(rel) } catch (e: Exception) {
-            Log.w(TAG, "network folder: ${SmbFolder.describe(e, folder.config)}")
-            out.write("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
-            return
-        }
-        if (length == null) {
-            out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
-            return
-        }
+        val length = source.length
         val start = if (rangeStart >= 0) rangeStart.coerceAtMost(length) else 0L
         val end = if (rangeEnd >= 0) rangeEnd.coerceAtMost(length - 1) else length - 1
         val count = (end - start + 1).coerceAtLeast(0)
@@ -175,8 +190,23 @@ object LiveTvRecordingServer {
         head.append("Accept-Ranges: bytes\r\n")
         if (rangeStart >= 0) head.append("Content-Range: bytes ").append(start).append('-').append(end).append('/').append(length).append("\r\n")
         head.append("Connection: close\r\n\r\n")
-        out.write(head.toString().toByteArray())
-        if (!method.equals("HEAD", ignoreCase = true) && count > 0) folder.read(rel, start, count, out)
+        // Opened before the answer starts, so a file that's gone gives an error the player retries.
+        when (source) {
+            is RecordingPieces.Source.Local -> {
+                val raf = try { RandomAccessFile(source.file, "r") } catch (e: java.io.IOException) {
+                    out.write("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                    return
+                }
+                raf.use { r ->
+                    out.write(head.toString().toByteArray())
+                    if (!method.equals("HEAD", ignoreCase = true) && count > 0) { r.seek(source.offset + start); copy(r, count, out) }
+                }
+            }
+            is RecordingPieces.Source.Remote -> {
+                out.write(head.toString().toByteArray())
+                if (!method.equals("HEAD", ignoreCase = true) && count > 0) source.folder.read(source.path, source.offset + start, count, out)
+            }
+        }
         out.flush()
     }
 }

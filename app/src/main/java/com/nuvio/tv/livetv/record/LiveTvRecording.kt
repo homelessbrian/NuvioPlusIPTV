@@ -37,7 +37,9 @@ data class LiveTvRecording(
     /** Downloaded from the provider's catch-up (rather than recorded as it aired). */
     val fromCatchup: Boolean = false,
     /** Catch-up: how long the whole download should be (show plus extra time), in seconds; 0 = not known. */
-    val expectedSec: Double = 0.0
+    val expectedSec: Double = 0.0,
+    /** Recorded by another TV that uses the same network folder (shown here, not saved by this TV). */
+    val fromOtherTv: Boolean = false
 ) {
     val isRecording: Boolean get() = status == RecordingStatus.RECORDING
 
