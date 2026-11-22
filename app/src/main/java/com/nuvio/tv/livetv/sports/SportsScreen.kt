@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusRequester
@@ -1623,7 +1624,7 @@ private fun GamePage(
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
             ) {
                 itemsIndexed(replays, key = { _, m -> m.channel.key }) { i, m ->
-                    ChannelLine(m.channel, m.how, modifier = when {
+                    ChannelLine(m.channel, m.how, teams = sides.takeIf { it.size == 2 }?.map { bandColor(teamColor(it.team)) }, modifier = when {
                         i == 0 -> Modifier.focusRequester(firstReplay)
                         m.channel.key == backReplayKey -> Modifier.focusRequester(backReplay)
                         else -> Modifier
@@ -1788,6 +1789,7 @@ private fun GamePage(
                     SportsAction(
                         if (following) "★  ${side.team.name}" else "☆  ${side.team.name}",
                         modifier = m, selected = following,
+                        tint = bandColor(teamColor(side.team)),
                         onClick = { viewModel.repo.toggleTeam(side.team) }
                     )
                 }
@@ -1827,7 +1829,7 @@ private fun GamePage(
                     plays.isNotEmpty() -> {
                         LiveText("LATEST SCORING", color = SportsLook.Dim, size = 9.sp, weight = FontWeight.Black)
                         Spacer(Modifier.height(2.dp))
-                        plays.takeLast(4).reversed().forEach { p -> PlayRow(p, sport) }
+                        plays.takeLast(4).reversed().forEach { p -> PlayRow(p, sport, sides) }
                     }
                     ev.state == GameState.PRE -> {
                         LiveText(
@@ -1887,6 +1889,9 @@ private fun GamePage(
         runCatching { stripReq.requestFocus() }
         onStripFocused()
     }
+    // Something playing: the two teams' colours wash across the top of the page and fade into it.
+    Box(Modifier.fillMaxSize()) {
+    if (showVideo && sides.size == 2) TeamColourWash(sides, Modifier.fillMaxWidth().height(TEAM_WASH_HEIGHT))
     Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 14.dp)) {
         if (others.size > 1) {
             GamesStrip(others, ev.id, settings.hideScores, use24h, openReq = stripReq, onOpen = onOpenFromStrip)
@@ -1900,7 +1905,7 @@ private fun GamePage(
                     Row(Modifier.fillMaxWidth()) {
                         videoSlot(Modifier.height(GAME_VIDEO_HEIGHT).aspectRatio(16f / 9f))
                         Spacer(Modifier.width(12.dp))
-                        GameScoreColumn(ev, sides, settings.hideScores, now, use24h, Modifier.weight(1f))
+                        GameScoreColumn(ev, sides, settings.hideScores, now, use24h, sport, Modifier.weight(1f).height(GAME_VIDEO_HEIGHT))
                     }
                 } else scoreboard()
                 Spacer(Modifier.height(8.dp))
@@ -1914,6 +1919,7 @@ private fun GamePage(
             watchOn(Modifier.width(WATCH_WIDTH).fillMaxHeight().padding(bottom = 14.dp))
         }
     }
+    }
 }
 
 /** The video's height on a game page (16:9), leaving room for the tabs under it. */
@@ -1922,29 +1928,123 @@ private val GAME_VIDEO_HEIGHT = 216.dp
 /** The game page's "Watch on" column. */
 private val WATCH_WIDTH = 360.dp
 
-/** Beside the video on a game page: the score (or the time), and the clock. */
+/** How far down the page the teams' colours reach while something plays. */
+private val TEAM_WASH_HEIGHT = 300.dp
+
+/** The two teams' colours across the top of a game page, one each side, fading out downwards. */
 @Composable
-private fun GameScoreColumn(ev: SportsEvent, sides: List<Side>, hideScores: Boolean, now: Long, use24h: Boolean, modifier: Modifier) {
+private fun TeamColourWash(sides: List<Side>, modifier: Modifier) {
+    val a = bandColor(teamColor(sides[0].team))
+    val b = bandColor(teamColor(sides[1].team))
+    Box(
+        modifier
+            .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(0f to Color.Black, 0.45f to Color.Black.copy(alpha = 0.7f), 1f to Color.Transparent),
+                    blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
+                )
+            }
+            .background(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    0f to a.copy(alpha = 0.78f), 0.38f to a.copy(alpha = 0.30f),
+                    0.62f to b.copy(alpha = 0.30f), 1f to b.copy(alpha = 0.78f)
+                )
+            )
+    )
+}
+
+/**
+ * Beside the video on a game page: the two teams big (logo, name, record, score; the beaten side
+ * dimmed), the state (LIVE clock, FINAL), and the score by period. Too narrow for that: the
+ * small version (abbreviations and scores).
+ */
+@Composable
+private fun GameScoreColumn(ev: SportsEvent, sides: List<Side>, hideScores: Boolean, now: Long, use24h: Boolean, sport: Sport, modifier: Modifier) {
     val showScore = ev.hasScore && !hideScores && ev.state != GameState.PRE
-    Column(modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (sides.size == 2) {
+    val live = ev.state == GameState.LIVE
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val wide = maxWidth >= 240.dp && sides.size == 2
+        if (!wide) {
+            Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (sides.size == 2) {
+                    sides.forEach { s ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TeamLogo(s.team, 22.dp)
+                            Spacer(Modifier.width(6.dp))
+                            LiveText(s.team.abbr.ifBlank { s.team.name }, color = Color.White, size = 13.sp, weight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                            if (showScore) LiveText(s.score.orEmpty(), color = Color.White, size = 18.sp, weight = FontWeight.Black)
+                        }
+                    }
+                } else {
+                    LiveText(ev.title, color = Color.White, size = 13.sp, weight = FontWeight.ExtraBold, maxLines = 3)
+                }
+                LiveText(
+                    (if (live) "● " else "") + cornerStatus(ev, use24h, hideScores),
+                    color = if (live) SportsLook.Live else SportsLook.Dim, size = 11.sp, weight = FontWeight.Black, maxLines = 2
+                )
+                if (live) GameProgress(progressOf(ev, now))
+            }
+            return@BoxWithConstraints
+        }
+        val lead = if (showScore) sides.maxByOrNull { it.score?.toDoubleOrNull() ?: 0.0 } else null
+        val tied = showScore && sides[0].score == sides[1].score
+        val periods = showScore && sides.any { it.periods.isNotEmpty() } && (sport != Sport.RUGBY || periodsAddUp(sides))
+        Column(Modifier.fillMaxSize().padding(start = 6.dp, end = 4.dp), verticalArrangement = Arrangement.Center) {
             sides.forEach { s ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TeamLogo(s.team, 22.dp)
-                    Spacer(Modifier.width(6.dp))
-                    LiveText(s.team.abbr.ifBlank { s.team.name }, color = Color.White, size = 13.sp, weight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
-                    if (showScore) LiveText(s.score.orEmpty(), color = Color.White, size = 18.sp, weight = FontWeight.Black)
+                val dim = showScore && !tied && s != lead && ev.state == GameState.POST
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 5.dp).graphicsLayer { alpha = if (dim) 0.62f else 1f },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TeamLogo(s.team, 44.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        LiveText(s.team.name, color = Color.White, size = 19.sp, weight = FontWeight.Black, maxLines = 1)
+                        LiveText(
+                            listOfNotNull(s.team.fullName.takeIf { it.isNotBlank() && it != s.team.name }, s.record?.takeIf { !hideScores }).joinToString(" · "),
+                            color = Color.White.copy(alpha = 0.72f), size = 11.sp, maxLines = 1
+                        )
+                    }
+                    if (showScore) LiveText(s.score.orEmpty(), color = Color.White, size = 40.sp, weight = FontWeight.Black)
                 }
             }
-        } else {
-            LiveText(ev.title, color = Color.White, size = 13.sp, weight = FontWeight.ExtraBold, maxLines = 3)
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LiveText(
+                    (if (live) "● " else "") + cornerStatus(ev, use24h, hideScores).uppercase(),
+                    color = Color.White, size = 10.sp, weight = FontWeight.Black, maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(5.dp))
+                        .background(if (live) SportsLook.Live else Color.Black.copy(alpha = 0.42f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+                if (periods) {
+                    Spacer(Modifier.width(10.dp))
+                    OneLine(periodLine(sides, sport), Color.White.copy(alpha = 0.8f), 11.sp, FontWeight.SemiBold, Modifier.weight(1f))
+                }
+            }
+            if (live) {
+                Spacer(Modifier.height(6.dp))
+                GameProgress(progressOf(ev, now))
+            }
         }
-        val live = ev.state == GameState.LIVE
-        LiveText(
-            (if (live) "● " else "") + cornerStatus(ev, use24h, hideScores),
-            color = if (live) SportsLook.Live else SportsLook.Dim, size = 11.sp, weight = FontWeight.Black, maxLines = 2
-        )
-        if (live) GameProgress(progressOf(ev, now))
+    }
+}
+
+/** "Q1 14–3 · Q2 20–7 · Q3 8–11 · Q4 3–6": the score in each period, in the sport's team order. */
+private fun periodLine(sides: List<Side>, sport: Sport): String {
+    val n = sides.maxOf { it.periods.size }
+    val prefix = when (sport) {
+        Sport.AMERICAN_FOOTBALL -> "Q"
+        Sport.BASKETBALL -> "Q"
+        Sport.HOCKEY -> "P"
+        Sport.FOOTBALL, Sport.RUGBY -> "H"
+        else -> ""
+    }
+    return (0 until n).joinToString(" · ") { i ->
+        val label = if (prefix.isEmpty()) "${i + 1}" else if (prefix == "Q" && i >= 4) "OT" else if (prefix == "P" && i >= 3) "OT" else "$prefix${i + 1}"
+        "$label ${sides[0].periods.getOrNull(i) ?: "–"}–${sides[1].periods.getOrNull(i) ?: "–"}"
     }
 }
 
@@ -2002,17 +2102,36 @@ private fun StandingRow(st: Standing) {
 }
 
 @Composable
-private fun PlayRow(p: ScoringPlay, sport: Sport) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(SportsLook.Divider))
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        LiveText(p.clock, color = SportsLook.Dim, size = 10.sp, weight = FontWeight.Bold, modifier = Modifier.width(64.dp))
-        p.teamAbbr?.let { LiveText("$it  ", size = 11.sp, weight = FontWeight.Black) }
+private fun PlayRow(p: ScoringPlay, sport: Sport, sides: List<Side> = emptyList()) {
+    // The scoring team (by its abbreviation): its colour along the line, its logo, its number bold.
+    val scorer = p.teamAbbr?.let { ab -> sides.firstOrNull { it.team.abbr.equals(ab, ignoreCase = true) } }
+    val c = scorer?.let { bandColor(teamColor(it.team)) }
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp).height(30.dp).clip(RoundedCornerShape(7.dp))
+            .then(
+                if (c != null) Modifier.background(androidx.compose.ui.graphics.Brush.horizontalGradient(0f to c.copy(alpha = 0.55f), 0.45f to c.copy(alpha = 0.12f), 0.8f to Color.Transparent))
+                else Modifier
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(c ?: SportsLook.Divider))
+        Spacer(Modifier.width(8.dp))
+        LiveText(p.clock, color = Color.White.copy(alpha = 0.75f), size = 10.sp, weight = FontWeight.Bold, modifier = Modifier.width(62.dp))
+        if (scorer != null) {
+            TeamLogo(scorer.team, 18.dp)
+            Spacer(Modifier.width(6.dp))
+        } else p.teamAbbr?.let { LiveText("$it  ", size = 11.sp, weight = FontWeight.Black) }
         OneLine(p.text, Color.White, 11.sp, modifier = Modifier.weight(1f))
         if (p.awayScore != null && p.homeScore != null) {
-            LiveText(
-                if (sport.homeFirst) "  ${p.homeScore} – ${p.awayScore}" else "  ${p.awayScore} – ${p.homeScore}",
-                size = 11.sp, weight = FontWeight.Black
-            )
+            val first = if (sport.homeFirst) p.homeScore else p.awayScore
+            val second = if (sport.homeFirst) p.awayScore else p.homeScore
+            val firstScored = scorer != null && scorer.home == sport.homeFirst
+            val secondScored = scorer != null && !firstScored
+            Spacer(Modifier.width(8.dp))
+            LiveText(first, color = if (secondScored) SportsLook.Dim else Color.White, size = 12.sp, weight = if (firstScored) FontWeight.Black else FontWeight.SemiBold)
+            LiveText(" – ", color = SportsLook.Dim, size = 12.sp)
+            LiveText(second, color = if (firstScored) SportsLook.Dim else Color.White, size = 12.sp, weight = if (secondScored) FontWeight.Black else FontWeight.SemiBold)
+            Spacer(Modifier.width(8.dp))
         }
     }
 }
@@ -2115,7 +2234,14 @@ private fun FixChannelDialog(ev: SportsEvent, matches: List<ChannelMatch>, hideS
 
 /** A channel in a Sports pop-up: logo, name, and a note on the right; white when highlighted. */
 @Composable
-internal fun ChannelLine(channel: LiveChannel, detail: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun ChannelLine(
+    channel: LiveChannel,
+    detail: String,
+    modifier: Modifier = Modifier,
+    /** A game's replay or highlight: the two teams' colours, split, beside its name. */
+    teams: List<Color>? = null,
+    onClick: () -> Unit
+) {
     var focused by remember { mutableStateOf(false) }
     Row(
         modifier
@@ -2128,6 +2254,13 @@ internal fun ChannelLine(channel: LiveChannel, detail: String, modifier: Modifie
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (teams != null && teams.size == 2) {
+            Row(Modifier.size(width = 34.dp, height = 22.dp).clip(RoundedCornerShape(5.dp))) {
+                Box(Modifier.weight(1f).fillMaxHeight().background(teams[0]))
+                Box(Modifier.weight(1f).fillMaxHeight().background(teams[1]))
+            }
+            Spacer(Modifier.width(8.dp))
+        }
         ChannelLogo(channel.logo, 22.dp)
         Spacer(Modifier.width(10.dp))
         LiveText(channel.name, color = Color.White, size = 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

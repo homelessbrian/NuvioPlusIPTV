@@ -703,10 +703,31 @@ internal fun SportsAction(
     selected: Boolean = false,
     /** A coloured dot before the text (Record's red one). */
     dot: Color? = null,
+    /** A team's colour behind the button (a game page's follow buttons). */
+    tint: Color? = null,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(50)
+    if (tint != null && dot == null) {
+        LiveText(
+            text,
+            modifier = modifier
+                .clip(shape)
+                .background(tint.copy(alpha = if (selected) 0.95f else 0.55f))
+                .border(
+                    if (focused) NuvioTheme.focusRing.border(2.dp)
+                    else androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = if (selected) 0.45f else 0.22f)),
+                    shape
+                )
+                .onFocusChanged { focused = it.isFocused }
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 7.dp),
+            color = Color.White,
+            size = 12.sp, weight = FontWeight.ExtraBold
+        )
+        return
+    }
     if (dot != null) {
         Row(
             modifier
