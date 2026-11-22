@@ -124,6 +124,9 @@ internal class SportsFeeds {
     /** Team colours from TheSportsDB for every team-sport league in nuvio-data (re-read weekly by its job). */
     fun teamColorsRaw(): String = get(DATA_URL + "sportsdb/colors.json")
 
+    /** TheSportsDB's rugby games on now, with the match minute (the nuvio-data scores job, every few minutes). */
+    fun rugbyLiveRaw(): String = get(DATA_URL + "sportsdb/rugby-live.json")
+
     /** A TheSportsDB game's goals, cards, stats and line-ups (the nuvio-data job writes them). */
     /** The list of teams that have players (kept by the nuvio-data job). */
     fun playersIndexRaw(): String = get(DATA_URL + "sportsdb/players/index.json")

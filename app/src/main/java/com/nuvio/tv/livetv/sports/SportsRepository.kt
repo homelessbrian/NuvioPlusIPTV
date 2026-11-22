@@ -145,6 +145,9 @@ class SportsRepository @Inject constructor(
     private val lookedUp = MutableStateFlow<Map<String, LeagueData>>(emptyMap())
     /** Shows found in the guide, by day (the day's start). */
     private val guideData = MutableStateFlow<Map<Long, List<SportsEvent>>>(emptyMap())
+    /** TheSportsDB's live rugby (match minute), read while a rugby game is on: see [RugbyLive]. */
+    private val rugbyLive = MutableStateFlow<RugbyLive.Snapshot?>(null)
+    @Volatile private var rugbyLiveReadAt = 0L
 
     /** TheSportsDB's TV listings (nuvio-data's sportsdb/tv.json): channels in many countries, for [events]. */
     private val tvData = MutableStateFlow<List<TvListing>>(emptyList())
@@ -188,9 +191,11 @@ class SportsRepository @Inject constructor(
      * comes in: on slower boxes that alone kept the processor busy through a whole update round.
      */
     @OptIn(FlowPreview::class)
-    private fun plainEvents(): StateFlow<List<SportsEvent>> = combine(leagueData, weekData, fixtureData, guideData, tsdbData) { l, w, f, g, t ->
-        EventInputs(l, w, f, g, t)
-    }.debounce(400).map { (l, w, f, g, t) ->
+    private fun plainEvents(): StateFlow<List<SportsEvent>> = combine(
+        combine(leagueData, weekData, fixtureData, guideData, tsdbData) { l, w, f, g, t -> EventInputs(l, w, f, g, t) },
+        rugbyLive
+    ) { inputs, rugby -> inputs to rugby }.debounce(400).map { (inputs, rugby) ->
+        val (l, w, f, g, t) = inputs
         val now = System.currentTimeMillis()
         val copies = java.util.IdentityHashMap<SportsEvent, SportsEvent>()
         val guide = mergeWrestlingAirings(g.values.flatten()).map { timed(it, now, copies) }
@@ -236,7 +241,8 @@ class SportsRepository @Inject constructor(
                 }
             }
         }
-        val espn = l.values.flatMap { it.events } + w.values.flatMap { it.events }
+        // Rugby: ESPN's match minute stays at 1', so TheSportsDB's minute (or the half) instead.
+        val espn = RugbyLive.fixAll(l.values.flatMap { it.events } + w.values.flatMap { it.events }, rugby, now)
         // A match ESPN lists, found again in the guide (or a schedule file) under a guide-only
         // league of the same sport, shows once: the ESPN one, with its score. "The same match":
         // within 3 hours, with one of ESPN's team names in the title. Any sport, not just rugby.
@@ -776,6 +782,7 @@ class SportsRepository @Inject constructor(
         while (true) {
             val active = foreground.value && (settings.value.showInSidebar || viewers.value > 0)
             if (active) sportsCatching { updateOnce(System.currentTimeMillis()) }.onFailure { Log.w(TAG, "Sports update failed", it) }
+            if (active) sportsCatching { updateRugbyLive(System.currentTimeMillis()) }.onFailure { Log.w(TAG, "Live rugby update failed", it) }
             // Requested scoreboards and notifications keep their feeds. The catalogue that
             // only helps future browsing waits until the movie or episode closes.
             if (active && com.nuvio.tv.livetv.data.BackgroundWork.onDemandPlaying.value && requiredDuringPlayback().isNotEmpty()) {
@@ -970,6 +977,26 @@ class SportsRepository @Inject constructor(
     }
 
     private var lastFailLine: String? = null
+
+    /**
+     * While a rugby game is on: TheSportsDB's live rugby file (its match minute), read every minute
+     * while Sports is open and every 3 minutes otherwise. Each reading moves the minute on, even
+     * when the file hasn't changed. Nothing is read when no rugby is on.
+     */
+    private suspend fun updateRugbyLive(now: Long) {
+        val on = (leagueData.value.values.asSequence() + weekData.value.values.asSequence())
+            .flatMap { it.events.asSequence() }.any(RugbyLive::applies)
+        if (!on) {
+            if (rugbyLive.value != null) rugbyLive.value = null
+            return
+        }
+        val every = if (viewers.value > 0) 60_000L else 3 * MINUTE
+        if (now - rugbyLiveReadAt < every) return
+        rugbyLiveReadAt = now
+        val raw = withContext(Dispatchers.IO) { sportsCatching { feeds.rugbyLiveRaw() }.getOrNull() }
+        // Not there (yet) or unreadable: the half is shown instead, from the last reading's age.
+        rugbyLive.value = raw?.let { RugbyLive.parse(it, now) } ?: rugbyLive.value?.let { RugbyLive.Snapshot(it.atMs, now, it.games) }
+    }
 
     /**
      * How often a league nobody follows or is looking at is checked. Every 45 minutes for all
@@ -2272,7 +2299,7 @@ class SportsRepository @Inject constructor(
                 if (!chosen && !mine(side.team.id)) continue
                 val was = prev.sides.firstOrNull { it.team.id == side.team.id }?.score?.toDoubleOrNull() ?: continue
                 val nowScore = side.score?.toDoubleOrNull() ?: continue
-                if (nowScore > was) SportsLive.alert(SportsAlert(ev, side.team, league))
+                if (nowScore > was) SportsLive.alert(SportsAlert(RugbyLive.fix(ev, rugbyLive.value, System.currentTimeMillis()), side.team, league))
             }
         }
     }

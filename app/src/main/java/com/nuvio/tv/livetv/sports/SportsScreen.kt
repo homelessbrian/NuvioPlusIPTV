@@ -1796,7 +1796,7 @@ private fun GamePage(
     }
     val details: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth()) {
-            if (sides.size == 2 && showScore && sides.any { it.periods.isNotEmpty() }) {
+            if (sides.size == 2 && showScore && sides.any { it.periods.isNotEmpty() } && (sport != Sport.RUGBY || periodsAddUp(sides))) {
                 Column(Modifier.fillMaxWidth().sportsFrame(false, accent = NuvioTheme.colors.Secondary).padding(horizontal = 12.dp, vertical = 9.dp)) {
                     LiveText(periodHeading(sport), color = SportsLook.Dim, size = 9.sp, weight = FontWeight.Black)
                     Spacer(Modifier.height(4.dp))
@@ -1944,6 +1944,16 @@ private fun GameScoreColumn(ev: SportsEvent, sides: List<Side>, hideScores: Bool
         )
         if (live) GameProgress(progressOf(ev, now))
     }
+}
+
+/**
+ * Whether each side's scores by period add up to its score. ESPN's live rugby leaves them at 0
+ * all game, which showed 0-0 halves beside a 32-12 score: for rugby such a table is left out.
+ */
+private fun periodsAddUp(sides: List<Side>): Boolean = sides.all { s ->
+    val total = s.score?.toDoubleOrNull() ?: return@all true
+    val parts = s.periods.map { it.toDoubleOrNull() ?: return@all true }
+    parts.isEmpty() || kotlin.math.abs(parts.sum() - total) < 0.01
 }
 
 private fun periodHeading(sport: Sport): String = when (sport) {
