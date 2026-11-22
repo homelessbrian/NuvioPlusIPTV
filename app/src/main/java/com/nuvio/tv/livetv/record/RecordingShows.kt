@@ -134,6 +134,7 @@ internal fun RecordedFolderCard(
             .onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown && e.key == Key.Menu) { onMenu(); true } else false
             }
+            .okTapOrHold(onTap = onClick, onHold = onMenu)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -334,6 +335,7 @@ private fun EpisodeRow(
             .onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown && e.key == Key.Menu) { onMenu(); true } else false
             }
+            .okTapOrHold(onTap = onClick, onHold = onMenu)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
