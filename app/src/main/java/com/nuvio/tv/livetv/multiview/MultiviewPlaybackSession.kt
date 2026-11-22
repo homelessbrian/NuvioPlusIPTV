@@ -520,6 +520,9 @@ private class AndroidMultiviewPanePlayer(
         .apply {
             volume = 0f
             playWhenReady = false
+            // Panes never ask the TV to change its refresh rate: with several streams of
+            // different frame rates on screen they would each pull it their own way.
+            videoChangeFrameRateStrategy = C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
             trackSelectionParameters = trackSelectionParameters.buildUpon()
                 // Prefer modest adaptive variants when four hardware decoders share a TV box.
                 .setMaxVideoSize(1280, 720)
