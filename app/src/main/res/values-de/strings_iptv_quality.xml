@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"Beste Qualität"</string>
+    <string name="autoplay_mode_quality_desc">"Spielt die beste Quelle nach deinen Qualitätsregeln ab: Auflösung, Quelle, vertrauenswürdige Release-Gruppen, HDR und Ton."</string>
+    <string name="quality_rules_title">"Qualitätsregeln"</string>
+    <string name="quality_rules_subtitle">"Was „Beste Qualität“ wählt und wie „Beste Qualität zuerst“ sortiert, für jede Quelle."</string>
+    <string name="quality_rules_open">"Zeigen"</string>
+    <string name="quality_rules_close">"Ausblenden"</string>
+    <string name="stream_sort_sources">"Quellen sortieren"</string>
+    <string name="stream_sort_sources_sub">"Die Reihenfolge der Quellenliste."</string>
+    <string name="stream_sort_source_order">"Quellenreihenfolge"</string>
+    <string name="stream_sort_source_order_desc">"So, wie jede Quelle sie sendet."</string>
+    <string name="stream_sort_best_first">"Beste Qualität zuerst"</string>
+    <string name="stream_sort_best_first_desc">"Nach deinen Qualitätsregeln sortiert. Links, die die Regeln ausschließen, werden nicht gelistet."</string>
+    <string name="quality_low_groups_title">"Release-Gruppen geringer Qualität"</string>
+    <string name="quality_low_groups_subtitle">"Gruppen, die für schlechte oder gefälschte Releases bekannt sind (Liste von TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"Ans Ende verschieben"</string>
+    <string name="quality_low_groups_hide">"Ausblenden"</string>
+    <string name="quality_low_groups_normal">"Wie die anderen behandeln"</string>
+    <string name="quality_trusted_groups_title">"Vertrauenswürdige Release-Gruppen"</string>
+    <string name="quality_trusted_groups_subtitle">"Beste zuerst. Beginnt mit der Liste von TRaSH Guides. Leere sie, um diese Liste zurückzubekommen."</string>
+    <string name="quality_rules_reset_title">"Auf Empfehlung zurücksetzen"</string>
+    <string name="quality_rules_reset_subtitle">"Setzt alle Qualitätsregeln auf die empfohlene Einrichtung zurück."</string>
+</resources>
