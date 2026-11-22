@@ -121,8 +121,8 @@ class LiveTvSettingsViewModel @Inject constructor(
         }
     }
 
-    fun addPlaylist(name: String, url: String, userAgent: String, epgUrl: String = "") =
-        viewModelScope.launch { repository.addPlaylist(name, url, userAgent, epgUrl) }
+    fun addPlaylist(name: String, url: String, userAgent: String, epgUrl: String = "", importVod: Boolean = true) =
+        viewModelScope.launch { repository.addPlaylist(name, url, userAgent, epgUrl, importVod) }
 
     fun addXtream(name: String, server: String, user: String, pass: String, importVod: Boolean = true, importLive: Boolean = true, epgUrl: String = "") =
         viewModelScope.launch {

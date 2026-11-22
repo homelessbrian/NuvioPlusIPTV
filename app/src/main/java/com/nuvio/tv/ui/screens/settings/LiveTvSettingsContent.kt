@@ -854,7 +854,7 @@ internal fun LiveTvSettingsContent(
                             context.getString(R.string.iptv_settings_movies_series_from_1_s, pl.name),
                             if (pl.importVod) context.getString(R.string.iptv_settings_included) else context.getString(R.string.iptv_settings_not_included_switch_on_to_import_this_provider),
                             pl.importVod,
-                            { viewModel.savePlaylist(pl.copy(importVod = !pl.importVod)) }
+                            { viewModel.savePlaylist(pl.copy(importVod = !pl.importVod, vodSwitchSet = true)) }
                         )
                     }
                     SubHeading(context.getString(R.string.iptv_settings_browsing))
@@ -2016,7 +2016,9 @@ internal fun LiveTvSettingsContent(
                 FormField(context.getString(R.string.iptv_settings_user_agent_optional), context.getString(R.string.iptv_settings_leave_empty_for_default))
             ),
             onDismiss = close,
-            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addPlaylist(v[0], v[1], v[3], epgUrl = v[2]); close() }
+            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addPlaylist(v[0], v[1], v[3], epgUrl = v[2]); close() },
+            toggle2 = context.getString(R.string.iptv_settings_include_movies_series_on_demand) to true,
+            onSaveBoth = { v, _, vod -> if (v[1].isNotBlank()) viewModel.addPlaylist(v[0], v[1], v[3], epgUrl = v[2], importVod = vod); close() }
         )
         LiveDialog.AddXtream -> SourceFormDialog(
             title = context.getString(R.string.iptv_settings_add_xtream_codes_login_2),
@@ -2174,9 +2176,19 @@ internal fun LiveTvSettingsContent(
                         FormField(context.getString(R.string.iptv_settings_user_agent_optional), "", src.userAgent)
                     ),
                     toggle = context.getString(R.string.iptv_settings_load_guide_linked_in_playlist) to src.useEmbeddedEpg,
+                    toggle2 = context.getString(R.string.iptv_settings_include_movies_series_on_demand) to src.importVod,
                     onDismiss = close,
                     onSave = { v, t ->
                         viewModel.savePlaylist(src.copy(name = v[0], url = v[1], userAgent = v[2], useEmbeddedEpg = t))
+                        close()
+                    },
+                    onSaveBoth = { v, t, vod ->
+                        viewModel.savePlaylist(
+                            src.copy(
+                                name = v[0], url = v[1], userAgent = v[2], useEmbeddedEpg = t, importVod = vod,
+                                vodSwitchSet = src.vodSwitchSet || vod != src.importVod
+                            )
+                        )
                         close()
                     }
                 )
@@ -3035,7 +3047,7 @@ private fun AddFromPhoneDialog(viewModel: LiveTvSettingsViewModel, onDismiss: ()
                 else -> {
                     val name = e.name.ifBlank { receipt(R.string.iptv_settings_playlist) }
                     // The guide link goes with the playlist (switched on for it only), like the TV's own form.
-                    viewModel.addPlaylist(name, e.url, e.userAgent, epgUrl = e.epgUrl)
+                    viewModel.addPlaylist(name, e.url, e.userAgent, epgUrl = e.epgUrl, importVod = e.includeVod)
                     if (e.epgUrl.isNotBlank()) receipt(R.string.iptv_settings_added_playlist_guide, name) else receipt(R.string.iptv_settings_playlist_1_s, name)
                 }
             }

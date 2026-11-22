@@ -27,7 +27,7 @@ data class PlaylistSource(
     val lastUpdatedMs: Long = 0L,
     val lastError: String? = null,
     val channelCount: Int = 0,
-    /** Xtream: also import the provider's movies and series (On Demand). */
+    /** Also import the provider's movies and series (On Demand): Xtream, Stalker and M3U links. */
     val importVod: Boolean = true,
     /** Xtream: import the live TV channels (off = On Demand only). */
     val importLive: Boolean = true,
@@ -92,7 +92,12 @@ data class PlaylistSource(
     val linkUsername: String = "",
     val linkPassword: String = "",
     /** M3U links: the playlist also lists movies or episodes (found when it's read). */
-    val vodInPlaylist: Boolean = false
+    val vodInPlaylist: Boolean = false,
+    /**
+     * M3U links: the user picked whether to load movies and series (when adding the playlist or
+     * in its settings), so finding them in the playlist later doesn't switch them back on.
+     */
+    val vodSwitchSet: Boolean = false
 ) {
     /** The user agent requests for this playlist go out with ("" = the app default). */
     val effectiveUserAgent: String get() = userAgent.ifBlank { fallbackUserAgent }
@@ -1027,7 +1032,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-22 18:30"
+    const val KIT_STAMP = "2026-11-22 18:45"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

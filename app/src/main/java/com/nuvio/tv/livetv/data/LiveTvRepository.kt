@@ -201,9 +201,14 @@ class LiveTvRepository @Inject constructor(
 
     // ---------------------------------------------------------------- sources CRUD
 
-    suspend fun addPlaylist(name: String, url: String, userAgent: String = "", epgUrl: String = ""): String {
+    suspend fun addPlaylist(name: String, url: String, userAgent: String = "", epgUrl: String = "", importVod: Boolean = true): String {
         val id = UUID.randomUUID().toString()
-        prefs.updatePlaylists { it + PlaylistSource(id = id, name = name.ifBlank { "Playlist" }, url = url.trim(), userAgent = userAgent.trim()) }
+        prefs.updatePlaylists {
+            it + PlaylistSource(
+                id = id, name = name.ifBlank { "Playlist" }, url = url.trim(), userAgent = userAgent.trim(),
+                importVod = importVod, vodSwitchSet = !importVod
+            )
+        }
         val guideId = addGuideForNewPlaylist(id, name.ifBlank { "Playlist" }, epgUrl)
         scope.launch { refreshInternal(forcePlaylists = false, forceEpg = false, forceIds = setOfNotNull(id, guideId)) }
         return id
@@ -3830,13 +3835,13 @@ class LiveTvRepository @Inject constructor(
                 else {
                     // Movies and series found for the first time: switched on, like a new Xtream
                     // login (playlists saved before On Demand existed had them off, which meant
-                    // nothing for an M3U playlist until now).
+                    // nothing for an M3U playlist until now). Not when the user switched them off.
                     val hadVod = it.vodInPlaylist || it.linkServer.isNotBlank() || it.loginInLink() != null
                     val hasVod = hasVodEntries || keptNow != null || it.loginInLink() != null
                     it.copy(
                         linkServer = keptNow?.first ?: "", linkUsername = keptNow?.second ?: "", linkPassword = keptNow?.third ?: "",
                         vodInPlaylist = hasVodEntries,
-                        importVod = if (!hadVod && hasVod) true else it.importVod
+                        importVod = if (!hadVod && hasVod && !it.vodSwitchSet) true else it.importVod
                     )
                 }
             }

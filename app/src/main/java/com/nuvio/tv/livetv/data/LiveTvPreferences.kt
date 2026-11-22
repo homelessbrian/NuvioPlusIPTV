@@ -1941,6 +1941,7 @@ class LiveTvPreferences @Inject constructor(
                     linkUsername = o.optString("linkUsername"),
                     linkPassword = o.optString("linkPassword"),
                     vodInPlaylist = o.optBoolean("vodInPlaylist", false),
+                    vodSwitchSet = o.optBoolean("vodSwitchSet", false),
                     dispatcharr = o.optBoolean("dispatcharr", false)
                 )
             }
@@ -1959,7 +1960,7 @@ class LiveTvPreferences @Inject constructor(
                     .put("xtreamServer", s.xtreamServer).put("xtreamUsername", s.xtreamUsername)
                     .put("xtreamPassword", s.xtreamPassword)
                     .put("linkServer", s.linkServer).put("linkUsername", s.linkUsername)
-                    .put("linkPassword", s.linkPassword).put("vodInPlaylist", s.vodInPlaylist)
+                    .put("linkPassword", s.linkPassword).put("vodInPlaylist", s.vodInPlaylist).put("vodSwitchSet", s.vodSwitchSet)
                     .put("lastUpdatedMs", s.lastUpdatedMs).put("lastError", s.lastError ?: "")
                     .put("channelCount", s.channelCount)
                     .put("importVod", s.importVod)
