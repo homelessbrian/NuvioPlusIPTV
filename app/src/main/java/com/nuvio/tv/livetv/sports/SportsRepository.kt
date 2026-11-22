@@ -2101,23 +2101,23 @@ class SportsRepository @Inject constructor(
             // there's no traffic reason to leave any of them out) — plus names you follow.
             val guideLeagues = SportsCatalog.all.filter { it.guideOnly }
             val keys = channels.associateBy { it.key }
-            // Put channels found from names, listed networks and the user's picks on live
-            // game cards before the much larger guide scan. A guide match will replace these
-            // provisional results when the full round finishes.
-            val quickEvents = events.value.filter { ev ->
-                ev.state == GameState.LIVE || (ev.state == GameState.PRE && ev.startMs in now..(now + 3 * HOUR))
-            }
-            if (quickEvents.isNotEmpty()) {
+            // Put channels found from names, listed networks and the user's picks on game cards
+            // before the much larger guide scan, which can take minutes on a busy day. Channel
+            // names (event channels like "SMU @ Notre Dame") are looked for in every game, since
+            // that's quick and such channels rarely have guide listings; networks only for games
+            // on now or starting within 3 hours (that step reads the guide a little). Added to
+            // what's already shown; the full round's results replace them when it finishes.
+            if (events.value.isNotEmpty()) {
                 val quickAt = System.currentTimeMillis()
                 sportsCatching {
                     matcher.match(SportsMatcher.Input(
-                        events = quickEvents, channels = channels, quality = user.channelQuality,
-                        shiftMs = shift, settings = s, now = now, readGuide = false
+                        events = events.value, channels = channels, quality = user.channelQuality,
+                        shiftMs = shift, settings = s, now = now, readGuide = false,
+                        networksUntil = now + 3 * HOUR
                     ))
                 }.onSuccess { quick ->
-                    val fresh = quick.matches.filterKeys { it !in _matches.value }
-                    if (fresh.isNotEmpty()) {
-                        _matches.value = _matches.value + fresh
+                    if (quick.matches.isNotEmpty()) {
+                        addMatches(quick.matches, s)
                         rebuildLiveScores()
                     }
                     LiveTvLoadReport.add("Sports quick channels: ${quick.matches.size} games in ${System.currentTimeMillis() - quickAt} ms")
@@ -2153,19 +2153,7 @@ class SportsRepository @Inject constructor(
                     matchingCheckpoint()
                     // Games on now: the guide's channels as soon as their half-hours are read,
                     // added to what's already shown (the quick matches), before the rest of the day.
-                    val rank = SportsMatcher.preferenceRank(s)
-                    _matches.update { prev ->
-                        val next = prev.toMutableMap()
-                        for ((id, list) in early) {
-                            val byChannel = prev[id].orEmpty().associateByTo(LinkedHashMap()) { it.channel.key }
-                            for (m in list) {
-                                val old = byChannel[m.channel.key]
-                                if (old == null || m.score > old.score) byChannel[m.channel.key] = m
-                            }
-                            next[id] = SportsMatcher.sortMatches(byChannel.values.toList(), s.bestChannelFirst, rank).take(40)
-                        }
-                        next
-                    }
+                    addMatches(early, s)
                     rebuildLiveScores()
                 }
             )
@@ -2178,6 +2166,23 @@ class SportsRepository @Inject constructor(
             rebuildLiveScores()
         } finally {
             _matching.value = false
+        }
+    }
+
+    /** [found] added to the channels already shown for each game (a channel already there keeps the higher score). */
+    private fun addMatches(found: Map<String, List<ChannelMatch>>, s: SportsSettings) {
+        val rank = SportsMatcher.preferenceRank(s)
+        _matches.update { prev ->
+            val next = prev.toMutableMap()
+            for ((id, list) in found) {
+                val byChannel = prev[id].orEmpty().associateByTo(LinkedHashMap()) { it.channel.key }
+                for (m in list) {
+                    val old = byChannel[m.channel.key]
+                    if (old == null || m.score > old.score) byChannel[m.channel.key] = m
+                }
+                next[id] = SportsMatcher.sortMatches(byChannel.values.toList(), s.bestChannelFirst, rank).take(40)
+            }
+            next
         }
     }
 
