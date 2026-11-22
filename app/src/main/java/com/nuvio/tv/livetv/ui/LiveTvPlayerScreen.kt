@@ -262,6 +262,15 @@ fun LiveTvPlayerScreen(
     }
     // Another game picked in the Games list: its channels to choose from.
     var gamePick by remember { mutableStateOf<com.nuvio.tv.livetv.sports.SportsWatchGame?>(null) }
+    // A game highlighted in the Games list: its add-on streams are looked for (after a moment, so
+    // moving along the row asks for nothing), so they're there when it's picked.
+    LaunchedEffect(rowIsGames, rowShowing, recentFocus) {
+        if (!rowIsGames || !rowShowing) return@LaunchedEffect
+        val g = recentFocus?.let { rowGames.getOrNull(it - 1) } ?: return@LaunchedEffect
+        if (g.watching) return@LaunchedEffect
+        delay(600L)
+        sports.lookForStreams(g.event.id)
+    }
     // Remember the list used last, so the row opens there next time (once you've settled on one).
     LaunchedEffect(rowListId) {
         val id = rowListId ?: return@LaunchedEffect
@@ -517,11 +526,26 @@ fun LiveTvPlayerScreen(
             dagger.hilt.android.EntryPointAccessors.fromApplication(context.applicationContext, com.nuvio.tv.livetv.sports.SportsEntryPoint::class.java).sportsRepository()
         }.getOrNull()
     }
-    val gameBackups = remember(current?.key, panelFull, playback.catchupTitle, backupsTick, dialog, backups) {
+    // A game's add-on streams play only when that add-on is still on (and the channel rules allow it).
+    fun offerAsBackup(ch: LiveChannel): Boolean =
+        if (ch.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) sports.mayPlay(ch) else viewModel.canOfferAsBackup(ch)
+    // Add-on streams arrive a moment after the game is found: the lists follow them.
+    val sportsMatches = sportsRepo?.matches?.collectAsStateWithLifecycle()?.value
+    val gameBackups = remember(current?.key, panelFull, playback.catchupTitle, backupsTick, dialog, backups, sportsMatches) {
         val ch = current?.takeIf { playback.catchupTitle == null }
         if (ch == null || sportsRepo == null) null
         else runCatching { sportsRepo.gameChannelsFor(ch.key, exclude = backups.mapTo(HashSet()) { it.key }) }.getOrNull()
-            ?.let { g -> g.copy(channels = g.channels.filter(viewModel::canOfferAsBackup)) }?.takeIf { it.channels.isNotEmpty() }
+            ?.let { g -> g.copy(channels = g.channels.filter(::offerAsBackup)) }?.takeIf { it.channels.isNotEmpty() }
+    }
+    // Watching a live game: its streams from your sports add-ons are looked for (again every few
+    // minutes while it's on), for the backup lists, the Games list and Multiview.
+    LaunchedEffect(current?.key, playback.catchupTitle, sportsRepo) {
+        val key = current?.key ?: return@LaunchedEffect
+        if (playback.catchupTitle != null || sportsRepo == null) return@LaunchedEffect
+        while (true) {
+            runCatching { sportsRepo.lookForStreamsOn(key) }
+            delay(60_000L)
+        }
     }
     val anyBackups = backups.isNotEmpty() || gameBackups != null
     val poster by androidx.compose.runtime.produceState<String?>(initialValue = null, watchingTitle, current?.key) {
@@ -664,8 +688,12 @@ fun LiveTvPlayerScreen(
                                     onOpenSportsGame(g.event.id)
                                 } else {
                                     val pick = gamesNow.firstOrNull { it.event.id == g.event.id }
-                                    if (pick == null || pick.channels.isEmpty()) toast = "None of your channels show ${g.event.title} right now"
-                                    else gamePick = pick
+                                    if (pick == null) toast = "None of your channels show ${g.event.title} right now"
+                                    else {
+                                        // Its add-on streams join the list as they're found.
+                                        sports.lookForStreams(pick.event.id)
+                                        gamePick = pick
+                                    }
                                 }
                                 Unit
                             }
@@ -866,7 +894,7 @@ fun LiveTvPlayerScreen(
                                     // Asked again now: a game may have started since the list was last worked out.
                                     val freshGame = current?.takeIf { playback.catchupTitle == null }?.let { ch ->
                                         runCatching { sportsRepo?.gameChannelsFor(ch.key, exclude = backups.mapTo(HashSet()) { it.key }) }.getOrNull()
-                                            ?.channels?.filter(viewModel::canOfferAsBackup)?.takeIf { it.isNotEmpty() }
+                                            ?.channels?.filter(::offerAsBackup)?.takeIf { it.isNotEmpty() }
                                     }
                                     if (backups.isNotEmpty() || freshGame != null) {
                                         closeFull()
@@ -1295,7 +1323,8 @@ fun LiveTvPlayerScreen(
                 gameGuide = { ch, onNow -> gameBackups?.guideFor(ch, onNow, System.currentTimeMillis(), settings.use24HourClock) },
                 playingKey = playback.channelKey,
                 modifier = Modifier.align(Alignment.CenterEnd),
-                onLongPress = { ch -> backupMenuFor = ch },
+                // An add-on stream has no channel options (record, favorites, rename…).
+                onLongPress = { ch -> if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) backupMenuFor = ch },
                 menuOpen = backupMenuFor != null,
                 onPick = { ch ->
                     dialog = PlayerDialog.NONE
@@ -1363,7 +1392,9 @@ fun LiveTvPlayerScreen(
                     .padding(horizontal = 18.dp, vertical = 8.dp)
             )
         }
-        gamePick?.let { pick ->
+        gamePick?.let { picked ->
+            // Kept up to date while it's open (add-on streams can arrive after it opens).
+            val pick = sports.games.collectAsStateWithLifecycle().value.firstOrNull { it.event.id == picked.event.id } ?: picked
             com.nuvio.tv.livetv.sports.GameChannelsDialog(
                 game = pick,
                 now = now,
@@ -1410,6 +1441,7 @@ fun LiveTvPlayerScreen(
                 onGame = { game -> sports.resolve(game.event.id) != null },
                 onPlayGame = { game -> playSportsGame(game.event.id) },
                 onStream = { game, channelKey -> playSportsGame(game.event.id, channelKey) },
+                onGameFocus = { game -> sports.lookForStreams(game.event.id) },
                 onAdd = {
                     val channelKey = viewModel.playbackState.value.channelKey
                     val eventId = selectedSportsSelection?.takeIf { it.channelKey == channelKey }?.eventId
@@ -1598,7 +1630,7 @@ fun LiveTvPlayerScreen(
             gameGuide = { ch -> gameBackups?.guideFor(ch, viewModel.currentProgram(ch.key), System.currentTimeMillis(), settings.use24HourClock) },
             playingKey = playback.channelKey,
             startKey = backupMenuLastKey,
-            onLongPress = { ch -> backupMenuFor = ch; backupMenuLastKey = ch.key },
+            onLongPress = { ch -> if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) { backupMenuFor = ch; backupMenuLastKey = ch.key } },
             nowTitle = { key -> viewModel.currentProgram(key)?.title },
             onPick = { ch ->
                 dialog = PlayerDialog.NONE

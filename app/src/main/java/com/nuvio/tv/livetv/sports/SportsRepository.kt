@@ -577,19 +577,14 @@ class SportsRepository @Inject constructor(
         internal fun guideFor(ch: LiveChannel, onNow: com.nuvio.tv.livetv.model.EpgProgram?, now: Long, use24h: Boolean): GuideLine? {
             val ev = event ?: return null
             val m = matched[ch.key] ?: return null
+            // An add-on's stream of the game has no guide: it's the game itself.
+            if (ch.sourceId == SportsAddonSource.SOURCE_ID) return GuideLine(GuideKind.NOW, "Add-on stream", null)
             return guideLine(ev, m, onNow, now, use24h)
         }
     }
 
-    /**
-     * The player's backup lists (Right twice, the bar's Backups button): the live game (or one
-     * starting within 15 minutes) that [channelKey] is showing, and every other channel showing it
-     * in the game page's order (your region first), the same channels "won't play" moves through.
-     * Your own channels only. [exclude]: channels the list already shows (this channel's own copies). Null when the
-     * channel isn't showing a game we know of, Sports is off, or there are no other channels.
-     */
-    fun gameChannelsFor(channelKey: String, exclude: Set<String> = emptySet()): GameChannels? {
-        if (!settings.value.showInSidebar) return null
+    /** The live game (or one starting within 15 minutes) [channelKey] is sure to be showing, and its channel list. */
+    private fun liveGameOn(channelKey: String): Pair<SportsEvent, List<ChannelMatch>>? {
         val now = System.currentTimeMillis()
         val evs = events.value.associateBy { it.id }
         var game: SportsEvent? = null
@@ -598,13 +593,26 @@ class SportsRepository @Inject constructor(
             val on = ev.state == GameState.LIVE || (ev.state == GameState.PRE && ev.startMs - now < 15 * MINUTE)
             (on && l.any { it.channel.key == channelKey && (it.sure || it.score >= 150) }).also { if (it) game = ev }
         }?.value ?: return null
-        val ev = game ?: return null
+        return (game ?: return null) to list
+    }
+
+    /**
+     * The player's backup lists (Right twice, the bar's Backups button): the live game (or one
+     * starting within 15 minutes) that [channelKey] is showing, and every other channel showing it
+     * in the game page's order (your region first), the same channels "won't play" moves through,
+     * then the game's streams from your sports add-ons. [exclude]: channels the list already shows
+     * (this channel's own copies). Null when the channel isn't showing a game we know of, Sports is
+     * off, or there is nothing else.
+     */
+    fun gameChannelsFor(channelKey: String, exclude: Set<String> = emptySet()): GameChannels? {
+        if (!settings.value.showInSidebar) return null
+        val (ev, list) = liveGameOn(channelKey) ?: return null
         val playing = list.first { it.channel.key == channelKey }
         val copyKey = SportsMatcher.copyKey(playing.channel)
         val picked = list.asSequence()
             .filter { it.channel.key != channelKey && it.channel.key !in exclude }
-            // Your own channels only: addon streams and videos stay on the game page.
-            .filter { it.channel.sourceId != SportsAddonSource.SOURCE_ID && it.channel.sourceId != SportsVideos.SOURCE_ID }
+            // Your channels, then the game's streams from your sports add-ons (official videos stay on the game page).
+            .filter { it.channel.sourceId != SportsVideos.SOURCE_ID }
             .filter { it.sure || it.score >= 150 || SportsMatcher.copyKey(it.channel) == copyKey }
             .distinctBy { it.channel.key }
             .toList()
@@ -614,6 +622,38 @@ class SportsRepository @Inject constructor(
         val sides = if (league != null) ev.ordered(league.sport) else ev.sides
         val title = if (sides.size == 2) sides.joinToString(" vs ") { it.team.name } else ev.title
         return GameChannels(title, others, ev, picked.associateBy { it.channel.key })
+    }
+
+    private val liveLookAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val liveLookJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    /**
+     * A live game (or one starting within half an hour) is being watched or picked somewhere other
+     * than its game page (the player, Quick Channels' Games list, Multiview): its streams from your
+     * sports add-ons are looked for, so they show next to your channels. Asked once every few
+     * minutes at most; nothing when the game page is already looking.
+     */
+    fun lookForLiveStreams(ev: SportsEvent) {
+        if (!settings.value.showInSidebar) return
+        val now = System.currentTimeMillis()
+        val on = ev.state == GameState.LIVE || (ev.state == GameState.PRE && ev.startMs - now < 30 * MINUTE)
+        if (!on) return
+        if (addonJobs[ev.id]?.isActive == true || liveLookJobs[ev.id]?.isActive == true) return
+        if (now - (liveLookAt[ev.id] ?: 0L) < LIVE_LOOK_MS) return
+        liveLookAt[ev.id] = now
+        liveLookJobs[ev.id] = scope.launch {
+            try { lookInAddons(ev) } finally { liveLookJobs.remove(ev.id) }
+        }
+    }
+
+    fun lookForLiveStreams(eventId: String) {
+        events.value.firstOrNull { it.id == eventId }?.let { lookForLiveStreams(it) }
+    }
+
+    /** The game [channelKey] is showing (if any): its add-on streams (see [lookForLiveStreams]). */
+    fun lookForStreamsOn(channelKey: String) {
+        if (!settings.value.showInSidebar) return
+        liveGameOn(channelKey)?.first?.let { lookForLiveStreams(it) }
     }
 
     private val _loading = MutableStateFlow(false)
@@ -2821,6 +2861,8 @@ class SportsRepository @Inject constructor(
         private const val WARM_DELAY_MS = 600L
         /** Replays found this recently aren't asked for again when the game is opened. */
         private const val VOD_FRESH_MS = 10 * 60_000L
+        /** Add-on streams of a live game watched outside its page: looked for again after this. */
+        private const val LIVE_LOOK_MS = 3 * 60_000L
         /** Official videos found: asked again after half an hour (more get added for a few hours). */
         private const val VIDEO_FRESH_MS = 30 * 60_000L
         /** None found yet: asked again after five minutes. */

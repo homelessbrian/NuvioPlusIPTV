@@ -267,7 +267,7 @@ internal fun GameChannelsDialog(
         )
         Spacer(Modifier.height(10.dp))
         if (rows.isEmpty()) {
-            LiveText("None of your channels show this game right now.", color = SportsLook.Dim, size = 13.sp)
+            LiveText("None of your channels or add-ons show this game right now.", color = SportsLook.Dim, size = 13.sp)
             return@SportsDialog
         }
         androidx.compose.foundation.lazy.LazyColumn(
@@ -291,6 +291,7 @@ internal fun GameChannelsDialog(
                             }
                         }
                         if (guide != null) GuideLineText(guide, modifier = Modifier.padding(top = 2.dp))
+                        else if (m.channel.sourceId == SportsAddonSource.SOURCE_ID) LiveText("Add-on stream · ${m.channel.sourceName}", color = SportsLook.Dim, size = 10.sp)
                         else if (!m.sure) LiveText("Might be showing it", color = SportsLook.Dim, size = 10.sp)
                     }
                     Spacer(Modifier.width(8.dp))
@@ -301,5 +302,6 @@ internal fun GameChannelsDialog(
             }
         }
     }
-    LaunchedEffect(Unit) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } }
+    // Add-on streams can arrive after it opens: the first Watch gets the focus once there's a row.
+    LaunchedEffect(rows.isNotEmpty()) { if (rows.isNotEmpty()) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } } }
 }

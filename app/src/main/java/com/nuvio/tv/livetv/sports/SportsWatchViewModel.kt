@@ -135,6 +135,11 @@ class SportsWatchViewModel @Inject constructor(
         if (profileStillCurrent()) selection.select(SportsWatchPolicy.filterQuery(key))
     }
 
+    /** A game highlighted or picked here: its streams from your sports add-ons are looked for (see [SportsRepository.lookForLiveStreams]). */
+    fun lookForStreams(eventId: String) {
+        if (profileStillCurrent()) repo.lookForLiveStreams(eventId)
+    }
+
     /** Resolve the requested broadcast at the press, or Sports' best allowed source when omitted. */
     fun resolve(eventId: String, channelKey: String? = null): ChannelMatch? {
         if (!profileStillCurrent()) return null
