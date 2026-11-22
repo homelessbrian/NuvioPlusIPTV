@@ -84,7 +84,9 @@ internal fun ProviderDetailDialog(
     item: VodItem,
     viewModel: OnDemandViewModel,
     onDismiss: () -> Unit,
-    onPlay: (url: String, title: String, poster: String?, season: Int?, episode: Int?, episodeName: String?) -> Unit
+    onPlay: (url: String, title: String, poster: String?, season: Int?, episode: Int?, episodeName: String?) -> Unit,
+    /** "Fix Match": pick the right title when it found the wrong one (or none). */
+    onFixMatch: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     val info by produceState<VodInfo?>(initialValue = null, item.uid) { value = viewModel.info(item) }
@@ -109,6 +111,10 @@ internal fun ProviderDetailDialog(
                     item.rating?.let { "★ $it" }
                 ).joinToString("  ·  ")
                 if (meta.isNotBlank()) LiveText(meta, color = NuvioTheme.colors.TextSecondary, size = 13.sp)
+                onFixMatch?.let { fix ->
+                    Spacer(Modifier.height(8.dp))
+                    DialogPill("Fix Match", selected = false, onClick = fix)
+                }
                 Spacer(Modifier.height(8.dp))
                 LiveText(info?.plot ?: if (info == null) "Loading details…" else "", color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 6)
                 Spacer(Modifier.height(12.dp))

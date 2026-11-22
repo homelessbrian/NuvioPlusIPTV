@@ -145,11 +145,14 @@ fun HomeVodRowsHost(
     }
     CompositionLocalProvider(LocalHomeVodActions provides actions) { content() }
 
+    var fixMatchItem by remember { mutableStateOf<VodItem?>(null) }
+    fixMatchItem?.let { item -> com.nuvio.tv.livetv.ondemand.FixMatchFor(item, vod) { fixMatchItem = null } }
     providerItem?.let { item ->
         ProviderDetailDialog(
             item = item,
             viewModel = vod,
             onDismiss = { providerItem = null },
+            onFixMatch = { providerItem = null; fixMatchItem = item },
             onPlay = { url, title, poster, season, episode, episodeName ->
                 providerItem = null
                 // Played with the title's id, so Nuvio tracks progress (resume, Continue watching).

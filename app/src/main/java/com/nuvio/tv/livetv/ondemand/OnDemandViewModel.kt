@@ -77,8 +77,44 @@ class OnDemandViewModel @Inject constructor(
     private val watchProgressRepository: com.nuvio.tv.domain.repository.WatchProgressRepository,
     private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
-    private val layoutPrefs: com.nuvio.tv.data.local.LayoutPreferenceDataStore
+    private val layoutPrefs: com.nuvio.tv.data.local.LayoutPreferenceDataStore,
+    private val matchFixes: com.nuvio.tv.livetv.data.TitleMatchFixes
 ) : ViewModel() {
+
+    /** The title picked with Fix match for this one, if any (it always wins). */
+    private suspend fun pinned(item: VodItem): LiveTvPosterResolver.Hit? =
+        matchFixes.get(com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid))
+
+    /** The pick for this title, for the Fix match window. */
+    fun pinnedNow(item: VodItem): LiveTvPosterResolver.Hit? =
+        matchFixes.fixes.value[com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid)]
+
+    /** Shows and movies for the Fix match search. */
+    suspend fun searchMatches(text: String, series: Boolean?, year: Int?) = matchFixes.search(text, series, year)
+
+    /**
+     * Fix match: this title is [picked] from now on (poster, artwork, details, and what it opens);
+     * null goes back to automatic. Also clears a name typed with the old "Fix poster".
+     */
+    fun pickMatch(item: VodItem, picked: com.nuvio.tv.livetv.data.TitleMatchFixes.Candidate?) {
+        viewModelScope.launch {
+            val hit = picked?.let { runCatching { matchFixes.toHit(it) }.rethrowCancel().getOrNull() }
+            if (picked != null && hit == null) return@launch
+            repository.setPosterFix(item, "", null)
+            matchFixes.set(com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid), hit)
+            posters.remove(item.uid)
+            names.remove(item.uid)
+            homeMatched.remove(item.uid)
+            homeHits.remove(item.uid)
+            homeDetailed.remove(item.uid)
+            if (hit != null) useMatch(item, hit, detailed = true)
+            else {
+                enrichOne(item, urgent = true)
+                if (!homeMatched.containsKey(item.uid)) posterFor(item)
+            }
+            updateHomeRows()
+        }
+    }
 
     /** Your poster provider's pattern for Home rows (Settings › Layout), or "" when none. */
     @Volatile private var posterPattern: String = ""
@@ -118,6 +154,7 @@ class OnDemandViewModel @Inject constructor(
      * among same-named titles.
      */
     private suspend fun matchAny(item: VodItem, urgent: Boolean, imdb: String? = null): LiveTvPosterResolver.Hit? {
+        pinned(item)?.let { return it }
         repository.posterFix(item)?.let { (title, year) ->
             return resolver.matchFor(title, item.kind == VodKind.SERIES, year, urgent = urgent)
         }
@@ -132,6 +169,7 @@ class OnDemandViewModel @Inject constructor(
      * lookups being paused or your addons not answering; then the title is tried again later.
      */
     private suspend fun matchAnswered(item: VodItem, imdb: String?): Boolean {
+        if (pinned(item) != null) return true
         repository.posterFix(item)?.let { (title, year) -> return resolver.answered(title, item.kind == VodKind.SERIES, year) }
         return matchTitles(item).all { resolver.answered(it, item.kind == VodKind.SERIES, item.year, imdb) }
     }
@@ -366,6 +404,10 @@ class OnDemandViewModel @Inject constructor(
         posters[item.uid]?.let { return withProvider(item, it) }
         // "Use posters from my addons" off: the provider's image, no lookups at all.
         if (!settings.value.onDemandAddonPosters) return item.icon
+        // Picked with Fix match (maybe on another TV): that title's poster.
+        matchFixes.fixes.value[com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid)]?.let { p ->
+            (p.meta.rawPosterUrl ?: p.meta.poster)?.let { posters[item.uid] = it; return withProvider(item, it, p.meta) }
+        }
         // Remembered from an earlier visit (kept between app starts).
         repository.cachedPoster(item)?.let { (cached, checked) ->
             val fresh = System.currentTimeMillis() - checked < WEEK_MS
@@ -376,7 +418,7 @@ class OnDemandViewModel @Inject constructor(
         // films, remakes and titles in another language no longer get another title's poster.
         // One lookup per title, remembered with the poster. (Not with "Fix poster": then the
         // name you typed decides.)
-        val fixed = repository.posterFix(item) != null
+        val fixed = repository.posterFix(item) != null || pinned(item) != null
         val imdb = if (fixed) null else kotlinx.coroutines.withTimeoutOrNull(4_000) { imdbFor(item) }
         var hit = matchAny(item, urgent = false, imdb = imdb)
         val answered = hit != null || matchAnswered(item, imdb)
@@ -415,6 +457,10 @@ class OnDemandViewModel @Inject constructor(
             hitJob.await() to idJob.await()
         }
         hit?.meta?.genres?.takeIf { it.isNotEmpty() }?.let { repository.fillGenres(item, it) }
+        // Picked with Fix match from TMDB: opens by its IMDb id with your own addons.
+        if (hit != null && hit.addonBaseUrl == VodMatchJson.TMDB_SOURCE) {
+            return hit.meta.imdbId?.let { OnDemandTarget.Details(it, type, null, item.uid) } ?: OnDemandTarget.Provider(item)
+        }
         return when {
             hit != null && (imdb == null || hit.meta.imdbId == imdb || hit.meta.id == imdb) ->
                 OnDemandTarget.Details(hit.meta.id, hit.meta.rawType.ifBlank { hit.type }, hit.addonBaseUrl, item.uid)
@@ -728,7 +774,7 @@ class OnDemandViewModel @Inject constructor(
         val saved = repository.savedMatches(items.filter { !homeMatched.containsKey(it.uid) })
         for (item in items) {
             VodHomeIds.rememberReal(item, null)
-            saved[item.uid]?.let { (hit, detailed) ->
+            (matchFixes.fixes.value[com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid)]?.let { it to true } ?: saved[item.uid])?.let { (hit, detailed) ->
                 homeHits[item.uid] = hit
                 homeMatched[item.uid] = hit.meta
                 homeTried += item.uid
@@ -1019,7 +1065,7 @@ class OnDemandViewModel @Inject constructor(
         // Poster and title lookups (addon searches) wait while Nuvio's player is open.
         if (!urgent) com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
         // The provider's TMDB id picks out the right title among same-named ones (see posterFor).
-        val fixed = repository.posterFix(item) != null
+        val fixed = repository.posterFix(item) != null || pinned(item) != null
         val imdb = if (fixed) null else kotlinx.coroutines.withTimeoutOrNull(4_000) { runCatching { imdbFor(item) }.getOrNull() }
         val found = runCatching { matchAny(item, urgent = urgent, imdb = imdb) }.rethrowCancel().getOrNull()
         if (!fixed && (found == null || wrongTitle(found, imdb))) {

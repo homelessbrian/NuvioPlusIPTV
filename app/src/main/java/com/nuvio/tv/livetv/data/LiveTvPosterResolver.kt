@@ -112,11 +112,12 @@ class LiveTvPosterResolver @Inject constructor(
      * Recordings: the title in your addons' catalogs that a recorded show's name matches (movie
      * or series), so its artwork (backdrop and logo) can be shown. Null if there's no good match.
      */
-    suspend fun titleFor(name: String): Hit? {
+    suspend fun titleFor(name: String, hint: TypeHint? = null): Hit? {
         if (LiveTvRepository.isPlaceholderTitle(name) || isGenericName(name)) return null
         val query = LiveTvSearchBridge.cleanTitle(name).ifBlank { name.trim() }
         if (query.length < 2) return null
-        val key = normalize(query)
+        // A recording with an episode number is a show: only shows are looked at (a same-named film can't win).
+        val key = normalize(query) + (hint?.let { "|" + it.kind + it.strong } ?: "")
         titleHits[key]?.let { return it }
         val clues = LiveTvSearchBridge.yearInTitle(name)?.let { Clues(year = it) } ?: Clues()
         val hit = withContext(Urgency(false)) {
@@ -126,7 +127,7 @@ class LiveTvPosterResolver @Inject constructor(
                 var found: Hit? = null
                 for (q in queries) {
                     found = try {
-                        lookup(q, null, if (q == query) clues else Clues(), attempt)
+                        lookup(q, hint, if (q == query) clues else Clues(), attempt)
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {

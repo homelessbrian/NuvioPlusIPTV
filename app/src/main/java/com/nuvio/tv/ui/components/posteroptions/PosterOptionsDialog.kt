@@ -62,7 +62,10 @@ fun PosterOptionsDialog(
     onToggleWatched: () -> Unit,
     /** Live TV fork: the Calendar's bell for a show ("Ring the bell…"), when offered. */
     bellLabel: String? = null,
-    onBell: () -> Unit = {}
+    onBell: () -> Unit = {},
+    /** Live TV fork: one more option (On Demand's "Fix Match"), when offered. */
+    extraLabel: String? = null,
+    onExtra: () -> Unit = {}
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
 
@@ -120,6 +123,19 @@ fun PosterOptionsDialog(
                 )
             ) {
                 Text(bellLabel)
+            }
+        }
+
+        if (extraLabel != null) {
+            Button(
+                onClick = onExtra,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioTheme.colors.BackgroundCard,
+                    contentColor = NuvioTheme.colors.TextPrimary
+                )
+            ) {
+                Text(extraLabel)
             }
         }
 
@@ -244,7 +260,10 @@ fun PosterOptionsHost(
     controller: PosterOptionsController,
     onNavigateToDetail: (id: String, type: String, addonBaseUrl: String) -> Unit,
     /** Live TV fork: offer the Calendar's bell for shows (Search). */
-    calendarBell: Boolean = false
+    calendarBell: Boolean = false,
+    /** Live TV fork: one more option at the end (On Demand's "Fix Match"). */
+    extraLabel: String? = null,
+    onExtra: () -> Unit = {}
 ) {
     val target = state.target
     if (target != null) {
@@ -284,6 +303,11 @@ fun PosterOptionsHost(
             onBell = {
                 bell?.toggle?.invoke()
                 controller.dismiss()
+            },
+            extraLabel = extraLabel,
+            onExtra = {
+                controller.dismiss()
+                onExtra()
             }
         )
     }

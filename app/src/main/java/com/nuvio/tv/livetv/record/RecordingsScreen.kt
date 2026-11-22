@@ -85,7 +85,8 @@ class RecordingsViewModel @Inject constructor(
     private val tmdbService: com.nuvio.tv.core.tmdb.TmdbService,
     private val tmdbMetadataService: com.nuvio.tv.core.tmdb.TmdbMetadataService,
     private val liveRepository: com.nuvio.tv.livetv.data.LiveTvRepository,
-    private val livePrefs: com.nuvio.tv.livetv.data.LiveTvPreferences
+    private val livePrefs: com.nuvio.tv.livetv.data.LiveTvPreferences,
+    private val matchFixes: com.nuvio.tv.livetv.data.TitleMatchFixes
 ) : ViewModel() {
     val recordings = recorder.recordings
     /** How far a move between drives has got (null when nothing is moving). */
@@ -142,14 +143,50 @@ class RecordingsViewModel @Inject constructor(
     val posters: StateFlow<Map<String, String>> = _posters.asStateFlow()
     private val tried = HashSet<String>()
 
+    /** A show set to record or recorded: its name, channel, and whether it's surely a show (an episode number, a series rule). */
+    data class TitleAsk(val title: String, val channelName: String?, val series: Boolean = false, val description: String? = null)
+
+    private fun hintFor(series: Boolean) =
+        if (series) com.nuvio.tv.livetv.data.LiveTvPosterResolver.TypeHint(com.nuvio.tv.livetv.data.LiveTvPosterResolver.Kind.SERIES, strong = true) else null
+
+    // ---- "Fix match": your pick wins; otherwise the channel's country can pick between same-named shows.
+    private val countryPicks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+    private object NoPick
+
+    /** The title picked with Fix match, or the one the channel's country points to; null = the automatic lookup. */
+    private suspend fun pickedHit(title: String, channelName: String?, series: Boolean): com.nuvio.tv.livetv.data.LiveTvPosterResolver.Hit? {
+        matchFixes.get(com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(title))?.let { return it }
+        val country = com.nuvio.tv.livetv.data.TitleMatchFixes.countryOf(channelName) ?: return null
+        val key = posterKey(title) + "|" + country
+        countryPicks[key]?.let { return it as? com.nuvio.tv.livetv.data.LiveTvPosterResolver.Hit }
+        val clean = com.nuvio.tv.livetv.ui.LiveTvSearchBridge.cleanTitle(title).ifBlank { title.trim() }
+        val c = runCatching { matchFixes.byCountry(clean, country) }.getOrNull()
+        val hit = c?.let { runCatching { matchFixes.toHit(it) }.getOrNull() }
+        countryPicks[key] = hit ?: NoPick
+        return hit
+    }
+
+    private suspend fun posterOf(ask: TitleAsk): String? {
+        if (com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(ask.channelName, ask.title)) return null
+        pickedHit(ask.title, ask.channelName, ask.series)?.meta?.let { m -> (m.rawPosterUrl ?: m.poster)?.let { return it } }
+        return posterResolver.posterFor(
+            ask.title, hintFor(ask.series),
+            com.nuvio.tv.livetv.data.LiveTvPosterResolver.Clues(description = ask.description), urgent = false
+        )
+    }
+
+    private fun askOf(r: LiveTvRecording) = TitleAsk(r.title, r.channelName, !r.episode.isNullOrBlank(), r.description)
+
+    private var lastRecordings: List<LiveTvRecording> = emptyList()
+
     fun loadPosters(list: List<LiveTvRecording>) {
+        lastRecordings = list
         val todo = list.filter { tried.add(it.id) }
         if (todo.isEmpty()) return
         viewModelScope.launch {
             for (r in todo) {
                 // Sports recordings: the channel's logo (game titles found random films).
-                if (com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(r.channelName, r.title)) continue
-                val poster = runCatching { posterResolver.posterFor(r.title, null, com.nuvio.tv.livetv.data.LiveTvPosterResolver.Clues(), urgent = false) }.getOrNull()
+                val poster = runCatching { posterOf(askOf(r)) }.getOrNull()
                 if (poster != null) _posters.value = _posters.value + (r.id to poster)
             }
         }
@@ -159,16 +196,17 @@ class RecordingsViewModel @Inject constructor(
     /** Show title (see [posterKey]) -> poster, for the Scheduled and Series tabs. */
     val titlePosters: StateFlow<Map<String, String>> = _titlePosters.asStateFlow()
     private val triedTitles = HashSet<String>()
+    private var lastTitles: List<TitleAsk> = emptyList()
 
-    /** Posters for shows set to record: title and the channel's name (sports keep the channel logo). */
-    fun loadTitlePosters(list: List<Pair<String, String?>>) {
-        val todo = list.filter { (title, _) -> title.isNotBlank() && triedTitles.add(posterKey(title)) }
+    /** Posters for shows set to record (sports keep the channel logo). */
+    fun loadTitlePosters(list: List<TitleAsk>) {
+        lastTitles = list
+        val todo = list.filter { it.title.isNotBlank() && triedTitles.add(posterKey(it.title)) }
         if (todo.isEmpty()) return
         viewModelScope.launch {
-            for ((title, channelName) in todo) {
-                if (com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(channelName, title)) continue
-                val poster = runCatching { posterResolver.posterFor(title, null, com.nuvio.tv.livetv.data.LiveTvPosterResolver.Clues(), urgent = false) }.getOrNull()
-                if (poster != null) _titlePosters.value = _titlePosters.value + (posterKey(title) to poster)
+            for (ask in todo) {
+                val poster = runCatching { posterOf(ask) }.getOrNull()
+                if (poster != null) _titlePosters.value = _titlePosters.value + (posterKey(ask.title) to poster)
             }
         }
     }
@@ -183,9 +221,11 @@ class RecordingsViewModel @Inject constructor(
     fun loadArt(list: List<LiveTvRecording>) {
         val todo = list.filter { triedArt.add(it.id) }
         if (todo.isEmpty()) return
-        // Found before: straight away, no lookup.
+        val fixed = matchFixes.fixes.value
+        // Found before: straight away, no lookup (not when a Fix match pick is set: the pick decides).
         val saved = HashMap<String, RecordingArt>()
         todo.forEach { r ->
+            if (fixed.containsKey(com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(r.title))) return@forEach
             runCatching { artPrefs.getString(r.id, null) }.getOrNull()?.let { v ->
                 val parts = v.split('\n')
                 saved[r.id] = RecordingArt(parts.getOrNull(0)?.ifBlank { null }, parts.getOrNull(1)?.ifBlank { null })
@@ -197,16 +237,20 @@ class RecordingsViewModel @Inject constructor(
                 if (r.id in saved) continue
                 // Sports: no guessed artwork (the card shows the channel's logo).
                 if (com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(r.channelName, r.title)) continue
-                val found = runCatching { findArt(r.title) }.getOrNull() ?: continue
+                val found = runCatching { findArt(askOf(r)) }.getOrNull() ?: continue
                 _art.value = _art.value + (r.id to found)
                 runCatching { artPrefs.edit().putString(r.id, (found.backdrop ?: "") + "\n" + (found.logo ?: "")).apply() }
             }
         }
     }
 
-    /** The show in your addons' catalogs, then its TMDB backdrop and logo (the addon's own if TMDB has none). */
-    private suspend fun findArt(title: String): RecordingArt? {
-        val hit = posterResolver.titleFor(title) ?: return null
+    /** The picked title's artwork, else the show in your addons' catalogs, then its TMDB backdrop and logo. */
+    private suspend fun findArt(ask: TitleAsk): RecordingArt? {
+        pickedHit(ask.title, ask.channelName, ask.series)?.meta?.let { m ->
+            val backdrop = m.background ?: m.landscapePoster ?: return null
+            return RecordingArt(backdrop, m.logo)
+        }
+        val hit = posterResolver.titleFor(ask.title, hintFor(ask.series)) ?: return null
         val movie = hit.type.equals("movie", ignoreCase = true)
         val tmdb = runCatching {
             tmdbService.ensureTmdbId(hit.meta.id, if (movie) "movie" else "series")?.let { id ->
@@ -220,6 +264,51 @@ class RecordingsViewModel @Inject constructor(
         val logo = tmdb?.logo ?: hit.meta.logo
         if (backdrop == null) return null
         return RecordingArt(backdrop, logo)
+    }
+
+    // ---- Fix match
+
+    /** Shows and movies for the Fix match search. */
+    suspend fun searchMatches(text: String, series: Boolean?, year: Int?) = matchFixes.search(text, series, year)
+
+    /** The pick for this show's name, if one is set. */
+    fun fixFor(title: String) = matchFixes.fixes.value[com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(title)]
+
+    /** Every recording named [title] (and future ones) uses [picked]; null goes back to automatic. */
+    fun setMatch(title: String, picked: com.nuvio.tv.livetv.data.TitleMatchFixes.Candidate?) {
+        viewModelScope.launch {
+            val hit = picked?.let { matchFixes.toHit(it) }
+            matchFixes.set(com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(title), hit)
+            // The collector below redraws the cards (here and when a pick comes in from another TV).
+        }
+    }
+
+    init {
+        // A pick changed (here, or synced from another TV): look those shows up again.
+        viewModelScope.launch {
+            var before = matchFixes.fixes.value
+            matchFixes.fixes.collect { now ->
+                val changed = (before.keys + now.keys).filter { k -> k.startsWith("rec:") && before[k]?.meta != now[k]?.meta }.toSet()
+                before = now
+                if (changed.isNotEmpty()) redo(changed)
+            }
+        }
+    }
+
+    private fun redo(keys: Set<String>) {
+        fun hit(title: String) = com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(title) in keys
+        val recs = lastRecordings.filter { hit(it.title) }
+        recs.forEach { r ->
+            tried.remove(r.id); triedArt.remove(r.id)
+            runCatching { artPrefs.edit().remove(r.id).apply() }
+        }
+        _posters.value = _posters.value - recs.map { it.id }.toSet()
+        _art.value = _art.value - recs.map { it.id }.toSet()
+        val titles = lastTitles.filter { hit(it.title) }
+        titles.forEach { triedTitles.remove(posterKey(it.title)) }
+        _titlePosters.value = _titlePosters.value - titles.map { posterKey(it.title) }.toSet()
+        if (recs.isNotEmpty()) { loadPosters(lastRecordings); loadArt(lastRecordings) }
+        if (titles.isNotEmpty()) loadTitlePosters(lastTitles)
     }
 
     fun playUrl(rec: LiveTvRecording): String = recorder.playUrl(rec)
@@ -282,6 +371,8 @@ fun RecordingsScreen(
         if (showPlaylist) listOfNotNull(channelName, playlistOf(sourceId)).joinToString(" · ") else channelName
     LaunchedEffect(recordings) { viewModel.loadPosters(recordings); viewModel.loadArt(recordings) }
     var menuFor by remember { mutableStateOf<LiveTvRecording?>(null) }
+    // Fix match: the show's name, and whether it's surely a show (null = don't know).
+    var fixMatchFor by remember { mutableStateOf<Pair<String, Boolean?>?>(null) }
     var confirmDelete by remember { mutableStateOf<LiveTvRecording?>(null) }
     var infoFor by remember { mutableStateOf<LiveTvRecording?>(null) }
     // New Recording: picking the channel, then the time.
@@ -339,9 +430,9 @@ fun RecordingsScreen(
     val titlePosters by viewModel.titlePosters.collectAsStateWithLifecycle()
     LaunchedEffect(schedules, seriesRules, repeatRules) {
         viewModel.loadTitlePosters(
-            schedules.map { it.title to it.channel.name } +
-                seriesRules.map { it.title to it.channel.name } +
-                repeatRules.map { it.title to it.channel.name }
+            schedules.map { RecordingsViewModel.TitleAsk(it.title, it.channel.name, !it.episode.isNullOrBlank()) } +
+                seriesRules.map { RecordingsViewModel.TitleAsk(it.title, it.channel.name, series = true) } +
+                repeatRules.map { RecordingsViewModel.TitleAsk(it.title, it.channel.name) }
         )
     }
     fun posterOf(rec: LiveTvRecording): String? = posters[rec.id] ?: titlePosters[posterKey(rec.title)]
@@ -587,6 +678,7 @@ fun RecordingsScreen(
                 (playlistOf(s.channel.sourceId)?.let { "\nRecording from playlist: $it" } ?: ""),
             actions = listOf(
                 "Cancel Recording" to { scheduleMenu = null; viewModel.scheduler.cancel(s.id) },
+                "Fix Match" to { scheduleMenu = null; fixMatchFor = s.title to (if (s.episode.isNullOrBlank()) null else true) },
                 "Close" to { scheduleMenu = null }
             ),
             onDismiss = { scheduleMenu = null }
@@ -606,6 +698,7 @@ fun RecordingsScreen(
                     seriesMenu = null; viewModel.scheduler.setNewOnly(r.id, !r.newOnly)
                 },
                 ("Episodes to Keep: " + (if (r.keepLast == 0) "All" else "Last ${r.keepLast}")) to { seriesMenu = null; seriesKeepMenu = r },
+                "Fix Match" to { seriesMenu = null; fixMatchFor = r.title to true },
                 "Close" to { seriesMenu = null }
             ),
             onDismiss = { seriesMenu = null }
@@ -651,9 +744,28 @@ fun RecordingsScreen(
                 if (RecordingStorage.choices(recContext).size > 1) add("Move To…" to { menuFor = null; movePick = listOf(rec) })
             }
             add("Information" to { menuFor = null; infoFor = rec })
+            // Wrong poster or artwork (a film instead of the show, the US version of a UK show):
+            // pick the right one; it's used for every recording of this show.
+            if (!com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(rec.channelName, rec.title))
+                add("Fix Match" to { menuFor = null; fixMatchFor = rec.title to (if (rec.episode.isNullOrBlank()) null else true) })
             add("Delete" to { menuFor = null; confirmDelete = rec })
         }
         RecordingActionDialog(title = rec.title, detail = rec.problem, actions = actions, onDismiss = { menuFor = null })
+    }
+    fixMatchFor?.let { (title, series) ->
+        val fix = viewModel.fixFor(title)
+        com.nuvio.tv.livetv.ui.FixMatchDialog(
+            title = title,
+            initialQuery = fix?.meta?.name ?: com.nuvio.tv.livetv.ui.LiveTvSearchBridge.cleanTitle(title).ifBlank { title },
+            initialSeries = series,
+            scopeNote = "Used for every recording of this show, now and later",
+            hasFix = fix != null,
+            current = com.nuvio.tv.livetv.data.TitleMatchFixes.currentOf(fix),
+            search = { q, kind, year -> viewModel.searchMatches(q, kind, year) },
+            onPick = { c -> fixMatchFor = null; viewModel.setMatch(title, c) },
+            onReset = { fixMatchFor = null; viewModel.setMatch(title, null) },
+            onDismiss = { fixMatchFor = null }
+        )
     }
     movePick?.let { recs ->
         val here = recs.mapNotNull { viewModel.storageIdOf(it) }.distinct()

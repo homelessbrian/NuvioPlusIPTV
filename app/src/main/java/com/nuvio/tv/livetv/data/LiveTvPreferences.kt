@@ -161,6 +161,8 @@ class LiveTvPreferences @Inject constructor(
         /** Profiles kept matched ("1,3" per group): each group shares one copy of its Live TV choices. */
         val profileMatch = stringSetPreferencesKey("profile_match_groups")
         val calendarChannelPicks = stringPreferencesKey("calendar_channel_picks")
+        /** "Fix match" picks for recordings and On Demand titles (JSON object), see TitleMatchFixes. */
+        val titleMatchFixes = stringPreferencesKey("title_match_fixes")
         val calendarPlans = stringPreferencesKey("calendar_plans")
         val onDemandInStreams = booleanPreferencesKey("on_demand_in_streams")
         val onDemandStreamsPosition = stringPreferencesKey("on_demand_streams_position")
@@ -901,6 +903,13 @@ class LiveTvPreferences @Inject constructor(
 
     suspend fun editCalendarChannelPicks(transform: (String) -> String) {
         store.edit { it[Keys.calendarChannelPicks] = transform(it[Keys.calendarChannelPicks] ?: "") }
+    }
+
+    /** "Fix match": the title picked by hand for a recorded show or an On Demand title (JSON object). */
+    val titleMatchFixes: Flow<String> = store.data.map { it[Keys.titleMatchFixes] ?: "" }.distinctUntilChanged()
+
+    suspend fun editTitleMatchFixes(transform: (String) -> String) {
+        store.edit { it[Keys.titleMatchFixes] = transform(it[Keys.titleMatchFixes] ?: "") }
     }
 
     /** The Calendar's Live TV plans ("record when it's in my guide", "record every new episode"), as JSON. */
