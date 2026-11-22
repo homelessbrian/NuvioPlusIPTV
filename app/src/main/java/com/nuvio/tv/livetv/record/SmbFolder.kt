@@ -61,17 +61,7 @@ data class NetworkFolderConfig(
  * Every call blocks, so call it off the main thread.
  */
 class SmbFolder(val config: NetworkFolderConfig) : Closeable {
-    private val client = SMBClient(
-        SmbConfig.builder()
-            // Android's own security library lacks a piece Windows logins need (MD4).
-            .withSecurityProvider(BCSecurityProvider())
-            .withAuthenticators(NtlmAuthenticator.Factory())
-            .withMultiProtocolNegotiate(true)
-            .withDfsEnabled(false)
-            .withTimeout(20, TimeUnit.SECONDS)
-            .withSoTimeout(45, TimeUnit.SECONDS)
-            .build()
-    )
+    private val client = newClient()
     private val lock = Any()
     private var connection: Connection? = null
     private var session: Session? = null
@@ -355,6 +345,19 @@ class SmbFolder(val config: NetworkFolderConfig) : Closeable {
     companion object {
         private const val BUFFER = 1 shl 20
 
+        /** A file sharing client set up the way every network folder connection uses. */
+        internal fun newClient(): SMBClient = SMBClient(
+            SmbConfig.builder()
+                // Android's own security library lacks a piece Windows logins need (MD4).
+                .withSecurityProvider(BCSecurityProvider())
+                .withAuthenticators(NtlmAuthenticator.Factory())
+                .withMultiProtocolNegotiate(true)
+                .withDfsEnabled(false)
+                .withTimeout(20, TimeUnit.SECONDS)
+                .withSoTimeout(45, TimeUnit.SECONDS)
+                .build()
+        )
+
         /** Statuses that mean the connection itself has gone (connect again), not a file problem. */
         private val RECONNECT_STATUSES = setOf(
             NtStatus.STATUS_NETWORK_NAME_DELETED,
@@ -375,7 +378,7 @@ class SmbFolder(val config: NetworkFolderConfig) : Closeable {
         private fun fileThere(d: DiskShare, path: String): Boolean =
             try { d.fileExists(path) } catch (e: SMBApiException) { if (e.status in NOT_FOUND) false else throw e }
 
-        private fun hostAndPort(host: String): Pair<String, Int?> {
+        internal fun hostAndPort(host: String): Pair<String, Int?> {
             val h = host.trim()
             // [fe80::1]:445, or a plain IPv6 address (several colons) with no port.
             if (h.startsWith("[")) {
