@@ -19,7 +19,7 @@ internal object SportsStale {
         Sport.AMERICAN_FOOTBALL -> 7 * HOUR
         Sport.BASEBALL -> 9 * HOUR
         Sport.BASKETBALL, Sport.HOCKEY -> 6 * HOUR
-        Sport.FOOTBALL, Sport.RUGBY -> 5 * HOUR
+        Sport.FOOTBALL, Sport.RUGBY, Sport.HANDBALL -> 5 * HOUR
         else -> 12 * HOUR
     }
 

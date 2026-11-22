@@ -2099,7 +2099,7 @@ private fun periodLine(sides: List<Side>, sport: Sport): String {
         Sport.AMERICAN_FOOTBALL -> "Q"
         Sport.BASKETBALL -> "Q"
         Sport.HOCKEY -> "P"
-        Sport.FOOTBALL, Sport.RUGBY -> "H"
+        Sport.FOOTBALL, Sport.RUGBY, Sport.HANDBALL -> "H"
         else -> ""
     }
     return (0 until n).joinToString(" · ") { i ->
@@ -2121,7 +2121,7 @@ private fun periodsAddUp(sides: List<Side>): Boolean = sides.all { s ->
 private fun periodHeading(sport: Sport): String = when (sport) {
     Sport.BASEBALL -> "BY INNING"
     Sport.HOCKEY -> "BY PERIOD"
-    Sport.FOOTBALL, Sport.RUGBY -> "BY HALF"
+    Sport.FOOTBALL, Sport.RUGBY, Sport.HANDBALL -> "BY HALF"
     Sport.AMERICAN_FOOTBALL -> "BY QUARTER"
     else -> "BY PERIOD"
 }

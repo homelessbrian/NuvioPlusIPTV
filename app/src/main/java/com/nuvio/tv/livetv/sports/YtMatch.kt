@@ -79,7 +79,9 @@ internal class YtMatch private constructor(
 
     private fun teamIn(s: Side, joined: String): Boolean {
         val t = s.team
-        return listOfNotNull(t.fullName, t.name, t.location?.let { it + t.name }, t.location?.takeIf { it.length >= 5 })
+        // Handball clubs: "Paris Saint-Germain Handball" is "Paris Saint-Germain" in video titles.
+        val club = if (sport == Sport.HANDBALL) listOfNotNull(t.fullName, t.name).map { fold(it).replace(HANDBALL_WORDS, " ") } else emptyList()
+        return (listOfNotNull(t.fullName, t.name, t.location?.let { it + t.name }, t.location?.takeIf { it.length >= 5 }) + club)
             .map(::joined).filter { it.length >= 3 }.any { it in joined }
     }
 
@@ -180,6 +182,8 @@ internal class YtMatch private constructor(
         private val SLASHED = Regex("\\b(\\d{1,2})/(\\d{1,2})/(\\d{2}|\\d{4})\\b")
         private val SEASON = Regex("\\b((?:19|20)\\d{2})/(?:\\d{2}|\\d{4})\\b")
         private val YEAR = Regex("\\b(?:19|20)\\d{2}\\b")
+        private val HANDBALL_WORDS = Regex("""\b(handball|handbol|handboll|handbold|haandbold|handbal|hb|hc|hbc)\b""")
+
         private val GENERIC = setOf(
             "the", "and", "vs", "of", "at", "in", "on", "an", "from", "with", "for", "to", "by",
             "highlights", "highlight", "extended", "condensed", "official", "full", "fight", "fights", "match", "matches",

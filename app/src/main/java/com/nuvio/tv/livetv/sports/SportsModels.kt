@@ -26,10 +26,11 @@ enum class Sport(val label: String, val icon: String) {
     LACROSSE("Lacrosse", "🥍"),
     GAELIC("Gaelic Games", "☘️"),
     NETBALL("Netball", "🤾"),
+    HANDBALL("Handball", "🤾"),
     OTHER("More Sports", "🏅");
 
     /** Home team first with "v" (UK style) instead of away team first with "at" (US style). */
-    val homeFirst: Boolean get() = this == FOOTBALL || this == RUGBY || this == CRICKET || this == AUSSIE_RULES
+    val homeFirst: Boolean get() = this == FOOTBALL || this == RUGBY || this == CRICKET || this == AUSSIE_RULES || this == HANDBALL
 }
 
 /** How a league's events look: two teams, or one event with many competitors (a race, a fight card). */

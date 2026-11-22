@@ -389,10 +389,18 @@ data class Standings(
                 )
             }
             if (rows.isEmpty()) return null
-            val sorted = rows.sortedBy { if (it.pos > 0) it.pos else Int.MAX_VALUE }.mapIndexed { i, r -> if (r.pos > 0) r else r.copy(pos = i + 1) }
+            fun ordered(list: List<StandingsRow>) = list.sortedBy { if (it.pos > 0) it.pos else Int.MAX_VALUE }.mapIndexed { i, r -> if (r.pos > 0) r else r.copy(pos = i + 1) }
+            // Group stages (handball's EHF Champions League: Group A and B) carry each row's group.
+            val groupOf = HashMap<String, String>()
+            arr.objs().forEach { t -> val id = t.str("id"); val g = t.str("group"); if (id != null && g != null) groupOf[id] = g }
+            val groups = if (groupOf.isEmpty()) listOf(StandingsGroup(league.name, null, ordered(rows)))
+            else rows.groupBy { groupOf[it.id] ?: league.name }.toSortedMap().map { (g, list) ->
+                StandingsGroup(if (g.length <= 2) "Group $g" else g, null, ordered(list))
+            }
+            val sorted = groups.flatMap { it.rows }
             val columns = listOf(c("gamesPlayed", "P"), c("wins", "W"), c("ties", "D"), c("losses", "L"), c("pointDifferential", "GD"), c("points", "PTS"))
                 .filter { col -> sorted.any { !it.values[col.key].isNullOrBlank() } }
-            return Standings(league.id, root.str("season"), StandingsKind.TABLE, columns, listOf(StandingsGroup(league.name, null, sorted)), "TheSportsDB", now)
+            return Standings(league.id, root.str("season"), StandingsKind.TABLE, columns, groups, "TheSportsDB", now)
         }
 
         // ------------------------------------------------------------------ AFCON qualifying

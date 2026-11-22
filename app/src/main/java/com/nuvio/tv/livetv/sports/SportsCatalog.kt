@@ -736,6 +736,9 @@ object SportsCatalog {
     /** "FC", "AFC" and similar on the end or start of names: guides often leave them off. */
     private val CLUB_BITS = Regex("""^(fc|afc|cf|sc|ac|ss|ssc|as|rc|cd|ca|sv|vfb|vfl|tsg|1 fc) | (fc|afc|cf|sc)$""")
 
+    /** Handball club letters and words that guides leave off ("THW", "SG", "HSG", "Handball", "HB"). */
+    private val HANDBALL_BITS = Regex("""^(thw|sg|hsg|tbv|tvb|tsv|mt|sc|hc|hb|hbc|rk|ks|kc|vfl|fc|tus|sv|bsv|gwd|ehv|usam|pauc) |\b(handball club|handball|hbc|hb|hc)\b""")
+
     /**
      * How a guide might name [team]: strong names (enough on their own, with the other team) and
      * weak ones (a city: Detroit plays four sports). College teams go by their school.
@@ -753,6 +756,16 @@ object SportsCatalog {
             nick?.let { if (loc == null || nick != loc) weak += it }
         } else if (league.sport == Sport.FOOTBALL) {
             nick?.let { strong += it; strong += it.replace(CLUB_BITS, "").trim() }
+            loc?.let { if (loc != nick) weak += it }
+        } else if (league.sport == Sport.HANDBALL) {
+            // "Fenix Toulouse Handball", "SG Flensburg-Handewitt", "THW Kiel": guides usually
+            // drop the club letters and "Handball" ("Toulouse v Montpellier", "Flensburg-Handewitt").
+            nick?.let { n ->
+                strong += n
+                val core = n.replace(HANDBALL_BITS, " ").trim().replace(Regex(" +"), " ")
+                if (core.length >= 4) strong += core
+                core.split(' ').filter { it.length >= 4 && it != core }.forEach { weak += it }
+            }
             loc?.let { if (loc != nick) weak += it }
         } else {
             nick?.let { if (it != loc) strong += it }

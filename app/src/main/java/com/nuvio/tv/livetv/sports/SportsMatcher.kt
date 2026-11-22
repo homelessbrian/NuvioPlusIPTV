@@ -1446,6 +1446,7 @@ internal class SportsMatcher(
             Sport.VOLLEYBALL to listOf("volleyball", "beach volley"),
             Sport.BASKETBALL to listOf("basketball", "nba", "wnba", "nbl", "euroleague"),
             Sport.NETBALL to listOf("netball"),
+            Sport.HANDBALL to listOf("handball", "ehf", "starligue", "handball bundesliga", "hbl"),
             Sport.HOCKEY to listOf("hockey", "nhl"),
             Sport.BASEBALL to listOf("baseball", "mlb"),
             Sport.CRICKET to listOf("cricket"),
@@ -1455,7 +1456,7 @@ internal class SportsMatcher(
             Sport.GOLF to listOf("golf"),
             Sport.RACING to listOf("motogp", "formula 1", "formula one", "nascar", "indycar", "superbikes", "wsbk"),
             Sport.LACROSSE to listOf("lacrosse"),
-            Sport.OTHER to listOf("handball", "futsal", "badminton", "table tennis", "esports", "cycling", "horse racing")
+            Sport.OTHER to listOf("futsal", "badminton", "table tennis", "esports", "cycling", "horse racing")
         )
 
         /** Words too common to tell one tournament or race from another ("Hall of Fame Open" is hall/fame, never open). */
