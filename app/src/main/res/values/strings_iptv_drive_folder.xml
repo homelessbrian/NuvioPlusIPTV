@@ -53,5 +53,5 @@
     <string name="iptv_place_network_change_note">Pick a different computer, NAS or shared folder</string>
     <string name="iptv_place_network_remove">Remove Network Folder</string>
     <string name="iptv_place_network_remove_note">Back to how it was before it was set up</string>
-    <string name="iptv_place_network_remove_message">This TV stops using %1$s. Recordings already saved there stay on it and aren't deleted.</string>
+    <string name="iptv_place_network_remove_message">This TV stops using %1$s. Recordings already saved there stay on it and aren\'t deleted.</string>
 </resources>
