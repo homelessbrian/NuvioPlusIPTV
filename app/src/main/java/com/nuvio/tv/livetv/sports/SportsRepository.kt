@@ -1889,6 +1889,24 @@ class SportsRepository @Inject constructor(
                 if (!loading && matchMissed) kickMatch("Live TV update done")
             }
         }
+        // A playlist turned off (or its live channels switched off) or deleted: its channels leave
+        // every game right now, and the full search follows without waiting its usual 10 minutes.
+        // The quick search only ever adds channels, so without this they stayed until the next
+        // full search.
+        scope.launch {
+            var known: Set<String>? = null
+            prefs.playlists.collect { list ->
+                val ids = list.mapTo(HashSet()) { it.id }
+                val gone = list.filter { !it.liveEnabled }.mapTo(HashSet()) { it.id }
+                known?.let { gone += it - ids }
+                known = ids
+                if (gone.isNotEmpty() && dropMatchesOf(gone)) {
+                    playlistOffPending = true
+                    pickPending = true
+                    kickMatch("a playlist was turned off")
+                }
+            }
+        }
         // Last time's matches straight away (the games, the channels), so the page isn't empty
         // while the new round runs.
         scope.launch {
@@ -1975,7 +1993,7 @@ class SportsRepository @Inject constructor(
             }
             val why = when {
                 firstSearch -> "first search"
-                picked -> "a channel pick"
+                picked -> if (playlistOffPending) "a playlist was turned off" else "a channel pick"
                 lastFullKey == null -> kickReason ?: "app start"
                 kick != lastFullKick -> kickReason ?: "asked again"
                 games?.count != lastGames?.count || games?.games != lastGames?.games -> "games added or removed"
@@ -2002,6 +2020,7 @@ class SportsRepository @Inject constructor(
             lastFullAt = System.currentTimeMillis()
             lastQuickAt = lastFullAt
             pickPending = false
+            playlistOffPending = false
             lastRun = System.currentTimeMillis()
             val t0 = System.currentTimeMillis()
             if (!matchOrDefer()) return@collect
@@ -2092,6 +2111,23 @@ class SportsRepository @Inject constructor(
         }
     }
     @Volatile private var pickPending = false
+    /** The pending search is for a playlist turned off, not a channel pick (only the report's wording differs). */
+    @Volatile private var playlistOffPending = false
+
+    /** Takes the channels of these playlists off every game; true when any game lost one. */
+    private fun dropMatchesOf(sourceIds: Set<String>): Boolean {
+        var changed = false
+        _matches.update { prev ->
+            val next = HashMap<String, List<ChannelMatch>>(prev.size)
+            for ((id, list) in prev) {
+                val kept = list.filter { it.channel.sourceId !in sourceIds }
+                if (kept.size != list.size) changed = true
+                if (kept.isNotEmpty()) next[id] = kept
+            }
+            if (changed) next else prev
+        }
+        return changed
+    }
     private var lastSummary: String? = null
 
     // Nobody on the Sports page: low priority, out of the way of the guide and the video.
