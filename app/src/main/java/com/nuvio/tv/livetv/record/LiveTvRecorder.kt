@@ -81,6 +81,8 @@ class LiveTvRecorder @Inject constructor(
 
     init {
         NetworkFolderStore.init(context)
+        // The network folder follows Live TV sync (set up once, every TV and phone gets it).
+        NetworkFolderStore.bindSync(context, prefs, scope)
         scope.launch {
             settings = runCatching { prefs.currentSettings() }.getOrDefault(settings)
             load()

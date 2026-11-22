@@ -3,12 +3,16 @@ package com.nuvio.tv.livetv.record
 import android.content.Context
 import android.net.Uri
 import com.nuvio.tv.core.profile.ProtectedProfilePreferences
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 
 /**
- * The network folder set up for recordings (Settings › Live TV › Recordings), kept on this TV
- * only: it isn't synced or backed up, and the password is stored encrypted.
+ * The network folder set up for recordings (Settings › Live TV › Recordings). Kept here with
+ * the password stored encrypted, and synced (Live TV sync, Logins part, like playlist logins)
+ * so the other TVs and the phone app get it without typing it again. Which storage each TV
+ * records to stays its own choice.
  */
 object NetworkFolderStore {
     /** The "Save recordings to" choice for the network folder. */
@@ -29,6 +33,8 @@ object NetworkFolderStore {
     @Volatile private var cached: NetworkFolderConfig? = null
     @Volatile private var folder: SmbFolder? = null
     @Volatile private var rootPath: String? = null
+    @Volatile private var syncPrefs: com.nuvio.tv.livetv.data.LiveTvPreferences? = null
+    @Volatile private var syncScope: kotlinx.coroutines.CoroutineScope? = null
 
     /** The app, once [init] has run (for the recordings server, which has none of its own). */
     internal fun appContext(): Context? = appContext
@@ -68,8 +74,40 @@ object NetworkFolderStore {
         return cached
     }
 
-    /** Saves (or with null, forgets) the folder. False if it couldn't be saved. */
+    /**
+     * Keeps the folder in step with the synced copy (once, from the recorder). A folder set up
+     * here before it was synced goes into the synced copy; one set up, changed or removed on
+     * another device comes in from it.
+     */
+    fun bindSync(context: Context, prefs: com.nuvio.tv.livetv.data.LiveTvPreferences, scope: kotlinx.coroutines.CoroutineScope) {
+        if (syncPrefs != null) return
+        syncPrefs = prefs
+        syncScope = scope
+        val app = context.applicationContext
+        scope.launch {
+            runCatching {
+                if (prefs.networkFolderJson.first() == null) config(app)?.let { prefs.setNetworkFolderJson(toJson(it)) }
+            }
+            prefs.networkFolderJson.collect { json ->
+                if (json == null) return@collect
+                val synced = if (json.isBlank()) null else fromJson(json)
+                if (json.isNotBlank() && synced == null) return@collect
+                if (synced != config(app)) runCatching { store(app, synced) }
+            }
+        }
+    }
+
+    /** Saves (or with null, forgets) the folder, here and in the synced copy. False if it couldn't be saved. */
     fun save(context: Context, config: NetworkFolderConfig?): Boolean {
+        if (!store(context, config)) return false
+        val prefs = syncPrefs
+        val scope = syncScope
+        if (prefs != null && scope != null) scope.launch { runCatching { prefs.setNetworkFolderJson(config?.let { toJson(it) } ?: "") } }
+        return true
+    }
+
+    /** Saves (or forgets) the folder on this TV only. */
+    private fun store(context: Context, config: NetworkFolderConfig?): Boolean {
         synchronized(this) {
             if (runCatching { secure(context).write(0, config?.let { toJson(it) }) }.isFailure) return false
             cached = config

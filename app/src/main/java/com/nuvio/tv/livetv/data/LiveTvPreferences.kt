@@ -133,6 +133,8 @@ class LiveTvPreferences @Inject constructor(
         val parentalPin = stringPreferencesKey("parental_pin")
         val lockAdultContent = booleanPreferencesKey("lock_adult_content")
         val lockLogins = booleanPreferencesKey("lock_logins")
+        /** The network folder for recordings (JSON); "" once removed. Synced (Logins part) so other TVs and phones get it. */
+        val networkFolder = stringPreferencesKey("network_folder")
         val showQualityBadges = booleanPreferencesKey("show_quality_badges")
         val showFrameRate = booleanPreferencesKey("show_frame_rate")
         val matchFrameRate = booleanPreferencesKey("match_frame_rate")
@@ -540,6 +542,13 @@ class LiveTvPreferences @Inject constructor(
     private val epgsMemo = SnapshotMemo<List<EpgSource>>()
     private val settingsMemo = SnapshotMemo<LiveTvSettings>()
     private val userStateMemo = SnapshotMemo<LiveUserState>()
+
+    /** The network folder for recordings as JSON: null when never set up here or synced, "" once removed. */
+    val networkFolderJson: Flow<String?> = store.data.map { it[Keys.networkFolder] }.distinctUntilChanged()
+
+    suspend fun setNetworkFolderJson(json: String) {
+        store.edit { it[Keys.networkFolder] = json }
+    }
 
     val playlists: Flow<List<PlaylistSource>> = store.data
         .map { p -> playlistsMemo.get(p, null, 0) { decodePlaylists(p[Keys.playlists]) } }

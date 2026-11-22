@@ -96,7 +96,7 @@ internal class SyncParts(private val store: SharedPreferences) {
         private const val BEHAVIOR_SEEN = "sync_part_behavior_seen"
         private val PROFILE_SUFFIX = Regex("""_p\d+$""")
 
-        private val LOGIN_KEYS = setOf("playlists", "epg_sources", "playlist_accounts", "epg_overrides")
+        private val LOGIN_KEYS = setOf("playlists", "epg_sources", "playlist_accounts", "epg_overrides", "network_folder")
         private val FAVORITE_KEYS = setOf(
             "favorites", "hidden_channels", "hidden_groups", "hidden_playlists", "channel_names", "channel_logos", "channel_numbers",
             "group_names", "group_order", "custom_groups", "channel_order", "channel_copies", "channel_audio",
