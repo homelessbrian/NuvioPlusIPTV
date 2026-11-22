@@ -968,6 +968,8 @@ private fun SportsHub(
                 playingKey = playingKey,
                 videoOn = videoOn,
                 videoSlot = videoSlot,
+                windowInUse = windowInUse,
+                viewModel = viewModel,
                 header = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
