@@ -2020,8 +2020,14 @@ class LiveTvPreferences @Inject constructor(
 
     private companion object {
         const val EPG_SEP = "\u0001"
-        /** Per-TV keys that Google Drive sync never copies. */
-        private val SYNC_EXCLUDED_BASE = setOf("last_channel", "previous_channel", "last_group", "recent", "on_demand_imports", "channel_quality", "developer_tools", "recording_storage")
+        /**
+         * Per-TV keys that sync never copies. The last five depend on this TV's own screen and sound
+         * set-up (a receiver, a 24p screen, how much memory it has), so each TV keeps its own.
+         */
+        private val SYNC_EXCLUDED_BASE = setOf(
+            "last_channel", "previous_channel", "last_group", "recent", "on_demand_imports", "channel_quality", "developer_tools", "recording_storage",
+            "audio_passthrough", "buffer_size", "match_frame_rate", "frame_rate_mode", "aspect_mode"
+        )
         private val PROFILE_SUFFIX = Regex("""_p\d+$""")
         /** A playlist id (they are random UUIDs). */
         private val PLAYLIST_ID = Regex("""[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}""")
