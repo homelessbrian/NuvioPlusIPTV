@@ -87,4 +87,32 @@
     <string name="home_rows_playlist_names">"Nama playlist di judul baris"</string>
     <string name="home_rows_playlist_names_hint">"Baris TV Langsung dan On Demand dari grup playlist menampilkan nama playlist-nya (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"Semua"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · hingga %2$d judul"</string>
+    <string name="home_rows_hidden_empty">"Belum ada yang ditampilkan – disembunyikan di Beranda"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"Kategori film atau serial"</string>
+    <string name="home_rows_pick_vod_group_title">"Pilih kategori"</string>
+    <string name="home_rows_pick_vod_none">"Belum ada kategori On Demand. Aktifkan On Demand untuk playlist di Pengaturan → Live TV, atau tampilkan beberapa grup di Kelola Grup VOD."</string>
+    <string name="home_rows_pick_vod_recent">"Baru ditambahkan"</string>
+    <string name="home_rows_pick_vod_recent_hint">"Film atau serial"</string>
+    <string name="home_rows_vod_movies">"Film"</string>
+    <string name="home_rows_vod_series">"Serial"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="other">"%1$d judul"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"Film Baru Ditambahkan"</string>
+    <string name="home_rows_vod_recent_series_title">"Serial Baru Ditambahkan"</string>
+    <string name="home_rows_upcoming_today">"Hari ini %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"Besok %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"Baris On Demand"</string>
+    <string name="home_rows_option_vod">"Judul dari"</string>
+    <string name="home_hero_live">"LIVE"</string>
+    <string name="home_hero_min_left">"Sisa %1$d mnt"</string>
+    <string name="home_hero_starting">"Mulai sekarang"</string>
+    <string name="home_hero_starts_in_min">"Mulai dalam %1$d mnt"</string>
+    <string name="home_hero_starts_in_hours">"Mulai dalam %1$d j %2$d mnt"</string>
+    <string name="home_hero_watch_on">"Tonton di"</string>
+    <string name="home_hero_next">"BERIKUTNYA"</string>
 </resources>

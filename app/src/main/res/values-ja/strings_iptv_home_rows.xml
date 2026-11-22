@@ -87,4 +87,32 @@
     <string name="home_rows_playlist_names">"行タイトルにプレイリスト名"</string>
     <string name="home_rows_playlist_names_hint">"プレイリストのグループから作ったライブTVとオンデマンドの行に、どのプレイリストかを表示します（UK: Entertainment - HBStrong）。"</string>
     <string name="home_rows_limit_all">"すべて"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · 最大 %2$d 本"</string>
+    <string name="home_rows_hidden_empty">"今は表示するものがありません – ホームでは非表示"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"映画またはシリーズのカテゴリ"</string>
+    <string name="home_rows_pick_vod_group_title">"カテゴリを選ぶ"</string>
+    <string name="home_rows_pick_vod_none">"On Demand のカテゴリはまだありません。設定 → Live TV でプレイリストの On Demand をオンにするか、「VOD グループの管理」でグループを表示してください。"</string>
+    <string name="home_rows_pick_vod_recent">"最近追加"</string>
+    <string name="home_rows_pick_vod_recent_hint">"映画またはシリーズ"</string>
+    <string name="home_rows_vod_movies">"映画"</string>
+    <string name="home_rows_vod_series">"シリーズ"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="other">"%1$d 本"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"最近追加された映画"</string>
+    <string name="home_rows_vod_recent_series_title">"最近追加されたシリーズ"</string>
+    <string name="home_rows_upcoming_today">"今日 %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"明日 %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"On Demand の行"</string>
+    <string name="home_rows_option_vod">"タイトルの取得元"</string>
+    <string name="home_hero_live">"LIVE"</string>
+    <string name="home_hero_min_left">"残り %1$d 分"</string>
+    <string name="home_hero_starting">"まもなく開始"</string>
+    <string name="home_hero_starts_in_min">"%1$d 分後に開始"</string>
+    <string name="home_hero_starts_in_hours">"%1$d 時間 %2$d 分後に開始"</string>
+    <string name="home_hero_watch_on">"放送チャンネル"</string>
+    <string name="home_hero_next">"次"</string>
 </resources>

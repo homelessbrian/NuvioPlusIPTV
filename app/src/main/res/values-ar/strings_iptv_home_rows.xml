@@ -87,4 +87,37 @@
     <string name="home_rows_playlist_names">"اسم قائمة التشغيل في عناوين الصفوف"</string>
     <string name="home_rows_playlist_names_hint">"تُظهر صفوف البث المباشر وحسب الطلب المأخوذة من مجموعة قائمة تشغيل اسم تلك القائمة (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"الكل"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · حتى %2$d عنوان"</string>
+    <string name="home_rows_hidden_empty">"لا شيء لعرضه الآن – مخفي في الرئيسية"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"فئة أفلام أو مسلسلات"</string>
+    <string name="home_rows_pick_vod_group_title">"اختر فئة"</string>
+    <string name="home_rows_pick_vod_none">"لا توجد فئات On Demand بعد. شغّل On Demand لقائمة تشغيل من الإعدادات ← Live TV، أو أظهر بعض المجموعات في إدارة مجموعات VOD."</string>
+    <string name="home_rows_pick_vod_recent">"أُضيف مؤخرًا"</string>
+    <string name="home_rows_pick_vod_recent_hint">"أفلام أو مسلسلات"</string>
+    <string name="home_rows_vod_movies">"أفلام"</string>
+    <string name="home_rows_vod_series">"مسلسلات"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="zero">"%1$d عنوان"</item>
+        <item quantity="one">"عنوان واحد (%1$d)"</item>
+        <item quantity="two">"عنوانان (%1$d)"</item>
+        <item quantity="few">"%1$d عناوين"</item>
+        <item quantity="many">"%1$d عنوانًا"</item>
+        <item quantity="other">"%1$d عنوان"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"أفلام أُضيفت مؤخرًا"</string>
+    <string name="home_rows_vod_recent_series_title">"مسلسلات أُضيفت مؤخرًا"</string>
+    <string name="home_rows_upcoming_today">"اليوم %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"غدًا %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"صف On Demand"</string>
+    <string name="home_rows_option_vod">"العناوين من"</string>
+    <string name="home_hero_live">"مباشر"</string>
+    <string name="home_hero_min_left">"متبقٍ %1$d د"</string>
+    <string name="home_hero_starting">"يبدأ الآن"</string>
+    <string name="home_hero_starts_in_min">"يبدأ بعد %1$d د"</string>
+    <string name="home_hero_starts_in_hours">"يبدأ بعد %1$d س %2$d د"</string>
+    <string name="home_hero_watch_on">"شاهد على"</string>
+    <string name="home_hero_next">"التالي"</string>
 </resources>

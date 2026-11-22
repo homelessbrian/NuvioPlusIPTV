@@ -87,4 +87,34 @@
     <string name="home_rows_playlist_names">"שם הפלייליסט בכותרות השורות"</string>
     <string name="home_rows_playlist_names_hint">"שורות של שידור חי ו-VOD מקבוצה של פלייליסט מציגות מאיזה פלייליסט הן (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"הכול"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · עד %2$d כותרים"</string>
+    <string name="home_rows_hidden_empty">"אין מה להציג כרגע – מוסתר בבית"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"קטגוריית סרטים או סדרות"</string>
+    <string name="home_rows_pick_vod_group_title">"בחירת קטגוריה"</string>
+    <string name="home_rows_pick_vod_none">"עדיין אין קטגוריות On Demand. אפשר להפעיל On Demand לרשימת השמעה בהגדרות ← Live TV, או להציג קבוצות בניהול קבוצות VOD."</string>
+    <string name="home_rows_pick_vod_recent">"נוספו לאחרונה"</string>
+    <string name="home_rows_pick_vod_recent_hint">"סרטים או סדרות"</string>
+    <string name="home_rows_vod_movies">"סרטים"</string>
+    <string name="home_rows_vod_series">"סדרות"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="one">"כותר אחד"</item>
+        <item quantity="two">"%1$d כותרים"</item>
+        <item quantity="other">"%1$d כותרים"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"סרטים שנוספו לאחרונה"</string>
+    <string name="home_rows_vod_recent_series_title">"סדרות שנוספו לאחרונה"</string>
+    <string name="home_rows_upcoming_today">"היום %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"מחר %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"שורת On Demand"</string>
+    <string name="home_rows_option_vod">"כותרים מתוך"</string>
+    <string name="home_hero_live">"בשידור חי"</string>
+    <string name="home_hero_min_left">"נותרו %1$d דק׳"</string>
+    <string name="home_hero_starting">"מתחיל עכשיו"</string>
+    <string name="home_hero_starts_in_min">"מתחיל בעוד %1$d דק׳"</string>
+    <string name="home_hero_starts_in_hours">"מתחיל בעוד %1$d שע׳ %2$d דק׳"</string>
+    <string name="home_hero_watch_on">"לצפייה ב"</string>
+    <string name="home_hero_next">"הבא"</string>
 </resources>

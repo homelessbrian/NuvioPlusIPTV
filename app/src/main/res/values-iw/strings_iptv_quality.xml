@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"האיכות הטובה ביותר"</string>
+    <string name="autoplay_mode_quality_desc">"מפעיל את המקור הטוב ביותר לפי כללי האיכות: רזולוציה, מקור, קבוצות שחרור אמינות, HDR ושמע."</string>
+    <string name="quality_rules_title">"כללי איכות"</string>
+    <string name="quality_rules_subtitle">"מה בוחרת האיכות הטובה ביותר ואיך ממיינת האיכות הטובה ביותר קודם, לכל מקור."</string>
+    <string name="quality_rules_open">"הצגה"</string>
+    <string name="quality_rules_close">"הסתרה"</string>
+    <string name="stream_sort_sources">"מיון מקורות"</string>
+    <string name="stream_sort_sources_sub">"סדר רשימת המקורות."</string>
+    <string name="stream_sort_source_order">"סדר מקורות"</string>
+    <string name="stream_sort_source_order_desc">"כפי שכל מקור שולח אותם."</string>
+    <string name="stream_sort_best_first">"האיכות הטובה ביותר קודם"</string>
+    <string name="stream_sort_best_first_desc">"מדורג לפי כללי האיכות. קישורים שהכללים מוציאים לא מופיעים."</string>
+    <string name="quality_low_groups_title">"קבוצות שחרור באיכות נמוכה"</string>
+    <string name="quality_low_groups_subtitle">"קבוצות שידועות בשחרורים גרועים או מזויפים (רשימת TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"העברה לתחתית"</string>
+    <string name="quality_low_groups_hide">"הסתרה"</string>
+    <string name="quality_low_groups_normal">"כמו כל השאר"</string>
+    <string name="quality_trusted_groups_title">"קבוצות שחרור אמינות"</string>
+    <string name="quality_trusted_groups_subtitle">"הטובות קודם. מתחיל ברשימת TRaSH Guides. ריקון מחזיר את הרשימה הזו."</string>
+    <string name="quality_rules_reset_title">"איפוס להמלצה"</string>
+    <string name="quality_rules_reset_subtitle">"מחזיר את כל כללי האיכות להגדרה המומלצת."</string>
+</resources>

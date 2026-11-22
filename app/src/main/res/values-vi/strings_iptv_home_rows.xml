@@ -87,4 +87,32 @@
     <string name="home_rows_playlist_names">"Tên danh sách phát trong tiêu đề hàng"</string>
     <string name="home_rows_playlist_names_hint">"Các hàng TV trực tiếp và Theo yêu cầu từ một nhóm của danh sách phát sẽ hiện tên danh sách đó (UK: Entertainment - HBStrong)."</string>
     <string name="home_rows_limit_all">"Tất cả"</string>
+    <string name="home_rows_type_vod">"On Demand"</string>
+    <string name="home_rows_desc_vod">"%1$s · tối đa %2$d mục"</string>
+    <string name="home_rows_hidden_empty">"Hiện chưa có gì – đã ẩn trên Trang chủ"</string>
+    <string name="home_rows_section_vod">"On Demand"</string>
+    <string name="home_rows_pick_vod_group">"Một thể loại phim hoặc phim bộ"</string>
+    <string name="home_rows_pick_vod_group_title">"Chọn thể loại"</string>
+    <string name="home_rows_pick_vod_none">"Chưa có thể loại On Demand. Hãy bật On Demand cho một danh sách phát trong Cài đặt → Live TV, hoặc hiện vài nhóm trong Quản lý nhóm VOD."</string>
+    <string name="home_rows_pick_vod_recent">"Mới thêm"</string>
+    <string name="home_rows_pick_vod_recent_hint">"Phim lẻ hoặc phim bộ"</string>
+    <string name="home_rows_vod_movies">"Phim lẻ"</string>
+    <string name="home_rows_vod_series">"Phim bộ"</string>
+    <plurals name="home_rows_vod_titles_count">
+        <item quantity="other">"%1$d mục"</item>
+    </plurals>
+    <string name="home_rows_vod_recent_movies_title">"Phim lẻ mới thêm"</string>
+    <string name="home_rows_vod_recent_series_title">"Phim bộ mới thêm"</string>
+    <string name="home_rows_upcoming_today">"Hôm nay %1$s"</string>
+    <string name="home_rows_upcoming_tomorrow">"Ngày mai %1$s"</string>
+    <string name="home_rows_upcoming_day">"%1$s %2$s"</string>
+    <string name="home_rows_options_vod_subtitle">"Hàng On Demand"</string>
+    <string name="home_rows_option_vod">"Mục từ"</string>
+    <string name="home_hero_live">"TRỰC TIẾP"</string>
+    <string name="home_hero_min_left">"Còn %1$d phút"</string>
+    <string name="home_hero_starting">"Bắt đầu ngay"</string>
+    <string name="home_hero_starts_in_min">"Bắt đầu sau %1$d phút"</string>
+    <string name="home_hero_starts_in_hours">"Bắt đầu sau %1$d giờ %2$d phút"</string>
+    <string name="home_hero_watch_on">"Xem trên"</string>
+    <string name="home_hero_next">"TIẾP THEO"</string>
 </resources>

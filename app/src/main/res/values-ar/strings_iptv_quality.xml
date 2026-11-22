@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="autoplay_mode_quality">"أفضل جودة"</string>
+    <string name="autoplay_mode_quality_desc">"يشغّل أفضل مصدر حسب قواعد الجودة: الدقة والمصدر ومجموعات الإصدار الموثوقة وHDR والصوت."</string>
+    <string name="quality_rules_title">"قواعد الجودة"</string>
+    <string name="quality_rules_subtitle">"ما يختاره \"أفضل جودة\" وكيف يرتّب \"أفضل جودة أولًا\"، لكل مصدر."</string>
+    <string name="quality_rules_open">"إظهار"</string>
+    <string name="quality_rules_close">"إخفاء"</string>
+    <string name="stream_sort_sources">"ترتيب المصادر"</string>
+    <string name="stream_sort_sources_sub">"ترتيب قائمة المصادر."</string>
+    <string name="stream_sort_source_order">"ترتيب المصادر"</string>
+    <string name="stream_sort_source_order_desc">"كما يرسلها كل مصدر."</string>
+    <string name="stream_sort_best_first">"أفضل جودة أولًا"</string>
+    <string name="stream_sort_best_first_desc">"مرتبة حسب قواعد الجودة. الروابط التي تستبعدها القواعد لا تظهر."</string>
+    <string name="quality_low_groups_title">"مجموعات إصدار منخفضة الجودة"</string>
+    <string name="quality_low_groups_subtitle">"مجموعات معروفة بإصدارات رديئة أو مزيفة (قائمة TRaSH Guides)."</string>
+    <string name="quality_low_groups_push_down">"النقل إلى الأسفل"</string>
+    <string name="quality_low_groups_hide">"إخفاء"</string>
+    <string name="quality_low_groups_normal">"معاملتها كالبقية"</string>
+    <string name="quality_trusted_groups_title">"مجموعات إصدار موثوقة"</string>
+    <string name="quality_trusted_groups_subtitle">"الأفضل أولًا. تبدأ بقائمة TRaSH Guides. أفرغها لاستعادة تلك القائمة."</string>
+    <string name="quality_rules_reset_title">"إعادة الضبط إلى الموصى به"</string>
+    <string name="quality_rules_reset_subtitle">"يعيد كل قواعد الجودة إلى الإعداد الموصى به."</string>
+</resources>
