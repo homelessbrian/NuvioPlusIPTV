@@ -1723,13 +1723,45 @@ internal fun LiveTvSettingsContent(
                 // Drives come and go: read again whenever the section is opened (or the network folder changes).
                 var networkVersion by remember { mutableStateOf(0) }
                 val drives = remember("recordings" in open, networkVersion) { com.nuvio.tv.livetv.record.RecordingStorage.choices(recContext) }
-                val driveProblems = remember("recordings" in open) { com.nuvio.tv.livetv.record.RecordingStorage.problems(recContext) }
+                val driveProblems = remember("recordings" in open, networkVersion) { com.nuvio.tv.livetv.record.RecordingStorage.problems(recContext) }
                 val chosen = drives.firstOrNull { it.id == s.recordingStorage }
                 fun driveLabel(c: com.nuvio.tv.livetv.record.RecordingStorage.Choice) =
                     // A network folder that hasn't said how big it is: no "0 MB free".
                     if (c.isNetwork && c.totalBytes <= 0) c.label
                     else c.label + " · " + com.nuvio.tv.livetv.record.RecordingStorage.sizeLabel(c.freeBytes, context.settingsLocale) + context.getString(R.string.iptv_settings_free)
                 var pickingDrive by remember { mutableStateOf(false) }
+                var pickingFolder by remember { mutableStateOf(false) }
+                var forgettingFolder by remember { mutableStateOf(false) }
+                // Waiting for "All files access" to be turned on in Android's settings: the folder
+                // picker opens by itself once it is (checked every second for a few minutes).
+                var waitingAccess by remember { mutableStateOf(false) }
+                LaunchedEffect(waitingAccess) {
+                    var tries = 0
+                    while (waitingAccess && tries++ < 300) {
+                        delay(1_000)
+                        if (com.nuvio.tv.livetv.record.DriveFolders.hasAccess()) { waitingAccess = false; pickingFolder = true }
+                    }
+                    waitingAccess = false
+                }
+                fun chooseFolder() {
+                    val folders = com.nuvio.tv.livetv.record.DriveFolders
+                    when {
+                        !folders.supported() -> confirm(
+                            context.getString(R.string.iptv_drive_folder_title),
+                            context.getString(R.string.iptv_drive_folder_unsupported),
+                            context.getString(android.R.string.ok)
+                        ) { }
+                        folders.hasAccess() -> pickingFolder = true
+                        else -> confirm(
+                            context.getString(R.string.iptv_drive_folder_access_title),
+                            context.getString(R.string.iptv_drive_folder_access_message),
+                            context.getString(R.string.iptv_drive_folder_access_open)
+                        ) {
+                            if (folders.openAccessSettings(recContext)) waitingAccess = true
+                            else com.nuvio.tv.livetv.record.LiveTvNotice.show(context.getString(R.string.iptv_drive_folder_access_missing))
+                        }
+                    }
+                }
                 var editingNetwork by remember { mutableStateOf(false) }
                 var pickingNetworkSpace by remember { mutableStateOf(false) }
                 var pickingKeepDays by remember { mutableStateOf(false) }
@@ -1830,7 +1862,18 @@ internal fun LiveTvSettingsContent(
                                 pickingDrive = false
                                 withLogins { editingNetwork = true }
                             }
-                        ) + driveProblems.map { p ->
+                        ) + listOf(
+                            // Any folder on a drive (for boxes that don't give the app its own folder on one).
+                            context.getString(R.string.iptv_drive_folder_choose) to {
+                                pickingDrive = false
+                                chooseFolder()
+                            }
+                        ) + (if (com.nuvio.tv.livetv.record.DriveFolders.saved(recContext).isNotEmpty()) listOf(
+                            context.getString(R.string.iptv_drive_folder_forget) to {
+                                pickingDrive = false
+                                forgettingFolder = true
+                            }
+                        ) else emptyList()) + driveProblems.map { p ->
                             // Plugged in but not usable: say why instead of leaving it out.
                             context.getString(R.string.iptv_settings_1_s_can_t_be_used, p.label) to {
                                 pickingDrive = false
@@ -1848,6 +1891,38 @@ internal fun LiveTvSettingsContent(
                         ),
                         onDismiss = { pickingDrive = false }
                     )
+                    if (pickingFolder) DriveFolderDialog(
+                        locale = context.settingsLocale,
+                        onDismiss = { pickingFolder = false },
+                        onChosen = { id ->
+                            pickingFolder = false
+                            networkVersion++
+                            update { it.copy(recordingStorage = id) }
+                        }
+                    )
+                    if (forgettingFolder) {
+                        val saved = remember { com.nuvio.tv.livetv.record.DriveFolders.saved(recContext) }
+                        ActionListDialog(
+                            title = context.getString(R.string.iptv_drive_folder_forget),
+                            actions = saved.map { f ->
+                                val label = drives.firstOrNull { it.id == f.id }?.label
+                                    ?: (f.drive + (if (f.path.isEmpty()) "" else " › " + f.path))
+                                label to {
+                                    forgettingFolder = false
+                                    confirm(
+                                        context.getString(R.string.iptv_drive_folder_forget),
+                                        context.getString(R.string.iptv_drive_folder_forget_message, label),
+                                        context.getString(R.string.iptv_drive_folder_forget_button)
+                                    ) {
+                                        com.nuvio.tv.livetv.record.DriveFolders.remove(recContext, f)
+                                        networkVersion++
+                                        if (s.recordingStorage == f.id) update { it.copy(recordingStorage = "") }
+                                    }
+                                }
+                            },
+                            onDismiss = { forgettingFolder = false }
+                        )
+                    }
                     if (editingNetwork) NetworkFolderDialog(
                         onDismiss = { editingNetwork = false },
                         onSaved = {

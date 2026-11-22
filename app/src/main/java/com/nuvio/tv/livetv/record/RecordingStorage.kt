@@ -26,6 +26,11 @@ object RecordingStorage {
         val isDevice: Boolean get() = id.isEmpty()
         /** The network folder (its free space is what it last said; total 0 = not known). */
         val isNetwork: Boolean get() = id == NetworkFolderStore.STORAGE_ID
+        /** A folder the user picked on a drive ([DriveFolders]); recordings go straight into it. */
+        val isFolder: Boolean get() = DriveFolders.isFolderId(id)
+        /** Where Pause and Rewind Anytime keeps its buffer when this is the chosen place. */
+        val timeshiftDir: File get() =
+            if (isFolder) File(dir, ".timeshift") else File(dir.parentFile ?: dir, "timeshift")
     }
 
     /** Every place recordings can go right now (this device first). */
@@ -73,6 +78,23 @@ object RecordingStorage {
             val f = File(context.filesDir, "recordings")
             out.add(0, Choice("", displayContext.getString(R.string.iptv_storage_this_device), f, runCatching { context.filesDir.usableSpace }.getOrDefault(0L), runCatching { context.filesDir.totalSpace }.getOrDefault(0L)))
         }
+        // Folders picked on a drive (needs "All files access"; drives must be plugged in).
+        if (DriveFolders.hasAccess()) {
+            val drives = DriveFolders.drives(context)
+            for (saved in DriveFolders.saved(context)) {
+                val drive = drives.firstOrNull { it.id == saved.drive } ?: continue
+                val dir = DriveFolders.dirOf(context, saved, drives) ?: continue
+                val name = if (saved.path.isEmpty()) "" else " › " + saved.path.substringAfterLast('/')
+                val driveName = if (drive.primary) displayContext.getString(R.string.iptv_storage_this_device) else drive.label
+                out += Choice(
+                    id = saved.id,
+                    label = driveName + name,
+                    dir = dir,
+                    freeBytes = runCatching { drive.root.usableSpace }.getOrDefault(0L),
+                    totalBytes = runCatching { drive.root.totalSpace }.getOrDefault(0L)
+                )
+            }
+        }
         // The network folder, when one is set up (Settings › Live TV › Recordings).
         NetworkFolderStore.config(context)?.let { cfg ->
             val space = NetworkFolderStore.cachedSpace(context)
@@ -97,8 +119,11 @@ object RecordingStorage {
     fun problems(context: Context): List<Problem> {
         val displayContext = context.withAppLocale()
         val sm = context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
-        val usable = choices(context).map { it.id }.toSet()
-        return volumes(sm).filter { it.isRemovable && !it.isPrimary && (it.uuid == null || it.uuid !in usable) }
+        val usable = choices(context).flatMap { c ->
+            // A drive with a picked folder on it is usable too.
+            listOfNotNull(c.id, DriveFolders.parse(c.id)?.drive)
+        }.toSet()
+        return volumes(sm).filter { it.isRemovable && !it.isPrimary && (it.uuid == null || it.uuid !in usable) && DriveFolders.idOf(it) !in usable }
             .mapNotNull { vol ->
                 val label = runCatching { vol.getDescription(context) }.getOrNull()?.takeIf { it.isNotBlank() } ?: displayContext.getString(R.string.iptv_storage_usb_drive)
                 val reason = when (vol.state) {

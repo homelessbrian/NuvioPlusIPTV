@@ -60,9 +60,7 @@ private fun clearOldBuffers(context: android.content.Context, before: Long) {
     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
         runCatching {
             val roots = listOf(java.io.File(context.cacheDir, "timeshift")) +
-                com.nuvio.tv.livetv.record.RecordingStorage.choices(context).mapNotNull { c ->
-                    c.dir.parentFile?.let { java.io.File(it, "timeshift") }
-                }
+                com.nuvio.tv.livetv.record.RecordingStorage.choices(context).map { it.timeshiftDir }
             roots.distinct().forEach { root ->
                 root.listFiles()?.forEach { f ->
                     val started = f.name.toLongOrNull() ?: 0L

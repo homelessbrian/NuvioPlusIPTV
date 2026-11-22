@@ -185,6 +185,7 @@ class LiveTvRecorder @Inject constructor(
         if (storage.id != settings.recordingStorage) {
             LiveTvNotice.show(
                 if (settings.recordingStorage == NetworkFolderStore.STORAGE_ID) "The network folder isn't set up, so \"$title\" is saved to this device"
+                else if (DriveFolders.isFolderId(settings.recordingStorage) && !DriveFolders.hasAccess()) "The app no longer has access to the folder for recordings, so \"$title\" is saved to this device"
                 else "The drive for recordings isn't plugged in, so \"$title\" is saved to this device"
             )
         }

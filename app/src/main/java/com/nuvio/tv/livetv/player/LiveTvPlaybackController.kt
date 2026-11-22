@@ -159,10 +159,7 @@ class LiveTvPlaybackController @Inject constructor(
         val first = bufferStorageId == null
         bufferStorageId = id
         val old = timeshift.baseDir
-        timeshift.baseDir = java.io.File(
-            com.nuvio.tv.livetv.record.RecordingStorage.resolve(context, id).dir.parentFile ?: context.cacheDir,
-            "timeshift"
-        )
+        timeshift.baseDir = com.nuvio.tv.livetv.record.RecordingStorage.resolve(context, id).timeshiftDir
         // The drive's own leftovers on first use this session (nothing is recording yet), and
         // the old place's when the setting changes.
         timeshift.cleanLeftovers(listOf(timeshift.baseDir), olderThanMs = if (first) 60_000L else 15 * 60_000L)

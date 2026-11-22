@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_drive_folder_choose">Choose a Folder on a Drive…</string>
+    <string name="iptv_drive_folder_forget">Stop Using a Folder…</string>
+    <string name="iptv_drive_folder_title">Choose a Folder</string>
+    <string name="iptv_drive_folder_pick_drive">Pick the drive, then the folder recordings should go in.</string>
+    <string name="iptv_drive_folder_no_drives">No drives found. Check the drive is plugged in and shows in the box\'s own Storage settings.</string>
+    <string name="iptv_drive_folder_shared_storage">This Device (Shared Storage)</string>
+    <string name="iptv_drive_folder_drive_row">%1$s · %2$s free</string>
+    <string name="iptv_drive_folder_here">Folder: %1$s</string>
+    <string name="iptv_drive_folder_save_here">✓  Save Recordings Here</string>
+    <string name="iptv_drive_folder_make">＋  New Folder \"%1$s\"</string>
+    <string name="iptv_drive_folder_default_name">Nuvio Recordings</string>
+    <string name="iptv_drive_folder_up">‹  Back</string>
+    <string name="iptv_drive_folder_cant_write">This box won\'t let the app save in this folder. Try another folder, or another drive. An NTFS drive may need formatting as exFAT.</string>
+    <string name="iptv_drive_folder_access_title">Allow Access to Drives</string>
+    <string name="iptv_drive_folder_access_message">To save to any folder on a drive, Android needs \"All files access\" turned on for this app. On the next screen, turn on \"Allow access to manage all files\" for Nuvio + IPTV, then press Back. The app only uses it for the recording folders you pick.</string>
+    <string name="iptv_drive_folder_access_open">Open Settings</string>
+    <string name="iptv_drive_folder_access_missing">This box has no screen for \"All files access\", so a folder on a drive can\'t be picked here.</string>
+    <string name="iptv_drive_folder_unsupported">Picking a folder on a drive needs Android 11 or newer. On this box, recordings can go to a drive in the list when Android gives the app a folder on it.</string>
+    <string name="iptv_drive_folder_forget_message">\"%1$s\" won\'t be offered any more. Recordings already in it stay on the drive but won\'t show in the app unless you choose the folder again.</string>
+    <string name="iptv_drive_folder_forget_button">Stop Using</string>
+</resources>
