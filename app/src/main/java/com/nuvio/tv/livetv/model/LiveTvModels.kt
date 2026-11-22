@@ -255,7 +255,12 @@ data class EpgSource(
     val lastError: String? = null,
     val programCount: Int = 0,
     /** Minutes to move this guide's listings by: later (+) or earlier (−). Applied when the guide is stored. */
-    val shiftMinutes: Int = 0
+    val shiftMinutes: Int = 0,
+    /** User agent typed in for this guide (some guide servers only answer IPTV apps). Blank: automatic. */
+    val userAgent: String = "",
+    /** With none typed in: the one that worked when the app's default was turned away (a media
+     *  player's), remembered on this TV. Blank: the app's default. */
+    val fallbackUserAgent: String = ""
 )
 
 data class CatchupInfo(
@@ -997,7 +1002,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-21 21:35"
+    const val KIT_STAMP = "2026-11-22 02:35"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

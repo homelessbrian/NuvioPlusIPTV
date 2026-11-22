@@ -180,7 +180,7 @@ class LiveTvSettingsViewModel @Inject constructor(
     fun setPlaylistCatchupShift(id: String, minutes: Int) = viewModelScope.launch { repository.setPlaylistCatchupShift(id, minutes) }
     fun setEpgShift(id: String, minutes: Int) = viewModelScope.launch { repository.setEpgShift(id, minutes) }
 
-    fun addEpg(name: String, url: String) = viewModelScope.launch { repository.addEpg(name, url) }
+    fun addEpg(name: String, url: String, userAgent: String = "") = viewModelScope.launch { repository.addEpg(name, url, userAgent) }
     fun saveEpg(source: EpgSource) = viewModelScope.launch { repository.updateEpg(source) }
     fun removeEpg(id: String) = viewModelScope.launch { repository.removeEpg(id) }
     fun setEpgEnabled(id: String, enabled: Boolean) = viewModelScope.launch { repository.setEpgEnabled(id, enabled) }

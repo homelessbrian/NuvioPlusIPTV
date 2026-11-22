@@ -368,15 +368,23 @@ class LiveTvRepository @Inject constructor(
         scope.launch { rebuild() }
     }
 
-    suspend fun addEpg(name: String, url: String): String {
+    suspend fun addEpg(name: String, url: String, userAgent: String = ""): String {
         val id = UUID.randomUUID().toString()
-        prefs.updateEpgSources { it + EpgSource(id = id, name = name.ifBlank { "EPG" }, url = url.trim()) }
+        prefs.updateEpgSources { it + EpgSource(id = id, name = name.ifBlank { "EPG" }, url = url.trim(), userAgent = userAgent.trim()) }
         scope.launch { refreshInternal(forcePlaylists = false, forceEpg = false, forceIds = setOf(id)) }
         return id
     }
 
     suspend fun updateEpg(source: EpgSource) {
-        prefs.updateEpgSources { list -> list.map { if (it.id == source.id) source else it } }
+        prefs.updateEpgSources { list ->
+            list.map { old ->
+                if (old.id != source.id) old
+                // A new link or user agent: the remembered fallback is worked out again.
+                else if (old.url.trim() != source.url.trim() || old.userAgent.trim() != source.userAgent.trim())
+                    source.copy(url = source.url.trim(), userAgent = source.userAgent.trim(), fallbackUserAgent = "")
+                else source
+            }
+        }
         scope.launch { refreshInternal(forcePlaylists = false, forceEpg = false, forceIds = setOf(source.id)) }
     }
 
@@ -751,13 +759,11 @@ class LiveTvRepository @Inject constructor(
                         val source = playlists.firstOrNull { it.id == target.playlistId }
                             ?: throw com.nuvio.stalker.StalkerException(com.nuvio.stalker.StalkerError.STALE_SESSION)
                         downloadStalkerGuide(source, file, settings)
-                    } else download(
-                        target.url, file, target.userAgent,
-                        progressLabel = { localized -> localized.getString(R.string.iptv_repository_status_downloading_guide_label, target.name) },
+                    } else downloadGuide(
+                        target, file,
                         // Also whole when the guide has gone stale: a provider that keeps answering
                         // "not changed" to the short check left channels without listings overnight.
-                        full = forceEpg || forcedHere || stale || guideHoles,
-                        reportAs = target.name
+                        full = forceEpg || forcedHere || stale || guideHoles
                     )
                 }
                 if (result.getOrNull() == true) changed = true
@@ -2013,7 +2019,9 @@ class LiveTvRepository @Inject constructor(
         /** A playlist's own (built-in) guide: that playlist. */
         val playlistId: String? = null,
         /** How far this guide's listings are moved (its own time shift), in ms. */
-        val shiftMs: Long = 0L
+        val shiftMs: Long = 0L,
+        /** No user agent typed in for it (or its playlist): turned away, it's asked again as a media player. */
+        val autoAgent: Boolean = false
     )
 
     /** Each guide file's time shift (ms), and each playlist's built-in guide shift, as last collected. */
@@ -2050,11 +2058,14 @@ class LiveTvRepository @Inject constructor(
         fun hostOf(u: String) = runCatching { java.net.URI(u.trim()).host?.lowercase() }.getOrNull()
         prefs.currentEpgSources().filter { it.enabled && it.url.isNotBlank() }.forEach { src ->
             val host = hostOf(src.url)
-            val ua = allPlaylists.firstOrNull { pl ->
+            val borrowed = if (src.userAgent.isNotBlank()) "" else allPlaylists.firstOrNull { pl ->
                 pl.effectiveUserAgent.isNotBlank() && host != null &&
                     hostOf(if (pl.isXtream) pl.xtreamBase() else pl.url) == host
             }?.effectiveUserAgent.orEmpty()
-            targets += EpgTarget(src.id, src.id, src.name, src.url, ua, shiftMs = src.shiftMinutes * 60_000L)
+            // Its own user agent first, then its playlist's, then the one that worked last time.
+            val ua = src.userAgent.ifBlank { borrowed }.ifBlank { src.fallbackUserAgent }
+            targets += EpgTarget(src.id, src.id, src.name, src.url, ua, shiftMs = src.shiftMinutes * 60_000L,
+                autoAgent = src.userAgent.isBlank() && borrowed.isBlank())
         }
         val playlists = prefs.currentPlaylists().filter { it.liveEnabled && it.useEmbeddedEpg }
         for (pl in playlists) {
@@ -2073,7 +2084,8 @@ class LiveTvRepository @Inject constructor(
                 if (targets.none { it.url == url }) {
                     targets += EpgTarget(
                         "auto_" + sha1(url), null, "${pl.name} (built-in)", url, pl.effectiveUserAgent,
-                        playlistId = pl.id, shiftMs = pl.guideShiftMinutes * 60_000L
+                        playlistId = pl.id, shiftMs = pl.guideShiftMinutes * 60_000L,
+                        autoAgent = pl.userAgent.isBlank()
                     )
                 }
             }
@@ -3077,7 +3089,7 @@ class LiveTvRepository @Inject constructor(
             if (checkPlaylist && (response.code == 403 || response.code == 406)) {
                 throw NotAPlaylistException("an error (${httpError(response.code)})")
             }
-            if (!response.isSuccessful) error(httpError(response.code))
+            if (!response.isSuccessful) throw HttpStatusException(response.code, httpError(response.code))
             val body = response.body ?: error("Empty response")
             val tmp = File(target.parentFile, target.name + ".tmp")
             // With a label: how much has come in so far, so a big download doesn't look frozen.
@@ -3148,6 +3160,41 @@ class LiveTvRepository @Inject constructor(
 
     /** An M3U link answered with something other than channels; [what] says what came back. */
     private class NotAPlaylistException(val what: String) : Exception(what)
+
+    /** The server answered with an error code (same message as before, the code kept for retries). */
+    private class HttpStatusException(val code: Int, message: String) : IllegalStateException(message)
+
+    /**
+     * Downloads a guide. With no user agent typed in for it (or its playlist): if the server
+     * turns the app's default (browser-style) user agent away, as some guide providers do to keep
+     * out web scrapers (often with a 404), it's asked again as a media player (VLC), like other
+     * IPTV apps. The one that worked is remembered for that guide on this TV.
+     */
+    private suspend fun downloadGuide(target: EpgTarget, file: File, full: Boolean): Boolean {
+        val label: (Context) -> String = { localized -> localized.getString(R.string.iptv_repository_status_downloading_guide_label, target.name) }
+        if (!target.autoAgent) return download(target.url, file, target.userAgent, progressLabel = label, full = full, reportAs = target.name)
+        val first = target.userAgent.ifBlank { DEFAULT_UA }
+        val second = if (first == PLAYER_UA) DEFAULT_UA else PLAYER_UA
+        fun nameOf(ua: String) = if (ua == PLAYER_UA) "a media-player user agent (VLC)" else "the app's default user agent"
+        val refused = try {
+            return download(target.url, file, first, progressLabel = label, full = full, reportAs = target.name)
+        } catch (e: HttpStatusException) {
+            if (e.code !in GUIDE_AGENT_RETRY_CODES) throw e
+            e
+        }
+        LIVE_REPORT.add("Guide \"${target.name}\": ${nameOf(first)} got HTTP ${refused.code}; trying ${nameOf(second)}")
+        val changed = try {
+            download(target.url, file, second, progressLabel = label, full = true, reportAs = target.name)
+        } catch (e: HttpStatusException) {
+            throw HttpStatusException(e.code, httpError(e.code) + ". If this guide's provider asks for a specific user agent, enter it in the guide's settings.")
+        }
+        LIVE_REPORT.add("Guide \"${target.name}\": loaded with ${nameOf(second)}" + if (target.sourceId != null) "; using it for this guide from now on" else "")
+        target.sourceId?.let { id ->
+            val remember = if (second == DEFAULT_UA) "" else second
+            prefs.updateEpgSources { list -> list.map { if (it.id == id) it.copy(fallbackUserAgent = remember) else it } }
+        }
+        return changed
+    }
 
     /**
      * Downloads an M3U link. With no user agent set for it: if the link answers the app's
@@ -3968,6 +4015,8 @@ class LiveTvRepository @Inject constructor(
         const val DEFAULT_UA = "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
         /** Tried for M3U links that don't send channels to [DEFAULT_UA] (see downloadM3u). */
         const val PLAYER_UA = "VLC/3.0.20 LibVLC/3.0.20"
+        /** Answers a guide server gives a user agent it doesn't like (see downloadGuide). */
+        private val GUIDE_AGENT_RETRY_CODES = setOf(401, 403, 404, 406, 451, 884)
 
         private val qualityTokens = Regex("""\b(fhd|uhd|hd|sd|4k|8k|hevc|h265|h264|1080p|720p|backup|raw)\b""")
         private val prefixToken = Regex("""^[a-z]{2,3}\s*[:|]\s*""")

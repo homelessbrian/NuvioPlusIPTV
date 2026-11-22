@@ -1785,7 +1785,7 @@ class LiveTvPreferences @Inject constructor(
                             it.copy(lastUpdatedMs = 0, lastError = null, channelCount = 0, serverTimezone = "", catchupNoHlsSince = 0L)
                         })
                         Keys.epgs.name -> encodeEpgs(decodeEpgs(value).map {
-                            it.copy(lastUpdatedMs = 0, lastError = null, programCount = 0)
+                            it.copy(lastUpdatedMs = 0, lastError = null, programCount = 0, fallbackUserAgent = "")
                         })
                         else -> value
                     }
@@ -1816,7 +1816,7 @@ class LiveTvPreferences @Inject constructor(
         data.optJSONObject(com.nuvio.vpn.android.VpnBackup.KEY)?.optString("v")?.let {
             com.nuvio.vpn.android.VpnBackup.restoreSetup(context, it)
         }
-        // Playlists whose address or login changed: they need downloading again.
+        // Playlists whose address or login changed, and guides whose link or user agent changed: they need downloading again.
         val changed = HashSet<String>()
         store.edit { p ->
             val localPlaylists = decodePlaylists(p[Keys.playlists]).associateBy { it.id }
@@ -1856,7 +1856,12 @@ class LiveTvPreferences @Inject constructor(
                         } else if (name == Keys.epgs.name) {
                             v = encodeEpgs(decodeEpgs(v).map { r ->
                                 localEpgs[r.id]?.let { l ->
-                                    r.copy(lastUpdatedMs = l.lastUpdatedMs, lastError = l.lastError, programCount = l.programCount)
+                                    // A new link or user agent from the other TV: downloaded again.
+                                    if (l.url != r.url || l.userAgent != r.userAgent) changed += r.id
+                                    r.copy(
+                                        lastUpdatedMs = l.lastUpdatedMs, lastError = l.lastError, programCount = l.programCount,
+                                        fallbackUserAgent = if (l.url == r.url) l.fallbackUserAgent.ifBlank { r.fallbackUserAgent } else ""
+                                    )
                                 } ?: r
                             })
                         }
@@ -1968,7 +1973,9 @@ class LiveTvPreferences @Inject constructor(
                     lastUpdatedMs = o.optLong("lastUpdatedMs"),
                     lastError = o.optString("lastError").ifBlank { null },
                     programCount = o.optInt("programCount"),
-                    shiftMinutes = o.optInt("shiftMinutes", 0)
+                    shiftMinutes = o.optInt("shiftMinutes", 0),
+                    userAgent = o.optString("userAgent"),
+                    fallbackUserAgent = o.optString("fallbackUserAgent")
                 )
             }
         }.getOrDefault(emptyList())
@@ -1983,6 +1990,7 @@ class LiveTvPreferences @Inject constructor(
                     .put("enabled", s.enabled).put("lastUpdatedMs", s.lastUpdatedMs)
                     .put("lastError", s.lastError ?: "").put("programCount", s.programCount)
                     .put("shiftMinutes", s.shiftMinutes)
+                    .put("userAgent", s.userAgent).put("fallbackUserAgent", s.fallbackUserAgent)
             )
         }
         return arr.toString()

@@ -460,6 +460,7 @@ details .field{margin-bottom:16px}
 <label class="check" data-for="xtream stalker" hidden><input id="vod" type="checkbox" checked>${esc(texts.includeVod)}</label>
 <div class="field" data-for="m3u xtream stalker"><label for="epg">${esc(texts.epgOptionalLabel)}</label><input id="epg" name="epg" type="url" dir="ltr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(texts.epgPlaceholder)}"></div>
 <div class="field" data-for="epg" hidden><label for="eurl">${esc(texts.epgLabel)}</label><input id="eurl" type="url" dir="ltr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(texts.epgPlaceholder)}"></div>
+<div class="field" data-for="epg" hidden><label for="eua">${esc(texts.userAgentLabel)}</label><input id="eua" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(texts.userAgentPlaceholder)}"></div>
 <button class="send" type="submit" id="send">${esc(texts.send)}</button>
 <div id="msg" role="status"></div>
 </form>
@@ -482,7 +483,7 @@ else if(kind==='xtream'){p.set('server',v('server'));p.set('user',v('user'));p.s
 p.set('live',document.getElementById('live').checked?'1':'0');p.set('vod',document.getElementById('vod').checked?'1':'0');p.set('epg',v('epg'))}
 else if(kind==='stalker'){['portal','mac','suser','serial','devid','devid2','sig','tz','lang'].forEach(function(id){p.set(id,v(id))});p.set('spass',document.getElementById('spass').value);
 p.set('live',document.getElementById('live').checked?'1':'0');p.set('vod',document.getElementById('vod').checked?'1':'0');p.set('epg',v('epg'))}
-else{p.set('url',v('eurl'))}
+else{p.set('url',v('eurl'));p.set('ua',v('eua'))}
 var b=document.getElementById('send');b.disabled=true;msg(labels.sending,'');
 fetch(location.pathname.replace(/\/$/,'')+'/add',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
 .then(function(r){return r.json()}).then(function(j){

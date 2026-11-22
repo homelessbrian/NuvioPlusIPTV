@@ -1865,9 +1865,13 @@ internal fun LiveTvSettingsContent(
         LiveDialog.AddFromPhone -> AddFromPhoneDialog(viewModel = viewModel, onDismiss = close)
         LiveDialog.AddEpg -> SourceFormDialog(
             title = context.getString(R.string.iptv_settings_add_epg_source_2),
-            fields = listOf(FormField(context.getString(R.string.iptv_settings_name), context.getString(R.string.iptv_settings_guide)), FormField(context.getString(R.string.iptv_settings_xmltv_url), "http://…/epg.xml.gz")),
+            fields = listOf(
+                FormField(context.getString(R.string.iptv_settings_name), context.getString(R.string.iptv_settings_guide)),
+                FormField(context.getString(R.string.iptv_settings_xmltv_url), "http://…/epg.xml.gz"),
+                FormField(context.getString(R.string.iptv_settings_user_agent_optional), "")
+            ),
             onDismiss = close,
-            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addEpg(v[0], v[1]); close() }
+            onSave = { v, _ -> if (v[1].isNotBlank()) viewModel.addEpg(v[0], v[1], v[2]); close() }
         )
         is LiveDialog.PlaylistActions -> ActionListDialog(
             title = d.source.name,
@@ -2159,9 +2163,13 @@ internal fun LiveTvSettingsContent(
         )
         is LiveDialog.EditEpg -> SourceFormDialog(
             title = context.getString(R.string.iptv_settings_edit_epg_source),
-            fields = listOf(FormField(context.getString(R.string.iptv_settings_name), "", d.source.name), FormField(context.getString(R.string.iptv_settings_xmltv_url), "", d.source.url)),
+            fields = listOf(
+                FormField(context.getString(R.string.iptv_settings_name), "", d.source.name),
+                FormField(context.getString(R.string.iptv_settings_xmltv_url), "", d.source.url),
+                FormField(context.getString(R.string.iptv_settings_user_agent_optional), "", d.source.userAgent)
+            ),
             onDismiss = close,
-            onSave = { v, _ -> viewModel.saveEpg(d.source.copy(name = v[0], url = v[1])); close() }
+            onSave = { v, _ -> viewModel.saveEpg(d.source.copy(name = v[0], url = v[1], userAgent = v[2])); close() }
         )
         LiveDialog.HiddenChannels -> UnhideDialog(
             title = context.getString(R.string.iptv_settings_hidden_channels_2),
@@ -2840,7 +2848,7 @@ private fun AddFromPhoneDialog(viewModel: LiveTvSettingsViewModel, onDismiss: ()
                 }
                 "epg" -> {
                     val name = e.name.ifBlank { "EPG" }
-                    viewModel.addEpg(name, e.url)
+                    viewModel.addEpg(name, e.url, e.userAgent)
                     receipt(R.string.iptv_settings_tv_guide_1_s, name)
                 }
                 else -> {
