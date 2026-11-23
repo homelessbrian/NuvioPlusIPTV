@@ -186,12 +186,12 @@ internal fun MultiviewPane(
             .clickable(onClick = onClick)
     ) {
         if (pane.player != null) {
-            // Panes are drawn like the rest of the screen (a texture), not in the TV's video window:
-            // some TV boxes have only one or two video windows, so the other panes played sound
-            // over a black picture. Protected channels can only be shown in the video window.
+            // Panes are drawn like the rest of the screen, which shows a picture on every box (some
+            // have only one or two video windows, so other panes played sound over black). Only
+            // boxes known to show several video windows use those; see MultiviewVideoWindows.
             // The kind is fixed when the view is made, so a change makes a new one.
-            androidx.compose.runtime.key(pane.isProtected) {
-                val layout = if (pane.isProtected) R.layout.live_tv_surface_player_view else R.layout.live_tv_texture_player_view
+            androidx.compose.runtime.key(pane.inVideoWindow) {
+                val layout = if (pane.inVideoWindow) R.layout.live_tv_surface_player_view else R.layout.live_tv_texture_player_view
                 AndroidView(
                     factory = { context ->
                         (LayoutInflater.from(context).inflate(layout, null) as PlayerView).apply {
@@ -209,7 +209,7 @@ internal fun MultiviewPane(
                     update = {
                         if (it.player !== pane.player) it.player = pane.player
                         it.videoSurfaceView?.visibility =
-                            if (hideVideo && pane.isProtected) android.view.View.INVISIBLE else android.view.View.VISIBLE
+                            if (hideVideo && pane.inVideoWindow) android.view.View.INVISIBLE else android.view.View.VISIBLE
                     },
                     onRelease = { it.player = null }
                 )
@@ -285,7 +285,7 @@ internal fun MultiviewPane(
         }
         if (overlayVisible && pane.channelKey != null) {
             Row(
-                Modifier.align(Alignment.TopStart).padding(8.dp).graphicsLayer { alpha = overlay.value }.clip(RoundedCornerShape(10.dp))
+                Modifier.align(Alignment.BottomStart).padding(8.dp).graphicsLayer { alpha = overlay.value }.clip(RoundedCornerShape(10.dp))
                     .background(LabelChip).padding(start = 5.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,

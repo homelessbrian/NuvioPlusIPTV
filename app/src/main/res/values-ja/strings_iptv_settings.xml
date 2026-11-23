@@ -671,6 +671,8 @@
     <string name="iptv_settings_sync_vpn_description">"VPN の構成、選択中のプロファイル、自動保護の範囲。"</string>
     <string name="iptv_settings_sync_favorites">"お気に入りとグループ"</string>
     <string name="iptv_settings_sync_favorites_description">"お気に入りのチャンネル、非表示のチャンネル、グループの順序。"</string>
+    <string name="iptv_settings_sync_home_rows">"ホームの行"</string>
+    <string name="iptv_settings_sync_home_rows_description">"ホームに追加したライブTV、スポーツ、オンデマンドの行。スマホとも共有されます。"</string>
     <string name="iptv_settings_sync_sports_description">"フォロー中のチームとリーグ、「リーグを選ぶ」。"</string>
     <string name="iptv_settings_sync_calendar">"カレンダー"</string>
     <string name="iptv_settings_sync_calendar_description">"フォロー中と非表示の番組。"</string>

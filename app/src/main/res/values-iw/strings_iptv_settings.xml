@@ -671,6 +671,8 @@
     <string name="iptv_settings_sync_vpn_description">"תצורות VPN, הפרופיל הנבחר והיקף ההגנה האוטומטית."</string>
     <string name="iptv_settings_sync_favorites">"מועדפים וקבוצות"</string>
     <string name="iptv_settings_sync_favorites_description">"ערוצים מועדפים, ערוצים מוסתרים וסדר הקבוצות."</string>
+    <string name="iptv_settings_sync_home_rows">"שורות בדף הבית"</string>
+    <string name="iptv_settings_sync_home_rows_description">"שורות טלוויזיה חיה, ספורט ותוכן לפי דרישה שהוספת לדף הבית. משותפות גם עם הטלפון שלך."</string>
     <string name="iptv_settings_sync_sports_description">"קבוצות וליגות שעוקבים אחריהן, ובחירת ליגות."</string>
     <string name="iptv_settings_sync_calendar">"לוח שנה"</string>
     <string name="iptv_settings_sync_calendar_description">"תוכניות במעקב ומוסתרות."</string>

@@ -83,7 +83,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import com.nuvio.tv.livetv.ui.leftJumpsToTop
-import com.nuvio.tv.livetv.ui.okTapOrHold
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -776,9 +775,6 @@ private fun SportsHub(
     val leagueChoices = latestPage?.takeIf { it.query.copy(leaguePick = leaguePick) == pageQuery }?.sportLeagues.orEmpty()
     val allSports = sportChoices?.allSports.orEmpty()
     val allSport = allSportPick?.takeIf { p -> allSports.any { it.name == p } }
-    // All Events' Pick Leagues showing (the ticked leagues together), and its tick list open.
-    val pickedOn = effectiveChip == CHIP_ALL && leagueView == null && allSportPick == SPORT_PICKED && settings.pickedLeagues.isNotEmpty()
-    var pickOpen by remember { mutableStateOf(false) }
     val sections = pageData?.sections ?: remember {
         DaySections(emptyList(), emptyList(), emptyList(), emptyList(), 0)
     }
@@ -893,7 +889,7 @@ private fun SportsHub(
         }
     }
     val sportBar: @Composable () -> Unit = {
-        if (effectiveChip == CHIP_ALL && leagueView == null && (allSports.isNotEmpty() || settings.pickedLeagues.isNotEmpty())) {
+        if (effectiveChip == CHIP_ALL && leagueView == null && allSports.isNotEmpty()) {
             Spacer(Modifier.height(SportsSpace.RowGap))
             LazyRow(
                 Modifier.fillMaxWidth().keepFocusWhileHeld(vertical = false),
@@ -901,22 +897,9 @@ private fun SportsHub(
                 verticalAlignment = Alignment.CenterVertically,
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)
             ) {
-                item(key = "sport_all") { FilterIcon("▦", "All", allSport == null && !pickedOn, withLabel = true) { onAllSportPick(null); contentJump++ } }
+                item(key = "sport_all") { FilterIcon("▦", "All", allSport == null, withLabel = true) { onAllSportPick(null); contentJump++ } }
                 items(allSports, key = { "sport_" + it.name }) { sp ->
                     FilterIcon(sp.icon, sp.label, allSport == sp.name, withLabel = true) { onAllSportPick(sp.name); contentJump++ }
-                }
-                // Pick Leagues: several leagues together, from any sports. OK: show them (none
-                // ticked yet, or already showing: the list to tick them); hold OK: the list.
-                item(key = "sport_picked") {
-                    val tap: () -> Unit = {
-                        if (settings.pickedLeagues.isEmpty() || pickedOn) pickOpen = true
-                        else { onAllSportPick(SPORT_PICKED); contentJump++ }
-                    }
-                    FilterIcon(
-                        "☰", pickedLeaguesLabel(settings), pickedOn,
-                        Modifier.okTapOrHold(onTap = tap, onHold = { pickOpen = true }),
-                        withLabel = true, onClick = tap
-                    )
                 }
             }
         }
@@ -981,10 +964,6 @@ private fun SportsHub(
         "No $name games $whenWord" to "Showing the next match day: $nextWord"
     }
     val leagueEmpty: String? = pickedLeague?.let { "No ${it.name} games this day or in the week ahead." }
-        ?: if (pickedOn) {
-            if (settings.pickedLiveOnly && day == 0) "None of your picked leagues are playing right now."
-            else "No games from your picked leagues this day."
-        } else null
     val list: @Composable (Modifier) -> Unit = { m ->
         GameList(
             modifier = m,
@@ -1178,19 +1157,6 @@ private fun SportsHub(
         modifier = Modifier.align(Alignment.BottomStart).padding(start = 60.dp, bottom = 8.dp)
     )
     statusLine()
-    if (pickOpen) {
-        PickLeaguesDialog(
-            settings = settings,
-            leagues = remember(settings.hiddenLeagues, settings.region, follows) { viewModel.repo.activeLeagues(settings, follows) },
-            onChange = { ids, liveOnly -> viewModel.repo.updateSettings { it.copy(pickedLeagues = ids, pickedLiveOnly = liveOnly) } },
-            onDismiss = { ids ->
-                pickOpen = false
-                // Leagues ticked: show them; all cleared: back to every sport.
-                if (ids.isNotEmpty()) { onAllSportPick(SPORT_PICKED); contentJump++ }
-                else if (allSportPick == SPORT_PICKED) onAllSportPick(null)
-            }
-        )
-    }
     if (leaguesOpen) {
         LeaguesPicker(
             settings = settings,
@@ -1231,7 +1197,7 @@ private fun GameList(
     onPick: () -> Unit,
     onOpen: (SportsEvent) -> Unit,
     onQuickWatch: (SportsEvent) -> Unit,
-    /** All Events only: the "Choose Leagues" bar above the games (null: no bar). */
+    /** All Events only: the "Edit League List" bar above the games (null: no bar). */
     leaguesLine: String? = null,
     leaguesBarReq: FocusRequester? = null,
     onChooseLeagues: () -> Unit = {}
@@ -1354,7 +1320,7 @@ private fun LeaguesBar(line: String, modifier: Modifier = Modifier, onClick: () 
         verticalAlignment = Alignment.CenterVertically
     ) {
         LiveText(line, color = SportsLook.Dim, size = 12.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
-        LiveText("Choose Leagues  ›", color = Color.White, size = 13.sp, weight = FontWeight.Bold)
+        LiveText("Edit League List  ›", color = Color.White, size = 13.sp, weight = FontWeight.Bold)
     }
 }
 
@@ -1388,8 +1354,8 @@ private fun LeaguesPicker(
         if (hits.isEmpty()) null else s to hits
     }
     SportsDialog(onDismiss = onDismiss, width = 620.dp) {
-        LiveText("Leagues on All Events", size = 18.sp, weight = FontWeight.Bold)
-        LiveText("OK turns a league on or off or opens a sport; Right on a sport: Turn all on / off. Leagues you follow always show.", color = SportsLook.Dim, size = 12.sp, maxLines = 3)
+        LiveText("Edit League List", size = 18.sp, weight = FontWeight.Bold)
+        LiveText("Remove leagues you never want to see. They stay gone until you add them back. Leagues you follow always show. OK turns a league on or off, and opens or closes a sport; Right on a sport: Turn all on / off.", color = SportsLook.Dim, size = 12.sp, maxLines = 3)
         Spacer(Modifier.height(8.dp))
         LiveTextField(
             value = query, onValueChange = { query = it }, hint = "Search leagues", focusRequester = field,
@@ -1437,95 +1403,6 @@ private fun LeaguesPicker(
                             },
                             modifier = Modifier.padding(start = 22.dp),
                             onClick = { if (!mine) onToggle(l) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-    LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
-}
-
-/**
- * All Events' Pick Leagues: tick the leagues to see together (from any sports), and whether to
- * show only the games on now. Sports open and close like the Leagues on All Events list; the
- * sports you've ticked leagues in start open.
- */
-@Composable
-private fun PickLeaguesDialog(
-    settings: SportsSettings,
-    leagues: List<League>,
-    onChange: (Set<String>, Boolean) -> Unit,
-    onDismiss: (Set<String>) -> Unit
-) {
-    val first = remember { FocusRequester() }
-    val field = remember { FocusRequester() }
-    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    var ticked by remember { mutableStateOf(settings.pickedLeagues) }
-    var liveOnly by remember { mutableStateOf(settings.pickedLiveOnly) }
-    var query by remember { mutableStateOf("") }
-    val groups = remember(leagues) {
-        Sport.entries.mapNotNull { s -> leagues.filter { it.sport == s }.takeIf { it.isNotEmpty() }?.let { s to it } }
-    }
-    var open by remember { mutableStateOf(groups.filter { (_, list) -> list.any { it.id in settings.pickedLeagues } }.map { it.first }.toSet()) }
-    val q = query.trim().lowercase()
-    val searching = q.isNotEmpty()
-    val shown = if (!searching) groups else groups.mapNotNull { (s, list) ->
-        val hits = if (s.label.lowercase().contains(q)) list else list.filter { it.name.lowercase().contains(q) || it.short.lowercase().contains(q) }
-        if (hits.isEmpty()) null else s to hits
-    }
-    fun save() = onChange(ticked, liveOnly)
-    SportsDialog(onDismiss = { onDismiss(ticked) }, width = 620.dp) {
-        LiveText("Pick Leagues", size = 18.sp, weight = FontWeight.Bold)
-        LiveText("Tick the leagues to see together on All Events, from any sports. Back when you're done.", color = SportsLook.Dim, size = 12.sp)
-        Spacer(Modifier.height(8.dp))
-        LiveTextField(
-            value = query, onValueChange = { query = it }, hint = "Search leagues", focusRequester = field,
-            onDone = { keyboard?.hide(); runCatching { first.requestFocus() } }
-        )
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.heightIn(max = 360.dp).keepFocusWhileHeld(horizontal = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            item(key = "live_only") {
-                SportsMenuRow(
-                    label = (if (liveOnly) "✓   " else "      ") + "Live games only",
-                    detail = if (liveOnly) "Today: only what's on now" else "Off",
-                    modifier = Modifier.focusRequester(first),
-                    onClick = { liveOnly = !liveOnly; save() }
-                )
-            }
-            if (ticked.isNotEmpty()) item(key = "clear") {
-                SportsMenuRow(
-                    label = "      Clear all",
-                    detail = if (ticked.size == 1) "1 picked" else "${ticked.size} picked",
-                    onClick = { ticked = emptySet(); save() }
-                )
-            }
-            if (searching && shown.isEmpty()) item(key = "none") {
-                LiveText("No leagues match that search.", color = SportsLook.Dim, size = 12.sp, modifier = Modifier.padding(8.dp))
-            }
-            shown.forEach { (sport, list) ->
-                val isOpen = searching || sport in open
-                item(key = "g_${sport.name}") {
-                    val total = groups.first { it.first == sport }.second
-                    val picked = total.count { it.id in ticked }
-                    SportsMenuRow(
-                        label = (if (isOpen) "▾   " else "▸   ") + "${sport.icon}  ${sport.label}",
-                        detail = when {
-                            searching -> "${list.size} found"
-                            picked > 0 -> "$picked picked"
-                            else -> "${total.size} leagues"
-                        },
-                        onClick = { if (!searching) open = if (sport in open) open - sport else open + sport }
-                    )
-                }
-                if (isOpen) {
-                    items(list, key = { it.id }) { l ->
-                        val on = l.id in ticked
-                        SportsMenuRow(
-                            label = (if (on) "✓   " else "      ") + l.name,
-                            detail = if (l.guideOnly) "From your guide" else null,
-                            modifier = Modifier.padding(start = 22.dp),
-                            onClick = { ticked = if (on) ticked - l.id else ticked + l.id; save() }
                         )
                     }
                 }

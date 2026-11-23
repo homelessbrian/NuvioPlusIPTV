@@ -661,6 +661,8 @@
     <string name="iptv_settings_sync_vpn_description">"Configurazioni VPN, profilo selezionato e ambito della protezione automatica."</string>
     <string name="iptv_settings_sync_favorites">"Preferiti e gruppi"</string>
     <string name="iptv_settings_sync_favorites_description">"Canali preferiti, canali nascosti e ordine dei gruppi."</string>
+    <string name="iptv_settings_sync_home_rows">"Righe della Home"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Righe di TV in diretta, Sport e On Demand che hai aggiunto alla Home. Condivise anche con il telefono."</string>
     <string name="iptv_settings_sync_sports_description">"Squadre e campionati seguiti, e Scegli campionati."</string>
     <string name="iptv_settings_sync_calendar">"Calendario"</string>
     <string name="iptv_settings_sync_calendar_description">"Serie seguite e nascoste."</string>

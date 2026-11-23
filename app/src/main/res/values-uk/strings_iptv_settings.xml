@@ -671,6 +671,8 @@
     <string name="iptv_settings_sync_vpn_description">"Конфігурації VPN, вибраний профіль і обсяг автоматичного захисту."</string>
     <string name="iptv_settings_sync_favorites">"Обране й групи"</string>
     <string name="iptv_settings_sync_favorites_description">"Обрані канали, приховані канали й порядок груп."</string>
+    <string name="iptv_settings_sync_home_rows">"Ряди на головній"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Ряди ТБ наживо, Спорту та За запитом, додані на головну. Також доступні на телефоні."</string>
     <string name="iptv_settings_sync_sports_description">"Команди й ліги, за якими ви стежите, і «Вибрати ліги»."</string>
     <string name="iptv_settings_sync_calendar">"Календар"</string>
     <string name="iptv_settings_sync_calendar_description">"Відстежувані й приховані передачі."</string>

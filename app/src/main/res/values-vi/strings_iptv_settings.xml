@@ -671,6 +671,8 @@
     <string name="iptv_settings_sync_vpn_description">"Cấu hình VPN, hồ sơ đã chọn và phạm vi tự động bảo vệ."</string>
     <string name="iptv_settings_sync_favorites">"Yêu thích và nhóm"</string>
     <string name="iptv_settings_sync_favorites_description">"Kênh yêu thích, kênh bị ẩn và thứ tự nhóm."</string>
+    <string name="iptv_settings_sync_home_rows">"Hàng trên Trang chủ"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Các hàng TV trực tiếp, Thể thao và Theo yêu cầu bạn đã thêm vào Trang chủ. Cũng được chia sẻ với điện thoại."</string>
     <string name="iptv_settings_sync_sports_description">"Đội và giải đấu đang theo dõi, và Chọn giải đấu."</string>
     <string name="iptv_settings_sync_calendar">"Lịch biểu"</string>
     <string name="iptv_settings_sync_calendar_description">"Chương trình đang theo dõi và bị ẩn."</string>

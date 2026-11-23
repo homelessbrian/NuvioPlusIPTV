@@ -274,6 +274,8 @@ fun MultiviewScreen(
     }
 
     KeepScreenAwake(on = true)
+    // How often this screen is really redrawn (it should sit still while the panes play).
+    com.nuvio.tv.livetv.ui.FrameMeter("Multiview")
     DisposableEffect(sports) {
         val lease = sports?.acquireViewing()
         onDispose { lease?.close() }
@@ -481,8 +483,8 @@ fun MultiviewScreen(
                         pane = pane,
                         overlaysShown = overlaysShown,
                         fullScreen = isFull,
-                        // Two protected pictures cannot be stacked reliably, so the covered one is put away.
-                        hideVideo = fullPane != null && !isFull && state.panes.getOrNull(fullPane)?.isProtected == true,
+                        // Two video windows cannot be stacked reliably, so the covered one is put away.
+                        hideVideo = fullPane != null && !isFull,
                         hint = when {
                             isFull -> "Back: all panes"
                             pane.channelKey != null || pane.error != null -> "Hold OK: full screen"

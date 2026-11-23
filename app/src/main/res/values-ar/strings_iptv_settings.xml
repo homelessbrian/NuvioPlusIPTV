@@ -671,6 +671,8 @@
     <string name="iptv_settings_sync_vpn_description">"إعدادات VPN والملف المختار ونطاق الحماية التلقائية."</string>
     <string name="iptv_settings_sync_favorites">"المفضلة والمجموعات"</string>
     <string name="iptv_settings_sync_favorites_description">"القنوات المفضلة والمخفية وترتيب المجموعات."</string>
+    <string name="iptv_settings_sync_home_rows">"صفوف الرئيسية"</string>
+    <string name="iptv_settings_sync_home_rows_description">"صفوف البث المباشر والرياضة وحسب الطلب التي أضفتها إلى الرئيسية. تُشارك مع هاتفك أيضًا."</string>
     <string name="iptv_settings_sync_sports_description">"الفرق والدوريات المتابَعة، واختيار الدوريات."</string>
     <string name="iptv_settings_sync_calendar">"التقويم"</string>
     <string name="iptv_settings_sync_calendar_description">"البرامج المتابَعة والمخفية."</string>

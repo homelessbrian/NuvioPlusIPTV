@@ -330,6 +330,7 @@ class RecordingsViewModel @Inject constructor(
     fun markWatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.markWatched(recorder.appContext, it.id) }
     fun markUnwatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.clear(recorder.appContext, it.id) }
     fun moveTo(recs: List<LiveTvRecording>, target: RecordingStorage.Choice) = recorder.moveTo(recs.map { it.id }, target)
+    fun stopMove() = recorder.stopMove()
     fun storageIdOf(rec: LiveTvRecording): String? = recorder.storageIdOf(rec)
     /** Where new recordings go now (Save Recordings To). */
     fun currentStorageId(): String = recorder.currentStorage().id
@@ -664,10 +665,18 @@ fun RecordingsScreen(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                LiveText("Moving recordings" + if (m.count > 1) " (${m.index} of ${m.count})" else "", size = 14.sp, weight = FontWeight.Bold)
+                LiveText(
+                    (if (m.stopping) "Stopping" else "Moving recordings") + if (m.count > 1) " (${m.index} of ${m.count})" else "",
+                    size = 14.sp, weight = FontWeight.Bold
+                )
                 LiveText(m.title, size = 13.sp, color = colors.TextSecondary)
                 ProgressLine(if (m.totalBytes > 0) m.doneBytes.toFloat() / m.totalBytes else 0f, colors.Secondary, Modifier.fillMaxWidth())
                 LiveText(sizeLabel(m.doneBytes) + " of " + sizeLabel(m.totalBytes), size = 12.sp, color = colors.TextTertiary)
+                LiveText(
+                    if (m.stopping) (if (m.network) "Stops when this recording is done" else "Stopping…")
+                    else "To stop, choose Move To again",
+                    size = 12.sp, color = colors.TextTertiary
+                )
             }
         }
     }
@@ -784,7 +793,20 @@ fun RecordingsScreen(
             onDismiss = { fixMatchFor = null }
         )
     }
-    movePick?.let { recs ->
+    // Move To while a move is going on: stop it, or let it carry on.
+    if (movePick != null && moving != null) {
+        val m = moving!!
+        RecordingActionDialog(
+            title = "Moving recordings",
+            detail = "\"${m.title}\"" + (if (m.count > 1) " (${m.index} of ${m.count})" else "") +
+                " · " + sizeLabel(m.doneBytes) + " of " + sizeLabel(m.totalBytes) + ". " +
+                "Recordings already moved stay moved; the rest stay where they are." +
+                if (m.network) " To or from the network folder, it stops once the recording being moved now is done." else "",
+            actions = (if (m.stopping) emptyList<Pair<String, () -> Unit>>() else listOf("Stop Moving" to { movePick = null; viewModel.stopMove() })) +
+                listOf("Keep Going" to { movePick = null }),
+            onDismiss = { movePick = null }
+        )
+    } else movePick?.let { recs ->
         val here = recs.mapNotNull { viewModel.storageIdOf(it) }.distinct()
         val current = remember(recs) { viewModel.currentStorageId() }
         // Each drive once: a drive moves recordings into the folder chosen for it (Save Recordings To).

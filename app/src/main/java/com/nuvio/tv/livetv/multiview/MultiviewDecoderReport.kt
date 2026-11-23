@@ -19,6 +19,13 @@ internal object MultiviewDecoderReport {
         return "$codec $size, $colour"
     }
 
+    /** Picture size and frames a second, e.g. "1920x1080 at 60 frames a second". */
+    fun picture(f: Format?): String {
+        if (f == null || f.width <= 0 || f.height <= 0) return "picture size not known yet"
+        val rate = if (f.frameRate > 0f) " at ${Math.round(f.frameRate)} frames a second" else ""
+        return "${f.width}x${f.height}$rate"
+    }
+
     private fun space(v: Int) = when (v) {
         C.COLOR_SPACE_BT709 -> "BT.709"
         C.COLOR_SPACE_BT601 -> "BT.601"

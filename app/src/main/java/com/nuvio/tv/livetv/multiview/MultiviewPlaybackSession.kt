@@ -57,6 +57,11 @@ data class MultiviewPaneState(
     val isReconnecting: Boolean = false,
     /** A protected (DRM) channel: its picture can only be shown through the TV's video window. */
     val isProtected: Boolean = false,
+    /**
+     * The picture plays in one of the TV's own video windows (only on boxes known to show several
+     * of them, and for protected channels). Otherwise it is drawn with the rest of the screen.
+     */
+    val inVideoWindow: Boolean = false,
 )
 
 data class MultiviewState(
@@ -135,6 +140,16 @@ class MultiviewPlaybackSession(
         mainHandler.post { if (!released) core.restartPlayers() }
     }
 
+    // The VPN stopped carrying traffic and works again: panes that stalled or gave up start over.
+    private val vpnRecovery = VpnPlaybackProtection.observeConnectionRecovered {
+        if (released) return@observeConnectionRecovered
+        LiveTvLoadReport.add("Multiview: the VPN works again; restarting panes that stopped")
+        core.restartStoppedPanes()
+    }
+
+    // How hot the box is, while Multiview is open: a box that heats up slows its chip down.
+    private val heatWatch = MultiviewBoxHeat.watch(appContext)
+
     fun setLayout(layout: MultiviewLayout) = onMain { core.setLayout(layout) }
     fun assignChannel(paneId: Int, channel: LiveChannel) = onMain { core.assignChannel(paneId, channel) }
     fun clearPane(paneId: Int) = onMain { core.clearPane(paneId) }
@@ -175,6 +190,8 @@ class MultiviewPlaybackSession(
         if (released) return
         released = true
         vpnSubscription.close()
+        vpnRecovery.close()
+        heatWatch.close()
         mainHandler.removeCallbacksAndMessages(null)
         core.release()
     }
@@ -211,6 +228,7 @@ class MultiviewPlaybackSession(
                     error = playback.error,
                     isReconnecting = playback.isReconnecting,
                     isProtected = channel?.drm != null,
+                    inVideoWindow = MultiviewVideoWindows.inVideoWindow(channel?.drm != null),
                 )
             },
         )
@@ -219,6 +237,10 @@ class MultiviewPlaybackSession(
 
 /** How many Multiview panes currently have a video decoder (for the report's decoder lines). */
 @OptIn(UnstableApi::class)
+/** A pane checks how many frames it showed every few seconds and reports on a minute of playing. */
+private const val SMOOTHNESS_SAMPLE_MS = 10_000L
+private const val SMOOTHNESS_REPORT_MS = 60_000L
+
 private fun decodersOpen(): Int = MultiviewDecoderReport.openPlayers.count { it.videoDecoderCounters != null }
 
 @OptIn(UnstableApi::class)
@@ -365,12 +387,96 @@ private class AndroidMultiviewPanePlayer(
 
     /** Channels whose decoder line is already in the report, so a reconnect doesn't repeat it. */
     private val decoderReported = mutableSetOf<String>()
+    /** Channels whose picture size line is already in the report. */
+    private val pictureReported = mutableSetOf<String>()
+    /** Channels already reported as playing smoothly, so the good news is said once. */
+    private val smoothReported = mutableSetOf<String>()
+
+    // How many frames a second the pane really shows, measured only while it is playing.
+    private var sampleCounters: androidx.media3.exoplayer.DecoderCounters? = null
+    private var sampleShown = 0
+    private var sampleSkipped = 0
+    private var sampleAt = 0L
+    private var sampleWasPlaying = false
+    private var shownFrames = 0
+    private var skippedFrames = 0
+    private var playedMs = 0L
+
+    private fun forgetSmoothness() {
+        sampleCounters = null
+        sampleWasPlaying = false
+        shownFrames = 0
+        skippedFrames = 0
+        playedMs = 0L
+    }
+
+    private fun sampleSmoothness() {
+        if (released) return
+        val now = SystemClock.elapsedRealtime()
+        val counters = player.videoDecoderCounters
+        val playing = player.isPlaying
+        counters?.ensureUpdated()
+        if (counters != null && counters === sampleCounters && playing && sampleWasPlaying) {
+            shownFrames += (counters.renderedOutputBufferCount - sampleShown).coerceAtLeast(0)
+            skippedFrames += (counters.droppedBufferCount - sampleSkipped).coerceAtLeast(0)
+            playedMs += now - sampleAt
+        }
+        sampleCounters = counters
+        sampleShown = counters?.renderedOutputBufferCount ?: 0
+        sampleSkipped = counters?.droppedBufferCount ?: 0
+        sampleAt = now
+        sampleWasPlaying = playing
+        if (playedMs >= SMOOTHNESS_REPORT_MS) reportSmoothness()
+    }
+
+    /**
+     * One line when a pane shows clearly fewer frames than its stream has (the "slide show"
+     * look), at most once a minute; a pane that plays fine says so once per channel.
+     */
+    private fun reportSmoothness() {
+        val shown = shownFrames
+        val skipped = skippedFrames
+        val ms = playedMs
+        shownFrames = 0
+        skippedFrames = 0
+        playedMs = 0L
+        val ch = channel ?: return
+        if (ms <= 0L) return
+        // Nothing drawn at all: the pane was put away behind a full-screen one, not choppy.
+        if (shown == 0 && skipped == 0) return
+        val format = player.videoFormat
+        val perSecond = shown * 1000f / ms
+        val streamRate = format?.frameRate?.takeIf { it > 0f }
+        val choppy = (streamRate != null && perSecond < streamRate * 0.8f) ||
+            (streamRate == null && perSecond < 22f) ||
+            skipped > shown / 20
+        val detail = "stream ${MultiviewDecoderReport.picture(format)}; $skipped skipped; " +
+            "${decodersOpen()} Multiview decoders open; box ${MultiviewBoxHeat.describe(appContext)}"
+        if (choppy) {
+            smoothReported -= ch.key
+            LiveTvLoadReport.add("Multiview: ${ch.name} is choppy: showed ${Math.round(perSecond)} frames a second ($detail)")
+        } else if (smoothReported.add(ch.key)) {
+            LiveTvLoadReport.add("Multiview: ${ch.name} is smooth: showed ${Math.round(perSecond)} frames a second ($detail)")
+        }
+    }
 
     /**
      * Which video decoder the box gave this pane and the picture's colour format, once per
      * channel, so a pane whose picture looks wrong (e.g. tinted) can be told apart from one that's fine.
      */
     private val decoderReport = object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+        override fun onVideoInputFormatChanged(
+            eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+            format: androidx.media3.common.Format,
+            decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?,
+        ) {
+            if (released) return
+            val ch = channel ?: return
+            if (format.width <= 0 || format.height <= 0) return
+            if (!pictureReported.add("${ch.key}|${format.width}x${format.height}|${format.frameRate}")) return
+            LiveTvLoadReport.add("Multiview: ${ch.name} picture ${MultiviewDecoderReport.picture(format)}")
+        }
+
         override fun onVideoDecoderInitialized(
             eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
             decoderName: String,
@@ -404,14 +510,16 @@ private class AndroidMultiviewPanePlayer(
             .build()
     }.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         .setEnableDecoderFallback(true)
+        .apply { if (MultiviewVideoWindows.feedFrameByFrame) forceDisableMediaCodecAsynchronousQueueing() }
 
     val player: ExoPlayer = ExoPlayer.Builder(context, renderers)
         .setLoadControl(
             DefaultLoadControl.Builder()
-                // Enough ahead to ride out a provider's small hiccups. It used to keep only 1.5 s
-                // (like the "None" buffer size), so with two or more streams sharing the
-                // connection the panes took turns stuttering. The memory cap below still applies.
-                .setBufferDurationsMs(12_000, 30_000, 1_500, 3_000)
+                // The same amount ahead at all times (lower and upper mark equal), so each pane
+                // fetches its stream at a steady pace instead of in big bursts. With 12-30 s ahead,
+                // four panes kept refilling at full speed together and the box fell behind showing
+                // them (a slide show, worse on a fast connection). 8 s still rides out small hiccups.
+                .setBufferDurationsMs(8_000, 8_000, 1_000, 2_000)
                 .setBackBuffer(0, false)
                 .setTargetBufferBytes(bufferBytes)
                 .setPrioritizeTimeOverSizeThresholds(false)
@@ -426,6 +534,9 @@ private class AndroidMultiviewPanePlayer(
         .apply {
             volume = 0f
             playWhenReady = false
+            // Panes never ask the TV to change its refresh rate: with several streams of
+            // different frame rates on screen they would each pull it their own way.
+            videoChangeFrameRateStrategy = C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
             trackSelectionParameters = trackSelectionParameters.buildUpon()
                 // Prefer modest adaptive variants when four hardware decoders share a TV box.
                 .setMaxVideoSize(1280, 720)
@@ -440,8 +551,18 @@ private class AndroidMultiviewPanePlayer(
                 .build()
             addListener(listener)
             addAnalyticsListener(decoderReport)
+            MultiviewVideoWindows.reportOnce()
             MultiviewDecoderReport.openPlayers += this
         }
+
+    init {
+        scope.launch {
+            while (true) {
+                delay(SMOOTHNESS_SAMPLE_MS)
+                sampleSmoothness()
+            }
+        }
+    }
 
     override val playback: MultiviewPanePlayback
         get() = MultiviewPanePlayback(
@@ -458,11 +579,27 @@ private class AndroidMultiviewPanePlayer(
         reconnectAttempt = 0
         playingSince = 0L
         reconnecting = false
+        forgetSmoothness()
         // What the full-screen player already learned about this channel's link.
         streamUrl = if (channel.key in LiveStreamFormats.tsInstead) LiveStreamFormats.tsLinkFor(channel.url) ?: channel.url else channel.url
         streamMime = if (channel.key in LiveStreamFormats.plainTs) MimeTypes.VIDEO_MP2T else null
         formatGuess = 0
-        connect(channel)
+        // Panes that start together (opening Multiview, a layout, the VPN coming back) open their
+        // streams a moment apart instead of all rushing to load at once.
+        val now = SystemClock.elapsedRealtime()
+        val wait = (nextStartAt - now).coerceAtLeast(0L)
+        nextStartAt = maxOf(now, nextStartAt) + START_STAGGER_MS
+        if (wait == 0L) { connect(channel); return }
+        resolveJob?.cancel()
+        val expected = ++generation
+        resolving = true
+        resolveJob = scope.launch {
+            delay(wait)
+            if (released || expected != generation) return@launch
+            connect(channel)
+            player.playWhenReady = wantPlaying && error == null
+            onChanged()
+        }
     }
 
     private fun connect(channel: LiveChannel) {
@@ -520,6 +657,10 @@ private class AndroidMultiviewPanePlayer(
         player.volume = 0f
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, !enableAudio)
+            // The pane being watched gets the sharper picture; the others take a smaller version
+            // when the stream offers one, which leaves the box's video chip and the connection
+            // more room. Streams with only one version (most IPTV channels) are not changed.
+            .setMaxVideoSize(if (audible) 1280 else 960, if (audible) 720 else 540)
             .build()
         if (enableAudio) player.volume = 1f
     }
@@ -606,6 +747,10 @@ private class AndroidMultiviewAudioFocus(context: Context) : MultiviewAudioFocus
 }
 
 private const val MAX_RECONNECTS = 6
+/** Gap between panes that start at the same time. */
+private const val START_STAGGER_MS = 350L
+/** When the next pane may open its stream (shared by every pane, main thread only). */
+private var nextStartAt = 0L
 private const val RECOVERED_AFTER_MS = 60_000L
 private const val LOST_MESSAGE = "Lost the connection to this stream. Retry or choose another channel."
 

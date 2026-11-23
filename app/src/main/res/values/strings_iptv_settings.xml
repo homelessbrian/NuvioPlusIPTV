@@ -671,7 +671,9 @@
     <string name="iptv_settings_sync_vpn_description">"VPN configurations, selected profile and automatic protection scope."</string>
     <string name="iptv_settings_sync_favorites">"Favorites and groups"</string>
     <string name="iptv_settings_sync_favorites_description">"Favorite channels, hidden channels and group order."</string>
-    <string name="iptv_settings_sync_sports_description">"Followed teams and leagues, and Choose Leagues."</string>
+    <string name="iptv_settings_sync_home_rows">"Home rows"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Live TV, Sports and On Demand rows you added to Home. Shared with your phone too."</string>
+    <string name="iptv_settings_sync_sports_description">"Followed teams and leagues, and your league list."</string>
     <string name="iptv_settings_sync_calendar">"Calendar"</string>
     <string name="iptv_settings_sync_calendar_description">"Followed and hidden shows."</string>
     <string name="iptv_settings_sync_behavior">"Behavior and options"</string>

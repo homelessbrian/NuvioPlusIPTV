@@ -26,7 +26,7 @@
 
 - **🎞️ Record to a network folder:** save recordings to a NAS or shared folder, with **Find on Network** to pick it. One file per show, and every TV on the same folder shares one library. You can also record to any folder on a USB drive. [More below](#%EF%B8%8F-recordings).
 - **🗂️ Recordings, redone:** Recorded, Scheduled and Series tabs with posters, **Fix Match** for the wrong poster, **Delete Recordings After**, and its own tab in Live TV settings.
-- **🏆 A new Sports hub:** a game preview and league table beside the list, a game page with tabs and a guide line under every channel, **Top Players with photos**, **Pick Leagues** to see several leagues together, and team colours while you watch. [More below](#-sports-hub).
+- **🏆 A new Sports hub:** a game preview and league table beside the list, a game page with tabs and a guide line under every channel, **Top Players with photos**, and team colours while you watch. [More below](#-sports-hub).
 - **🎬 More highlights:** from the sports' own YouTube channels (UFC, F1, boxing, tennis, darts and more), for older games and past races too.
 - **🏠 Live TV, Sports and On Demand rows on Home:** add them from **Settings → Content & Discovery → Home Screen Rows**.
 - **⭐ Better sources:** **Best quality** auto-play with your own **Quality rules**, and **Set up for this TV**, which checks your box, screen and sound and suggests settings.
@@ -61,8 +61,7 @@ Sports in the side menu shows scores and schedules, and works out **which of you
   - **Live & Upcoming,** then a row for every team, country, league and name you follow.
   - **Your order:** arrange the rows how you like.
 - **All Events:** every game in your region's leagues plus every league and team you follow (scores for every league, wherever you are), with a live count. **Day tabs** run from a week back to a week ahead.
-- **Choose Leagues:** a bar on All Events turns any league on or off.
-- **Pick Leagues:** a button on All Events's sport row shows several leagues together (say college basketball and the NFL), with a **Live only** switch for today.
+- **Edit League List:** a bar on All Events removes leagues you never want to see (and brings them back).
 - **A preview beside the list:** with nothing playing, the highlighted game shows large with its league table, both teams marked. On My Sports, the top half follows the card you're on.
 - **Follow anything:**
   - **Teams, countries, whole leagues,** or a **name** (a player, driver or fighter) to catch any show that mentions it.
@@ -560,6 +559,7 @@ Nuvio + IPTV is free. If it's made your TV better and you'd like to say thanks, 
 - **🙌 [ghbarker](https://github.com/ghbarker): a huge thank you.** He built the **built-in VPN** (WireGuard and OpenVPN playback protection), **Multiview** and **Stalker / Ministra portals**, and contributed them to this project, along with a lot of speed work. He also made the original [phone port](https://github.com/ghbarker/NuvioMobile-IPTV) that the phone app is built on.
 - **[Nuvio](https://github.com/NuvioMedia/NuvioTV)** by the NuvioMedia team: Nuvio + IPTV is built on their work and follows their releases.
 - Guide and overlay design inspired by **TiviMate**.
+- **[Nuvio Arc](https://github.com/Ysosrs123)** by Ysosrs123: thanks for the ideas behind best-quality source sorting and auto-play, "Set up for this TV" and fast seek thumbnails.
 - Channel logo libraries from **[iptv-org](https://github.com/iptv-org)** and **[tv-logos](https://github.com/tv-logo/tv-logos)**.
 - Sports data from **ESPN**'s public feed, **[TheSportsDB](https://www.thesportsdb.com)**, **HockeyTech**, **MLB**'s stats service and **sporting-events.org**. Show schedules from **[TVmaze](https://www.tvmaze.com)**, and pictures and logos from **[TMDB](https://www.themoviedb.org)**. Nuvio + IPTV isn't affiliated with any of them, and team and league names and logos belong to their owners.
 - Built with Kotlin, Jetpack Compose, TV Material 3 and Media3 / ExoPlayer.
