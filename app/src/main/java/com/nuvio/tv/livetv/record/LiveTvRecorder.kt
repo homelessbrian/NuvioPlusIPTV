@@ -361,7 +361,29 @@ class LiveTvRecorder @Inject constructor(
     }
 
     /** How far a move between drives has got (null when nothing is being moved). */
-    data class MoveProgress(val title: String, val doneBytes: Long, val totalBytes: Long, val index: Int, val count: Int)
+    data class MoveProgress(
+        val title: String, val doneBytes: Long, val totalBytes: Long, val index: Int, val count: Int,
+        /** Stop Moving was chosen: it stops as soon as it safely can. */
+        val stopping: Boolean = false,
+        /** To or from the network folder: a stop waits for the recording being moved now. */
+        val network: Boolean = false,
+    )
+
+    private class MoveStopped : Exception()
+
+    /** Set by [stopMove]; checked between recordings and, on drives, while copying. */
+    @Volatile private var stopMoveAsked = false
+
+    /**
+     * Stops the move going on. A copy part way through is thrown away (the recording stays where
+     * it was); recordings already moved stay moved. To or from the network folder it stops once
+     * the recording being moved now is done, so nothing is left half there.
+     */
+    fun stopMove() {
+        val m = _move.value ?: return
+        stopMoveAsked = true
+        _move.value = m.copy(stopping = true)
+    }
 
     private val _move = MutableStateFlow<MoveProgress?>(null)
     val move: StateFlow<MoveProgress?> = _move.asStateFlow()
@@ -389,7 +411,9 @@ class LiveTvRecorder @Inject constructor(
             LiveTvNotice.show("Not enough room on ${target.label}: needs ${RecordingStorage.sizeLabel(total)}, has ${RecordingStorage.sizeLabel(target.freeBytes)} free")
             return
         }
-        _move.value = MoveProgress(list.first().title, 0, total, 1, list.size)
+        stopMoveAsked = false
+        val network = toNetwork || list.any { NetworkFolderStore.isNetworkDir(File(it.dir)) }
+        _move.value = MoveProgress(list.first().title, 0, total, 1, list.size, network = network)
         scope.launch {
             if (toNetwork) {
                 val folder = NetworkFolderStore.folder(context)
@@ -407,21 +431,32 @@ class LiveTvRecorder @Inject constructor(
             var done = 0L
             var moved = 0
             var failure: String? = null
+            var stopped = false
             try {
                 for ((i, rec) in list.withIndex()) {
+                    if (stopMoveAsked) { stopped = true; break }
                     val sizeBefore = done
                     val ok = runCatching {
-                        moveOne(rec, target) { copied -> _move.value = MoveProgress(rec.title, sizeBefore + copied, total, i + 1, list.size) }
-                    }.getOrElse { failure = it.message ?: "something went wrong"; false }
+                        moveOne(rec, target) { copied ->
+                            _move.value = MoveProgress(rec.title, sizeBefore + copied, total, i + 1, list.size, stopping = stopMoveAsked, network = network)
+                        }
+                    }.getOrElse {
+                        if (it is MoveStopped) { stopped = true; return@getOrElse false }
+                        failure = it.message ?: "something went wrong"; false
+                    }
+                    if (stopped) break
                     if (!ok) { if (failure == null) failure = "\"${rec.title}\" couldn't be moved"; break }
                     moved++
                     done += dirSize(File(_recordings.value.firstOrNull { it.id == rec.id }?.dir ?: rec.dir))
                 }
             } finally {
                 _move.value = null
+                stopMoveAsked = false
             }
             LiveTvNotice.show(
                 when {
+                    stopped && moved == 0 -> "Stopped moving. Nothing was moved."
+                    stopped -> "Stopped moving. Moved $moved of ${list.size} to ${target.label}; the rest are where they were."
                     failure != null && moved == 0 -> "Couldn't move: $failure. Nothing was lost."
                     failure != null -> "Moved $moved of ${list.size} to ${target.label}. Stopped: $failure"
                     moved == 1 -> "Moved \"${list.first().title}\" to ${target.label}"
@@ -458,15 +493,23 @@ class LiveTvRecorder @Inject constructor(
         for (f in ordered) {
             val out = File(tmp, f.relativeTo(src).path)
             out.parentFile?.mkdirs()
-            f.inputStream().use { input -> out.outputStream().use { o ->
+            f.inputStream().use { input -> java.io.FileOutputStream(out).use { o ->
                 val buf = ByteArray(256 * 1024)
+                var unsynced = 0L
                 while (true) {
+                    if (stopMoveAsked) { runCatching { o.close() }; tmp.deleteRecursively(); throw MoveStopped() }
                     val n = input.read(buf)
                     if (n < 0) break
                     o.write(buf, 0, n)
                     copied += n
+                    unsynced += n
+                    // Written out to the drive every few MB, so the progress shows the drive's real
+                    // speed (otherwise Android holds it in memory, the bar races ahead, then sits
+                    // at the end of each file while the drive catches up).
+                    if (unsynced >= MOVE_SYNC_BYTES) { runCatching { o.fd.sync() }; unsynced = 0 }
                     onCopied(copied)
                 }
+                if (unsynced > 0) runCatching { o.fd.sync() }
             } }
             if (out.length() != f.length()) { tmp.deleteRecursively(); throw IllegalStateException("the copy of \"${rec.title}\" came out the wrong size") }
         }
@@ -966,6 +1009,8 @@ class LiveTvRecorder @Inject constructor(
         const val NETWORK_LOW = 2L * 1024 * 1024 * 1024
         /** Room to leave free on the drive being moved to. */
         const val MOVE_MARGIN = 200L * 1024 * 1024
+        /** How much a move between drives writes before making the drive save it (keeps the progress honest). */
+        const val MOVE_SYNC_BYTES = 8L * 1024 * 1024
         /** A live HLS recording starts this far before now (the newest pieces), not at the channel's look-back start. */
         const val LIVE_LEAD_MS = 30_000L
         /** A catch-up HLS replay that's saved nothing after this long: switch to the TS link. */
