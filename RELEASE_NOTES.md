@@ -2,49 +2,54 @@
 
 ## What's new
 
+### Sports (redesigned)
+- **A redesigned Sports hub.** A game preview and the league table sit beside the list, and My Sports follows the card you're on. Team colours show while a game plays
+- **New game page:** a row of the day's games, tabs for Stats, Line-ups, Top Players, Table, Head to Head and more, and a line under every channel saying whether it's showing the game now or later
+- **Top Players with photos:** the player of the game, every leader category, and a player profile when you press OK
+- **Edit League List:** a bar on All Events removes leagues you never want to see, and brings them back
+- **More highlights.** Races, fights, golf, tennis, darts and more get highlights and full replays from the sports' own YouTube channels. Older games keep theirs, and race, fight and tournament rows go back through the whole season. Turn them on or off with **Show Highlights** and **Show Condensed Games** in Settings → Sports
+- **Games list while you watch:** Quick Channels has a Games list with the league's other live games. Sports add-on streams also show next to a game's other channels, in Quick Channels and in Multiview
+- **Handball** plus Czech and Slovak leagues. College tables have conference tabs and real records
+- Followed teams show results from every competition (Nations League, friendlies, cups), and league rows keep the last week's results
+- **Back** on any Sports page brings the highlight to the top first, then opens the menu
+
 ### Recordings
-- **Record to a network folder (NAS or shared folder).** Settings → Live TV → Recordings → Save Recordings To → Network Folder. **Find on Network** searches your home network for computers and NAS boxes, you sign in and pick a folder. It works with the VPN in Full app mode too
-- **One file per show,** like "Show - S01E02.ts", that plays in VLC and other apps. Every TV on the same folder shares one library, and the folder follows your Setup Sync
-- **Record to any folder on a USB drive,** for boxes that don't give the app its own folder on a drive. Save Recordings To and Move To now list each drive once
-- **Recorded, Scheduled and Series tabs** with posters, and a gear on the Recordings page for Recordings settings (also its own tab in Settings → Live TV)
-- **Fix Match:** hold OK on a recording or an On Demand title and search for the right show or movie, or paste an IMDb ID or TMDB link. A pick covers every recording of that show and syncs to your other devices
+- **Record anywhere:** to a USB drive, any folder on a drive, or a **network folder** on a NAS or PC (Settings → Live TV → Recordings → Save Recordings To). **Find on Network** looks for computers and NAS boxes on your home network. It works with the VPN in Full app mode too
+- **One file per show,** like "Show - S01E02.ts", which plays in VLC and other apps
+- **One library for every device.** Every TV using the same network folder sees the same recordings, and the phone app can play them while you're at home
+- **Recorded, Scheduled and Series tabs** with posters, and a gear on the Recordings page for Recordings settings
+- **Move To** shows real progress, and you can stop a move part way
+- **Fix Match:** hold OK on a recording or an On Demand title to pick the right show or movie, or paste an IMDb ID or TMDB link
 - **Delete Recordings After** (3 to 30 days), with **Keep Forever** for the ones you pick
 
-### Sports
-- **A new Sports hub.** A game preview and league table sit beside the list. The game page has a row of the day's games, tabs and a line under every channel that says if it's showing the game now or later. My Sports follows the card you're on, and team colours show while a game plays
-- **Top Players with photos:** the player of the game, every leader category and a profile when you press OK
-- **More highlights.** Races, fights, golf, tennis, darts and more get highlights and full replays from the sports' own YouTube channels. Older games and past races keep theirs, and race, fight and tournament rows go back through the whole season
-- **Show Highlights** and **Show Condensed Games** switches in Settings → Sports
-- Sports add-on streams show next to a game's other channels in the backup list, Quick Channels and Multiview. A new **Games** list in Quick Channels shows the league's other games while you watch one
-- **Handball,** Czech and Slovak leagues added. College tables have conference tabs and real records
-- **Back** on any Sports page brings the highlight to the top first, then opens the menu
-- Followed teams show results from every competition (Nations League, friendlies, cups), and league rows keep the last week's results
-
-### Home
-- **Live TV, Sports and On Demand rows on Home.** Settings → Content & Discovery → Home Screen Rows → Add a row. Favorites, a playlist group, games on now, a movie or series category, Recently added or Continue Watching On Demand. They work in every Home layout and keep their place on all your TVs
-- **On Demand** keeps its matches, so posters and details come back straight away, and has a **Hide Non-English Titles** switch (Settings → Live TV → On Demand)
+### Back up & restore
+- **Back up or restore with your phone:** scan the QR code on the TV to download your setup to your phone, or send a backup from your phone to the TV
+- Or **save a backup file** (.nptv) on the TV and restore it later (Settings → Live TV → Backup File)
 
 ### Playback
-- **Best quality auto-play** with your own **Quality rules** and a **Best quality first** source order (Settings → Playback → Stream Selection)
+- **Best quality:** a new auto-play option that picks the best source. Edit the **Quality rules**, or sort sources with **Best quality first** (Settings → Playback → Stream Selection)
 - **Set up for this TV** (first section of Settings → Playback) checks your box, screen and sound and suggests settings, with Apply all and Undo
-- **Seek thumbnails** fill in much sooner
+- **Seek thumbnails** fill in much sooner when they're turned on
 
-### Live TV
-- **Favorite groups:** hold OK on a group to add it. Favorites sit at the top with a star
-- **Show on Profiles** for each playlist, and a **Backup File** (.nptv) you can save on the TV or with your phone and restore (Settings → Live TV)
-- **Lock Playlist Logins** under Parental Controls: editing playlists and guides, backups and the network folder ask for your PIN
+### Live TV and Home
+- **Live TV, Sports and On Demand rows on Home:** favorites, a playlist group, games on now, a movie or series category, Recently added or Continue Watching On Demand (Settings → Content & Discovery → Home Screen Rows → Add a row). They sync with your other TVs and your phone
+- **Favorite groups:** hold OK on a group to star it and move it to the top
+- **Show on Profiles:** choose which profiles see each playlist
+- **Lock Playlist Logins** (under Parental Controls): when it's on, editing playlists and guides, backups and the network folder ask for your PIN
+- **Hide Non-English Titles:** a new switch in Settings → Live TV → On Demand. On Demand also keeps its matches, so posters and details come back straight away
+- Episode names show beside the title in the guide, and Up/Down reads a show's whole description
 - A **User agent** box for guides, and a switch to leave movies and series out of M3U playlists
-- Read a show's whole description with Up/Down in overlay mode and the guide. Episode names show beside the title in the guide
 
 ### Nuvio 1.2.0-beta.3
 - Built on Nuvio 1.2.0-beta.3: automatic audio-based subtitle sync, trailer subtitles, star ratings, drag to reorder collections, season posters in the season tabs and more
 
 ## Fixed
-- **Multiview** no longer stutters on some boxes
+- **Multiview** is smoother on more boxes, and panes restart by themselves when the VPN comes back
 - **USB recordings** no longer fail when a drive is sleeping or busy
-- **Sports highlights** that reach the end now close properly, and a highlight in the Sports window no longer loses the TV's picture when you open another page
+- **Sports highlights** close properly at the end, and a highlight in the Sports window no longer loses the TV's picture when you open another page
 - **Race games** like MotoGP now get their channels, and **NFL game tables** show both teams' divisions in full
 - Only real wrestling shows appear in Live & Upcoming, and long-finished games no longer show as live (thanks to dwk001)
+- Turning a playlist off takes its channels off every game right away
 - **Slow-starting channels** (4K, Dispatcharr) get time to load instead of reconnecting
 - Shows marked new no longer show the mark twice
 - A guide that can't finish updating because storage is full keeps the old guide, with a clear message
