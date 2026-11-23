@@ -35,6 +35,7 @@ final class HttpStreamTunnel implements TunnelEngine {
     }
 
     private volatile boolean configured;
+    private final HandshakeHealth health = new HandshakeHealth();
     boolean isConfigured() { return configured; }
     void configure(Config config) throws IOException {
         if (handle == 0 || !configureNative(handle, input(config))) throw new IOException("HTTP-only WireGuard could not start.");
@@ -78,7 +79,7 @@ final class HttpStreamTunnel implements TunnelEngine {
         if (openVpn != null) return openVpn.statistics();
         long[] stats = statsNative(handle);
         if (stats == null || stats.length != 3) throw new IOException("WireGuard statistics are unavailable.");
-        return new TunnelTraffic(stats[0], stats[1], stats[2]);
+        return new TunnelTraffic(stats[0], stats[1], stats[2], health);
     }
     @Override public boolean probe() { return handle != 0 && probeNative(handle); }
     @Override public String egress() { return handle == 0 ? null : egressNative(handle); }

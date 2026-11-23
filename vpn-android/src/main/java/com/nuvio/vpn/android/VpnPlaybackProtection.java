@@ -421,6 +421,8 @@ public final class VpnPlaybackProtection {
         String profile = settings.getSelectedProfileId();
         if (profile == null) throw new IOException("Select a VPN profile in Settings before playing.");
         if (VpnConnectionService.verifiedFor(profile, settings.getMode())) { result.complete(null); return; }
+        // Not verified right now: have the connection checked on its next tick rather than at its next scheduled check.
+        VpnConnectionService.checkSoon();
         if (pending != null && (!pending.profile.equals(profile) || pending.mode != settings.getMode()
                 || !pending.currentAutomaticIntent())) {
             Pending obsolete = pending;

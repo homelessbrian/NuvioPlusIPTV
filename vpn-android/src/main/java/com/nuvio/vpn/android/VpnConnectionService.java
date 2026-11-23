@@ -33,6 +33,14 @@ public final class VpnConnectionService extends android.net.VpnService {
     private static final long STALL_RETRY_MS = 2000;
     /** ...and only this many failures in a row mark the connection as not working. */
     private static final int STALL_FAILURES = 3;
+    /** While not (yet) verified, the connection is checked this often for the first minute... */
+    private static final long QUICK_CHECK_MS = 2000;
+    private static final long QUICK_CHECK_FOR_MS = 60000;
+    /** ...and this often after that. */
+    private static final long SLOW_CHECK_MS = 10000;
+    /** Set when someone presses play while the connection isn't verified: check on the next tick. */
+    private static volatile boolean checkSoon;
+    static void checkSoon() { checkSoon = true; }
     private static volatile Snapshot current = new Snapshot(Phase.IDLE, 0, 0);
     private static volatile boolean running;
     private static volatile String requestedProfile;
@@ -123,6 +131,8 @@ public final class VpnConnectionService extends android.net.VpnService {
     private volatile boolean destroyed;
     private long started, lastProbe, lastStatsLog, lastEgressProbe;
     private boolean probeVerified;
+    /** When the connection last stopped being verified (0 while verified). */
+    private long unverifiedSince;
     /** Traffic checks while connected: when data last came in, when it was last checked, failed checks in a row,
      *  and whether this quiet spell already passed a check. */
     private long lastReceived, receivedGrewAt, lastStallCheck;
@@ -229,6 +239,7 @@ public final class VpnConnectionService extends android.net.VpnService {
             started = SystemClock.elapsedRealtime();
             lastProbe = lastStatsLog = lastEgressProbe = 0;
             probeVerified = false;
+            unverifiedSince = started;
             lastReceived = receivedGrewAt = lastStallCheck = 0;
             stallFailures = 0;
             stallPassed = false;
@@ -307,7 +318,14 @@ public final class VpnConnectionService extends android.net.VpnService {
             long now = SystemClock.elapsedRealtime();
             TunnelTraffic stats = engine.statistics();
             if (!stats.authenticated || stats.session != verifiedSession) probeVerified = false;
-            if (!probeVerified && (stats.session > 0 && stats.session != verifiedSession || now - lastProbe >= 10000)) {
+            if (probeVerified) unverifiedSince = 0;
+            else if (unverifiedSince == 0) unverifiedSince = now;
+            // Not verified: check every 2 s for the first minute (then every 10 s), and at once when
+            // someone presses play, instead of one try every 10 s.
+            long checkEvery = now - unverifiedSince < QUICK_CHECK_FOR_MS ? QUICK_CHECK_MS : SLOW_CHECK_MS;
+            boolean asked = checkSoon;
+            if (!probeVerified && (stats.session > 0 && stats.session != verifiedSession || asked || now - lastProbe >= checkEvery)) {
+                checkSoon = false;
                 lastProbe = now;
                 verifiedSession = stats.session;
                 probeVerified = engine.probe();
@@ -342,6 +360,7 @@ public final class VpnConnectionService extends android.net.VpnService {
                     event("vpn_stalled: no traffic for " + ((now - receivedGrewAt) / 1000) + " s and "
                             + STALL_FAILURES + " checks in a row failed");
                     probeVerified = false;
+                    unverifiedSince = now;
                     lastProbe = now;
                     stallFailures = 0;
                     stallPassed = true;
