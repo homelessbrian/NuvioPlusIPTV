@@ -707,6 +707,13 @@ class SportsRepository @Inject constructor(
                 SportsCatalog.leagues.filter { it.espnPath != null && (isMine(it, f) || SportsCatalog.shown(it, st)) }.map { it.id }.toSet()
             }.getOrDefault(emptySet())
             withContext(Dispatchers.IO) { runCatching { leagueData.update { it + readSavedScores(first) } } }
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val saved = readSavedAhead(SportsFollows.fromJson(prefs.sportsMineJson.first()))
+                    // Anything fetched meanwhile is newer than the saved copy.
+                    if (saved.isNotEmpty()) aheadData.update { saved + it }
+                }
+            }
             val tFirst = System.currentTimeMillis()
             withContext(com.nuvio.tv.livetv.data.BackgroundWork.quiet) { runCatching { loadCache(skip = first) } }
             cacheLoaded.value = true
@@ -850,11 +857,14 @@ class SportsRepository @Inject constructor(
             if (active && !com.nuvio.tv.livetv.data.BackgroundWork.onDemandPlaying.value && extrasJob?.isActive != true) extrasJob = scope.launch {
                 val force = forceExtras.also { forceExtras = false }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
-                sportsCatching { updateWeek(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Sports week update failed", it) }
-                com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
+                // Your own leagues' rows (weeks ahead, the season, recent results) first: the
+                // week for every league can take many minutes on a slow box, and rows like UFC's
+                // or F1's (nothing this week) stayed missing until it was done.
                 sportsCatching { updateAhead(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Sports weeks-ahead update failed", it) }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
                 sportsCatching { updatePast(System.currentTimeMillis()) }.onFailure { Log.w(TAG, "Sports past days update failed", it) }
+                com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
+                sportsCatching { updateWeek(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Sports week update failed", it) }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
                 sportsCatching { updateTsdb(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Non-league update failed", it) }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
@@ -1291,11 +1301,16 @@ class SportsRepository @Inject constructor(
         val noSchedule = f.teams.flatMap { listOf(it.leagueId) + SportsCatalog.relatedLeagues(it.leagueId) }
             .filter { it.startsWith("rugby/") || it.startsWith("rugby-league/") || it.startsWith("australian-football/") }
         val ids = (f.pins + f.leagues + noSchedule).toSet()
-        if (aheadData.value.keys.any { it.removePrefix(SEASON_KEY) !in ids }) aheadData.update { m -> m.filterKeys { it.removePrefix(SEASON_KEY) in ids } }
+        val dropped = aheadData.value.keys.filter { it.removePrefix(SEASON_KEY) !in ids }
+        if (dropped.isNotEmpty()) {
+            aheadData.update { m -> m.filterKeys { it.removePrefix(SEASON_KEY) in ids } }
+            dropped.forEach { k -> sportsCatching { aheadFile(k).delete() } }
+        }
         val due = ids.mapNotNull { SportsCatalog.league(it) }.filter { l ->
             l.espnPath != null && now - (aheadData.value[l.id]?.fetchedAt ?: 0L) > (if (force) HOUR else 6 * HOUR)
         }
-        if (due.isEmpty()) return
+        // Nothing due here still checks the seasons (they have their own clock, and may not be saved yet).
+        if (due.isEmpty()) { updateSeasonPast(now, ids); return }
         // ESPN takes a whole month ("202611") though not a range of days: the months the next
         // five weeks touch, kept from a week ahead on (the week before is in [weekData]), and the
         // months the last [LEAGUE_BACK_DAYS] days touch, for their results.
@@ -1327,6 +1342,7 @@ class SportsRepository @Inject constructor(
                     }
             }
             aheadData.update { it + (l.id to LeagueData(parsed, at, null)) }
+            saveGames(aheadFile(l.id), at, parsed)
         }
         updateSeasonPast(now, ids)
     }
@@ -1362,6 +1378,7 @@ class SportsRepository @Inject constructor(
                     .distinctBy { it.id }
             }
             aheadData.update { it + (SEASON_KEY + l.id to LeagueData(parsed, at, null)) }
+            saveGames(aheadFile(SEASON_KEY + l.id), at, parsed)
         }
     }
 
@@ -1731,6 +1748,34 @@ class SportsRepository @Inject constructor(
                 }
             }
         }
+    }
+
+    /** Where a followed league's weeks ahead ("ah_") or season ("as_", [SEASON_KEY]) are saved. */
+    private fun aheadFile(key: String): File =
+        if (key.startsWith(SEASON_KEY)) File(dir, "as_${safe(key.removePrefix(SEASON_KEY))}.json") else File(dir, "ah_${safe(key)}.json")
+
+    /**
+     * Your leagues' weeks ahead and seasons as last saved, so their My Sports rows (UFC, F1,
+     * golf: nothing this week) show as soon as the page opens instead of after every league's
+     * week has been fetched. Kept at their saved time, so they're fetched again when due.
+     */
+    private fun readSavedAhead(f: SportsFollows): Map<String, LeagueData> {
+        val now = System.currentTimeMillis()
+        val out = HashMap<String, LeagueData>()
+        for (id in (f.pins + f.leagues).toSet()) {
+            val l = SportsCatalog.league(id) ?: continue
+            if (l.espnPath == null) continue
+            for (key in listOf(id, SEASON_KEY + id)) {
+                val file = aheadFile(key)
+                if (!file.exists()) continue
+                runCatching {
+                    if (now - file.lastModified() > 7 * DAY) return@runCatching
+                    val (savedAt, games) = readGames(l, file.readText(), "ah|$key") ?: return@runCatching
+                    out[key] = LeagueData(games, savedAt, null)
+                }
+            }
+        }
+        return out
     }
 
     /** The saved scores of [ids] (leagues read from their files; too old ones are left out). */
