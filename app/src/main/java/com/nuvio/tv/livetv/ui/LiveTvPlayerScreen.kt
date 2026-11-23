@@ -89,6 +89,8 @@ internal fun aspectModeOf(name: String): com.nuvio.tv.ui.screens.player.AspectMo
 fun LiveTvPlayerScreen(
     onBack: () -> Unit,
     onFindInNuvio: () -> Unit = {},
+    /** Find & stream: the show's movie or series page in Nuvio (one clear match). */
+    onOpenNuvioTitle: (NuvioTitle) -> Unit = { onFindInNuvio() },
     /** Overlay mode off: Left goes back to the guide with the group list open. */
     onBackToGroups: () -> Unit = onBack,
     /** The Channel Row's TV Guide tile: always the guide, even when Back would go to Sports. */
@@ -1347,10 +1349,12 @@ fun LiveTvPlayerScreen(
             LiveTvOverlayMode(
                 viewModel = viewModel,
                 onClose = { listVisible = false },
-                onFindInNuvio = { title ->
+                onFindInNuvio = { p, c ->
                     listVisible = false
-                    LiveTvSearchBridge.request(title)
-                    onFindInNuvio()
+                    viewModel.findInNuvio(p, c, onTitle = onOpenNuvioTitle) { title ->
+                        LiveTvSearchBridge.request(title)
+                        onFindInNuvio()
+                    }
                 }
             )
         }
@@ -1566,12 +1570,13 @@ fun LiveTvPlayerScreen(
                 },
                 bell = liveBell?.let { b -> Triple(if (b.isMovie) "Calendar" else "Bell", if (b.isMovie) (if (b.on) "On it" else "Add") else b.value, b.toggle) },
                 onSearch = viewModel.currentProgram(ch.key)
-                    ?.let { com.nuvio.tv.livetv.data.LiveTvPosterResolver.searchTitleFor(it, ch) }
-                    ?.let { title ->
+                    ?.let { p ->
                         {
                             dialog = PlayerDialog.NONE
-                            LiveTvSearchBridge.request(title)
-                            onFindInNuvio()
+                            viewModel.findInNuvio(p, ch, onTitle = onOpenNuvioTitle) { title ->
+                                LiveTvSearchBridge.request(title)
+                                onFindInNuvio()
+                            }
                         }
                     },
                 onReload = { dialog = PlayerDialog.NONE; viewModel.playback.retry() },

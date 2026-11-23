@@ -1241,6 +1241,35 @@ class LiveTvViewModel @Inject constructor(
         return null
     }
 
+    /**
+     * Find & stream in Nuvio: the movie or series this show clearly is in your addons' catalogs
+     * ([onTitle]: its page opens, on the episode when the guide gives it), else Nuvio's search
+     * for it ([onSearch], as before). Games and other sports events always go to search.
+     */
+    fun findInNuvio(program: EpgProgram, channel: LiveChannel?, onTitle: (NuvioTitle) -> Unit, onSearch: (String) -> Unit) {
+        val searchTitle = com.nuvio.tv.livetv.data.LiveTvPosterResolver.searchTitleFor(program, channel)
+        if (LiveTvRepository.isPlaceholderTitle(program.title) ||
+            com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSports(channel, program)) { onSearch(searchTitle); return }
+        viewModelScope.launch {
+            val hint = com.nuvio.tv.livetv.data.LiveTvPosterResolver.typeHint(program, channel)
+            com.nuvio.tv.livetv.record.LiveTvNotice.show("Finding \"${titleMarks(program.title).title}\" in Nuvio…")
+            val looking = com.nuvio.tv.livetv.record.LiveTvNotice.current.value
+            val hit = try {
+                withTimeoutOrNull(6_000) {
+                    runCatching { posterResolver.titleFor(program.title, hint, urgent = true) }
+                        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrNull()
+                }
+            } finally {
+                looking?.let { com.nuvio.tv.livetv.record.LiveTvNotice.clear(it) }
+            }
+            if (hit == null || hit.meta.id.isBlank()) { onSearch(searchTitle); return@launch }
+            val type = hit.meta.rawType.ifBlank { hit.type }
+            val series = !type.equals("movie", ignoreCase = true)
+            val ep = if (series) guideSeasonEpisode(program.episode, program.title) else null
+            onTitle(NuvioTitle(hit.meta.id, type, hit.addonBaseUrl, ep?.first, ep?.second))
+        }
+    }
+
     /** Remembers which channels to fill in first next time (the group on screen, favorites). */
     fun rememberPriority(keys: List<String>) = repository.rememberPriority(keys)
 

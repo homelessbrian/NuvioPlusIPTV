@@ -511,7 +511,10 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             channels: List<Triple<String, List<String>, String?>>,
             kept: Collection<String>,
             listed: Int = channels.size,
-            extraIds: Collection<String> = emptyList()
+            extraIds: Collection<String> = emptyList(),
+            /** Start of the hours kept ("Past Shows Kept"): shows from before still in it are carried over. 0: none. */
+            keepFrom: Long = 0L,
+            isPlaceholder: (String) -> Boolean = { false }
         ): Map<String, StagedMeta> {
             kept.forEach { gidFor(it) }
             val upd = db.compileStatement("UPDATE guide_ch SET cnt = ?, last_stop = ?, placeholders = ? WHERE gid = ?")
@@ -530,6 +533,11 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                 db.rawQuery("SELECT gid, xid FROM guide_ch WHERE src = ? AND state IN ($LIVE, $EMPTIED)", arrayOf(src)).use { c ->
                     while (c.moveToNext()) old += c.getLong(0) to c.getString(1)
                 }
+                // Shows that already aired and the new file no longer has (many guides start at
+                // "now", or put "No information" over yesterday): kept, so the guide and catch-up
+                // still show them for as long as Past Shows Kept says.
+                if (keepFrom > 0L) runCatching { carryPastShows(old, keepFrom, System.currentTimeMillis(), isPlaceholder) }
+                    .onFailure { if (it is android.database.sqlite.SQLiteFullException) throw it }
                 val move = db.compileStatement("UPDATE chan SET gid = ? WHERE gid = ?")
                 val drop = db.compileStatement("DELETE FROM chan WHERE gid = ?")
                 old.forEach { (oldGid, xid) ->
@@ -577,6 +585,65 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             return gids.keys.associateWith { xid ->
                 val m = meta[xid]
                 StagedMeta(m?.get(0)?.toInt() ?: 0, m?.get(1) ?: 0L, m?.get(2)?.toInt() ?: 0, hasRows = xid !in countedOnly)
+            }
+        }
+
+        /**
+         * For each guide channel the file had before and still has: the shows from before that
+         * ended between [from] and [until] go to the new listings wherever the new file has no
+         * real show at that time (a placeholder there gives way, unless it runs on past [until]).
+         * Inside the read's transaction, a few hundred guide channels at a time.
+         */
+        private fun carryPastShows(old: List<Pair<Long, String>>, from: Long, until: Long, isPlaceholder: (String) -> Boolean) {
+            val pairs = old.mapNotNull { (oldGid, xid) ->
+                val now = gids[xid]
+                if (now == null || xid in countedOnly) null else oldGid to now
+            }
+            if (pairs.isEmpty()) return
+            val copy = db.compileStatement(
+                "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) " +
+                    "SELECT ?, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source FROM listings WHERE rowid = ?"
+            )
+            val drop = db.compileStatement("DELETE FROM listings WHERE rowid = ?")
+            try {
+                for (part in pairs.chunked(200)) {
+                    val newOf = HashMap<Long, Long>(part.size * 2)
+                    part.forEach { (o, n) -> newOf[o] = n }
+                    // The new file's shows in those hours: rowid, start, stop, 1 = placeholder.
+                    val fresh = HashMap<Long, ArrayList<LongArray>>()
+                    db.rawQuery(
+                        "SELECT gid, rowid, start, stop, title FROM listings WHERE gid IN (${part.joinToString(",") { it.second.toString() }}) AND start < ? AND stop > ?",
+                        arrayOf(until.toString(), from.toString())
+                    ).use { c ->
+                        while (c.moveToNext()) {
+                            fresh.getOrPut(c.getLong(0)) { ArrayList() } +=
+                                longArrayOf(c.getLong(1), c.getLong(2), c.getLong(3), if (isPlaceholder(c.getString(4))) 1L else 0L)
+                        }
+                    }
+                    db.rawQuery(
+                        "SELECT gid, rowid, start, stop, title FROM listings WHERE gid IN (${part.joinToString(",") { it.first.toString() }}) AND stop > ? AND stop <= ? ORDER BY gid, start",
+                        arrayOf(from.toString(), until.toString())
+                    ).use { c ->
+                        while (c.moveToNext()) {
+                            if (isPlaceholder(c.getString(4))) continue
+                            val newGid = newOf[c.getLong(0)] ?: continue
+                            val start = c.getLong(2); val stop = c.getLong(3)
+                            val rows = fresh.getOrPut(newGid) { ArrayList() }
+                            // A real show then, or a placeholder still running after now: the new file wins.
+                            if (rows.any { it[1] < stop && it[2] > start && (it[3] == 0L || it[2] > until) }) continue
+                            rows.removeAll { r ->
+                                val gone = r[3] == 1L && r[1] < stop && r[2] > start
+                                if (gone && r[0] > 0L) { drop.clearBindings(); drop.bindLong(1, r[0]); drop.executeUpdateDelete() }
+                                gone
+                            }
+                            copy.clearBindings(); copy.bindLong(1, newGid); copy.bindLong(2, c.getLong(1))
+                            copy.executeInsert()
+                            rows += longArrayOf(0L, start, stop, 0L)
+                        }
+                    }
+                }
+            } finally {
+                runCatching { copy.close() }; runCatching { drop.close() }
             }
         }
 
@@ -851,8 +918,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     }
 
     /**
-     * Adds a channel's listings for a time span (Xtream catch-up archive), replacing anything
-     * stored for it in that span. They go to the guide channel it points at (so channels sharing
+     * Adds a channel's listings for a time span (Xtream catch-up archive), replacing what's
+     * stored for it at the times they cover. They go to the guide channel it points at (so channels sharing
      * that guide channel get them too); a channel with no guide gets a guide channel of its own.
      */
     fun putChannelRange(ch: String, fromMs: Long, toMs: Long, programs: List<EpgProgram>) {
@@ -878,7 +945,15 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                         SQLiteDatabase.CONFLICT_REPLACE)
                     made
                 }
-                db.delete("listings", "gid = ? AND start >= ? AND start < ?", arrayOf(id.toString(), (fromMs - sh).toString(), (toMs - sh).toString()))
+                // Only what these shows cover is replaced: a catch-up list with gaps (some
+                // providers leave hours out) keeps the shows already stored in between.
+                db.compileStatement("DELETE FROM listings WHERE gid = ? AND start < ? AND stop > ?").use { remove ->
+                    programs.forEach { p ->
+                        remove.clearBindings()
+                        remove.bindLong(1, id); remove.bindLong(2, p.stopMs - sh); remove.bindLong(3, p.startMs - sh)
+                        remove.executeUpdateDelete()
+                    }
+                }
                 val stmt = db.compileStatement(
                     "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
                 )

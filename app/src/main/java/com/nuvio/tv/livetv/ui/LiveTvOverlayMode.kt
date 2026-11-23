@@ -85,7 +85,7 @@ private sealed interface ScheduleRow {
 internal fun LiveTvOverlayMode(
     viewModel: LiveTvViewModel,
     onClose: () -> Unit,
-    onFindInNuvio: (String) -> Unit
+    onFindInNuvio: (EpgProgram, LiveChannel) -> Unit
 ) {
     // Guide Size (Settings → Live TV) sets the size of overlay mode too: text, icons and rows.
     val sizeSettings by viewModel.settings.collectAsStateWithLifecycle()
@@ -124,7 +124,7 @@ private fun odp(v: Float): androidx.compose.ui.unit.Dp = (v * LocalOverlayScale.
 private fun OverlayModeContent(
     viewModel: LiveTvViewModel,
     onClose: () -> Unit,
-    onFindInNuvio: (String) -> Unit
+    onFindInNuvio: (EpgProgram, LiveChannel) -> Unit
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val programs by viewModel.programs.collectAsStateWithLifecycle()
@@ -517,7 +517,7 @@ private fun OverlayModeContent(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 MenuItem("Find & stream in Nuvio", Modifier.focusRequester(first)) {
                     futurePrompt = null
-                    onFindInNuvio(com.nuvio.tv.livetv.data.LiveTvPosterResolver.searchTitleFor(p, ch))
+                    onFindInNuvio(p, ch)
                 }
                 MenuItem(
                     if (user.reminders.any { it.channelKey == ch.key && it.startMs == p.startMs }) "Cancel reminder" else "Remind me"

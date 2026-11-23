@@ -1542,6 +1542,18 @@ private fun PlaybackNavHost(
                     // Back from search returns to the guide.
                     navController.navigate(Screen.Search.route) { launchSingleTop = true }
                 },
+                onOpenNuvioTitle = { t ->
+                    // The show's page in Nuvio (on its episode when the guide gives it); Back returns to the guide.
+                    navController.navigate(
+                        Screen.Detail.createRoute(
+                            itemId = t.id,
+                            itemType = t.type,
+                            addonBaseUrl = t.addonBaseUrl,
+                            returnFocusSeason = t.season,
+                            returnFocusEpisode = t.episode
+                        )
+                    ) { launchSingleTop = true }
+                },
                 onReturnToSports = {
                     navController.navigate(Screen.Sports.route) {
                         popUpTo(navController.graph.startDestinationId) { saveState = true }

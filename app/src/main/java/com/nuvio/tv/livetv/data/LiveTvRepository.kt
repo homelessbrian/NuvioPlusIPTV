@@ -1608,7 +1608,9 @@ class LiveTvRepository @Inject constructor(
                         val later = list.filter { it.startMs >= maxOf(existingEnd, now) }
                         if (past.isEmpty() && later.isEmpty()) return@runCatching
                         val from = past.firstOrNull()?.startMs ?: pastEnd
-                        val keep = existing.filter { it.startMs >= pastEnd || it.startMs < from }
+                        // Shows already there stay wherever the archive has nothing at that time
+                        // (some providers leave hours out of it).
+                        val keep = existing.filter { e -> e.startMs >= pastEnd || past.none { it.startMs < e.stopMs && it.stopMs > e.startMs } }
                         val merged = (past + keep + later).sortedBy { it.startMs }
                             .fold(ArrayList<EpgProgram>()) { acc, p -> if (acc.isEmpty() || p.startMs >= acc.last().stopMs - 60_000) acc += p; acc }
                         if (guideInDb) runCatching {
@@ -2599,7 +2601,7 @@ class LiveTvRepository @Inject constructor(
                     return fallBack()
                 }
             }
-            val meta = runCatching { writer.finish(stamp, entries.map { Triple(it.id, it.names, it.icon) }, kept, listed, extraIds) }
+            val meta = runCatching { writer.finish(stamp, entries.map { Triple(it.id, it.names, it.icon) }, kept, listed, extraIds, keepFrom = windowStart, isPlaceholder = { isPlaceholder(it) }) }
                 .onFailure {
                     writer.abort(); Log.w(TAG, "Couldn't store ${target.name}", it)
                     if (isStorageFull(it)) {

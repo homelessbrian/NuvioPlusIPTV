@@ -172,6 +172,8 @@ fun LiveTvGuideScreen(
     onOpenRecordings: () -> Unit = {},
     onFindInNuvio: () -> Unit = {},
     onOpenNuvioSearch: () -> Unit = onFindInNuvio,
+    /** Find & stream: the show's movie or series page in Nuvio (one clear match). */
+    onOpenNuvioTitle: (NuvioTitle) -> Unit = { onFindInNuvio() },
     onReturnToSports: () -> Unit = {},
     /** A recording played here from Recordings or the Calendar: Back goes back to that screen (its route). */
     onReturnTo: (String) -> Unit = {},
@@ -197,6 +199,7 @@ fun LiveTvGuideScreen(
         onOpenSportsMultiview = onOpenSportsMultiview,
         onFindInNuvio = onFindInNuvio,
         onOpenNuvioSearch = onOpenNuvioSearch,
+        onOpenNuvioTitle = onOpenNuvioTitle,
         onReturnToSports = onReturnToSports,
         onReturnTo = onReturnTo,
         onOpenSportsGame = onOpenSportsGame,
@@ -214,6 +217,7 @@ private fun LiveTvGuideScreenBody(
     onOpenSportsMultiview: (Int, String?) -> Unit = { _, _ -> onOpenMultiview() },
     onFindInNuvio: () -> Unit = {},
     onOpenNuvioSearch: () -> Unit = onFindInNuvio,
+    onOpenNuvioTitle: (NuvioTitle) -> Unit = { onFindInNuvio() },
     /** Full screen was opened from the Sports page: Back goes back there. */
     onReturnToSports: () -> Unit = {},
     onReturnTo: (String) -> Unit = {},
@@ -826,10 +830,13 @@ private fun LiveTvGuideScreenBody(
         }
     }
 
-    fun findInNuvio(program: EpgProgram) {
-        // For a series with a "Show - Episode" title, search for the show.
-        LiveTvSearchBridge.request(com.nuvio.tv.livetv.data.LiveTvPosterResolver.searchTitleFor(program, null))
-        onFindInNuvio()
+    fun findInNuvio(program: EpgProgram, channel: LiveChannel?) {
+        // One clear match: its page in Nuvio. Otherwise search (for a series with a
+        // "Show - Episode" title, the show's name).
+        viewModel.findInNuvio(program, channel, onTitle = onOpenNuvioTitle) { title ->
+            LiveTvSearchBridge.request(title)
+            onFindInNuvio()
+        }
     }
 
     val focusedChannel = channels.getOrNull(row)
@@ -2233,7 +2240,7 @@ private fun LiveTvGuideScreenBody(
                 onProgramInfo = { menuTarget = null; infoFromMenu = true; infoTarget = target },
                 focusProgramInfo = menuOnInfo,
                 streamProgram = target.block?.program ?: viewModel.currentProgram(target.channel.key),
-                onFindInNuvio = { p -> menuTarget = null; findInNuvio(p) },
+                onFindInNuvio = { p -> menuTarget = null; findInNuvio(p, target.channel) },
                 onSearch = { menuTarget = null; LiveTvSearchBridge.origin.value = LiveTvSearchBridge.GUIDE; onOpenNuvioSearch() },
                 onRefresh = { menuTarget = null; viewModel.refresh() },
                 onGuideDisplay = { menuTarget = null; guideGearOpen = true },
@@ -2258,7 +2265,7 @@ private fun LiveTvGuideScreenBody(
                     infoTarget = null
                     if (infoFromMenu) { menuOnInfo = true; menuTarget = target }
                 },
-                onFind = { p -> infoTarget = null; findInNuvio(p) },
+                onFind = { p -> infoTarget = null; findInNuvio(p, target.channel) },
                 onWatch = { infoTarget = null; playChannel(target.channel) },
                 onCatchup = { p ->
                     infoTarget = null
@@ -2499,6 +2506,7 @@ private fun LiveTvGuideScreenBody(
                     }
                 },
                 onFindInNuvio = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; fullscreenShown = false; exitFullscreenTick++; onFindInNuvio() },
+                onOpenNuvioTitle = { t -> com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; fullscreenShown = false; exitFullscreenTick++; onOpenNuvioTitle(t) },
                 onOpenGuide = {
                     // The TV Guide tile: the guide itself, never back to Sports or Recordings.
                     com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn()
