@@ -140,6 +140,16 @@ class MultiviewPlaybackSession(
         mainHandler.post { if (!released) core.restartPlayers() }
     }
 
+    // The VPN stopped carrying traffic and works again: panes that stalled or gave up start over.
+    private val vpnRecovery = VpnPlaybackProtection.observeConnectionRecovered {
+        if (released) return@observeConnectionRecovered
+        LiveTvLoadReport.add("Multiview: the VPN works again; restarting panes that stopped")
+        core.restartStoppedPanes()
+    }
+
+    // How hot the box is, while Multiview is open: a box that heats up slows its chip down.
+    private val heatWatch = MultiviewBoxHeat.watch(appContext)
+
     fun setLayout(layout: MultiviewLayout) = onMain { core.setLayout(layout) }
     fun assignChannel(paneId: Int, channel: LiveChannel) = onMain { core.assignChannel(paneId, channel) }
     fun clearPane(paneId: Int) = onMain { core.clearPane(paneId) }
@@ -180,6 +190,8 @@ class MultiviewPlaybackSession(
         if (released) return
         released = true
         vpnSubscription.close()
+        vpnRecovery.close()
+        heatWatch.close()
         mainHandler.removeCallbacksAndMessages(null)
         core.release()
     }
@@ -439,7 +451,7 @@ private class AndroidMultiviewPanePlayer(
             (streamRate == null && perSecond < 22f) ||
             skipped > shown / 20
         val detail = "stream ${MultiviewDecoderReport.picture(format)}; $skipped skipped; " +
-            "${decodersOpen()} Multiview decoders open"
+            "${decodersOpen()} Multiview decoders open; box ${MultiviewBoxHeat.describe(appContext)}"
         if (choppy) {
             smoothReported -= ch.key
             LiveTvLoadReport.add("Multiview: ${ch.name} is choppy: showed ${Math.round(perSecond)} frames a second ($detail)")
@@ -498,6 +510,7 @@ private class AndroidMultiviewPanePlayer(
             .build()
     }.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         .setEnableDecoderFallback(true)
+        .apply { if (MultiviewVideoWindows.feedFrameByFrame) forceDisableMediaCodecAsynchronousQueueing() }
 
     val player: ExoPlayer = ExoPlayer.Builder(context, renderers)
         .setLoadControl(
@@ -571,7 +584,22 @@ private class AndroidMultiviewPanePlayer(
         streamUrl = if (channel.key in LiveStreamFormats.tsInstead) LiveStreamFormats.tsLinkFor(channel.url) ?: channel.url else channel.url
         streamMime = if (channel.key in LiveStreamFormats.plainTs) MimeTypes.VIDEO_MP2T else null
         formatGuess = 0
-        connect(channel)
+        // Panes that start together (opening Multiview, a layout, the VPN coming back) open their
+        // streams a moment apart instead of all rushing to load at once.
+        val now = SystemClock.elapsedRealtime()
+        val wait = (nextStartAt - now).coerceAtLeast(0L)
+        nextStartAt = maxOf(now, nextStartAt) + START_STAGGER_MS
+        if (wait == 0L) { connect(channel); return }
+        resolveJob?.cancel()
+        val expected = ++generation
+        resolving = true
+        resolveJob = scope.launch {
+            delay(wait)
+            if (released || expected != generation) return@launch
+            connect(channel)
+            player.playWhenReady = wantPlaying && error == null
+            onChanged()
+        }
     }
 
     private fun connect(channel: LiveChannel) {
@@ -719,6 +747,10 @@ private class AndroidMultiviewAudioFocus(context: Context) : MultiviewAudioFocus
 }
 
 private const val MAX_RECONNECTS = 6
+/** Gap between panes that start at the same time. */
+private const val START_STAGGER_MS = 350L
+/** When the next pane may open its stream (shared by every pane, main thread only). */
+private var nextStartAt = 0L
 private const val RECOVERED_AFTER_MS = 60_000L
 private const val LOST_MESSAGE = "Lost the connection to this stream. Retry or choose another channel."
 

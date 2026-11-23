@@ -41,6 +41,16 @@ internal object MultiviewVideoWindows {
         !fewWindows && chipNamed("amlogic")
     }
 
+    /** An Amlogic chip, whatever box it is in. */
+    val isAmlogic: Boolean by lazy { chipNamed("amlogic") }
+
+    /**
+     * Amlogic boxes: panes hand the video chip one frame at a time, in step with the player,
+     * the way TiviMate and OwnTV do there (Android's newer default lets the chip and the
+     * player run on their own schedules, and Amlogic chips are known to misbehave with it).
+     */
+    val feedFrameByFrame: Boolean get() = isAmlogic
+
     /** Whether a pane plays in a video window (otherwise it is drawn with the screen). */
     fun inVideoWindow(protected: Boolean): Boolean = protected || useVideoWindows
 
@@ -52,8 +62,9 @@ internal object MultiviewVideoWindows {
         reported = true
         val box = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
         LiveTvLoadReport.add(
-            if (useVideoWindows) "Multiview: panes play in the TV's video windows ($box, Amlogic chip)"
-            else "Multiview: panes drawn with the screen, the way that works on every box ($box)"
+            (if (useVideoWindows) "Multiview: panes play in the TV's video windows ($box, Amlogic chip)"
+            else "Multiview: panes drawn with the screen, the way that works on every box ($box)") +
+                (if (feedFrameByFrame) "; video fed one frame at a time" else "")
         )
     }
 }

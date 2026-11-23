@@ -27,6 +27,8 @@ public final class VpnConnectionService extends android.net.VpnService {
     private static final String RELEASE_PROXY = "com.nuvio.vpn.RELEASE_PROXY";
     private static final String CHANNEL = "nuvio-vpn";
     private static final int NOTIFICATION = 7341;
+    /** How long a connection that was carrying data may go silent before it is checked. */
+    private static final long STALL_CHECK_MS = 6000;
     private static volatile Snapshot current = new Snapshot(Phase.IDLE, 0, 0);
     private static volatile boolean running;
     private static volatile String requestedProfile;
@@ -117,6 +119,11 @@ public final class VpnConnectionService extends android.net.VpnService {
     private volatile boolean destroyed;
     private long started, lastProbe, lastStatsLog, lastEgressProbe;
     private boolean probeVerified;
+    /** Traffic checks while connected: when data last came in, and whether this stop was already checked. */
+    private long lastReceived, receivedGrewAt;
+    private boolean stallChecked;
+    /** The connection was working and then stopped (or dropped); its next success counts as a recovery. */
+    private boolean lostAfterWorking;
     private long verifiedSession;
     private boolean demandFailed;
     private String egress;
@@ -216,6 +223,8 @@ public final class VpnConnectionService extends android.net.VpnService {
             started = SystemClock.elapsedRealtime();
             lastProbe = lastStatsLog = lastEgressProbe = 0;
             probeVerified = false;
+            lastReceived = receivedGrewAt = 0;
+            stallChecked = false;
             demandFailed = false;
             failureReason = null;
             egress = null;
@@ -283,6 +292,7 @@ public final class VpnConnectionService extends android.net.VpnService {
                 noteFailure((engine.authRejected() ? "The VPN server rejected the login."
                         : "The VPN connection dropped or the server stopped answering.")
                         + (detail == null ? "" : " (" + detail + ")"));
+                if (current.phase == Phase.CONNECTED) lostAfterWorking = true;
                 current = new Snapshot(Phase.ERROR, 0, 0, null, engine.authRejected());
                 updateNotification();
                 return;
@@ -295,6 +305,21 @@ public final class VpnConnectionService extends android.net.VpnService {
                 verifiedSession = stats.session;
                 probeVerified = engine.probe();
                 stats = engine.statistics();
+                lastReceived = stats.received; // the check's own reply is not stream traffic
+            }
+            // Streams were flowing and then nothing came in for a few seconds: check the tunnel still
+            // carries traffic rather than waiting for its next renegotiation (which took a minute).
+            if (stats.received != lastReceived) {
+                lastReceived = stats.received;
+                receivedGrewAt = now;
+                stallChecked = false;
+            } else if (probeVerified && !stallChecked && receivedGrewAt > 0 && now - receivedGrewAt >= STALL_CHECK_MS) {
+                stallChecked = true;
+                lastProbe = now;
+                probeVerified = engine.probe();
+                stats = engine.statistics();
+                lastReceived = stats.received; // the check's own reply is not stream traffic
+                if (!probeVerified) event("vpn_stalled: no traffic for " + ((now - receivedGrewAt) / 1000) + " s and the check failed");
             }
             boolean verified = stats.authenticated && stats.session == verifiedSession
                     && stats.received > 0 && probeVerified;
@@ -310,6 +335,12 @@ public final class VpnConnectionService extends android.net.VpnService {
             if (destroyed || generation.get() != token || !engine.isUp()) return;
             Phase phase = verified ? Phase.CONNECTED : now - started > 30000 ? Phase.WAITING : Phase.CONNECTING;
             if (phase != current.phase) event(verified ? "vpn_handshake_and_tunneled_probe_verified" : "vpn_waiting_for_verified_connection");
+            if (current.phase == Phase.CONNECTED && phase != Phase.CONNECTED) lostAfterWorking = true;
+            if (verified && current.phase != Phase.CONNECTED && lostAfterWorking) {
+                lostAfterWorking = false;
+                event("vpn_recovered");
+                VpnPlaybackProtection.connectionRecovered();
+            }
             current = new Snapshot(phase, stats.received, stats.sent, verified ? egress : null);
             if (verified && now - lastStatsLog >= 10000) {
                 lastStatsLog = now;
