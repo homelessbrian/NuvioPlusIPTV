@@ -13,7 +13,6 @@
 ### Sports
 - **A new Sports hub.** A game preview and league table sit beside the list. The game page has a row of the day's games, tabs and a line under every channel that says if it's showing the game now or later. My Sports follows the card you're on, and team colours show while a game plays
 - **Top Players with photos:** the player of the game, every leader category and a profile when you press OK
-- **Pick Leagues:** on All Events, see several leagues together, with a Live only switch
 - **More highlights.** Races, fights, golf, tennis, darts and more get highlights and full replays from the sports' own YouTube channels. Older games and past races keep theirs, and race, fight and tournament rows go back through the whole season
 - **Show Highlights** and **Show Condensed Games** switches in Settings → Sports
 - Sports add-on streams show next to a game's other channels in the backup list, Quick Channels and Multiview. A new **Games** list in Quick Channels shows the league's other games while you watch one

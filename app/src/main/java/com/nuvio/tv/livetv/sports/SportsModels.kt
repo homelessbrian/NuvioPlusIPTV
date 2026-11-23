@@ -217,11 +217,7 @@ data class SportsSettings(
     /** A finished game's page lists highlights, recaps and single plays (off: replays only). */
     val showHighlights: Boolean = true,
     /** A finished game's page lists condensed games. */
-    val showCondensed: Boolean = true,
-    /** All Events' Pick Leagues: the leagues ticked (any sports, together). */
-    val pickedLeagues: Set<String> = emptySet(),
-    /** Pick Leagues: only the games on now. */
-    val pickedLiveOnly: Boolean = false
+    val showCondensed: Boolean = true
 ) {
     fun toJson(): String = JSONObject()
         .put("showInSidebar", showInSidebar)
@@ -248,8 +244,6 @@ data class SportsSettings(
         .put("leagueNetworkChannels", JSONObject(leagueNetworkChannels as Map<*, *>))
         .put("showHighlights", showHighlights)
         .put("showCondensed", showCondensed)
-        .put("pickedLeagues", JSONArray(pickedLeagues.toList()))
-        .put("pickedLiveOnly", pickedLiveOnly)
         .toString()
 
     companion object {
@@ -283,9 +277,7 @@ data class SportsSettings(
                     channelRegion = o.optString("channelRegion", ""),
                     leagueNetworkChannels = o.optJSONObject("leagueNetworkChannels").stringMap(),
                     showHighlights = o.optBoolean("showHighlights", d.showHighlights),
-                    showCondensed = o.optBoolean("showCondensed", d.showCondensed),
-                    pickedLeagues = o.optJSONArray("pickedLeagues").strings().toSet(),
-                    pickedLiveOnly = o.optBoolean("pickedLiveOnly", d.pickedLiveOnly)
+                    showCondensed = o.optBoolean("showCondensed", d.showCondensed)
                 )
             }.getOrDefault(SportsSettings())
         }

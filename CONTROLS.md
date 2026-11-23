@@ -55,7 +55,6 @@ In a show's info (hold OK), **▲ / ▼** read the whole description and **Back*
 | **Hold OK** on a game | Watch it in the video window (again: full screen) |
 | **◀ / ▶** on the big card | Your next games |
 | **▲** from the games | The top bar: My Sports, All Events, 🏆 Tables, your sports (and the day tabs on All Events) |
-| **OK** on **Pick Leagues** (All Events) | Tick several leagues to see them together · **Live only** switch |
 | **Hold Back** | Full screen on the game in the video window |
 | **Back** | First back up to the top (the highlight, or the My Sports button) · again opens the side menu |
 

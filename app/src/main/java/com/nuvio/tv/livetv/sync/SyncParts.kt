@@ -8,7 +8,7 @@ enum class SyncPart(val label: String, val description: String, val defaultOn: B
     LOGINS("Playlists and logins", "Your IPTV links, usernames and passwords. Stored encrypted.", true),
     VPN("VPN profiles and protection", "VPN configurations, selected profile and automatic protection scope.", true),
     FAVORITES("Favorites and groups", "Favorite channels, hidden channels and group order.", true),
-    SPORTS("Sports", "Followed teams and leagues, and Choose Leagues.", true),
+    SPORTS("Sports", "Followed teams and leagues, and your league list.", true),
     CALENDAR("Calendar", "Followed and hidden shows.", true),
     BEHAVIOR("Behavior and options", "How often lists and guides refresh, recording and catch-up options, sorting, search sources and Calendar choices. Not the look, so it is shared with your phone too.", true),
     LOOK("Look and layout", "Themes, menu, card styles and other visual options, kept the same on your TVs. Turn off to keep each TV its own.", true)
