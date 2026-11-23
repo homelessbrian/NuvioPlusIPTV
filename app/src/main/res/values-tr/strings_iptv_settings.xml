@@ -661,6 +661,8 @@
     <string name="iptv_settings_sync_vpn_description">"VPN yapılandırmaları, seçili profil ve otomatik korumanın kapsamı."</string>
     <string name="iptv_settings_sync_favorites">"Favoriler ve gruplar"</string>
     <string name="iptv_settings_sync_favorites_description">"Favori kanallar, gizli kanallar ve grup sırası."</string>
+    <string name="iptv_settings_sync_home_rows">"Ana sayfa satırları"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Ana sayfaya eklediğin Canlı TV, Spor ve İsteğe Bağlı satırları. Telefonunla da paylaşılır."</string>
     <string name="iptv_settings_sync_sports_description">"Takip edilen takımlar ve ligler ile Ligleri seç."</string>
     <string name="iptv_settings_sync_calendar">"Takvim"</string>
     <string name="iptv_settings_sync_calendar_description">"Takip edilen ve gizlenen diziler."</string>

@@ -661,6 +661,8 @@
     <string name="iptv_settings_sync_vpn_description">"VPN-Konfigurationen, gewähltes Profil und Umfang des automatischen Schutzes."</string>
     <string name="iptv_settings_sync_favorites">"Favoriten und Gruppen"</string>
     <string name="iptv_settings_sync_favorites_description">"Lieblingssender, ausgeblendete Sender und Gruppenreihenfolge."</string>
+    <string name="iptv_settings_sync_home_rows">"Startseiten-Reihen"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Live-TV-, Sport- und On-Demand-Reihen, die du zur Startseite hinzugefügt hast. Auch mit deinem Handy geteilt."</string>
     <string name="iptv_settings_sync_sports_description">"Verfolgte Teams und Ligen sowie „Ligen auswählen“."</string>
     <string name="iptv_settings_sync_calendar">"Kalender"</string>
     <string name="iptv_settings_sync_calendar_description">"Verfolgte und ausgeblendete Serien."</string>

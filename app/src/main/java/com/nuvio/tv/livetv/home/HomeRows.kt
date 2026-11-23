@@ -255,6 +255,9 @@ class HomeLiveRows @Inject constructor(
 
     @Volatile private var placesStarted = false
 
+    /** Each row's place the last time Home's order was looked at (row id → the row above it). */
+    private var seenAnchors: Map<String, String> = emptyMap()
+
     /**
      * Keeps each row's place in step with Home's row order, both ways (started by Home, once):
      * a row you move remembers the row above it; a row synced from another TV that this TV's
@@ -280,13 +283,19 @@ class HomeLiveRows @Inject constructor(
                             return@collectLatest
                         }
                     }
-                    // Remember where each row is now (the nearest row above it that isn't another live row).
-                    val anchors = list.associate { r ->
+                    // Remember where each row is now (the nearest row above it that isn't another live row),
+                    // but only for rows that moved on this TV. The phone's Home has other rows, so a row
+                    // can sit under a different one there; saving every difference would make the two
+                    // keep overwriting each other's place.
+                    val anchors = list.mapNotNull { r ->
                         val i = order.indexOf(r.key)
-                        r.id to if (i < 0) null else order.subList(0, i).lastOrNull { !HomeLiveRow.isKey(it) }.orEmpty()
-                    }
-                    if (list.any { r -> anchors[r.id]?.let { it != r.after } == true }) {
-                        edit { rows -> rows.map { r -> anchors[r.id]?.let { r.copy(after = it) } ?: r } }
+                        if (i < 0) null else r.id to order.subList(0, i).lastOrNull { !HomeLiveRow.isKey(it) }.orEmpty()
+                    }.toMap()
+                    val seen = seenAnchors
+                    seenAnchors = anchors
+                    val moved = anchors.filter { (id, at) -> seen[id]?.let { it != at } == true }
+                    if (list.any { r -> moved[r.id]?.let { it != r.after } == true }) {
+                        edit { rows -> rows.map { r -> moved[r.id]?.let { r.copy(after = it) } ?: r } }
                     }
                 }
         }

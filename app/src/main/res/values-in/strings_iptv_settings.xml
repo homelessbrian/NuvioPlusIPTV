@@ -671,6 +671,8 @@
     <string name="iptv_settings_sync_vpn_description">"Konfigurasi VPN, profil terpilih, dan cakupan perlindungan otomatis."</string>
     <string name="iptv_settings_sync_favorites">"Favorit dan grup"</string>
     <string name="iptv_settings_sync_favorites_description">"Saluran favorit, saluran tersembunyi, dan urutan grup."</string>
+    <string name="iptv_settings_sync_home_rows">"Baris Beranda"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Baris TV Langsung, Olahraga, dan Sesuai Permintaan yang Anda tambahkan ke Beranda. Juga dibagikan ke ponsel Anda."</string>
     <string name="iptv_settings_sync_sports_description">"Tim dan liga yang diikuti, serta Pilih Liga."</string>
     <string name="iptv_settings_sync_calendar">"Kalender"</string>
     <string name="iptv_settings_sync_calendar_description">"Acara yang diikuti dan disembunyikan."</string>

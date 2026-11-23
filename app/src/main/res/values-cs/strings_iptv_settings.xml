@@ -671,6 +671,8 @@
     <string name="iptv_settings_sync_vpn_description">"Konfigurace VPN, vybraný profil a rozsah automatické ochrany."</string>
     <string name="iptv_settings_sync_favorites">"Oblíbené a skupiny"</string>
     <string name="iptv_settings_sync_favorites_description">"Oblíbené kanály, skryté kanály a pořadí skupin."</string>
+    <string name="iptv_settings_sync_home_rows">"Řádky na Domů"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Řádky Živé TV, Sportu a Na vyžádání, které jste přidali na Domů. Sdílí se i s telefonem."</string>
     <string name="iptv_settings_sync_sports_description">"Sledované týmy a ligy a Vybrat ligy."</string>
     <string name="iptv_settings_sync_calendar">"Kalendář"</string>
     <string name="iptv_settings_sync_calendar_description">"Sledované a skryté pořady."</string>
