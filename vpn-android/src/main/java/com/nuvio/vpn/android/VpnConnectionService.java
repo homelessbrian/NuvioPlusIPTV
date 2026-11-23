@@ -27,8 +27,12 @@ public final class VpnConnectionService extends android.net.VpnService {
     private static final String RELEASE_PROXY = "com.nuvio.vpn.RELEASE_PROXY";
     private static final String CHANNEL = "nuvio-vpn";
     private static final int NOTIFICATION = 7341;
-    /** How long a connection that was carrying data may go silent before it is checked. */
+    /** How long a connection that was carrying data may go silent, while something plays, before it is checked. */
     private static final long STALL_CHECK_MS = 6000;
+    /** A failed check is tried again this soon... */
+    private static final long STALL_RETRY_MS = 2000;
+    /** ...and only this many failures in a row mark the connection as not working. */
+    private static final int STALL_FAILURES = 3;
     private static volatile Snapshot current = new Snapshot(Phase.IDLE, 0, 0);
     private static volatile boolean running;
     private static volatile String requestedProfile;
@@ -119,9 +123,11 @@ public final class VpnConnectionService extends android.net.VpnService {
     private volatile boolean destroyed;
     private long started, lastProbe, lastStatsLog, lastEgressProbe;
     private boolean probeVerified;
-    /** Traffic checks while connected: when data last came in, and whether this stop was already checked. */
-    private long lastReceived, receivedGrewAt;
-    private boolean stallChecked;
+    /** Traffic checks while connected: when data last came in, when it was last checked, failed checks in a row,
+     *  and whether this quiet spell already passed a check. */
+    private long lastReceived, receivedGrewAt, lastStallCheck;
+    private int stallFailures;
+    private boolean stallPassed;
     /** The connection was working and then stopped (or dropped); its next success counts as a recovery. */
     private boolean lostAfterWorking;
     private long verifiedSession;
@@ -223,8 +229,9 @@ public final class VpnConnectionService extends android.net.VpnService {
             started = SystemClock.elapsedRealtime();
             lastProbe = lastStatsLog = lastEgressProbe = 0;
             probeVerified = false;
-            lastReceived = receivedGrewAt = 0;
-            stallChecked = false;
+            lastReceived = receivedGrewAt = lastStallCheck = 0;
+            stallFailures = 0;
+            stallPassed = false;
             demandFailed = false;
             failureReason = null;
             egress = null;
@@ -307,19 +314,38 @@ public final class VpnConnectionService extends android.net.VpnService {
                 stats = engine.statistics();
                 lastReceived = stats.received; // the check's own reply is not stream traffic
             }
-            // Streams were flowing and then nothing came in for a few seconds: check the tunnel still
-            // carries traffic rather than waiting for its next renegotiation (which took a minute).
+            // Something is playing, streams were flowing and then nothing came in for a few seconds: check
+            // the tunnel still carries traffic rather than waiting for its next renegotiation (which took
+            // a minute). Only several failed checks in a row count: one slow or blocked check never stops
+            // playback. Nothing is checked while nothing plays (quiet menus are normal).
+            boolean playing = VpnPlaybackProtection.playbackActive();
             if (stats.received != lastReceived) {
                 lastReceived = stats.received;
                 receivedGrewAt = now;
-                stallChecked = false;
-            } else if (probeVerified && !stallChecked && receivedGrewAt > 0 && now - receivedGrewAt >= STALL_CHECK_MS) {
-                stallChecked = true;
-                lastProbe = now;
-                probeVerified = engine.probe();
+                stallFailures = 0;
+                stallPassed = false;
+            } else if (!playing) {
+                stallFailures = 0;
+            } else if (probeVerified && !stallPassed && receivedGrewAt > 0 && now - receivedGrewAt >= STALL_CHECK_MS
+                    && (stallFailures == 0 || now - lastStallCheck >= STALL_RETRY_MS)) {
+                lastStallCheck = now;
+                boolean working = engine.probe();
                 stats = engine.statistics();
                 lastReceived = stats.received; // the check's own reply is not stream traffic
-                if (!probeVerified) event("vpn_stalled: no traffic for " + ((now - receivedGrewAt) / 1000) + " s and the check failed");
+                if (working) {
+                    if (stallFailures > 0) event("vpn_stall_check_passed after " + stallFailures + " failed");
+                    stallFailures = 0;
+                    stallPassed = true;
+                } else if (++stallFailures < STALL_FAILURES) {
+                    event("vpn_stall_check_failed: " + stallFailures + " of " + STALL_FAILURES);
+                } else {
+                    event("vpn_stalled: no traffic for " + ((now - receivedGrewAt) / 1000) + " s and "
+                            + STALL_FAILURES + " checks in a row failed");
+                    probeVerified = false;
+                    lastProbe = now;
+                    stallFailures = 0;
+                    stallPassed = true;
+                }
             }
             boolean verified = stats.authenticated && stats.session == verifiedSession
                     && stats.received > 0 && probeVerified;

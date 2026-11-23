@@ -103,6 +103,8 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
             java.util.function.Consumer { line -> com.nuvio.tv.livetv.model.LiveTvLoadReport.add(line) }
         // ...and whether it's on and which profile (at start and whenever it changes).
         com.nuvio.tv.livetv.data.VpnReportLines.start()
+        // ...and whether video is playing (the VPN only checks for a stall while something plays).
+        com.nuvio.tv.livetv.data.VpnPlaybackSignal.start()
         // The DNS setting (Live TV settings), before any Live TV or player request.
         com.nuvio.tv.livetv.data.ForkDns.init(this)
         androidTvChannelSyncService.start()
