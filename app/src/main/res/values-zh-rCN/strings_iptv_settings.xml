@@ -671,6 +671,8 @@
     <string name="iptv_settings_sync_vpn_description">"VPN 配置、所选配置文件和自动保护范围。"</string>
     <string name="iptv_settings_sync_favorites">"收藏和分组"</string>
     <string name="iptv_settings_sync_favorites_description">"收藏频道、隐藏频道和分组顺序。"</string>
+    <string name="iptv_settings_sync_home_rows">"首页行"</string>
+    <string name="iptv_settings_sync_home_rows_description">"你添加到首页的直播电视、体育和点播行。也会同步到你的手机。"</string>
     <string name="iptv_settings_sync_sports_description">"关注的球队和联赛，以及“选择联赛”。"</string>
     <string name="iptv_settings_sync_calendar">"日历"</string>
     <string name="iptv_settings_sync_calendar_description">"关注和隐藏的节目。"</string>

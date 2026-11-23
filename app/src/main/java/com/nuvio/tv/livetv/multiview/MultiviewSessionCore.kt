@@ -230,6 +230,26 @@ internal class MultiviewSessionCore(
         onChanged()
     }
 
+    /**
+     * The VPN works again after it stopped carrying traffic: panes that gave up or are still
+     * waiting to reconnect start over. Panes that kept playing are left alone.
+     */
+    fun restartStoppedPanes() {
+        if (released || !isForeground) return
+        val stopped = (0 until layout.paneCount).filter { id ->
+            channels[id] != null && playbackAt(id).let { it.error != null || it.isReconnecting || (hasAudioFocus && !it.isPlaying) }
+        }
+        if (stopped.isEmpty()) return
+        muteAll()
+        for (id in stopped) {
+            releasePane(id)
+            setupErrors[id] = null
+            preparePane(id)
+        }
+        applyPlaybackAndSound()
+        onChanged()
+    }
+
     fun release() {
         if (released) return
         isForeground = false

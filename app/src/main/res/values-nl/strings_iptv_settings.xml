@@ -661,6 +661,8 @@
     <string name="iptv_settings_sync_vpn_description">"VPN-configuraties, gekozen profiel en reikwijdte van de automatische bescherming."</string>
     <string name="iptv_settings_sync_favorites">"Favorieten en groepen"</string>
     <string name="iptv_settings_sync_favorites_description">"Favoriete zenders, verborgen zenders en groepsvolgorde."</string>
+    <string name="iptv_settings_sync_home_rows">"Rijen op Start"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Live tv-, Sport- en On demand-rijen die je aan Start hebt toegevoegd. Ook gedeeld met je telefoon."</string>
     <string name="iptv_settings_sync_sports_description">"Gevolgde teams en competities, en Competities kiezen."</string>
     <string name="iptv_settings_sync_calendar">"Kalender"</string>
     <string name="iptv_settings_sync_calendar_description">"Gevolgde en verborgen series."</string>

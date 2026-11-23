@@ -831,8 +831,12 @@ class SportsRepository @Inject constructor(
         var extrasJob: kotlinx.coroutines.Job? = null
         while (true) {
             val active = foreground.value && (settings.value.showInSidebar || viewers.value > 0)
-            if (active) sportsCatching { updateOnce(System.currentTimeMillis()) }.onFailure { Log.w(TAG, "Sports update failed", it) }
-            if (active) sportsCatching { updateRugbyLive(System.currentTimeMillis()) }.onFailure { Log.w(TAG, "Live rugby update failed", it) }
+            // While video plays (Multiview, Live TV full screen, a movie) the scores are read on
+            // the low-priority threads, so the players get to the processor first. With four
+            // Multiview panes, score rounds at full priority every 10 s made every pane skip frames.
+            val ctx = if (watching()) com.nuvio.tv.livetv.data.BackgroundWork.quiet else Dispatchers.IO
+            if (active) withContext(ctx) { sportsCatching { updateOnce(System.currentTimeMillis()) } }.onFailure { Log.w(TAG, "Sports update failed", it) }
+            if (active) withContext(ctx) { sportsCatching { updateRugbyLive(System.currentTimeMillis()) } }.onFailure { Log.w(TAG, "Live rugby update failed", it) }
             // Requested scoreboards and notifications keep their feeds. The catalogue that
             // only helps future browsing waits until the movie or episode closes.
             if (active && com.nuvio.tv.livetv.data.BackgroundWork.onDemandPlaying.value && requiredDuringPlayback().isNotEmpty()) {
@@ -871,7 +875,13 @@ class SportsRepository @Inject constructor(
                     sportsCatching { updateFixtures() }
                 }
             }
-            val wait = if (viewers.value > 0) 10_000L else 30_000L
+            // Every 10 s with Sports on screen; every 20 s while video plays over it (Multiview,
+            // full screen), which still keeps the scores on screen current.
+            val wait = when {
+                viewers.value > 0 && !watching() -> 10_000L
+                viewers.value > 0 -> 20_000L
+                else -> 30_000L
+            }
             lastKick = kick.value
             withTimeoutOrNull(wait) { kick.first { it != lastKick } }
         }
@@ -1889,6 +1899,24 @@ class SportsRepository @Inject constructor(
                 if (!loading && matchMissed) kickMatch("Live TV update done")
             }
         }
+        // A playlist turned off (or its live channels switched off) or deleted: its channels leave
+        // every game right now, and the full search follows without waiting its usual 10 minutes.
+        // The quick search only ever adds channels, so without this they stayed until the next
+        // full search.
+        scope.launch {
+            var known: Set<String>? = null
+            prefs.playlists.collect { list ->
+                val ids = list.mapTo(HashSet()) { it.id }
+                val gone = list.filter { !it.liveEnabled }.mapTo(HashSet()) { it.id }
+                known?.let { gone += it - ids }
+                known = ids
+                if (gone.isNotEmpty() && dropMatchesOf(gone)) {
+                    playlistOffPending = true
+                    pickPending = true
+                    kickMatch("a playlist was turned off")
+                }
+            }
+        }
         // Last time's matches straight away (the games, the channels), so the page isn't empty
         // while the new round runs.
         scope.launch {
@@ -1975,7 +2003,7 @@ class SportsRepository @Inject constructor(
             }
             val why = when {
                 firstSearch -> "first search"
-                picked -> "a channel pick"
+                picked -> if (playlistOffPending) "a playlist was turned off" else "a channel pick"
                 lastFullKey == null -> kickReason ?: "app start"
                 kick != lastFullKick -> kickReason ?: "asked again"
                 games?.count != lastGames?.count || games?.games != lastGames?.games -> "games added or removed"
@@ -2002,6 +2030,7 @@ class SportsRepository @Inject constructor(
             lastFullAt = System.currentTimeMillis()
             lastQuickAt = lastFullAt
             pickPending = false
+            playlistOffPending = false
             lastRun = System.currentTimeMillis()
             val t0 = System.currentTimeMillis()
             if (!matchOrDefer()) return@collect
@@ -2092,6 +2121,23 @@ class SportsRepository @Inject constructor(
         }
     }
     @Volatile private var pickPending = false
+    /** The pending search is for a playlist turned off, not a channel pick (only the report's wording differs). */
+    @Volatile private var playlistOffPending = false
+
+    /** Takes the channels of these playlists off every game; true when any game lost one. */
+    private fun dropMatchesOf(sourceIds: Set<String>): Boolean {
+        var changed = false
+        _matches.update { prev ->
+            val next = HashMap<String, List<ChannelMatch>>(prev.size)
+            for ((id, list) in prev) {
+                val kept = list.filter { it.channel.sourceId !in sourceIds }
+                if (kept.size != list.size) changed = true
+                if (kept.isNotEmpty()) next[id] = kept
+            }
+            if (changed) next else prev
+        }
+        return changed
+    }
     private var lastSummary: String? = null
 
     // Nobody on the Sports page: low priority, out of the way of the guide and the video.
@@ -2133,7 +2179,10 @@ class SportsRepository @Inject constructor(
         }
     }
 
-    private suspend fun runMatch(quickOnly: Boolean = false) = withContext(if (viewers.value > 0) Dispatchers.Default else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+    /** The Sports page is open and nothing is playing: searches may use the full processor. */
+    private fun pageOnly(): Boolean = viewers.value > 0 && !watching()
+
+    private suspend fun runMatch(quickOnly: Boolean = false) = withContext(if (pageOnly()) Dispatchers.Default else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
         matchingCheckpoint()
         val live = prefs.settings.first()
         val user = prefs.userState.first()
@@ -2182,7 +2231,7 @@ class SportsRepository @Inject constructor(
                 withTimeoutOrNull(10_000) { _loading.first { !it } }
                 delay(500)
             }
-            matcher.prepareTable(events.value, guideLeagues, f.words, now, gentle = viewers.value == 0)
+            matcher.prepareTable(events.value, guideLeagues, f.words, now, gentle = !pageOnly())
             // All three days from one read of the guide (none at all when it hasn't changed).
             val days = sportsCatching {
                 matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, f.words, keys, shift, now)
@@ -2198,7 +2247,7 @@ class SportsRepository @Inject constructor(
                     shiftMs = shift,
                     settings = s,
                     now = now,
-                    gentle = viewers.value == 0
+                    gentle = !pageOnly()
                 ),
                 onUrgent = { early ->
                     matchingCheckpoint()

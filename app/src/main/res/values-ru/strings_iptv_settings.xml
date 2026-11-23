@@ -661,6 +661,8 @@
     <string name="iptv_settings_sync_vpn_description">"Конфигурации VPN, выбранный профиль и область автоматической защиты."</string>
     <string name="iptv_settings_sync_favorites">"Избранное и группы"</string>
     <string name="iptv_settings_sync_favorites_description">"Избранные каналы, скрытые каналы и порядок групп."</string>
+    <string name="iptv_settings_sync_home_rows">"Ряды на главной"</string>
+    <string name="iptv_settings_sync_home_rows_description">"Ряды ТВ в эфире, Спорта и По запросу, добавленные на главную. Также доступны на телефоне."</string>
     <string name="iptv_settings_sync_sports_description">"Отслеживаемые команды и лиги, а также «Выбрать лиги»."</string>
     <string name="iptv_settings_sync_calendar">"Календарь"</string>
     <string name="iptv_settings_sync_calendar_description">"Отслеживаемые и скрытые сериалы."</string>

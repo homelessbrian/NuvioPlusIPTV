@@ -226,6 +226,18 @@ public final class VpnPlaybackProtection {
         settingsListeners.add(listener);
         return () -> settingsListeners.remove(listener);
     }
+    private static final java.util.concurrent.CopyOnWriteArrayList<Runnable> recoveryListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    /**
+     * Runs on the main thread when the VPN works again after it stopped carrying traffic (or
+     * dropped), so streams that gave up meanwhile can start again.
+     */
+    public static AutoCloseable observeConnectionRecovered(Runnable listener) {
+        recoveryListeners.add(listener);
+        return () -> recoveryListeners.remove(listener);
+    }
+    static void connectionRecovered() {
+        for (Runnable listener : recoveryListeners) main.post(() -> { if (recoveryListeners.contains(listener)) listener.run(); });
+    }
     public static AutoCloseable observeBackupChanges(Runnable listener) {
         backupListeners.add(listener);
         return () -> backupListeners.remove(listener);

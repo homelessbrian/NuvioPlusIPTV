@@ -30,19 +30,6 @@ internal data class SportsPageQuery(
     val rowsPage: Boolean get() = chip == CHIP_MINE || rowsSport != null
 }
 
-/** All Events' sport row: "Pick Leagues" (the leagues ticked in Sports settings' [SportsSettings.pickedLeagues]) in place of one sport. */
-internal const val SPORT_PICKED = "picked"
-
-/** Pick Leagues' button: "Pick Leagues" with none ticked, the league's name with one, "3 Leagues" with more. */
-internal fun pickedLeaguesLabel(settings: SportsSettings): String {
-    val ids = settings.pickedLeagues
-    return when (ids.size) {
-        0 -> "Pick Leagues"
-        1 -> SportsCatalog.league(ids.first())?.name ?: "1 League"
-        else -> "${ids.size} Leagues"
-    } + if (ids.isNotEmpty() && settings.pickedLiveOnly) " · Live" else ""
-}
-
 /** The Sports page's sections for the day on screen. */
 internal class DaySections(
     val weekLong: List<SportsEvent>,
@@ -151,10 +138,6 @@ internal object SportsPageLists {
             CHIP_LIVE -> dayEvents.filter { it.state == GameState.LIVE }
             CHIP_ALL -> when {
                 leagueGames != null -> leagueGames
-                // Pick Leagues: the ticked leagues together (any sports); "Live only" on today.
-                q.allSportPick == SPORT_PICKED && leagueView == null && settings.pickedLeagues.isNotEmpty() -> dayEvents.filter { ev ->
-                    ev.leagueId in settings.pickedLeagues && (!settings.pickedLiveOnly || q.day != 0 || ev.state == GameState.LIVE)
-                }
                 allSport == null -> dayEvents
                 else -> dayEvents.filter { SportsCatalog.league(it.leagueId)?.sport?.name == allSport }
             }

@@ -83,8 +83,6 @@ internal object SportsWatchPolicy {
             if (!follows.isEmpty) add(SportsWatchFilter(FILTER_MINE, "★", "My Sports"))
             add(SportsWatchFilter(FILTER_ALL, "▦", "All Events"))
             add(SportsWatchFilter(FILTER_LIVE, "●", "Live Now"))
-            // The leagues ticked under All Events' Pick Leagues, together.
-            if (settings.pickedLeagues.isNotEmpty()) add(SportsWatchFilter(FILTER_SPORT + SPORT_PICKED, "☰", pickedLeaguesLabel(settings)))
             sports.forEach { add(SportsWatchFilter(FILTER_SPORT + it.name, it.icon, it.label)) }
         }
     }
