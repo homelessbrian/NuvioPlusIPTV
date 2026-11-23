@@ -91,6 +91,8 @@ fun LiveTvPlayerScreen(
     onFindInNuvio: () -> Unit = {},
     /** Overlay mode off: Left goes back to the guide with the group list open. */
     onBackToGroups: () -> Unit = onBack,
+    /** The Channel Row's TV Guide tile: always the guide, even when Back would go to Sports. */
+    onOpenGuide: () -> Unit = onBack,
     /**
      * Shown inside the guide (the guide draws the video, the same view as its preview, so the
      * picture never has to move to another view). This screen then only draws the controls.
@@ -645,7 +647,7 @@ fun LiveTvPlayerScreen(
                         if (isOk && guideOnOkUp) {
                             guideOnOkUp = false
                             closeFull()
-                            onBack()
+                            onOpenGuide()
                             return@onPreviewKeyEvent true
                         }
                         return@onPreviewKeyEvent isOk || e.key == Key.Back

@@ -2499,6 +2499,15 @@ private fun LiveTvGuideScreenBody(
                     }
                 },
                 onFindInNuvio = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; fullscreenShown = false; exitFullscreenTick++; onFindInNuvio() },
+                onOpenGuide = {
+                    // The TV Guide tile: the guide itself, never back to Sports or Recordings.
+                    com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn()
+                    com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn()
+                    fullscreenComing = false
+                    if (viewModel.catchup.value?.recordingId != null) viewModel.stopRecordingPlayback()
+                    else stopIfNoPreview()
+                    fullscreenShown = false; exitFullscreenTick++
+                },
                 onBackToGroups = { com.nuvio.tv.livetv.record.RecordingLaunch.clearReturn(); com.nuvio.tv.livetv.sports.SportsLaunch.clearReturn(); fullscreenComing = false; stopIfNoPreview(); fullscreenShown = false; savedSpot = null; exitFullscreenTick++; focusGroups() },
                 embedded = true,
                 onOpenSettings = onOpenSettings,
