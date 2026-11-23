@@ -2,6 +2,7 @@
 
 package com.nuvio.tv.livetv.record
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -33,6 +34,7 @@ import com.nuvio.tv.livetv.ui.okTapOrHold
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -202,7 +204,9 @@ internal fun RecordedShowPage(
     onMoveAll: (() -> Unit)?,
     onDeleteAll: () -> Unit,
     onClose: () -> Unit,
-    backdrop: String
+    backdrop: String,
+    /** Hands the page the highlight again (on its Play button) when it has wandered off. */
+    pageFocus: FocusRequester? = null
 ) {
     androidx.activity.compose.BackHandler(onBack = onClose)
     val colors = NuvioTheme.colors
@@ -237,7 +241,16 @@ internal fun RecordedShowPage(
     val totalBytes = show.episodes.sumOf { it.sizeBytes }
     val totalSec = show.episodes.sumOf { it.durationSec }
 
-    Box(Modifier.fillMaxSize().guideBackdrop(backdrop)) {
+    Box(
+        Modifier.fillMaxSize().guideBackdrop(backdrop)
+            // The highlight stays on this page (the Recordings page underneath is hidden), and
+            // coming into it lands on Play.
+            .focusProperties {
+                enter = { first }
+                exit = { FocusRequester.Cancel }
+            }
+            .focusGroup()
+    ) {
         com.nuvio.tv.livetv.ui.ThemeGlow(Modifier.fillMaxWidth().height(260.dp))
         Row(
             Modifier.fillMaxSize().padding(start = 56.dp, end = 48.dp, top = 32.dp),
@@ -268,7 +281,8 @@ internal fun RecordedShowPage(
                 PillButton(
                     (if (nextResume != null) "Resume " else "Play ") + episodeLabel(next),
                     primary = true,
-                    modifier = Modifier.fillMaxWidth().focusRequester(first).focusRequester(buttons[0]),
+                    modifier = Modifier.fillMaxWidth().focusRequester(first).focusRequester(buttons[0])
+                        .then(if (pageFocus != null) Modifier.focusRequester(pageFocus) else Modifier),
                     onFocus = { if (it) lastButton = 0 }, onClick = { onPlay(next) }, onMenu = { onMenu(next) }
                 )
                 if (watchedCount < show.episodes.size) {

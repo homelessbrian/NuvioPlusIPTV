@@ -81,6 +81,7 @@ In a show's info (hold OK), **▲ / ▼** read the whole description and **Back*
 | **OK** | Play (or resume) |
 | **Long-press OK** | The menu, without playing first: play from the beginning, stop recording, **Information**, **Fix Match**, delete |
 | **Gear** in the header | Recordings settings · **Back** returns |
+| **OK** on "Couldn't play this recording" (while watching one) | Try it again from the same spot |
 
 ### Multiview
 | Button | Action |

@@ -457,8 +457,10 @@ class LiveTvPlaybackController @Inject constructor(
      * bar (Up to seek, 30 s skips), starting [startAtMs] in. Nothing is asked of the provider.
      */
     fun playSavedRecording(channel: LiveChannel, playlist: java.io.File, title: String, recordingId: String, startAtMs: Long) {
-        play(channel, overrideUrl = android.net.Uri.fromFile(playlist).toString(), catchupTitle = title)
+        play(channel, overrideUrl = android.net.Uri.fromFile(playlist).toString(), catchupTitle = title, sourceLater = true)
         val p = _player ?: return
+        recordingReloads = 0
+        recordingWatchFrom = -1L
         savedRecordingId = recordingId
         savedRecordingPlaylist = playlist
         replayLocal = true
@@ -477,6 +479,81 @@ class LiveTvPlaybackController @Inject constructor(
             while (waited < 8_000 && p.playbackState != Player.STATE_READY) { delay(100); waited += 100 }
             if (savedRecordingId == recordingId && kotlin.math.abs(p.currentPosition - startAtMs) > 3_000) p.seekTo(startAtMs)
         }
+    }
+
+    /** Reloads of the recording playing ([playSavedRecording]) since it last played smoothly. */
+    private var recordingReloads = 0
+    /** Where the recording was at the last stall check, and since when it hasn't moved (-1: not watching). */
+    private var recordingWatchFrom = -1L
+    private var recordingStillSince = 0L
+    private var recordingSmoothSince = 0L
+
+    /**
+     * Opens the recording playing here again at [atMs] (after an error or a freeze, a VPN change
+     * or Reload): through the same source as [playSavedRecording], never as a plain file.
+     */
+    private fun reloadSavedRecording(atMs: Long) {
+        val p = _player ?: return
+        val playlist = savedRecordingPlaylist ?: return
+        val id = savedRecordingId ?: return
+        reconnectJob?.cancel()
+        _state.value = _state.value.copy(error = null, isBuffering = true)
+        recordingWatchFrom = -1L
+        recordingSmoothSince = 0L
+        p.stop()
+        p.setMediaSource(localRecordingSource(android.net.Uri.fromFile(playlist), 0L))
+        p.prepare()
+        p.playWhenReady = true
+        shiftJob?.cancel()
+        shiftJob = scope.launch {
+            var waited = 0
+            while (waited < 8_000 && p.playbackState != Player.STATE_READY) { delay(100); waited += 100 }
+            if (savedRecordingId == id && atMs > 0 && kotlin.math.abs(p.currentPosition - atMs) > 3_000) p.seekTo(atMs)
+        }
+    }
+
+    /** A recording that errored or froze: open it again from the same spot, a few times, before giving up. */
+    private fun recoverSavedRecording(why: String) {
+        val p = _player ?: return
+        val at = p.currentPosition.coerceAtLeast(0L)
+        if (recordingReloads >= MAX_RECORDING_RELOADS) {
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording: $why; still not playing after $recordingReloads reloads")
+            recordingWatchFrom = -1L
+            p.stop()
+            _state.value = _state.value.copy(error = "This recording stopped playing", isBuffering = false)
+            return
+        }
+        recordingReloads++
+        com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording: $why; opening it again from ${at / 1000} s (try $recordingReloads)")
+        _state.value = _state.value.copy(error = null, isBuffering = true)
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            delay(recordingReloads * 1_000L)
+            if (savedRecordingId != null) reloadSavedRecording(at)
+        }
+    }
+
+    /** The recording playing here: a freeze (no progress while it should play) reloads it. */
+    private fun checkRecordingStall(p: ExoPlayer, now: Long) {
+        if (!p.playWhenReady || pausedForBackground || _state.value.error != null ||
+            p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED ||
+            reconnectJob?.isActive == true
+        ) { recordingWatchFrom = -1L; recordingSmoothSince = 0L; return }
+        val pos = p.currentPosition
+        if (recordingWatchFrom < 0 || pos != recordingWatchFrom) {
+            recordingWatchFrom = pos
+            recordingStillSince = now
+            if (p.isPlaying) {
+                if (recordingSmoothSince == 0L) recordingSmoothSince = now
+                // A minute of smooth playing: any later trouble gets the full number of tries again.
+                if (now - recordingSmoothSince > 60_000L) recordingReloads = 0
+            }
+            return
+        }
+        recordingSmoothSince = 0L
+        if (now - recordingStillSince < RECORDING_STALL_MS) return
+        recordingWatchFrom = -1L
+        recoverSavedRecording("froze at ${pos / 1000} s")
     }
 
     /** Plays [playlist] (a recording that's still being made), a few seconds behind live. */
@@ -778,6 +855,8 @@ class LiveTvPlaybackController @Inject constructor(
         catchupExpectWallMs: Long? = null,
         stalkerStream: StalkerStreamRef? = null,
         reconnectAttempt: Int = 0,
+        /** The caller sets the player's source itself right after (a recording from Recordings). */
+        sourceLater: Boolean = false,
     ) {
         if (stalkerStream == null && overrideUrl == null && catchupTitle == null && channel.stalkerRef != null &&
             currentChannel?.key == channel.key && activeStalkerRef == channel.stalkerRef && _state.value.error == null &&
@@ -800,7 +879,7 @@ class LiveTvPlaybackController @Inject constructor(
         stalkerMimeType = null
         if (ref == null) {
             playResolved(channel, overrideUrl, catchupTitle, fallback, fallbacks, catchupStartMs,
-                catchupLeadMs, catchupPrimaryUrl, catchupExpectWallMs)
+                catchupLeadMs, catchupPrimaryUrl, catchupExpectWallMs, sourceLater = sourceLater)
             return
         }
         // Let go of the previous provider connection while the new temporary link is obtained.
@@ -848,6 +927,7 @@ class LiveTvPlaybackController @Inject constructor(
         catchupExpectWallMs: Long? = null,
         previousChannelKey: String? = currentChannel?.key,
         reconnectAttempt: Int = 0,
+        sourceLater: Boolean = false,
     ) {
         // Something chosen to play (back from the background through a launcher row, say):
         // that wins over picking up what was on before.
@@ -947,6 +1027,9 @@ class LiveTvPlaybackController @Inject constructor(
             stalkerMimeType != StalkerMimeProbe.HLS && stalkerMimeType != StalkerMimeProbe.DASH &&
             !url.substringBefore('?').endsWith(".m3u8", ignoreCase = true) && startReplayCache(channel, url)
         ) return
+        // A recording from Recordings: its own source comes next. Starting it here as a plain
+        // file first could fail on a recording joined into one file (its pieces aren't there).
+        if (sourceLater) return
         archiveStartPending = catchupTitle != null
         p.setMediaSource(buildMediaSource(url, channel.headers, isLive = catchupTitle == null))
         p.prepare()
@@ -1179,7 +1262,12 @@ class LiveTvPlaybackController @Inject constructor(
 
     private fun checkStall() {
         val p = _player ?: return
-        if (_shiftStartedAt.value != null || _recordingPlayback.value != null || savedRecordingId != null) { lastProgressAt = android.os.SystemClock.elapsedRealtime(); return }
+        if (savedRecordingId != null) {
+            lastProgressAt = android.os.SystemClock.elapsedRealtime()
+            checkRecordingStall(p, lastProgressAt)
+            return
+        }
+        if (_shiftStartedAt.value != null || _recordingPlayback.value != null) { lastProgressAt = android.os.SystemClock.elapsedRealtime(); return }
         val now = android.os.SystemClock.elapsedRealtime()
         val ch = currentChannel
         // Paused, in the background, nothing playing, or already showing an error: not a stall.
@@ -1301,6 +1389,11 @@ class LiveTvPlaybackController @Inject constructor(
         (activeStalkerRef ?: channel.stalkerRef)?.let { ref -> { stalker.prepare(channel.sourceId, ref) } }
 
     fun retry() {
+        if (savedRecordingId != null) {
+            recordingReloads = 0
+            reloadSavedRecording(_player?.currentPosition?.coerceAtLeast(0L) ?: 0L)
+            return
+        }
         val ch = currentChannel ?: return
         if (activeStalkerRef != null) { restartStalker(); return }
         val url = currentUrl
@@ -2047,8 +2140,8 @@ class LiveTvPlaybackController @Inject constructor(
             if (_recordingPlayback.value != null) { Log.w(TAG, "Playing from the recording failed", error); recordingPlaybackEnded(); return }
             // A recording from Recordings: there's nothing else to try, so say so.
             if (savedRecordingId != null) {
-                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording: couldn't be played (${error.errorCodeName})")
-                _state.value = _state.value.copy(error = "This recording couldn't be played", isBuffering = false)
+                Log.w(TAG, "Recording playback error", error)
+                recoverSavedRecording("playback error ${error.errorCodeName}")
                 return
             }
             // The saved catch-up couldn't be played: play the replay straight from the provider.
@@ -2441,6 +2534,13 @@ class LiveTvPlaybackController @Inject constructor(
                 val channel = currentChannel ?: return@launch
                 val url = currentUrl ?: return@launch
                 val active = _player ?: return@launch
+                // A recording from Recordings is on this box (or the recordings server): reopen it the same way.
+                if (savedRecordingId != null) {
+                    val wasPlaying = active.playWhenReady
+                    reloadSavedRecording(active.currentPosition.coerceAtLeast(0L))
+                    active.playWhenReady = wasPlaying
+                    return@launch
+                }
                 val resume = active.playWhenReady
                 val position = active.currentPosition
                 val live = _state.value.catchupTitle == null
@@ -2464,6 +2564,10 @@ class LiveTvPlaybackController @Inject constructor(
         /** This much further behind live than it normally plays counts as "behind live" in a sports addon game. */
         private const val OWN_BEHIND_MS = 8_000L
         private const val MAX_RECONNECTS = 8
+        /** A recording from Recordings: reloads after an error or a freeze before saying it stopped. */
+        private const val MAX_RECORDING_RELOADS = 3
+        /** A recording from Recordings with no progress for this long while it should play = frozen. */
+        private const val RECORDING_STALL_MS = 10_000L
         /** No progress for this long while it should be playing = stalled. */
         private const val STALL_MS = 15_000L
         /** How far a replay's own clock may be from the time asked for before it counts as a different show. */

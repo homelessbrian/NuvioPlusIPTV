@@ -412,6 +412,8 @@ fun RecordingsScreen(
             runCatching { first.requestFocus() }
         }
     }
+    // The open folder's page, to hand it the highlight back.
+    val folderFocus = remember { FocusRequester() }
     var movePick by remember { mutableStateOf<List<LiveTvRecording>?>(null) }
     var confirmDeleteShow by remember { mutableStateOf<RecordedShow?>(null) }
     val moving by viewModel.move.collectAsStateWithLifecycle()
@@ -463,8 +465,18 @@ fun RecordingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // While a folder is open on top, nothing underneath can take the highlight.
-                .then(if (openShow != null) Modifier.focusProperties { canFocus = false } else Modifier)
+                // While a folder is open on top, nothing underneath can take the highlight: the
+                // highlight can't move in here, and a key pressed while it's somehow in here
+                // (it's hidden under the folder) sends it back to the folder instead.
+                .focusProperties { enter = { if (openShowKey != null) androidx.compose.ui.focus.FocusRequester.Cancel else androidx.compose.ui.focus.FocusRequester.Default } }
+                .focusGroup()
+                .onPreviewKeyEvent { e ->
+                    if (openShowKey == null) false
+                    else {
+                        if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) runCatching { folderFocus.requestFocus() }
+                        true
+                    }
+                }
                 .padding(start = 56.dp, end = 48.dp, top = 32.dp)
         ) {
             Row(verticalAlignment = Alignment.Bottom) {
@@ -649,7 +661,8 @@ fun RecordingsScreen(
                 onMoveAll = if (RecordingStorage.choices(recContext).size > 1) ({ movePick = show.episodes }) else null,
                 onDeleteAll = { confirmDeleteShow = show },
                 onClose = { openShowKey = null },
-                backdrop = look.guideBackdrop
+                backdrop = look.guideBackdrop,
+                pageFocus = folderFocus
             )
         }
         // A move between drives: what's moving and how far along.
@@ -684,6 +697,8 @@ fun RecordingsScreen(
     val anything = recordings.isNotEmpty() || schedules.isNotEmpty() || seriesRules.isNotEmpty() || repeatRules.isNotEmpty()
     LaunchedEffect(anything) {
         kotlinx.coroutines.delay(120)
+        // A folder open (back from watching one of its episodes): the folder keeps the highlight.
+        if (openShowKey != null) return@LaunchedEffect
         // The top of the tab that's open; its tab when it's empty; nothing yet: New Recording.
         runCatching {
             when {

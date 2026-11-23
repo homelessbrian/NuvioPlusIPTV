@@ -840,7 +840,7 @@ fun LiveTvPlayerScreen(
                         } else if (heldMs >= LONG_PRESS_MS) {
                             openGear()
                         } else when {
-                            playback.error != null && playback.reconnectAttempt > 8 -> viewModel.playback.retry()
+                            playback.error != null && (playback.reconnectAttempt > 8 || playingRecording) -> viewModel.playback.retry()
                             // OK: the full panel (timeline, buttons, options), on Play/Pause.
                             current != null -> { panelFull = true; controlFocus = PanelControl.PLAY; showBanner() }
                             else -> showBanner()
@@ -973,7 +973,8 @@ fun LiveTvPlayerScreen(
         // A problem: what's happening, and why underneath (wrapped, so it isn't cut off).
         playback.error?.let { reason ->
             PlayerStatusMessage(
-                title = if (playback.reconnectAttempt > 8) "Stream unavailable · press OK to retry"
+                title = if (playingRecording) "Couldn't play this recording · press OK to try again"
+                    else if (playback.reconnectAttempt > 8) "Stream unavailable · press OK to retry"
                     else "Reconnecting… (attempt ${playback.reconnectAttempt})",
                 detail = reason,
                 modifier = Modifier.align(Alignment.Center)
