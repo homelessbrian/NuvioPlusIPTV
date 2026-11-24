@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"القناة نفسها"</string>
+    <string name="livetv_backups_addon_tag">"إضافة"</string>
+    <string name="livetv_backups_playlist_tag">"قائمة تشغيل"</string>
+    <string name="livetv_backups_quality_other">"جودة أخرى"</string>
+    <string name="iptv_backup_order_title">"البدائل وقنوات المباراة"</string>
+    <string name="iptv_backup_order_row_subtitle">"كيف تُجمَّع وتُرتَّب قائمة البدائل وقنوات المباراة في القنوات السريعة"</string>
+    <string name="iptv_backup_order_gear_hint">"العناوين وترتيبها"</string>
+    <string name="iptv_backup_order_group_by">"التجميع حسب"</string>
+    <string name="iptv_backup_order_group_by_hint">"يغيّره OK. داخل كل عنوان تتبع القنوات الترتيب الآخر أدناه"</string>
+    <string name="iptv_backup_order_by_source">"قائمة التشغيل / الإضافة"</string>
+    <string name="iptv_backup_order_by_quality">"الجودة"</string>
+    <string name="iptv_backup_order_no_headings">"بلا عناوين"</string>
+    <string name="iptv_backup_order_sources">"ترتيب قوائم التشغيل والإضافات"</string>
+    <string name="iptv_backup_order_sources_hint">"تنقل الأسهم عنصرًا؛ الجديدة تذهب إلى الأسفل"</string>
+    <string name="iptv_backup_order_qualities">"ترتيب الجودة"</string>
+    <string name="iptv_backup_order_qualities_hint">"ضع FHD فوق 4K إذا تعثّر 4K على هذا التلفاز"</string>
+    <string name="iptv_backup_order_quality_unknown">"الجودة غير مذكورة في الاسم"</string>
+    <string name="iptv_backup_order_reset">"العودة إلى الترتيب الافتراضي"</string>
+    <string name="iptv_backup_order_no_sources">"لا توجد قوائم تشغيل أو إضافات بعد"</string>
+</resources>

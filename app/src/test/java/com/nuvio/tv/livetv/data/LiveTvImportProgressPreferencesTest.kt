@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.data
 
 import android.content.Context
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.domain.model.UserProfile
 import com.nuvio.vpn.android.VpnBackup
 import io.mockk.Runs
 import io.mockk.every
@@ -34,6 +35,7 @@ class LiveTvImportProgressPreferencesTest {
         }
         val profileManager = mockk<ProfileManager> {
             every { activeProfileId } returns MutableStateFlow(1)
+            every { profiles } returns MutableStateFlow(listOf(UserProfile(1, "Primary", "#1E88E5")))
         }
         preferences = LiveTvPreferences(context, profileManager)
         mockkStatic(VpnBackup::class)

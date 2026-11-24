@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Ugyanaz a csatorna"</string>
+    <string name="livetv_backups_addon_tag">"Kiegészítő"</string>
+    <string name="livetv_backups_playlist_tag">"Lejátszási lista"</string>
+    <string name="livetv_backups_quality_other">"Egyéb minőség"</string>
+    <string name="iptv_backup_order_title">"Tartalékok és meccscsatornák"</string>
+    <string name="iptv_backup_order_row_subtitle">"Hogyan csoportosítja és rendezi a tartaléklistát és egy meccs csatornáit a Gyorscsatornák"</string>
+    <string name="iptv_backup_order_gear_hint">"Címsorok és sorrendjük"</string>
+    <string name="iptv_backup_order_group_by">"Csoportosítás"</string>
+    <string name="iptv_backup_order_group_by_hint">"Az OK módosítja. Minden címsoron belül a csatornák a lenti másik sorrendet követik"</string>
+    <string name="iptv_backup_order_by_source">"Lista / kiegészítő"</string>
+    <string name="iptv_backup_order_by_quality">"Minőség"</string>
+    <string name="iptv_backup_order_no_headings">"Nincs címsor"</string>
+    <string name="iptv_backup_order_sources">"Listák és kiegészítők sorrendje"</string>
+    <string name="iptv_backup_order_sources_hint">"a nyilak mozgatnak egyet; az újak a végére kerülnek"</string>
+    <string name="iptv_backup_order_qualities">"Minőségi sorrend"</string>
+    <string name="iptv_backup_order_qualities_hint">"tedd az FHD-t a 4K fölé, ha a 4K akadozik ezen a tévén"</string>
+    <string name="iptv_backup_order_quality_unknown">"A minőség nincs a névben"</string>
+    <string name="iptv_backup_order_reset">"Vissza az alapértelmezett sorrendhez"</string>
+    <string name="iptv_backup_order_no_sources">"Még nincs lista vagy kiegészítő"</string>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Isti kanal"</string>
+    <string name="livetv_backups_addon_tag">"Dodatak"</string>
+    <string name="livetv_backups_playlist_tag">"Popis"</string>
+    <string name="livetv_backups_quality_other">"Druga kvaliteta"</string>
+    <string name="iptv_backup_order_title">"Rezervni i kanali utakmice"</string>
+    <string name="iptv_backup_order_row_subtitle">"Kako se grupiraju i slažu popis rezervi i kanali utakmice u Brzim kanalima"</string>
+    <string name="iptv_backup_order_gear_hint">"Naslovi i njihov redoslijed"</string>
+    <string name="iptv_backup_order_group_by">"Grupiraj po"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK mijenja. Unutar svakog naslova kanali prate drugi redoslijed ispod"</string>
+    <string name="iptv_backup_order_by_source">"Popis / dodatak"</string>
+    <string name="iptv_backup_order_by_quality">"Kvaliteta"</string>
+    <string name="iptv_backup_order_no_headings">"Bez naslova"</string>
+    <string name="iptv_backup_order_sources">"Redoslijed popisa i dodataka"</string>
+    <string name="iptv_backup_order_sources_hint">"strelice pomiču jedan; novi idu na dno"</string>
+    <string name="iptv_backup_order_qualities">"Redoslijed kvalitete"</string>
+    <string name="iptv_backup_order_qualities_hint">"stavite FHD iznad 4K ako 4K zapinje na ovom TV-u"</string>
+    <string name="iptv_backup_order_quality_unknown">"Kvaliteta nije u nazivu"</string>
+    <string name="iptv_backup_order_reset">"Vrati zadani redoslijed"</string>
+    <string name="iptv_backup_order_no_sources">"Još nema popisa ni dodataka"</string>
+</resources>

@@ -20,6 +20,7 @@ import com.nuvio.tv.livetv.model.LiveUserState
 import com.nuvio.tv.livetv.model.PlaylistSource
 import com.nuvio.tv.livetv.model.Reminder
 import com.nuvio.tv.livetv.model.ZapMode
+import com.nuvio.tv.livetv.sync.SetupSyncProjection
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -208,6 +211,7 @@ class LiveTvPreferences @Inject constructor(
         val homeRowShowNext = booleanPreferencesKey("home_row_show_next")
         val homeRowCompact = booleanPreferencesKey("home_row_compact")
         val bufferSize = stringPreferencesKey("buffer_size")
+        val adaptiveLiveBufferEnabled = booleanPreferencesKey("adaptive_live_buffer")
         val groupSort = stringPreferencesKey("group_sort")
         val timeshiftEnabled = booleanPreferencesKey("timeshift_enabled")
         val timeshiftMinutes = intPreferencesKey("timeshift_minutes")
@@ -227,6 +231,9 @@ class LiveTvPreferences @Inject constructor(
         val panelRowLists = stringPreferencesKey("panel_row_lists")
         val panelRowLast = stringPreferencesKey("panel_row_last")
         val panelRowOpens = stringPreferencesKey("panel_row_opens")
+        val backupGroupBy = stringPreferencesKey("backup_group_by")
+        val backupSourceOrder = stringPreferencesKey("backup_source_order")
+        val backupQualityOrder = stringPreferencesKey("backup_quality_order")
         val channelSurf = booleanPreferencesKey("channel_surf")
         val barHidden = stringPreferencesKey("bar_hidden")
         val guideInfoHidden = stringPreferencesKey("guide_info_hidden")
@@ -702,6 +709,7 @@ class LiveTvPreferences @Inject constructor(
             homeRowShowNext = p[Keys.homeRowShowNext] ?: d.homeRowShowNext,
             homeRowCompact = p[Keys.homeRowCompact] ?: d.homeRowCompact,
             bufferSize = p[Keys.bufferSize] ?: d.bufferSize,
+            adaptiveLiveBufferEnabled = p[Keys.adaptiveLiveBufferEnabled] ?: d.adaptiveLiveBufferEnabled,
             groupSort = p[Keys.groupSort] ?: d.groupSort,
             timeshiftEnabled = p[Keys.timeshiftEnabled] ?: d.timeshiftEnabled,
             timeshiftMinutes = p[Keys.timeshiftMinutes] ?: d.timeshiftMinutes,
@@ -721,6 +729,9 @@ class LiveTvPreferences @Inject constructor(
             panelRowLists = p[Keys.panelRowLists] ?: d.panelRowLists,
             panelRowLast = p[Keys.panelRowLast] ?: d.panelRowLast,
             panelRowOpens = p[Keys.panelRowOpens] ?: d.panelRowOpens,
+            backupGroupBy = p[Keys.backupGroupBy] ?: d.backupGroupBy,
+            backupSourceOrder = p[Keys.backupSourceOrder] ?: d.backupSourceOrder,
+            backupQualityOrder = p[Keys.backupQualityOrder] ?: d.backupQualityOrder,
             channelSurf = p[Keys.channelSurf] ?: d.channelSurf,
             barHidden = p[Keys.barHidden] ?: d.barHidden,
             guideInfoHidden = p[Keys.guideInfoHidden] ?: d.guideInfoHidden,
@@ -1053,6 +1064,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.homeRowShowNext] = s.homeRowShowNext
         p[Keys.homeRowCompact] = s.homeRowCompact
         p[Keys.bufferSize] = s.bufferSize
+        p[Keys.adaptiveLiveBufferEnabled] = s.adaptiveLiveBufferEnabled
         p[Keys.groupSort] = s.groupSort
         p[Keys.timeshiftEnabled] = s.timeshiftEnabled
         p[Keys.timeshiftMinutes] = s.timeshiftMinutes
@@ -1071,6 +1083,9 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.panelRowLists] = s.panelRowLists
         p[Keys.panelRowLast] = s.panelRowLast
         p[Keys.panelRowOpens] = s.panelRowOpens
+        p[Keys.backupGroupBy] = s.backupGroupBy
+        p[Keys.backupSourceOrder] = s.backupSourceOrder
+        p[Keys.backupQualityOrder] = s.backupQualityOrder
         p[Keys.channelSurf] = s.channelSurf
         p[Keys.barHidden] = s.barHidden
         p[Keys.guideInfoHidden] = s.guideInfoHidden
@@ -1778,8 +1793,44 @@ class LiveTvPreferences @Inject constructor(
 
     // ---------- Google Drive sync ----------
 
-    /** Fires whenever anything in Live TV's stored data changes. */
-    val changes: Flow<Unit> = store.data.map { }
+    /**
+     * Only portable setup changes trigger automatic export. The initial stored snapshot still
+     * emits once, as before; callers drop it because startup performs its own reconciliation.
+     * VPN profiles/selections live outside DataStore and use their existing backup observer.
+     */
+    val changes: Flow<Unit> = channelFlow {
+        val vpnChanges = Channel<Unit>(Channel.CONFLATED)
+        // Listen before taking the initial stored snapshot. A native edit during startup is
+        // buffered until after the initial emission, so callers' drop(1) cannot discard it.
+        val observer = com.nuvio.vpn.android.VpnPlaybackProtection.observeBackupChanges { vpnChanges.trySend(Unit) }
+        try {
+            val projection = SetupSyncProjection({ it in SYNC_EXCLUDED }, ::syncString)
+            var previous = projection.values(store.data.first())
+            send(Unit)
+            launch { for (change in vpnChanges) send(Unit) }
+            store.data.collect { stored ->
+                val current = projection.values(stored)
+                if (current != previous) {
+                    previous = current
+                    send(Unit)
+                }
+            }
+        } finally {
+            observer.close()
+            vpnChanges.close()
+        }
+    }
+
+    /** Kept identical for change detection and the portable backup payload. */
+    private fun syncString(name: String, value: String): String = when (name) {
+        Keys.playlists.name -> encodePlaylists(decodePlaylists(value).map {
+            it.copy(lastUpdatedMs = 0, lastError = null, channelCount = 0, serverTimezone = "", catchupNoHlsSince = 0L)
+        })
+        Keys.epgs.name -> encodeEpgs(decodeEpgs(value).map {
+            it.copy(lastUpdatedMs = 0, lastError = null, programCount = 0, fallbackUserAgent = "")
+        })
+        else -> value
+    }
 
     /**
      * Everything worth carrying to another TV, as JSON: sources, settings, favorites, hidden
@@ -1798,19 +1849,7 @@ class LiveTvPreferences @Inject constructor(
                 is Long -> JSONObject().put("t", "l").put("v", value)
                 is Set<*> -> JSONObject().put("t", "s").put("v", JSONArray(value.map { it.toString() }))
                 is String -> {
-                    val v = when (name) {
-                        // Download status and what this TV learned about the server (its time zone,
-                        // whether HLS catch-up works) stay per TV: they differ between boxes, and
-                        // syncing them made each TV look changed to the other, so both reloaded.
-                        Keys.playlists.name -> encodePlaylists(decodePlaylists(value).map {
-                            it.copy(lastUpdatedMs = 0, lastError = null, channelCount = 0, serverTimezone = "", catchupNoHlsSince = 0L)
-                        })
-                        Keys.epgs.name -> encodeEpgs(decodeEpgs(value).map {
-                            it.copy(lastUpdatedMs = 0, lastError = null, programCount = 0, fallbackUserAgent = "")
-                        })
-                        else -> value
-                    }
-                    JSONObject().put("t", "str").put("v", v)
+                    JSONObject().put("t", "str").put("v", syncString(name, value))
                 }
                 else -> null
             } ?: return@forEach
@@ -2034,12 +2073,12 @@ class LiveTvPreferences @Inject constructor(
     private companion object {
         const val EPG_SEP = "\u0001"
         /**
-         * Per-TV keys that sync never copies. The last five depend on this TV's own screen and sound
-         * set-up (a receiver, a 24p screen, how much memory it has), so each TV keeps its own.
+         * Per-TV keys that sync never copies. Playback choices depend on this TV's screen, sound,
+         * connection and memory, so each TV keeps its own.
          */
         private val SYNC_EXCLUDED_BASE = setOf(
             "last_channel", "previous_channel", "last_group", "recent", "on_demand_imports", "channel_quality", "developer_tools", "recording_storage",
-            "audio_passthrough", "buffer_size", "match_frame_rate", "frame_rate_mode", "aspect_mode"
+            "audio_passthrough", "buffer_size", "adaptive_live_buffer", "match_frame_rate", "frame_rate_mode", "aspect_mode"
         )
         private val PROFILE_SUFFIX = Regex("""_p\d+$""")
         /** A playlist id (they are random UUIDs). */

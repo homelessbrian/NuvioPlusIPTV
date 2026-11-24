@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.player
 
 import java.io.File
 import java.io.FileOutputStream
+import java.io.BufferedOutputStream
 
 /**
  * Cuts a live MPEG-TS stream into short pieces with a local HLS playlist, as it arrives, so a
@@ -47,7 +48,7 @@ class TsSegmenter(
 
     // The piece being written.
     private var seq = 0L
-    private var out: FileOutputStream? = null
+    private var out: BufferedOutputStream? = null
     private var outFile: File? = null
     private var pieceStartPcr = -1L
     private var lastPcr = -1L
@@ -154,7 +155,7 @@ class TsSegmenter(
     private fun openPiece() {
         val f = File(dir, "seg$seq.ts")
         outFile = f
-        out = FileOutputStream(f).also { o ->
+        out = BufferedOutputStream(FileOutputStream(f), 64 * 1024).also { o ->
             pat?.let { o.write(it) }
             pmts.values.forEach { o.write(it) }
         }
@@ -168,9 +169,11 @@ class TsSegmenter(
     private fun closePiece() {
         val o = out ?: return
         val f = outFile ?: return
-        runCatching { o.flush(); o.close() }
         out = null
         outFile = null
+        // A piece must be fully on disk before its playlist entry or callback exposes it.
+        // Propagate a failed flush to the recorder instead of publishing a truncated piece.
+        o.close()
         if (pieceBytes == 0L) { f.delete(); return }
         val len = currentLengthSec().coerceAtLeast(0.1)
         pieces += Piece(seq, f.name, len, discontinuity = pieceDiscontinuity)

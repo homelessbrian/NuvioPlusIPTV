@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"वही चैनल"</string>
+    <string name="livetv_backups_addon_tag">"ऐड-ऑन"</string>
+    <string name="livetv_backups_playlist_tag">"प्लेलिस्ट"</string>
+    <string name="livetv_backups_quality_other">"अन्य क्वालिटी"</string>
+    <string name="iptv_backup_order_title">"बैकअप और मैच चैनल"</string>
+    <string name="iptv_backup_order_row_subtitle">"क्विक चैनल में बैकअप सूची और किसी मैच के चैनल कैसे समूहित और क्रमबद्ध हों"</string>
+    <string name="iptv_backup_order_gear_hint">"शीर्षक और उनका क्रम"</string>
+    <string name="iptv_backup_order_group_by">"इसके अनुसार समूह"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK से बदलें। हर शीर्षक के अंदर चैनल नीचे दिए दूसरे क्रम में रहते हैं"</string>
+    <string name="iptv_backup_order_by_source">"प्लेलिस्ट / ऐड-ऑन"</string>
+    <string name="iptv_backup_order_by_quality">"क्वालिटी"</string>
+    <string name="iptv_backup_order_no_headings">"कोई शीर्षक नहीं"</string>
+    <string name="iptv_backup_order_sources">"प्लेलिस्ट और ऐड-ऑन का क्रम"</string>
+    <string name="iptv_backup_order_sources_hint">"तीर एक को खिसकाते हैं; नए सबसे नीचे जाते हैं"</string>
+    <string name="iptv_backup_order_qualities">"क्वालिटी का क्रम"</string>
+    <string name="iptv_backup_order_qualities_hint">"अगर इस टीवी पर 4K अटकता है तो FHD को 4K से ऊपर रखें"</string>
+    <string name="iptv_backup_order_quality_unknown">"नाम में क्वालिटी नहीं"</string>
+    <string name="iptv_backup_order_reset">"डिफ़ॉल्ट क्रम पर लौटें"</string>
+    <string name="iptv_backup_order_no_sources">"अभी कोई प्लेलिस्ट या ऐड-ऑन नहीं"</string>
+</resources>

@@ -163,7 +163,7 @@
     <string name="iptv_settings_your_order">"Urutan Anda"</string>
     <string name="iptv_settings_channels_in_a_group">"Saluran dalam Grup"</string>
     <string name="iptv_settings_channel_order">"Urutan Saluran"</string>
-    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Cara saluran diurutkan di setiap grup, termasuk Favorit. Urutan playlist mempertahankan urutan Anda sendiri di Favorit dan grup Anda."</string>
+    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Cara saluran diurutkan di setiap grup, termasuk Favorit. Hanya urutan playlist yang mempertahankan urutan Anda sendiri (saluran yang Anda susun ulang, Favorit, dan grup Anda)."</string>
     <string name="iptv_settings_channel_number">"Nomor saluran"</string>
     <string name="iptv_settings_name">"Nama"</string>
     <string name="iptv_settings_number_channels_1_2_3_in_each_group">"Nomori Saluran 1, 2, 3… di Setiap Grup"</string>

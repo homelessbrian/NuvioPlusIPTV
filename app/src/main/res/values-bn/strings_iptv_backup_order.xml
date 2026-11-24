@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"একই চ্যানেল"</string>
+    <string name="livetv_backups_addon_tag">"অ্যাড-অন"</string>
+    <string name="livetv_backups_playlist_tag">"প্লেলিস্ট"</string>
+    <string name="livetv_backups_quality_other">"অন্য মান"</string>
+    <string name="iptv_backup_order_title">"ব্যাকআপ ও খেলার চ্যানেল"</string>
+    <string name="iptv_backup_order_row_subtitle">"কুইক চ্যানেলে ব্যাকআপ তালিকা ও একটি খেলার চ্যানেল কীভাবে সাজানো ও ভাগ করা হয়"</string>
+    <string name="iptv_backup_order_gear_hint">"শিরোনাম ও তাদের ক্রম"</string>
+    <string name="iptv_backup_order_group_by">"যে অনুযায়ী ভাগ"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK দিয়ে বদলান। প্রতিটি শিরোনামের ভেতরে চ্যানেল নিচের অন্য ক্রম মানে"</string>
+    <string name="iptv_backup_order_by_source">"প্লেলিস্ট / অ্যাড-অন"</string>
+    <string name="iptv_backup_order_by_quality">"মান"</string>
+    <string name="iptv_backup_order_no_headings">"শিরোনাম নেই"</string>
+    <string name="iptv_backup_order_sources">"প্লেলিস্ট ও অ্যাড-অনের ক্রম"</string>
+    <string name="iptv_backup_order_sources_hint">"তীর একটিকে সরায়; নতুনগুলো নিচে যায়"</string>
+    <string name="iptv_backup_order_qualities">"মানের ক্রম"</string>
+    <string name="iptv_backup_order_qualities_hint">"এই টিভিতে 4K আটকালে FHD-কে 4K-এর ওপরে রাখুন"</string>
+    <string name="iptv_backup_order_quality_unknown">"নামে মান নেই"</string>
+    <string name="iptv_backup_order_reset">"ডিফল্ট ক্রমে ফিরুন"</string>
+    <string name="iptv_backup_order_no_sources">"এখনও কোনো প্লেলিস্ট বা অ্যাড-অন নেই"</string>
+</resources>

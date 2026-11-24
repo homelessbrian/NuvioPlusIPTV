@@ -163,7 +163,7 @@
     <string name="iptv_settings_your_order">"Your order"</string>
     <string name="iptv_settings_channels_in_a_group">"Channels in a Group"</string>
     <string name="iptv_settings_channel_order">"Channel Order"</string>
-    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"How channels are sorted in every group, Favorites included. Playlist order keeps your own order in Favorites and your groups."</string>
+    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"How channels are sorted in every group, Favorites included. Only Playlist order keeps your own order (Reorder channels, Favorites and your groups)."</string>
     <string name="iptv_settings_channel_number">"Channel number"</string>
     <string name="iptv_settings_name">"Name"</string>
     <string name="iptv_settings_number_channels_1_2_3_in_each_group">"Number Channels 1, 2, 3… in Each Group"</string>
@@ -716,4 +716,6 @@
     <string name="iptv_settings_recording_keep_days_n">"%1$d days"</string>
     <string name="iptv_settings_picture_sound_and_pausing">"Picture, sound and pausing"</string>
     <string name="iptv_settings_recordings_tab_subtitle">"Where recordings are saved, the network folder and how long they\'re kept"</string>
+    <string name="iptv_settings_adaptive_live_buffer">Adaptive Live TV Buffer</string>
+    <string name="iptv_settings_adaptive_live_buffer_description">Builds toward a 20-second cushion on this TV by easing live playback down to 0.98× when needed. Keeps voices natural with compatible audio output and respects your playback speed.</string>
 </resources>

@@ -271,6 +271,60 @@ class RecordingsViewModel @Inject constructor(
         return RecordingArt(backdrop, logo)
     }
 
+    // ---- About: what the episode or movie is about, for recordings the guide gave no description.
+    private val _about = MutableStateFlow<Map<String, String>>(emptyMap())
+    /** Recording id -> description from Nuvio's own metadata (TMDB, else your addons). */
+    val about: StateFlow<Map<String, String>> = _about.asStateFlow()
+    private val triedAbout = HashSet<String>()
+    private val aboutPrefs = recorder.appContext.getSharedPreferences("livetv_recording_about", android.content.Context.MODE_PRIVATE)
+
+    fun loadAbout(list: List<LiveTvRecording>) {
+        val todo = list.filter { it.description.isNullOrBlank() && it.title.isNotBlank() && triedAbout.add(it.id) }
+        if (todo.isEmpty()) return
+        val fixed = matchFixes.fixes.value
+        val saved = HashMap<String, String>()
+        todo.forEach { r ->
+            if (fixed.containsKey(com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(r.title))) return@forEach
+            runCatching { aboutPrefs.getString(r.id, null) }.getOrNull()?.takeIf { it.isNotBlank() }?.let { saved[r.id] = it }
+        }
+        if (saved.isNotEmpty()) _about.value = _about.value + saved
+        viewModelScope.launch {
+            for (r in todo) {
+                if (r.id in saved) continue
+                if (com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(r.channelName, r.title)) continue
+                val text = runCatching { findAbout(r) }.getOrNull()?.trim()?.takeIf { it.isNotBlank() } ?: continue
+                _about.value = _about.value + (r.id to text)
+                runCatching { aboutPrefs.edit().putString(r.id, text).apply() }
+            }
+        }
+    }
+
+    /**
+     * The same title Nuvio would open (Fix match pick, else your addons' match), then TMDB:
+     * an episode's own description when the guide gave its season and episode, a movie's
+     * description otherwise. A show with no episode numbers gets nothing (its general
+     * description would read as if it were this episode's).
+     */
+    private suspend fun findAbout(r: LiveTvRecording): String? {
+        val ask = askOf(r)
+        val hit = pickedHit(ask.title, ask.channelName, ask.series)
+            ?: posterResolver.titleFor(ask.title, hintFor(ask.series)) ?: return null
+        val movie = hit.type.equals("movie", ignoreCase = true)
+        val numbers = r.episode?.let { RECORDING_EPISODE_NUMBERS.find(it) }
+            ?.let { it.groupValues[1].toInt() to it.groupValues[2].toInt() }
+        if (!movie && numbers == null) return null
+        val tmdbId = runCatching { tmdbService.ensureTmdbId(hit.meta.id, if (movie) "movie" else "series") }.getOrNull()
+        if (movie) {
+            val tmdb = tmdbId?.let {
+                runCatching { tmdbMetadataService.fetchEnrichment(it, com.nuvio.tv.domain.model.ContentType.MOVIE) }.getOrNull()
+            }
+            return tmdb?.description ?: hit.meta.description
+        }
+        val id = tmdbId ?: return null
+        val episodes = runCatching { tmdbMetadataService.fetchEpisodeEnrichment(id, listOf(numbers!!.first)) }.getOrNull()
+        return episodes?.get(numbers!!)?.overview
+    }
+
     // ---- Fix match
 
     /** Shows and movies for the Fix match search. */
@@ -304,15 +358,17 @@ class RecordingsViewModel @Inject constructor(
         fun hit(title: String) = com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(title) in keys
         val recs = lastRecordings.filter { hit(it.title) }
         recs.forEach { r ->
-            tried.remove(r.id); triedArt.remove(r.id)
+            tried.remove(r.id); triedArt.remove(r.id); triedAbout.remove(r.id)
             runCatching { artPrefs.edit().remove(r.id).apply() }
+            runCatching { aboutPrefs.edit().remove(r.id).apply() }
         }
         _posters.value = _posters.value - recs.map { it.id }.toSet()
         _art.value = _art.value - recs.map { it.id }.toSet()
+        _about.value = _about.value - recs.map { it.id }.toSet()
         val titles = lastTitles.filter { hit(it.title) }
         titles.forEach { triedTitles.remove(posterKey(it.title)) }
         _titlePosters.value = _titlePosters.value - titles.map { posterKey(it.title) }.toSet()
-        if (recs.isNotEmpty()) { loadPosters(lastRecordings); loadArt(lastRecordings) }
+        if (recs.isNotEmpty()) { loadPosters(lastRecordings); loadArt(lastRecordings); loadAbout(lastRecordings) }
         if (titles.isNotEmpty()) loadTitlePosters(lastTitles)
     }
 
@@ -323,6 +379,7 @@ class RecordingsViewModel @Inject constructor(
     fun delete(rec: LiveTvRecording) {
         recorder.delete(rec.id)
         runCatching { artPrefs.edit().remove(rec.id).apply() }
+        runCatching { aboutPrefs.edit().remove(rec.id).apply() }
     }
     fun freeBytes(): Long = recorder.freeBytes()
     fun setKeepForever(rec: LiveTvRecording, keep: Boolean) = recorder.setKeepForever(rec.id, keep)
@@ -356,6 +413,7 @@ fun RecordingsScreen(
     val repeatRules by viewModel.repeats.collectAsStateWithLifecycle()
     val posters by viewModel.posters.collectAsStateWithLifecycle()
     val art by viewModel.art.collectAsStateWithLifecycle()
+    val about by viewModel.about.collectAsStateWithLifecycle()
     var scheduleMenu by remember { mutableStateOf<RecordingSchedule?>(null) }
     // Back from the player: read where you got to again (the progress bars).
     var resumeTick by remember { mutableStateOf(0) }
@@ -380,7 +438,7 @@ fun RecordingsScreen(
     val showPlaylist = playlistNames.size > 1
     fun withPlaylist(channelName: String, sourceId: String): String =
         if (showPlaylist) listOfNotNull(channelName, playlistOf(sourceId)).joinToString(" · ") else channelName
-    LaunchedEffect(recordings) { viewModel.loadPosters(recordings); viewModel.loadArt(recordings) }
+    LaunchedEffect(recordings) { viewModel.loadPosters(recordings); viewModel.loadArt(recordings); viewModel.loadAbout(recordings) }
     var menuFor by remember { mutableStateOf<LiveTvRecording?>(null) }
     // Fix match: the show's name, and whether it's surely a show (null = don't know).
     var fixMatchFor by remember { mutableStateOf<Pair<String, Boolean?>?>(null) }
@@ -412,6 +470,8 @@ fun RecordingsScreen(
             runCatching { first.requestFocus() }
         }
     }
+    // The open folder's page, to hand it the highlight back.
+    val folderFocus = remember { FocusRequester() }
     var movePick by remember { mutableStateOf<List<LiveTvRecording>?>(null) }
     var confirmDeleteShow by remember { mutableStateOf<RecordedShow?>(null) }
     val moving by viewModel.move.collectAsStateWithLifecycle()
@@ -463,8 +523,18 @@ fun RecordingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // While a folder is open on top, nothing underneath can take the highlight.
-                .then(if (openShow != null) Modifier.focusProperties { canFocus = false } else Modifier)
+                // While a folder is open on top, nothing underneath can take the highlight: the
+                // highlight can't move in here, and a key pressed while it's somehow in here
+                // (it's hidden under the folder) sends it back to the folder instead.
+                .focusProperties { enter = { if (openShowKey != null) androidx.compose.ui.focus.FocusRequester.Cancel else androidx.compose.ui.focus.FocusRequester.Default } }
+                .focusGroup()
+                .onPreviewKeyEvent { e ->
+                    if (openShowKey == null) false
+                    else {
+                        if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) runCatching { folderFocus.requestFocus() }
+                        true
+                    }
+                }
                 .padding(start = 56.dp, end = 48.dp, top = 32.dp)
         ) {
             Row(verticalAlignment = Alignment.Bottom) {
@@ -640,6 +710,7 @@ fun RecordingsScreen(
             RecordedShowPage(
                 show = show,
                 art = art,
+                about = about,
                 resumeTick = resumeTick,
                 resumeOf = { viewModel.resume(it) },
                 isWatched = { viewModel.isWatched(it) },
@@ -649,7 +720,8 @@ fun RecordingsScreen(
                 onMoveAll = if (RecordingStorage.choices(recContext).size > 1) ({ movePick = show.episodes }) else null,
                 onDeleteAll = { confirmDeleteShow = show },
                 onClose = { openShowKey = null },
-                backdrop = look.guideBackdrop
+                backdrop = look.guideBackdrop,
+                pageFocus = folderFocus
             )
         }
         // A move between drives: what's moving and how far along.
@@ -684,6 +756,8 @@ fun RecordingsScreen(
     val anything = recordings.isNotEmpty() || schedules.isNotEmpty() || seriesRules.isNotEmpty() || repeatRules.isNotEmpty()
     LaunchedEffect(anything) {
         kotlinx.coroutines.delay(120)
+        // A folder open (back from watching one of its episodes): the folder keeps the highlight.
+        if (openShowKey != null) return@LaunchedEffect
         // The top of the tab that's open; its tab when it's empty; nothing yet: New Recording.
         runCatching {
             when {
@@ -865,7 +939,7 @@ fun RecordingsScreen(
         // Live: a recording still going keeps its size and length up to date.
         val rec = recordings.firstOrNull { it.id == picked.id } ?: picked
         val context = androidx.compose.ui.platform.LocalContext.current
-        RecordingInfoDialog(rec, savedOnLabel(context, rec.dir), playlistOf(rec.channelKey.substringBefore('|')), onDismiss = { infoFor = null })
+        RecordingInfoDialog(rec, savedOnLabel(context, rec.dir), playlistOf(rec.channelKey.substringBefore('|')), about = recordingAbout(rec, about), onDismiss = { infoFor = null })
     }
     confirmDelete?.let { rec ->
         RecordingActionDialog(
@@ -1557,7 +1631,7 @@ internal fun RecordingActionDialog(
 
 /** Hold OK → Information: what a recording is, how big it is and where it's kept. */
 @Composable
-private fun RecordingInfoDialog(rec: LiveTvRecording, savedOn: String, playlist: String?, onDismiss: () -> Unit) {
+private fun RecordingInfoDialog(rec: LiveTvRecording, savedOn: String, playlist: String?, about: String?, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } }
     val day = SimpleDateFormat("EEE d MMM", Locale.getDefault())
@@ -1586,6 +1660,10 @@ private fun RecordingInfoDialog(rec: LiveTvRecording, savedOn: String, playlist:
     }
     com.nuvio.tv.livetv.ui.LiveDialog(onDismiss = onDismiss, width = 520.dp) {
         LiveText(rec.title, size = 20.sp, weight = FontWeight.Bold, maxLines = 2)
+        about?.let {
+            Spacer(Modifier.height(8.dp))
+            LiveText(it, size = 14.sp, color = NuvioTheme.colors.TextSecondary, maxLines = 6)
+        }
         Spacer(Modifier.height(10.dp))
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             rows.forEach { (k, v) ->

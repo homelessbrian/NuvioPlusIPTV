@@ -251,6 +251,7 @@ private sealed interface LiveDialog {
     data object HighlightChoice : LiveDialog
     data object CustomGroups : LiveDialog
     data object ChannelRow : LiveDialog
+    data object BackupOrder : LiveDialog
     data object ConfirmRestore : LiveDialog
     data object BackupPhone : LiveDialog
     data object BackupsOnTv : LiveDialog
@@ -1257,6 +1258,12 @@ internal fun LiveTvSettingsContent(
                         onClick = { dialog = LiveDialog.ChannelRow }
                     )
                     SettingsActionRow(
+                        title = context.getString(R.string.iptv_backup_order_title),
+                        subtitle = context.getString(R.string.iptv_backup_order_row_subtitle),
+                        value = backupGroupByLabel(s),
+                        onClick = { dialog = LiveDialog.BackupOrder }
+                    )
+                    SettingsActionRow(
                         title = context.getString(R.string.iptv_settings_play_bar_background),
                         subtitle = context.getString(R.string.iptv_settings_how_dark_the_play_bar_is_standard_or),
                         value = when (s.panelBackground) { "darker" -> context.getString(R.string.iptv_settings_standard); "solid" -> context.getString(R.string.iptv_settings_darkest); else -> context.getString(R.string.iptv_settings_lightest) },
@@ -1387,6 +1394,12 @@ internal fun LiveTvSettingsContent(
                         onClick = {
                             update { st -> st.copy(bufferSize = when (st.bufferSize) { "none" -> "small"; "small" -> "normal"; "normal" -> "large"; "large" -> "xlarge"; else -> "none" }) }
                         }
+                    )
+                    SettingsToggleRow(
+                        context.getString(R.string.iptv_settings_adaptive_live_buffer),
+                        context.getString(R.string.iptv_settings_adaptive_live_buffer_description),
+                        s.adaptiveLiveBufferEnabled,
+                        { update { it.copy(adaptiveLiveBufferEnabled = !it.adaptiveLiveBufferEnabled) } }
                     )
                     SettingsToggleRow(
                         context.getString(R.string.iptv_settings_reconnect_automatically),
@@ -2625,6 +2638,13 @@ internal fun LiveTvSettingsContent(
         LiveDialog.ChannelRow -> ChannelRowDialog(
             settings = s,
             groups = remember(playlists, user.customGroups, user.groupNames) { viewModel.rowGroupOptions() },
+            onUpdate = { t -> update(t) },
+            onDismiss = close
+        )
+        LiveDialog.BackupOrder -> BackupOrderDialog(
+            settings = s,
+            playlists = playlists,
+            addonNames = { viewModel.liveStreamAddonNames() },
             onUpdate = { t -> update(t) },
             onDismiss = close
         )

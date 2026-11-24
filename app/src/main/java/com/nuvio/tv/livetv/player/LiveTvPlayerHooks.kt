@@ -112,6 +112,7 @@ class LiveTvPlayerHooks @Inject constructor(
                 playback.catchupCache = it.catchupCache
                 playback.audioPassthrough = it.audioPassthrough
                 playback.bufferSize = it.bufferSize
+                playback.adaptiveLiveBufferEnabled = it.adaptiveLiveBufferEnabled
                 playback.timeshiftEnabled = it.timeshiftEnabled
                 playback.timeshiftMinutes = it.timeshiftMinutes
                 playback.rewindAlways = it.timeshiftEnabled && it.rewindAlways

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Aynı kanal"</string>
+    <string name="livetv_backups_addon_tag">"Eklenti"</string>
+    <string name="livetv_backups_playlist_tag">"Liste"</string>
+    <string name="livetv_backups_quality_other">"Diğer kalite"</string>
+    <string name="iptv_backup_order_title">"Yedekler ve maç kanalları"</string>
+    <string name="iptv_backup_order_row_subtitle">"Yedek listesi ve Hızlı Kanallar'daki bir maçın kanallarının nasıl gruplanıp sıralandığı"</string>
+    <string name="iptv_backup_order_gear_hint">"Başlıklar ve sıraları"</string>
+    <string name="iptv_backup_order_group_by">"Grupla"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK değiştirir. Her başlıkta kanallar aşağıdaki diğer sırayı izler"</string>
+    <string name="iptv_backup_order_by_source">"Liste / eklenti"</string>
+    <string name="iptv_backup_order_by_quality">"Kalite"</string>
+    <string name="iptv_backup_order_no_headings">"Başlık yok"</string>
+    <string name="iptv_backup_order_sources">"Liste ve eklenti sırası"</string>
+    <string name="iptv_backup_order_sources_hint">"oklar birini taşır; yeniler en alta gider"</string>
+    <string name="iptv_backup_order_qualities">"Kalite sırası"</string>
+    <string name="iptv_backup_order_qualities_hint">"4K bu TV'de takılıyorsa FHD'yi 4K'nın üstüne koyun"</string>
+    <string name="iptv_backup_order_quality_unknown">"Kalite adda yok"</string>
+    <string name="iptv_backup_order_reset">"Varsayılan sıraya dön"</string>
+    <string name="iptv_backup_order_no_sources">"Henüz liste veya eklenti yok"</string>
+</resources>

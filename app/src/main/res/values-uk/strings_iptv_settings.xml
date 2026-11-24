@@ -163,7 +163,7 @@
     <string name="iptv_settings_your_order">"Ваш порядок"</string>
     <string name="iptv_settings_channels_in_a_group">"Канали в групі"</string>
     <string name="iptv_settings_channel_order">"Порядок каналів"</string>
-    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Як сортуються канали в кожній групі, зокрема в обраному. Порядок плейлиста зберігає ваш власний порядок в обраному й ваших групах."</string>
+    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Як сортуються канали в кожній групі, зокрема в обраному. Лише порядок плейлиста зберігає ваш власний порядок (переставлені канали, обране й ваші групи)."</string>
     <string name="iptv_settings_channel_number">"Номер каналу"</string>
     <string name="iptv_settings_name">"Назва"</string>
     <string name="iptv_settings_number_channels_1_2_3_in_each_group">"Нумерувати канали 1, 2, 3… у кожній групі"</string>

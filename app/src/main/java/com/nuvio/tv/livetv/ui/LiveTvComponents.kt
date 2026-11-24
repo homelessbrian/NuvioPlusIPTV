@@ -1007,11 +1007,24 @@ internal fun Modifier.glassTile(
 }
 
 /**
- * Counts slow screen frames while a screen is open and writes the tally to the Start-Up Report,
- * so "it feels laggy" can be told apart by what the screen was doing (and compared between versions).
+ * Detailed sampling for an explicit capture session. Normal use does not force a callback on
+ * every display refresh or keep a stack-sampling thread awake on an otherwise idle screen.
  */
 @Composable
 internal fun FrameMeter(label: String) {
+    val capture = frameCaptureActive()
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var foreground by remember(lifecycle) {
+        mutableStateOf(lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycle) {
+        val listener = androidx.lifecycle.LifecycleEventObserver { _, _ ->
+            foreground = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+        }
+        lifecycle.addObserver(listener)
+        onDispose { lifecycle.removeObserver(listener) }
+    }
+    if (!capture || !foreground) return
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.DisposableEffect(label, view) {
         val choreographer = android.view.Choreographer.getInstance()

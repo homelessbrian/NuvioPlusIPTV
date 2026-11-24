@@ -40,6 +40,7 @@ fun LiveTvSeekThumbsHook(viewModel: com.nuvio.tv.livetv.ui.LiveTvViewModel) {
 /** What the player was doing at the last look (read on the main thread, used by the engine's). */
 private class Seen {
     @Volatile var playing = false
+    @Volatile var loading = false
     @Volatile var positionMs = 0L
     @Volatile var aheadMs = 0L
     @Volatile var durationMs = 0L
@@ -50,6 +51,7 @@ private class Seen {
     fun read(c: LiveTvPlaybackController, vm: com.nuvio.tv.livetv.ui.LiveTvViewModel) {
         val p = c.player ?: return
         playing = p.isPlaying
+        loading = p.playWhenReady && p.playbackState == androidx.media3.common.Player.STATE_BUFFERING
         // Catch-up: time into the show (the seek bar's time); otherwise the player's own.
         val cs = vm.catchup.value
         val anchor = SeekThumbs.origin(SeekThumbs.Owner.LIVE)
@@ -70,6 +72,7 @@ private class Seen {
         isPlaying = { playing },
         positionMs = { positionMs },
         bufferedAheadMs = { aheadMs },
+        isLoading = { loading },
     )
 }
 

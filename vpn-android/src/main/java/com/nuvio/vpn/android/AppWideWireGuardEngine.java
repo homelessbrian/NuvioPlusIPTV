@@ -12,6 +12,7 @@ final class AppWideWireGuardEngine implements TunnelEngine {
     private final GoBackend backend;
     private final Tunnel tunnel;
     private volatile boolean closed;
+    private final HandshakeHealth health = new HandshakeHealth();
 
     AppWideWireGuardEngine(Context context, Config config, java.util.function.Consumer<AppWideWireGuardEngine> down) throws Exception {
         this.context = context.getApplicationContext();
@@ -36,7 +37,7 @@ final class AppWideWireGuardEngine implements TunnelEngine {
             Statistics.PeerStats value = stats.peer(peer);
             if (value != null) handshake = Math.max(handshake, value.latestHandshakeEpochMillis());
         }
-        return new TunnelTraffic(stats.totalRx(), stats.totalTx(), handshake);
+        return new TunnelTraffic(stats.totalRx(), stats.totalTx(), handshake, health);
     }
     @Override public boolean probe() { return AppVpnProbe.verify(context); }
     @Override public String egress() { return AppVpnProbe.egress(context); }

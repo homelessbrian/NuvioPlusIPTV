@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusRequester
@@ -82,10 +83,10 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import com.nuvio.tv.livetv.ui.leftJumpsToTop
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import java.text.SimpleDateFormat
@@ -258,8 +259,9 @@ fun SportsScreen(
     // The card last highlighted (not page state: moving the highlight mustn't redraw the page).
     val rowFocus = remember { arrayOfNulls<String>(1) }
     var rowsReturning by remember { mutableStateOf(false) }
-    // Left from the page's left edge: up to the top bar's first button (see leftJumpsToTop).
+    // The top bar's first button (My Sports): where Back goes if the page's own button can't take it.
     val sportsFirstChip = remember { FocusRequester() }
+    val hubFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // The button of the page you're on (Back takes the highlight up to it).
     val sportsPageChip = remember { FocusRequester() }
     var topBarFocused by remember { mutableStateOf(false) }
@@ -330,8 +332,8 @@ fun SportsScreen(
         }
     }
 
-    // Back up to the top bar (Left: its first button, My Sports, so one more Left opens Nuvio's
-    // menu; Back: the button of the page you're on, so one more Back opens the menu).
+    // Back up to the top bar: the button of the page you're on (My Sports if that fails), so one
+    // more Back opens the menu.
     fun hubToTop(toPage: Boolean = false) {
         scope.launch {
             // Only lists that have been on screen: scrolling one that never was (All Events while
@@ -465,11 +467,17 @@ fun SportsScreen(
                     }
                 }
             )
+            // Left at the start of a row stays put (Back is the way up to the top), so paging back
+            // through past games doesn't throw you up to the top bar or open the menu. From the top
+            // bar, Left still opens Nuvio's menu.
             else -> Box(
-                Modifier.fillMaxSize().leftJumpsToTop(
-                    atTop = { topBarFocused },
-                    toTop = { hubToTop() }
-                )
+                Modifier.fillMaxSize().onKeyEvent { e ->
+                    if (e.key != Key.DirectionLeft || e.type != KeyEventType.KeyDown || topBarFocused) {
+                        return@onKeyEvent false
+                    }
+                    hubFocusManager.moveFocus(FocusDirection.Left)
+                    true
+                }
             ) { SportsHub(
                 firstChip = sportsFirstChip,
                 pageChip = sportsPageChip,

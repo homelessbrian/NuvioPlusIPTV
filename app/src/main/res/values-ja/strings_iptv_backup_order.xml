@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"同じチャンネル"</string>
+    <string name="livetv_backups_addon_tag">"アドオン"</string>
+    <string name="livetv_backups_playlist_tag">"プレイリスト"</string>
+    <string name="livetv_backups_quality_other">"その他の画質"</string>
+    <string name="iptv_backup_order_title">"予備と試合のチャンネル"</string>
+    <string name="iptv_backup_order_row_subtitle">"予備リストとクイックチャンネルの試合のチャンネルの分け方と並び順"</string>
+    <string name="iptv_backup_order_gear_hint">"見出しとその順番"</string>
+    <string name="iptv_backup_order_group_by">"グループ分け"</string>
+    <string name="iptv_backup_order_group_by_hint">"OKで変更。各見出しの中では下のもう一方の順番で並びます"</string>
+    <string name="iptv_backup_order_by_source">"プレイリスト / アドオン"</string>
+    <string name="iptv_backup_order_by_quality">"画質"</string>
+    <string name="iptv_backup_order_no_headings">"見出しなし"</string>
+    <string name="iptv_backup_order_sources">"プレイリストとアドオンの順番"</string>
+    <string name="iptv_backup_order_sources_hint">"矢印で移動、新しいものは最後に追加"</string>
+    <string name="iptv_backup_order_qualities">"画質の順番"</string>
+    <string name="iptv_backup_order_qualities_hint">"このテレビで4Kがカクつく場合はFHDを4Kより上に"</string>
+    <string name="iptv_backup_order_quality_unknown">"名前に画質なし"</string>
+    <string name="iptv_backup_order_reset">"既定の順番に戻す"</string>
+    <string name="iptv_backup_order_no_sources">"プレイリストもアドオンもまだありません"</string>
+</resources>

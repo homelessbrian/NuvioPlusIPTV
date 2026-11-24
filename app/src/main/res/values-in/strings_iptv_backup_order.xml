@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Saluran sama"</string>
+    <string name="livetv_backups_addon_tag">"Add-on"</string>
+    <string name="livetv_backups_playlist_tag">"Playlist"</string>
+    <string name="livetv_backups_quality_other">"Kualitas lain"</string>
+    <string name="iptv_backup_order_title">"Cadangan &amp; saluran pertandingan"</string>
+    <string name="iptv_backup_order_row_subtitle">"Cara daftar cadangan dan saluran pertandingan di Saluran Cepat dikelompokkan dan diurutkan"</string>
+    <string name="iptv_backup_order_gear_hint">"Judul dan urutannya"</string>
+    <string name="iptv_backup_order_group_by">"Kelompokkan menurut"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK mengubahnya. Di setiap judul, saluran mengikuti urutan lain di bawah"</string>
+    <string name="iptv_backup_order_by_source">"Playlist / add-on"</string>
+    <string name="iptv_backup_order_by_quality">"Kualitas"</string>
+    <string name="iptv_backup_order_no_headings">"Tanpa judul"</string>
+    <string name="iptv_backup_order_sources">"Urutan playlist &amp; add-on"</string>
+    <string name="iptv_backup_order_sources_hint">"panah memindahkan satu; yang baru masuk ke bawah"</string>
+    <string name="iptv_backup_order_qualities">"Urutan kualitas"</string>
+    <string name="iptv_backup_order_qualities_hint">"taruh FHD di atas 4K jika 4K tersendat di TV ini"</string>
+    <string name="iptv_backup_order_quality_unknown">"Kualitas tidak ada di nama"</string>
+    <string name="iptv_backup_order_reset">"Kembali ke urutan bawaan"</string>
+    <string name="iptv_backup_order_no_sources">"Belum ada playlist atau add-on"</string>
+</resources>

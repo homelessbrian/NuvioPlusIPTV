@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"אותו ערוץ"</string>
+    <string name="livetv_backups_addon_tag">"תוסף"</string>
+    <string name="livetv_backups_playlist_tag">"רשימת השמעה"</string>
+    <string name="livetv_backups_quality_other">"איכות אחרת"</string>
+    <string name="iptv_backup_order_title">"גיבויים וערוצי המשחק"</string>
+    <string name="iptv_backup_order_row_subtitle">"איך רשימת הגיבויים וערוצי המשחק בערוצים המהירים מקובצים וממוינים"</string>
+    <string name="iptv_backup_order_gear_hint">"כותרות והסדר שלהן"</string>
+    <string name="iptv_backup_order_group_by">"קיבוץ לפי"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK משנה. בתוך כל כותרת הערוצים לפי הסדר השני למטה"</string>
+    <string name="iptv_backup_order_by_source">"רשימה / תוסף"</string>
+    <string name="iptv_backup_order_by_quality">"איכות"</string>
+    <string name="iptv_backup_order_no_headings">"ללא כותרות"</string>
+    <string name="iptv_backup_order_sources">"סדר רשימות ותוספים"</string>
+    <string name="iptv_backup_order_sources_hint">"החצים מזיזים פריט; חדשים נכנסים בסוף"</string>
+    <string name="iptv_backup_order_qualities">"סדר איכות"</string>
+    <string name="iptv_backup_order_qualities_hint">"שימו FHD מעל 4K אם 4K נתקע בטלוויזיה הזו"</string>
+    <string name="iptv_backup_order_quality_unknown">"האיכות לא מופיעה בשם"</string>
+    <string name="iptv_backup_order_reset">"חזרה לסדר ברירת המחדל"</string>
+    <string name="iptv_backup_order_no_sources">"אין עדיין רשימות או תוספים"</string>
+</resources>

@@ -238,6 +238,13 @@ public final class VpnPlaybackProtection {
     static void connectionRecovered() {
         for (Runnable listener : recoveryListeners) main.post(() -> { if (recoveryListeners.contains(listener)) listener.run(); });
     }
+    private static volatile boolean playbackActive;
+    /**
+     * The host says whether video is playing (player, full-screen Live TV, Multiview). The VPN only
+     * checks a quiet connection for a stall while something plays; quiet menus are normal.
+     */
+    public static void setPlaybackActive(boolean active) { playbackActive = active; }
+    static boolean playbackActive() { return playbackActive; }
     public static AutoCloseable observeBackupChanges(Runnable listener) {
         backupListeners.add(listener);
         return () -> backupListeners.remove(listener);
@@ -414,6 +421,8 @@ public final class VpnPlaybackProtection {
         String profile = settings.getSelectedProfileId();
         if (profile == null) throw new IOException("Select a VPN profile in Settings before playing.");
         if (VpnConnectionService.verifiedFor(profile, settings.getMode())) { result.complete(null); return; }
+        // Not verified right now: have the connection checked on its next tick rather than at its next scheduled check.
+        VpnConnectionService.checkSoon();
         if (pending != null && (!pending.profile.equals(profile) || pending.mode != settings.getMode()
                 || !pending.currentAutomaticIntent())) {
             Pending obsolete = pending;

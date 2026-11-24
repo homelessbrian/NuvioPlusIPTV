@@ -19,6 +19,7 @@ okhttp = "4.12.0"
 smbj = "0.15.0"
 # Held at 1.82: 1.83+ ships Java 25 classes the Compose mapping step can't read
 bouncycastle = "1.82"
+re2j = "1.8"
 moshi = "1.15.1"
 coroutines = "1.8.1"
 coil = "3.3.0"
@@ -44,6 +45,7 @@ sentryGradle = "6.14.0"
 benchmarkMacro = "1.4.1"
 androidxTestExtJunit = "1.2.1"
 androidxTestRunner = "1.6.2"
+espresso = "3.7.0"
 uiautomator = "2.3.0"
 profileinstaller = "1.4.1"
 baselineProfilePlugin = "1.4.1"
@@ -78,6 +80,7 @@ okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor",
 # Recording to a network folder (Windows file sharing / SMB)
 smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
 bouncycastle-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
+re2j = { group = "com.google.re2j", name = "re2j", version.ref = "re2j" }
 moshi = { group = "com.squareup.moshi", name = "moshi-kotlin", version.ref = "moshi" }
 moshi-codegen = { group = "com.squareup.moshi", name = "moshi-kotlin-codegen", version.ref = "moshi" }
 
@@ -143,6 +146,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmarkMacro" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
 androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
 androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 

@@ -7,6 +7,7 @@ import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.LiveTvStatus
 import com.nuvio.tv.livetv.model.ChannelGroup
+import com.nuvio.tv.livetv.model.ChannelSort
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveTvSettings
@@ -16,6 +17,10 @@ import com.nuvio.tv.livetv.player.LivePlaybackState
 import com.nuvio.tv.livetv.player.LiveTvPlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -573,7 +578,9 @@ class LiveTvViewModel @Inject constructor(
         val program: EpgProgram,
         val baseOffsetMs: Long,
         /** A recording from Recordings playing as its own show (the "program" is the recording). */
-        val recordingId: String? = null
+        val recordingId: String? = null,
+        /** That recording's poster as Recordings showed it (null: looked up here). */
+        val recordingPoster: String? = null
     )
 
     /**
@@ -581,7 +588,7 @@ class LiveTvViewModel @Inject constructor(
      * the catch-up seek bar; from where you left off unless [fromStart]. False if it can't
      * (gone, or nothing saved).
      */
-    fun playRecording(recordingId: String, fromStart: Boolean): Boolean {
+    fun playRecording(recordingId: String, fromStart: Boolean, poster: String? = null): Boolean {
         val rec = recorder.recordings.value.firstOrNull { it.id == recordingId } ?: return false
         val file = recorder.playlistFile(rec)
         if (!file.isFile) return false
@@ -602,7 +609,7 @@ class LiveTvViewModel @Inject constructor(
             startMs = base, stopMs = base + lengthMs, title = rec.title,
             description = rec.description, episode = rec.episode
         )
-        _catchup.value = CatchupSession(channel, program, 0L, recordingId = rec.id)
+        _catchup.value = CatchupSession(channel, program, 0L, recordingId = rec.id, recordingPoster = poster)
         _recordingEnded.value = null
         recordingSavedAt = 0L
         playback.playSavedRecording(channel, file, rec.title, rec.id, resume)
@@ -1042,7 +1049,7 @@ class LiveTvViewModel @Inject constructor(
     }
 
     /** Guide scrolled ahead or back: load those hours from the guide database if needed. */
-    fun ensureGuideRange(fromMs: Long, toMs: Long) = repository.ensureRange(fromMs, toMs)
+    fun ensureGuideRange(fromMs: Long, toMs: Long, channelKeys: List<String>) = repository.ensureRange(fromMs, toMs, channelKeys)
     /** The group on screen: its listings for every day the guide keeps (see the repository). */
     fun ensureGroupFullRange(channelKeys: List<String>) = repository.ensureFullRange(channelKeys)
     /** Changes when the guide's days ahead need asking for again (see the repository). */
@@ -1164,6 +1171,24 @@ class LiveTvViewModel @Inject constructor(
         ) ?: channel?.let { channelPoster(it, urgent = urgent) } // 24/7 channel, episode not found: the show's poster
     }
 
+    /**
+     * The poster for a recording playing here, found the way Recordings finds it: from the
+     * recording's own title, description and episode (not as a channel with no guide), and
+     * none for sports (the channel's logo, as in Recordings).
+     */
+    suspend fun recordingPosterFor(session: CatchupSession): String? {
+        session.recordingPoster?.let { return it }
+        if (!settings.value.showPosters) return null
+        val program = session.program
+        if (com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(session.channel.name, program.title)) return null
+        return posterResolver.posterFor(
+            program.title,
+            com.nuvio.tv.livetv.data.LiveTvPosterResolver.typeHint(program, null),
+            com.nuvio.tv.livetv.data.LiveTvPosterResolver.Clues(description = program.description),
+            urgent = true
+        )
+    }
+
     // ------------------------------------------------------------ show details on demand
 
     private val detailCache = com.nuvio.tv.livetv.data.boundedCache<String, EpgProgram>(800)
@@ -1239,6 +1264,35 @@ class LiveTvViewModel @Inject constructor(
             posterResolver.posterFor(name, hint, com.nuvio.tv.livetv.data.LiveTvPosterResolver.Clues(), urgent)?.let { return it }
         }
         return null
+    }
+
+    /**
+     * Find & stream in Nuvio: the movie or series this show clearly is in your addons' catalogs
+     * ([onTitle]: its page opens, on the episode when the guide gives it), else Nuvio's search
+     * for it ([onSearch], as before). Games and other sports events always go to search.
+     */
+    fun findInNuvio(program: EpgProgram, channel: LiveChannel?, onTitle: (NuvioTitle) -> Unit, onSearch: (String) -> Unit) {
+        val searchTitle = com.nuvio.tv.livetv.data.LiveTvPosterResolver.searchTitleFor(program, channel)
+        if (LiveTvRepository.isPlaceholderTitle(program.title) ||
+            com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSports(channel, program)) { onSearch(searchTitle); return }
+        viewModelScope.launch {
+            val hint = com.nuvio.tv.livetv.data.LiveTvPosterResolver.typeHint(program, channel)
+            com.nuvio.tv.livetv.record.LiveTvNotice.show("Finding \"${titleMarks(program.title).title}\" in Nuvio…")
+            val looking = com.nuvio.tv.livetv.record.LiveTvNotice.current.value
+            val hit = try {
+                withTimeoutOrNull(6_000) {
+                    runCatching { posterResolver.titleFor(program.title, hint, urgent = true) }
+                        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrNull()
+                }
+            } finally {
+                looking?.let { com.nuvio.tv.livetv.record.LiveTvNotice.clear(it) }
+            }
+            if (hit == null || hit.meta.id.isBlank()) { onSearch(searchTitle); return@launch }
+            val type = hit.meta.rawType.ifBlank { hit.type }
+            val series = !type.equals("movie", ignoreCase = true)
+            val ep = if (series) guideSeasonEpisode(program.episode, program.title) else null
+            onTitle(NuvioTitle(hit.meta.id, type, hit.addonBaseUrl, ep?.first, ep?.second))
+        }
     }
 
     /** Remembers which channels to fill in first next time (the group on screen, favorites). */
@@ -1438,19 +1492,21 @@ class LiveTvViewModel @Inject constructor(
     val schedules = scheduler.schedules
     val seriesRules = scheduler.series
 
-    /** Record a show from the guide (or cancel it if it's already set). Returns a message. */
-    fun toggleScheduled(channel: LiveChannel, program: EpgProgram): String {
+    /** Record a show from the guide (or cancel it if it's already set). */
+    fun toggleScheduled(channel: LiveChannel, program: EpgProgram, onResult: (String) -> Unit = com.nuvio.tv.livetv.record.LiveTvNotice::show) {
         if (scheduler.isScheduled(channel.key, program)) {
             scheduler.cancel(channel.key, program.startMs)
-            return "Recording cancelled"
+            onResult("Recording cancelled")
+            return
         }
         // On now, on a channel without catch-up: record it now (sharing the connection if you're
         // watching it). With catch-up, the whole show is saved from catch-up after it ends.
         val now = System.currentTimeMillis()
         if (channel.catchup == null && now >= program.startMs && now < program.stopMs && recorder.activeFor(channel.key) == null) {
-            return toggleRecording(channel)
+            toggleRecording(channel, onResult)
+            return
         }
-        return scheduler.add(channel, program)
+        onResult(scheduler.add(channel, program))
     }
 
     /** Record every airing of this show on this channel (or stop that). Returns a message. */
@@ -1472,14 +1528,15 @@ class LiveTvViewModel @Inject constructor(
      * Record the show on now on [channel] (or stop the recording running on it). Recording
      * starts from now and runs to 5 minutes past the show's end (an hour with no guide). If
      * you're watching this channel, you carry on watching from the recording, so one connection
-     * to the provider does both. Returns a message to show.
+     * to the provider does both. Reports preparation and completion without blocking the UI.
      */
-    fun toggleRecording(channel: LiveChannel): String {
+    fun toggleRecording(channel: LiveChannel, onResult: (String) -> Unit = com.nuvio.tv.livetv.record.LiveTvNotice::show) {
         recorder.activeFor(channel.key)?.let { running ->
             recorder.stop(running.id)
-            return "Recording stopped. It's in Recordings."
+            onResult("Recording stopped. It's in Recordings.")
+            return
         }
-        return startRecording(channel, showEndStopMs(channel) ?: (System.currentTimeMillis() + 60 * 60_000L))
+        startRecording(channel, showEndStopMs(channel) ?: (System.currentTimeMillis() + 60 * 60_000L), onResult)
     }
 
     /** When "until the show ends" stops: the show on now's end plus Keep Recording After. Null with no listing. */
@@ -1493,10 +1550,13 @@ class LiveTvViewModel @Inject constructor(
     /**
      * Starts recording the channel from now, stopping at [stopAtMs]; null records until it's
      * stopped by hand (with a safety stop after [UNTIL_STOPPED_MAX_MS], so a forgotten one can't
-     * fill the drive). Returns a message to show.
+     * fill the drive). Storage preparation runs before the player lets go of its connection.
      */
-    fun startRecording(channel: LiveChannel, stopAtMs: Long?): String {
-        recorder.activeFor(channel.key)?.let { return "This channel is already recording" }
+    private val startingRecordings = HashSet<String>()
+
+    fun startRecording(channel: LiveChannel, stopAtMs: Long?, onResult: (String) -> Unit) {
+        recorder.activeFor(channel.key)?.let { onResult("This channel is already recording"); return }
+        if (!startingRecordings.add(channel.key)) { onResult("This recording is starting"); return }
         val now = System.currentTimeMillis()
         val show = currentProgram(channel.key, now)?.takeIf { !LiveTvRepository.isPlaceholderTitle(it.title) }
         val untilStopped = stopAtMs == null
@@ -1504,24 +1564,59 @@ class LiveTvViewModel @Inject constructor(
         val title = show?.title?.let { titleMarks(it).title } ?: channel.name
         // Roughly 2 GB an hour in HD: say so if it may not fit (an hour's worth when it has no end).
         val needed = ((if (untilStopped) 60 * 60_000L else stopAt - now) / 3_600_000.0) * 2.0 * 1024 * 1024 * 1024
-        val watching = playback.playingChannel?.key == channel.key && playback.state.value.catchupTitle == null
-        val url = playback.liveUrlFor(channel)
-        if (watching) playback.handOverForRecording()
-        val rec = recorder.start(
-            channel = channel,
-            url = url,
-            title = title,
-            episode = show?.episode,
-            description = show?.description,
-            programStartMs = show?.startMs ?: 0L,
-            programStopMs = show?.stopMs ?: 0L,
-            stopAtMs = stopAt,
-            startDelayMs = if (watching) 1_500L else 0L
-        )
-        if (watching) playback.playFromRecording(recorder.playlistFile(rec))
-        val until = if (untilStopped) "you stop it" else formatClock(stopAt, settings.value.use24HourClock)
-        return if (recorder.freeBytes() < needed) "Recording \"$title\" until $until. Storage is low, so it may stop early."
-        else "Recording \"$title\" until $until"
+        onResult("Starting recording \"$title\"")
+        viewModelScope.launch {
+            val request = coroutineContext.job
+            var prepared: com.nuvio.tv.livetv.record.LiveTvRecorder.PreparedStorage? = null
+            var handedOver = false
+            try {
+                var freeBytes = Long.MAX_VALUE
+                withContext(Dispatchers.IO) {
+                    // Keep the preparation reference even if cancellation happens on dispatch back.
+                    prepared = recorder.prepareStorage(title)
+                    freeBytes = recorder.freeBytes()
+                }
+                val storage = checkNotNull(prepared)
+                // The user may have changed channels while a sleeping USB drive woke up.
+                val watching = storage.hasSpace && playback.playingChannel?.key == channel.key &&
+                    playback.state.value.catchupTitle == null && recorder.activeFor(channel.key) == null
+                val url = playback.liveUrlFor(channel)
+                // Once the connection is handed over, finish committing it even if this screen
+                // closes. Before that point, cancellation leaves live playback untouched.
+                withContext(NonCancellable) {
+                    if (watching) { playback.handOverForRecording(); handedOver = true }
+                    val rec = withContext(Dispatchers.IO) {
+                        recorder.start(
+                            channel = channel, url = url, title = title,
+                            episode = show?.episode, description = show?.description,
+                            programStartMs = show?.startMs ?: 0L, programStopMs = show?.stopMs ?: 0L,
+                            stopAtMs = stopAt, startDelayMs = if (watching) 1_500L else 0L,
+                            preparedStorage = storage,
+                        )
+                    }
+                    if (request.isActive && handedOver && playback.playingChannel?.key == channel.key && playback.state.value.catchupTitle == null) {
+                        if (rec.isRecording) playback.playFromRecording(recorder.playlistFile(rec))
+                        else playback.resumeAfterRecordingFailure()
+                    }
+                    val until = if (untilStopped) "you stop it" else formatClock(stopAt, settings.value.use24HourClock)
+                    if (request.isActive) onResult(when {
+                        !rec.isRecording -> rec.problem ?: "The recording could not start"
+                        freeBytes < needed -> "Recording \"$title\" until $until. Storage is low, so it may stop early."
+                        else -> "Recording \"$title\" until $until"
+                    })
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (request.isActive) {
+                    if (handedOver && recorder.activeFor(channel.key) == null && playback.playingChannel?.key == channel.key) playback.resumeAfterRecordingFailure()
+                    onResult("Couldn't start recording \"$title\": ${failure.message ?: "storage unavailable"}")
+                }
+            } finally {
+                startingRecordings.remove(channel.key)
+                withContext(NonCancellable + Dispatchers.IO) { prepared?.let(recorder::discardPreparedStorage) }
+            }
+        }
     }
 
     fun currentProgram(channelKey: String, at: Long = _now.value): EpgProgram? =
@@ -1552,8 +1647,12 @@ class LiveTvViewModel @Inject constructor(
 
     // ------------------------------------------------------------ reorder / copy
 
-    /** Groups you can reorder: not Search or Recently watched (that one follows what you watch). */
-    fun canReorder(groupId: String) = groupId != ChannelGroup.SEARCH && groupId != ChannelGroup.RECENT
+    /**
+     * Groups you can reorder: not Search or Recently watched (that one follows what you watch),
+     * and only with Playlist order (Name and Number sort every group, so a moved channel wouldn't stay put).
+     */
+    fun canReorder(groupId: String) = groupId != ChannelGroup.SEARCH && groupId != ChannelGroup.RECENT &&
+        settings.value.channelSort == ChannelSort.PLAYLIST
 
     fun saveOrder(groupId: String, keys: List<String>) = viewModelScope.launch {
         when {
@@ -1745,12 +1844,14 @@ internal fun buildUi(
     val sortedVisible = sorted(visible)
 
     /**
-     * Your order from "Reorder channels" wins. A channel you haven't placed (one that was
-     * hidden when you reordered, or a new one) goes right after the channel above it in the
-     * normal order, not at the bottom of the group.
+     * With Playlist order, your order from "Reorder channels" wins. A channel you haven't placed
+     * (one that was hidden when you reordered, or a new one) goes right after the channel above
+     * it in the normal order, not at the bottom of the group. Name (A–Z) and Channel number sort
+     * every group, reordered ones included (the saved order comes back with Playlist order).
      */
     fun ordered(groupId: String, list: List<LiveChannel>): List<LiveChannel> {
-        val order = user.channelOrder[groupId] ?: return if (list === visible) sortedVisible else sorted(list)
+        val order = user.channelOrder[groupId]?.takeIf { s.channelSort == ChannelSort.PLAYLIST }
+            ?: return if (list === visible) sortedVisible else sorted(list)
         val byKeyHere = list.associateBy { it.key }
         val placed = order.mapNotNull { byKeyHere[it] }.distinctBy { it.key }
         val placedKeys = placed.mapTo(HashSet()) { it.key }

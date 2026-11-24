@@ -10,9 +10,11 @@ import java.io.File
 
 /**
  * The network folder set up for recordings (Settings › Live TV › Recordings). Kept here with
- * the password stored encrypted, and synced (Live TV sync, Logins part, like playlist logins)
- * so the other TVs and the phone app get it without typing it again. Which storage each TV
- * records to stays its own choice.
+ * the password stored encrypted. The first one set up anywhere is synced (Live TV sync, Logins
+ * part, like playlist logins) so other TVs and the phone app start off with it; once a folder
+ * is saved on a device, that device keeps its own address (a phone reaching home through
+ * Tailscale uses a different one from the TVs). Which storage each TV records to stays its own
+ * choice.
  */
 object NetworkFolderStore {
     /** The "Save recordings to" choice for the network folder. */
@@ -27,6 +29,8 @@ object NetworkFolderStore {
     const val DEFAULT_BUFFER_MB = 1024
 
     private const val INFO_PREFS = "livetv_network_folder_info"
+    /** In [INFO_PREFS]: a folder was saved on this TV, so it keeps its own address. */
+    private const val OWN = "own_address"
 
     @Volatile private var appContext: Context? = null
     @Volatile private var loaded = false
@@ -90,6 +94,8 @@ object NetworkFolderStore {
             }
             prefs.networkFolderJson.collect { json ->
                 if (json == null) return@collect
+                // Saved on this TV: its own address stays, whatever another device saved.
+                if (ownHere(app)) return@collect
                 val synced = if (json.isBlank()) null else fromJson(json)
                 if (json.isNotBlank() && synced == null) return@collect
                 if (synced != config(app)) runCatching { store(app, synced) }
@@ -97,14 +103,37 @@ object NetworkFolderStore {
         }
     }
 
-    /** Saves (or with null, forgets) the folder, here and in the synced copy. False if it couldn't be saved. */
+    /**
+     * Saves (or with null, forgets) the folder on this TV, which keeps it from then on (another
+     * device's address doesn't replace it). The synced copy only starts new devices off: the
+     * first folder saved goes into it, and removing the folder it holds empties it. False if it
+     * couldn't be saved.
+     */
     fun save(context: Context, config: NetworkFolderConfig?): Boolean {
+        val before = config(context)
         if (!store(context, config)) return false
+        info(context).edit().putBoolean(OWN, true).apply()
         val prefs = syncPrefs
         val scope = syncScope
-        if (prefs != null && scope != null) scope.launch { runCatching { prefs.setNetworkFolderJson(config?.let { toJson(it) } ?: "") } }
+        if (prefs != null && scope != null) scope.launch {
+            runCatching {
+                val synced = prefs.networkFolderJson.first()
+                if (config != null) {
+                    if (synced.isNullOrBlank()) prefs.setNetworkFolderJson(toJson(config))
+                } else if (!synced.isNullOrBlank() && fromJson(synced)?.let { before != null && sameFolder(it, before) } == true) {
+                    prefs.setNetworkFolderJson("")
+                }
+            }
+        }
         return true
     }
+
+    /** A folder was saved on this TV (so it keeps its own address). */
+    private fun ownHere(context: Context): Boolean = info(context).getBoolean(OWN, false)
+
+    /** The same shared folder (address, share and folder; the login can differ). */
+    private fun sameFolder(a: NetworkFolderConfig, b: NetworkFolderConfig): Boolean =
+        a.host.trim().equals(b.host.trim(), true) && a.share.trim().equals(b.share.trim(), true) && a.path.trim().equals(b.path.trim(), true)
 
     /** Saves (or forgets) the folder on this TV only. */
     private fun store(context: Context, config: NetworkFolderConfig?): Boolean {
@@ -203,6 +232,11 @@ internal object NetworkMarker {
     fun bytes(dir: File): Long = read(dir).optLong("bytes")
     fun metaAt(dir: File): Long = read(dir).optLong("metaAt")
     fun folder(dir: File): String = read(dir).optString("folder")
+    /** Checksum of the info.json last sent to the network folder (-1: not known, sent before this was kept). */
+    fun infoCrc(dir: File): Long = read(dir).optLong("infoCrc", -1L)
+    /** Another TV's recording: when its details were last fetched, and when they last changed. */
+    fun mirrorCheckedAt(dir: File): Long = read(dir).optLong("checkedAt")
+    fun mirrorChangedAt(dir: File): Long = read(dir).optLong("changedAt")
     /** Another TV's recording (this TV only shows it). */
     fun isMirror(dir: File): Boolean = File(dir, NAME).isFile && read(dir).optBoolean("mirror")
 
@@ -213,7 +247,16 @@ internal object NetworkMarker {
     fun set(dir: File, bytes: Long) = write(dir, read(dir).put("bytes", bytes))
 
     @Synchronized
-    fun setMetaAt(dir: File, at: Long, folder: String) = write(dir, read(dir).put("metaAt", at).put("folder", folder))
+    fun setMetaAt(dir: File, at: Long, folder: String, infoCrc: Long) =
+        write(dir, read(dir).put("metaAt", at).put("folder", folder).put("infoCrc", infoCrc))
+
+    @Synchronized
+    fun mirrorChecked(dir: File, changed: Boolean) {
+        val now = System.currentTimeMillis()
+        val o = read(dir).put("checkedAt", now)
+        if (changed || o.optLong("changedAt") <= 0L) o.put("changedAt", now)
+        write(dir, o)
+    }
 
     @Synchronized
     fun setMirror(dir: File, folder: String) = write(dir, read(dir).put("mirror", true).put("folder", folder))

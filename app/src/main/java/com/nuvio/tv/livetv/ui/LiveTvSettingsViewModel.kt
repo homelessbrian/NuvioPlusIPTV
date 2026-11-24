@@ -30,8 +30,12 @@ class LiveTvSettingsViewModel @Inject constructor(
     val onDemand: com.nuvio.tv.livetv.ondemand.OnDemandRepository,
     private val posterResolver: com.nuvio.tv.livetv.data.LiveTvPosterResolver,
     private val matcher247: com.nuvio.tv.livetv.data.LiveTv247Matcher,
-    private val profileManager: com.nuvio.tv.core.profile.ProfileManager
+    private val profileManager: com.nuvio.tv.core.profile.ProfileManager,
+    private val sportsAddons: com.nuvio.tv.livetv.sports.SportsAddonSource
 ) : ViewModel() {
+
+    /** Add-ons that give live game streams, for Backups & Game Channels' order. */
+    suspend fun liveStreamAddonNames(): List<String> = sportsAddons.liveStreamAddonNames()
 
     /** Nuvio's profiles, for "Show on Profiles" on a playlist. */
     val profiles: StateFlow<List<com.nuvio.tv.domain.model.UserProfile>> = profileManager.profiles
