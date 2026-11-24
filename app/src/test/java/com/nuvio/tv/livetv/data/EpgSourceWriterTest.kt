@@ -5,6 +5,12 @@ import com.nuvio.tv.livetv.model.EpgAssignment
 import com.nuvio.tv.livetv.model.EpgProgram
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -192,6 +198,30 @@ class EpgSourceWriterTest {
         val expected = (listOf(replacement.first()) + old.subList(1, 4) + replacement.last())
             .map { it.copy(startMs = it.startMs + shift, stopMs = it.stopMs + shift) }
         assertEquals(expected, database.channelRange(channel, -1, Long.MAX_VALUE))
+    }
+
+    @Test fun `final source write event exposes the committed revision to a separate WAL reader`() = runBlocking {
+        seedLive()
+        val before = database.revision()
+        val reader = Executors.newSingleThreadExecutor()
+        val seen = ArrayList<Long>()
+        val observing = launch(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+            database.writeEvents.collect {
+                seen += reader.submit<Long> { database.revision() }.get(5, TimeUnit.SECONDS)
+            }
+        }
+        try {
+            database.startSource(source).apply {
+                add(xid, listOf(program(0).copy(title = "Committed replacement")), { false })
+                finish("committed-new", channels(), setOf(xid))
+            }
+            val committed = database.revision()
+            assertNotEquals(before, committed)
+            assertEquals(committed, seen.last())
+        } finally {
+            observing.cancelAndJoin()
+            reader.shutdownNow()
+        }
     }
 
     private fun seedLive(): List<EpgProgram> {

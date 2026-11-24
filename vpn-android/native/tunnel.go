@@ -197,7 +197,7 @@ func (t *httpTunnel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		},
-		Transport: transport, FlushInterval: -1,
+		Transport: transport, FlushInterval: -1, BufferPool: playbackResponseBuffers,
 		ErrorLog: log.New(io.Discard, "", 0),
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			http.Error(w, "Protected stream unavailable", http.StatusBadGateway)

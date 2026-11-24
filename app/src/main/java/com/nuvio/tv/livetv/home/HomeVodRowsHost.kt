@@ -71,13 +71,30 @@ fun HomeVodRowsHost(
     val watched by watchedFlow.collectAsStateWithLifecycle(0)
     LaunchedEffect(specs, version, watched) { vod.loadHomeScreenRows(specs) }
     // Home tells On Demand which card is highlighted (matched first) and when a row wants more.
-    androidx.compose.runtime.DisposableEffect(vod) {
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(vod, lifecycleOwner) {
         val hooks = VodHomeIds.HomeHooks(
             focused = { id -> vod.focusHome(id) },
             loadMore = { catalogId -> vod.loadMoreHomeScreenRow(catalogId) }
         )
         VodHomeIds.homeHooks = hooks
-        onDispose { if (VodHomeIds.homeHooks === hooks) VodHomeIds.homeHooks = null }
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (VodHomeIds.homeHooks === hooks) when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> vod.stopHomeScreenRows()
+                androidx.lifecycle.Lifecycle.Event.ON_START -> vod.resumeHomeScreenRows()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            if (VodHomeIds.homeHooks === hooks) {
+                VodHomeIds.homeHooks = null
+                // The rows stay on Home while a title opened from them is on screen, so Back
+                // lands on the same card (cleared, Home came back without them and lost its place).
+                vod.stopHomeScreenRows()
+            }
+        }
     }
     LaunchedEffect(vod) { vod.homeScreenRows.collect { rowsModel.setVodRows(it) } }
 
@@ -90,34 +107,36 @@ fun HomeVodRowsHost(
             open = open@{ metaId ->
                 if (VodHomeIds.uidOf(metaId) == null) return@open false
                 // Continue Watching On Demand: straight back to where you left off.
-                vod.continueTarget(metaId)?.let { (item, at) ->
+                vod.continueTarget(metaId)?.let { (_, at) ->
                     if (!opening) {
                         opening = true
                         scope.launch {
                             try {
-                                val played = com.nuvio.tv.livetv.ondemand.OnDemandPlay.resolve(context, item.uid, at.season, at.episode)
+                                val stamp = vod.homeReadStamp()
+                                val current = vod.resolveHomeItem(metaId) ?: return@launch
+                                val played = com.nuvio.tv.livetv.ondemand.OnDemandPlay.resolve(context, current.uid, at.season, at.episode)
+                                if (!vod.homeReadStampCurrent(stamp)) return@launch
                                 if (played != null) {
                                     onPlay(
-                                        played.url, played.title, if (item.kind == VodKind.SERIES) "series" else "movie",
+                                        played.url, played.title, if (current.kind == VodKind.SERIES) "series" else "movie",
                                         at.poster ?: played.poster, at.contentId, at.name, at.season, at.episode, at.episodeTitle
                                     )
                                 } else {
                                     // Gone from the provider, or its link couldn't be made: its details instead.
-                                    providerItem = item
+                                    providerItem = current
                                 }
                             } finally { opening = false }
                         }
                     }
                     return@open true
                 }
-                val item = vod.homeItem(metaId) ?: return@open true
                 if (!opening) {
                     opening = true
                     scope.launch {
                         try {
-                            when (val t = vod.targetFor(item)) {
+                            when (val t = vod.homeTarget(metaId) ?: return@launch) {
                                 is OnDemandTarget.Details -> onOpenDetail(t.itemId, t.itemType, t.addonBaseUrl, t.uid)
-                                is OnDemandTarget.Provider -> providerItem = item
+                                is OnDemandTarget.Provider -> providerItem = t.item
                             }
                         } finally { opening = false }
                     }
@@ -129,13 +148,13 @@ fun HomeVodRowsHost(
             },
             longPress = press@{ card, show ->
                 if (VodHomeIds.uidOf(card.id) == null) return@press false
-                val item = vod.homeItem(card.id) ?: return@press true
                 if (!opening) {
                     opening = true
                     scope.launch {
                         try {
-                            val target = vod.optionsTarget(card.id)
-                            if (target != null) show(target.first, target.second.orEmpty()) else providerItem = item
+                            val options = vod.homeOptions(card.id) ?: return@launch
+                            val target = options.details
+                            if (target != null) show(target.first, target.second.orEmpty()) else providerItem = options.item
                         } finally { opening = false }
                     }
                 }

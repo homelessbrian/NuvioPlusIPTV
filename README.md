@@ -29,7 +29,7 @@
 - **📺 A steadier guide:** shows that already aired stay in the guide after an update, and **Find & stream** opens the movie or series page straight away.
 - **⏺️ Recordings:** episode descriptions (from TMDB when the guide has none), the recording's poster on the play bar, and playback that picks up by itself after a freeze.
 - **🏆 Sports:** what you follow loads first when the app opens.
-- **⚡ Faster and lighter:** less memory for the guide, On Demand and Sports, and a faster start.
+- **⚡ Faster and lighter:** less memory for the guide, On Demand, Sports and big M3U playlists, lighter pausing and recording, and a faster start.
 - **Built on Nuvio 1.2.0-beta.4,** with built-in Usenet, Blu-ray disc titles, Simkl rewatches and much faster audio sync.
 
 ---

@@ -576,6 +576,8 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         return if (h == 0L) 1L else h
     }
 
+    private class ImportedItem(var fingerprint: Long, var seen: Boolean = false)
+
     /**
      * Brings one provider's catalog of [kind] up to date in a single transaction. Only titles that
      * are new or changed are written, and titles the provider no longer lists are removed: every
@@ -585,11 +587,12 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
      */
     fun replace(playlistId: String, kind: VodKind, categories: List<Pair<String, String>>, items: Sequence<VodItem>): Int {
         val db = writableDatabase
-        val existing = HashMap<String, Long>()
+        val existing = HashMap<String, ImportedItem>()
         db.rawQuery("SELECT id, h FROM items WHERE pl = ? AND kind = ?", arrayOf(playlistId, kind.key)).use { c ->
-            while (c.moveToNext()) existing[c.getString(0)] = if (c.isNull(1)) 0L else c.getLong(1)
+            while (c.moveToNext()) existing[c.getString(0)] = ImportedItem(if (c.isNull(1)) 0L else c.getLong(1))
         }
         val bulk = existing.isEmpty()
+        var unseen = existing.size
         var count = 0
         var written = 0
         var removed = 0
@@ -609,12 +612,15 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             val stmt = db.compileStatement(
                 "INSERT OR REPLACE INTO items (pl, kind, id, name, norm, icon, cat, ext, tmdb, year, rating, added, genre, h, stalker_ref, stalker_variant, provider_plot, provider_duration) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             )
-            val seen = HashSet<String>(maxOf(16, existing.size))
             items.forEach { it ->
                 count++
-                seen.add(it.id)
+                val previous = existing[it.id]
+                if (previous != null && !previous.seen) {
+                    previous.seen = true
+                    unseen--
+                }
                 val h = fingerprint(it)
-                if (existing[it.id] == h) return@forEach // unchanged
+                if (previous?.fingerprint == h) return@forEach // unchanged
                 stmt.clearBindings()
                 stmt.bindString(1, playlistId)
                 stmt.bindString(2, kind.key)
@@ -635,15 +641,19 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 it.providerPlot?.let { v -> stmt.bindString(17, v) } ?: stmt.bindNull(17)
                 it.providerDurationSeconds?.let { v -> stmt.bindLong(18, v) } ?: stmt.bindNull(18)
                 stmt.executeInsert()
-                existing[it.id] = h // a title listed twice is written once
+                if (previous == null) existing[it.id] = ImportedItem(h, seen = true)
+                else previous.fingerprint = h // identical duplicates are written once; changed ones keep the last value
                 written++
             }
             // Titles the provider no longer lists.
-            if (existing.size > seen.size) {
-                val del = db.compileStatement("DELETE FROM items WHERE pl = ? AND kind = ? AND id = ?")
-                existing.keys.filter { it !in seen }.forEach { id ->
-                    del.clearBindings(); del.bindString(1, playlistId); del.bindString(2, kind.key); del.bindString(3, id)
-                    removed += del.executeUpdateDelete()
+            if (unseen > 0) {
+                db.compileStatement("DELETE FROM items WHERE pl = ? AND kind = ? AND id = ?").use { del ->
+                    existing.forEach { (id, state) ->
+                        if (!state.seen) {
+                            del.clearBindings(); del.bindString(1, playlistId); del.bindString(2, kind.key); del.bindString(3, id)
+                            removed += del.executeUpdateDelete()
+                        }
+                    }
                 }
             }
             if (bulk) {

@@ -236,7 +236,17 @@ private fun OverlayModeContent(
     }
     // Land on what's on now when a schedule opens.
     // The full schedule (all days) for the channel being browsed, from the guide database.
-    LaunchedEffect(scheduleChannel?.key) { scheduleChannel?.let { viewModel.ensureChannelSchedule(it.key) } }
+    val guideGeneration by viewModel.guideGeneration.collectAsStateWithLifecycle()
+    LaunchedEffect(level, scheduleChannel?.key, settledChannel?.key, settings.overlayShowDetails, settings.epgOffsetMinutes, guideGeneration) {
+        when (level) {
+            OverlayLevel.CHANNELS -> if (settings.overlayShowDetails) {
+                settledChannel?.let { viewModel.ensureSchedulePreview(it.key) }
+            } else viewModel.releaseScheduleViewport()
+            OverlayLevel.SCHEDULE, OverlayLevel.DATES -> scheduleChannel?.let { viewModel.ensureChannelSchedule(it.key) }
+            else -> viewModel.releaseScheduleViewport()
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(viewModel) { onDispose { viewModel.releaseScheduleViewport() } }
     LaunchedEffect(scheduleChannel, schedule.size) {
         if (schedule.isEmpty()) return@LaunchedEffect
         val live = schedule.indexOfFirst { it is ScheduleRow.Show && now >= it.program.startMs && now < it.program.stopMs }

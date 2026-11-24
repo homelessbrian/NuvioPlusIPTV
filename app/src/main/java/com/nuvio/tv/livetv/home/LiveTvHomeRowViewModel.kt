@@ -100,6 +100,7 @@ class LiveTvHomeRowViewModel @Inject constructor(
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
                 _now.value = System.currentTimeMillis()
                 // Keep the hours around now loaded from the guide database as time passes.
+                repository.loadChannelsNow(rowChannels.replayCache.lastOrNull()?.first.orEmpty().take(200).map { it.key })
                 repository.ensureRange(_now.value - 3 * 3_600_000L, _now.value + 12 * 3_600_000L)
                 delay(30_000)
             }

@@ -248,10 +248,25 @@ class LiveTvViewModel @Inject constructor(
         viewModelScope.launch {
             while (true) {
                 // Nothing to keep up to date while a movie or episode plays in Nuvio's player.
-                com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
+                com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
                 _now.value = System.currentTimeMillis()
                 // Keep the hours around now loaded from the guide database as time passes.
-                repository.ensureRange(_now.value - 3 * 3_600_000L, _now.value + 12 * 3_600_000L)
+                if (com.nuvio.tv.livetv.data.BackgroundWork.liveHold.value || com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying.value) {
+                    // A long full-screen session still needs the playing channel's now/next,
+                    // without restarting all-channel browsing work alongside the video.
+                    playback.playingChannel?.key?.let { repository.loadChannelsNow(listOf(it)) }
+                    // Quick Channels, Up/Down browsing and the Multiview picker show what's on now
+                    // on other channels too, and only now/next is kept for them: once the app has
+                    // settled (not while the first channel starts), refill the pairs that ran out.
+                    // Only channels whose show has ended are read, a few at a time.
+                    if (android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime() > 60_000L) {
+                        repository.loadChannelsNow(uiState.value.channels.take(32).map { it.key })
+                        repository.ensureRange(_now.value - 3 * 3_600_000L, _now.value + 12 * 3_600_000L)
+                    }
+                } else {
+                    repository.loadChannelsNow(uiState.value.channels.take(32).map { it.key })
+                    repository.ensureRange(_now.value - 3 * 3_600_000L, _now.value + 12 * 3_600_000L)
+                }
                 delay(30_000)
             }
         }
@@ -665,6 +680,12 @@ class LiveTvViewModel @Inject constructor(
 
     private val _catchup = MutableStateFlow<CatchupSession?>(null)
     val catchup: StateFlow<CatchupSession?> = _catchup
+    init {
+        viewModelScope.launch {
+            _catchup.map { it?.takeIf { session -> session.recordingId == null }?.channel?.key }
+                .distinctUntilChanged().collect { if (it == null) repository.releaseCatchupViewport() }
+        }
+    }
 
     /** Plays [program] from the archive, starting [offsetMs] into it. */
     fun playCatchup(channel: LiveChannel, program: EpgProgram, offsetMs: Long = 0L): Boolean {
@@ -680,7 +701,7 @@ class LiveTvViewModel @Inject constructor(
             playback.play(channel, catchupTitle = program.title, catchupStartMs = program.startMs,
                 catchupLeadMs = offsetMs.coerceAtLeast(0L), stalkerStream = archive)
             _catchup.value = CatchupSession(channel, program, 0L)
-            repository.ensureChannelSchedule(channel.key)
+            repository.ensureCatchupRange(channel.key, program.startMs + offsetMs - settings.value.epgOffsetMinutes * 60_000L)
             return true
         }
         // The time zone picked for this playlist, else the server's. Not known yet (M3U from an
@@ -758,8 +779,7 @@ class LiveTvViewModel @Inject constructor(
             catchupExpectWallMs = if (shift == 0L && correctionMs == 0L) from else null
         )
         _catchup.value = CatchupSession(channel, program, offsetMs.coerceAtLeast(0) - lead)
-        // Load this channel's full schedule, so catch-up can follow on into later shows.
-        repository.ensureChannelSchedule(channel.key)
+        repository.ensureCatchupRange(channel.key, start - settings.value.epgOffsetMinutes * 60_000L)
         return true
     }
 
@@ -834,6 +854,7 @@ class LiveTvViewModel @Inject constructor(
         }
         val pos = catchupPositionMs() ?: return
         val absolute = s.program.startMs + pos
+        repository.ensureCatchupRange(s.channel.key, absolute - settings.value.epgOffsetMinutes * 60_000L)
         val list = programs.value[s.channel.key].orEmpty()
         val p = playback.player
         if (p?.playbackState == androidx.media3.common.Player.STATE_ENDED) {
@@ -1049,7 +1070,16 @@ class LiveTvViewModel @Inject constructor(
     }
 
     /** Guide scrolled ahead or back: load those hours from the guide database if needed. */
-    fun ensureGuideRange(fromMs: Long, toMs: Long, channelKeys: List<String>) = repository.ensureRange(fromMs, toMs, channelKeys)
+    fun ensureGuideRange(fromMs: Long, toMs: Long, channelKeys: List<String>) {
+        val shift = settings.value.epgOffsetMinutes * 60_000L
+        repository.ensureRange(fromMs - shift, toMs - shift, channelKeys)
+    }
+
+    suspend fun searchUpcomingGuide(query: String, channelKeys: List<String>, nowMs: Long, windowMs: Long): Map<String, EpgProgram> {
+        val shift = settings.value.epgOffsetMinutes * 60_000L
+        val found = repository.searchListings(query, channelKeys, nowMs - shift, nowMs + windowMs - shift)
+        return if (shift == 0L) found else found.mapValues { (_, p) -> p.copy(startMs = p.startMs + shift, stopMs = p.stopMs + shift) }
+    }
     /** The group on screen: its listings for every day the guide keeps (see the repository). */
     fun ensureGroupFullRange(channelKeys: List<String>) = repository.ensureFullRange(channelKeys)
     /** Changes when the guide's days ahead need asking for again (see the repository). */
@@ -1060,6 +1090,9 @@ class LiveTvViewModel @Inject constructor(
         repository.ensureChannelSchedule(channelKey)
         displayChannels.value.firstOrNull { it.key == channelKey }?.let { repository.loadXtreamArchive(listOf(it)) }
     }
+
+    fun ensureSchedulePreview(channelKey: String) = repository.ensureSchedulePreview(channelKey)
+    fun releaseScheduleViewport() = repository.releaseScheduleViewport()
 
     /** Past listings from the Xtream catch-up archive for these channels (browsing back). */
     fun loadCatchupArchive(channels: List<LiveChannel>) = repository.loadXtreamArchive(channels)

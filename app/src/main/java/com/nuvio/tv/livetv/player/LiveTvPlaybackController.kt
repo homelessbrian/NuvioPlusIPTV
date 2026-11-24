@@ -969,7 +969,7 @@ class LiveTvPlaybackController @Inject constructor(
         wallCheckedFor = null
         if (previousChannelKey != channel.key) {
             // A new channel starts on the hardware decoder again.
-            softwareVideoChannel = null
+            decoderFallback.reset()
             neverStartedCount = 0
             sawLive = false
             audioHandled = false
@@ -1463,7 +1463,11 @@ class LiveTvPlaybackController @Inject constructor(
         val start = archiveStartWallMs
         val pos = p.currentPosition
         val clip = playingClip()
+        val stoppedVideoMime = p.videoFormat?.sampleMimeType
         resumeAfterBackground = {
+            if (decoderFallback.retryAfterBackgroundStop(ch.key, stoppedVideoMime)) {
+                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Resuming after background stop: retrying the recovered video decoder")
+            }
             if (title != null) {
                 // Catch-up: the same replay, back where you were.
                 play(ch, url, title, catchupStartMs = start)
@@ -1837,13 +1841,12 @@ class LiveTvPlaybackController @Inject constructor(
      * 1 GB box that reports a 512 MB "large" heap it can't back, that is half the reported heap,
      * so the download-ahead is about 75 MB there instead of about 150 MB.
      */
-    private fun playerBufferBytes(): Int {
-        val heapMb = MemoryBudget.heapMb.takeIf { it > 0 } ?: 512L
-        return ((heapMb shl 20) * 3 / 10).coerceIn(32L shl 20, 160L shl 20).toInt()
-    }
+    private fun playerBufferPolicy() = LiveTvBufferPolicy.forDevice(
+        MemoryBudget.heapMb,
+        com.nuvio.tv.ui.screens.player.NuvioExoPlayerPerformanceHelper.getDevicePhysicalRamBytes(context)
+    )
 
-    /** The channel playing on a software video decoder after its hardware decoder failed. */
-    @Volatile private var softwareVideoChannel: String? = null
+    private val decoderFallback = LiveTvDecoderFallback()
 
     private fun buildPlayer(): ExoPlayer {
         val passthrough = audioPassthrough
@@ -1870,7 +1873,7 @@ class LiveTvPlaybackController @Inject constructor(
             // decoder failed (see onPlayerError), hardware as normal everywhere else.
             .setMediaCodecSelector { mime, secure, tunneling ->
                 val all = androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling)
-                if (softwareVideoChannel == null || softwareVideoChannel != currentChannel?.key ||
+                if (!decoderFallback.usesSoftware(currentChannel?.key, mime) ||
                     !androidx.media3.common.MimeTypes.isVideo(mime)
                 ) all else all.filter { it.softwareOnly }.ifEmpty { all }
             }
@@ -1885,16 +1888,18 @@ class LiveTvPlaybackController @Inject constructor(
             "xlarge" -> listOf(60_000, 150_000, 5_000, 10_000)
             else -> listOf(25_000, 60_000, 2_000, 4_000)
         }
-        val targetBufferBytes = playerBufferBytes()
+        val bufferPolicy = playerBufferPolicy()
+        val targetBufferBytes = bufferPolicy.targetBytes
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minMs, maxMs, startMs, rebufferMs)
-            .setPrioritizeTimeOverSizeThresholds(!MemoryBudget.isLowRamTier)
+            .setPrioritizeTimeOverSizeThresholds(bufferPolicy.prioritizeTime)
             // The download-ahead lives in the app's memory. The player's own cap (about 130 MB
             // for video) is more than half of what a cheap stick gives an app, which made the
             // whole app stutter as memory ran short. Capped to about 30% of the memory the app can
-            // really use (see playerBufferBytes):
+            // really use (see playerBufferPolicy):
             // the same on boxes with plenty, smaller on low-memory ones. On small heaps the
-            // byte target also stops loading before the duration minimum: high-bitrate video
+            // byte target also stops loading before the duration minimum on 1-2 GiB devices:
+            // high-bitrate video
             // must not consume the UI/decoder's memory to satisfy a large buffer setting.
             .setTargetBufferBytes(targetBufferBytes)
             .build()
@@ -2258,8 +2263,15 @@ class LiveTvPlaybackController @Inject constructor(
             // The TV's hardware video decoder failed on this channel: play it once more on
             // Android's software decoder before showing an error (a decoder taken away for a
             // moment just reconnects as usual).
-            if (ch != null && p != null && error.errorCode in VIDEO_DECODER_ERRORS && softwareVideoChannel != ch.key) {
-                softwareVideoChannel = ch.key
+            val failedMime = (error as? androidx.media3.exoplayer.ExoPlaybackException)?.rendererFormat?.sampleMimeType
+                ?: p?.videoFormat?.sampleMimeType
+            val transientDecoderFailure = error.errorCode in TRANSIENT_VIDEO_DECODER_ERRORS &&
+                generateSequence(error.cause) { it.cause }.take(8).any {
+                    it is android.media.MediaCodec.CodecException && (it.isTransient || it.isRecoverable)
+                }
+            if (ch != null && p != null && error.errorCode in VIDEO_DECODER_ERRORS &&
+                decoderFallback.fallBack(ch.key, failedMime, transientDecoderFailure)
+            ) {
                 com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Channel ${ch.name}: video decoder failed (${error.errorCodeName}); trying the software decoder")
                 val url = currentUrl ?: ch.url
                 p.setMediaSource(buildMediaSource(url, ch.headers, isLive = _state.value.catchupTitle == null))
@@ -2628,6 +2640,10 @@ class LiveTvPlaybackController @Inject constructor(
             PlaybackException.ERROR_CODE_DECODING_FAILED,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+        )
+        private val TRANSIENT_VIDEO_DECODER_ERRORS = setOf(
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED,
         )
         /** No picture this long after the video moved to a new screen = stuck. */
         private const val FRAME_TIMEOUT_MS = 2_500L

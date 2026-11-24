@@ -183,7 +183,10 @@ class CalendarRepository @Inject constructor(
         }
         // New guide listings: look for your episodes in them again.
         scope.launch {
-            kotlinx.coroutines.flow.combine(liveRepo.programs, liveRepo.channels, liveRepo.guideGeneration) { _, c, g -> c.size to g }
+            // Real guide changes only: the shows kept in memory (now/next, the hours on screen)
+            // change all the time without anything new in the guide.
+            kotlinx.coroutines.flow.combine(liveRepo.guideContentChanges, liveRepo.channels, liveRepo.guideGeneration) { content, c, g -> Triple(content, c.size, g) }
+                .distinctUntilChanged()
                 .drop(1).debounce(15_000).collect { matchGuide() }
         }
     }
