@@ -976,6 +976,10 @@ class OnDemandRepository @Inject constructor(
         runCatching { db.cachedPoster(item.uid) }.getOrNull()
     }
 
+    suspend fun cachedPosters(items: List<VodItem>): Map<String, String> = withContext(Dispatchers.IO) {
+        runCatching { db.cachedPosters(items.map { it.uid }) }.getOrDefault(emptyMap())
+    }
+
     suspend fun cachePoster(item: VodItem, poster: String?, title: String? = null) = withContext(Dispatchers.IO) {
         runCatching { db.cachePoster(item.uid, poster, title) }
         Unit

@@ -533,6 +533,17 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    fun cachedPosters(uids: Collection<String>): Map<String, String> {
+        val out = HashMap<String, String>()
+        uids.distinct().chunked(400).forEach { part ->
+            readableDatabase.rawQuery(
+                "SELECT uid, poster FROM posters WHERE uid IN (${part.joinToString(",") { "?" }}) AND poster != ''",
+                part.toTypedArray()
+            ).use { c -> while (c.moveToNext()) out[c.getString(0)] = c.getString(1) }
+        }
+        return out
+    }
+
     /** The proper name from your addons' match ("A View to a Kill"), if one was found. */
     fun cachedTitle(uid: String): String? =
         readableDatabase.rawQuery("SELECT title FROM posters WHERE uid = ?", arrayOf(uid)).use { c ->
