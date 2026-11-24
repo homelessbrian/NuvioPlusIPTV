@@ -39,8 +39,14 @@ object M3uParser {
      * away instead of being fully read and then thrown away.
      */
     fun parse(reader: BufferedReader, skip: ((String) -> Boolean)? = null): M3uPlaylist {
-        val epgUrls = mutableListOf<String>()
         val entries = ArrayList<M3uEntry>(4096)
+        val epgUrls = read(reader, skip) { entries += it }
+        return M3uPlaylist(epgUrls, entries)
+    }
+
+    /** Delivers each entry immediately; callers that build channels need not retain a second list. */
+    fun read(reader: BufferedReader, skip: ((String) -> Boolean)? = null, onEntry: (M3uEntry) -> Unit): List<String> {
+        val epgUrls = mutableListOf<String>()
 
         var pendingInfo: String? = null
         var pendingGroup: String? = null
@@ -112,7 +118,7 @@ object M3uParser {
                                     runCatching { java.net.URLDecoder.decode(part.substringAfter('=', ""), "UTF-8") }.getOrDefault(part.substringAfter('=', ""))
                             }
                         }
-                        entries.add(buildEntry(
+                        onEntry(buildEntry(
                             info, pendingGroup, line,
                             if (pendingHeaders.isEmpty()) emptyMap() else pendingHeaders.toMap(),
                             headerCatchup,
@@ -126,7 +132,7 @@ object M3uParser {
                 }
             }
         }
-        return M3uPlaylist(epgUrls.distinct(), entries)
+        return epgUrls.distinct()
     }
 
     /**
