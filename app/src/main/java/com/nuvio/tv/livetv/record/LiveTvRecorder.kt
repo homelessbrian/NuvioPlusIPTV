@@ -588,7 +588,7 @@ class LiveTvRecorder @Inject constructor(
                 val segmenter = TsSegmenter(dir) { _ -> }
                 var first = true
                 var tries = 0
-                while (scope.isActive && rec.id !in stopRequested && System.currentTimeMillis() < currentStop(rec.id)) {
+                try { while (scope.isActive && rec.id !in stopRequested && System.currentTimeMillis() < currentStop(rec.id)) {
                     val refreshLink = !first && !finite && resolveStream != null
                     if (!first) {
                         if (finite) {
@@ -686,8 +686,12 @@ class LiveTvRecorder @Inject constructor(
                         Log.w(TAG, "Recording ${rec.id}: ${if (resolveStream != null) "Stalker connection failed" else e.message}")
                     }
                 }
-                segmenter.finish(ended = true)
-                rec = progress(rec, segmenter.totalSec, dirSize(dir))
+                } finally {
+                    // A manual stop cancels the coroutine while it reads. Close the buffered
+                    // last piece on that path too, before the recording is marked finished.
+                    segmenter.finish(ended = true)
+                    rec = progress(rec, segmenter.totalSec, dirSize(dir))
+                }
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // Stopped by hand: finish below.
