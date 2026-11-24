@@ -34,8 +34,7 @@ object VodPictures {
             .build()
     }
 
-    /** Pictures that couldn't be fetched this session (not asked for again until a restart). */
-    private val failed = java.util.Collections.synchronizedSet(HashSet<String>())
+    private val failed = VodPictureFailures()
 
     private fun dir(context: Context) = File(context.cacheDir, DIR).apply { mkdirs() }
 
@@ -112,6 +111,7 @@ object VodPictures {
                     cachedBytes = if (bytes > CACHE_BYTES) VodPictureFiles.trim(directory, CACHE_BYTES, MAX_AGE_MS, System.currentTimeMillis(), activeDownloads) else bytes
                 }
             }
+            failed.remove(url)
             "file://" + f.absolutePath
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
