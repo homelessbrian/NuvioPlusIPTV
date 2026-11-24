@@ -16,6 +16,10 @@ import com.nuvio.tv.livetv.player.LivePlaybackState
 import com.nuvio.tv.livetv.player.LiveTvPlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -1467,19 +1471,21 @@ class LiveTvViewModel @Inject constructor(
     val schedules = scheduler.schedules
     val seriesRules = scheduler.series
 
-    /** Record a show from the guide (or cancel it if it's already set). Returns a message. */
-    fun toggleScheduled(channel: LiveChannel, program: EpgProgram): String {
+    /** Record a show from the guide (or cancel it if it's already set). */
+    fun toggleScheduled(channel: LiveChannel, program: EpgProgram, onResult: (String) -> Unit = com.nuvio.tv.livetv.record.LiveTvNotice::show) {
         if (scheduler.isScheduled(channel.key, program)) {
             scheduler.cancel(channel.key, program.startMs)
-            return "Recording cancelled"
+            onResult("Recording cancelled")
+            return
         }
         // On now, on a channel without catch-up: record it now (sharing the connection if you're
         // watching it). With catch-up, the whole show is saved from catch-up after it ends.
         val now = System.currentTimeMillis()
         if (channel.catchup == null && now >= program.startMs && now < program.stopMs && recorder.activeFor(channel.key) == null) {
-            return toggleRecording(channel)
+            toggleRecording(channel, onResult)
+            return
         }
-        return scheduler.add(channel, program)
+        onResult(scheduler.add(channel, program))
     }
 
     /** Record every airing of this show on this channel (or stop that). Returns a message. */
@@ -1501,14 +1507,15 @@ class LiveTvViewModel @Inject constructor(
      * Record the show on now on [channel] (or stop the recording running on it). Recording
      * starts from now and runs to 5 minutes past the show's end (an hour with no guide). If
      * you're watching this channel, you carry on watching from the recording, so one connection
-     * to the provider does both. Returns a message to show.
+     * to the provider does both. Reports preparation and completion without blocking the UI.
      */
-    fun toggleRecording(channel: LiveChannel): String {
+    fun toggleRecording(channel: LiveChannel, onResult: (String) -> Unit = com.nuvio.tv.livetv.record.LiveTvNotice::show) {
         recorder.activeFor(channel.key)?.let { running ->
             recorder.stop(running.id)
-            return "Recording stopped. It's in Recordings."
+            onResult("Recording stopped. It's in Recordings.")
+            return
         }
-        return startRecording(channel, showEndStopMs(channel) ?: (System.currentTimeMillis() + 60 * 60_000L))
+        startRecording(channel, showEndStopMs(channel) ?: (System.currentTimeMillis() + 60 * 60_000L), onResult)
     }
 
     /** When "until the show ends" stops: the show on now's end plus Keep Recording After. Null with no listing. */
@@ -1522,10 +1529,13 @@ class LiveTvViewModel @Inject constructor(
     /**
      * Starts recording the channel from now, stopping at [stopAtMs]; null records until it's
      * stopped by hand (with a safety stop after [UNTIL_STOPPED_MAX_MS], so a forgotten one can't
-     * fill the drive). Returns a message to show.
+     * fill the drive). Storage preparation runs before the player lets go of its connection.
      */
-    fun startRecording(channel: LiveChannel, stopAtMs: Long?): String {
-        recorder.activeFor(channel.key)?.let { return "This channel is already recording" }
+    private val startingRecordings = HashSet<String>()
+
+    fun startRecording(channel: LiveChannel, stopAtMs: Long?, onResult: (String) -> Unit) {
+        recorder.activeFor(channel.key)?.let { onResult("This channel is already recording"); return }
+        if (!startingRecordings.add(channel.key)) { onResult("This recording is starting"); return }
         val now = System.currentTimeMillis()
         val show = currentProgram(channel.key, now)?.takeIf { !LiveTvRepository.isPlaceholderTitle(it.title) }
         val untilStopped = stopAtMs == null
@@ -1533,24 +1543,59 @@ class LiveTvViewModel @Inject constructor(
         val title = show?.title?.let { titleMarks(it).title } ?: channel.name
         // Roughly 2 GB an hour in HD: say so if it may not fit (an hour's worth when it has no end).
         val needed = ((if (untilStopped) 60 * 60_000L else stopAt - now) / 3_600_000.0) * 2.0 * 1024 * 1024 * 1024
-        val watching = playback.playingChannel?.key == channel.key && playback.state.value.catchupTitle == null
-        val url = playback.liveUrlFor(channel)
-        if (watching) playback.handOverForRecording()
-        val rec = recorder.start(
-            channel = channel,
-            url = url,
-            title = title,
-            episode = show?.episode,
-            description = show?.description,
-            programStartMs = show?.startMs ?: 0L,
-            programStopMs = show?.stopMs ?: 0L,
-            stopAtMs = stopAt,
-            startDelayMs = if (watching) 1_500L else 0L
-        )
-        if (watching) playback.playFromRecording(recorder.playlistFile(rec))
-        val until = if (untilStopped) "you stop it" else formatClock(stopAt, settings.value.use24HourClock)
-        return if (recorder.freeBytes() < needed) "Recording \"$title\" until $until. Storage is low, so it may stop early."
-        else "Recording \"$title\" until $until"
+        onResult("Starting recording \"$title\"")
+        viewModelScope.launch {
+            val request = coroutineContext.job
+            var prepared: com.nuvio.tv.livetv.record.LiveTvRecorder.PreparedStorage? = null
+            var handedOver = false
+            try {
+                var freeBytes = Long.MAX_VALUE
+                withContext(Dispatchers.IO) {
+                    // Keep the preparation reference even if cancellation happens on dispatch back.
+                    prepared = recorder.prepareStorage(title)
+                    freeBytes = recorder.freeBytes()
+                }
+                val storage = checkNotNull(prepared)
+                // The user may have changed channels while a sleeping USB drive woke up.
+                val watching = storage.hasSpace && playback.playingChannel?.key == channel.key &&
+                    playback.state.value.catchupTitle == null && recorder.activeFor(channel.key) == null
+                val url = playback.liveUrlFor(channel)
+                // Once the connection is handed over, finish committing it even if this screen
+                // closes. Before that point, cancellation leaves live playback untouched.
+                withContext(NonCancellable) {
+                    if (watching) { playback.handOverForRecording(); handedOver = true }
+                    val rec = withContext(Dispatchers.IO) {
+                        recorder.start(
+                            channel = channel, url = url, title = title,
+                            episode = show?.episode, description = show?.description,
+                            programStartMs = show?.startMs ?: 0L, programStopMs = show?.stopMs ?: 0L,
+                            stopAtMs = stopAt, startDelayMs = if (watching) 1_500L else 0L,
+                            preparedStorage = storage,
+                        )
+                    }
+                    if (request.isActive && handedOver && playback.playingChannel?.key == channel.key && playback.state.value.catchupTitle == null) {
+                        if (rec.isRecording) playback.playFromRecording(recorder.playlistFile(rec))
+                        else playback.resumeAfterRecordingFailure()
+                    }
+                    val until = if (untilStopped) "you stop it" else formatClock(stopAt, settings.value.use24HourClock)
+                    if (request.isActive) onResult(when {
+                        !rec.isRecording -> rec.problem ?: "The recording could not start"
+                        freeBytes < needed -> "Recording \"$title\" until $until. Storage is low, so it may stop early."
+                        else -> "Recording \"$title\" until $until"
+                    })
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (request.isActive) {
+                    if (handedOver && recorder.activeFor(channel.key) == null && playback.playingChannel?.key == channel.key) playback.resumeAfterRecordingFailure()
+                    onResult("Couldn't start recording \"$title\": ${failure.message ?: "storage unavailable"}")
+                }
+            } finally {
+                startingRecordings.remove(channel.key)
+                withContext(NonCancellable + Dispatchers.IO) { prepared?.let(recorder::discardPreparedStorage) }
+            }
+        }
     }
 
     fun currentProgram(channelKey: String, at: Long = _now.value): EpgProgram? =
