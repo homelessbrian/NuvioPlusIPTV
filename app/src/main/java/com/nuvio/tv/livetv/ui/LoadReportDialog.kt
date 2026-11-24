@@ -54,6 +54,9 @@ import com.nuvio.tv.R
  */
 @Composable
 fun LoadReportDialog(onDismiss: () -> Unit) {
+    val capturing = frameCaptureActive()
+    val reportHeight = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp - 230)
+        .coerceIn(160, 380).dp
     val reportTitle = stringResource(R.string.iptv_settings_support_report_title)
     val lines by LiveTvLoadReport.lines.collectAsStateWithLifecycle()
     val text = lines.joinToString("\n")
@@ -95,7 +98,7 @@ fun LoadReportDialog(onDismiss: () -> Unit) {
                 state = listState,
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(max = 380.dp)
+                    .heightIn(max = reportHeight)
                     .border(
                         if (listFocused) 2.dp else 1.dp,
                         if (listFocused) NuvioTheme.colors.FocusRing else Color.Transparent,
@@ -149,6 +152,17 @@ fun LoadReportDialog(onDismiss: () -> Unit) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        MenuItem(stringResource(R.string.action_close), onClick = onDismiss)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MenuItem(
+                stringResource(if (capturing) R.string.iptv_settings_support_capture_stop else R.string.iptv_settings_support_capture_start),
+                modifier = Modifier.weight(3f),
+                onClick = { if (capturing) FrameCapture.stop() else FrameCapture.start() }
+            )
+            MenuItem(stringResource(R.string.action_close), modifier = Modifier.weight(1f), onClick = onDismiss)
+        }
+        LiveText(
+            stringResource(R.string.iptv_settings_support_capture_hint),
+            color = NuvioTheme.colors.TextSecondary, size = 12.sp, maxLines = 2
+        )
     }
 }
