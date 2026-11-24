@@ -102,7 +102,11 @@ class CatalogOrderViewModelTest {
             collectionsDataStore = collectionsStore,
             layoutPreferenceDataStore = layoutPrefs,
             homeCatalogSettingsSyncService = syncService,
-            serverCatalog = serverCatalog
+            serverCatalog = serverCatalog,
+            homeLiveRows = mockk(relaxed = true) {
+                every { rows } returns MutableStateFlow(emptyList())
+                every { names } returns MutableStateFlow(emptyMap())
+            }
         )
         return Harness(vm, layoutPrefs, syncService, diskOrderFlow, followFlow)
     }

@@ -486,6 +486,12 @@ configurations.all {
     exclude(group = "androidx.media3", module = "media3-extractor")
 }
 
+// Host tests need Robolectric's OpenJDK Conscrypt provider. The full app's Android
+// provider has the same class names but requires an Android-only JNI library.
+configurations.matching { it.name.contains("UnitTest") }.configureEach {
+    exclude(group = "org.conscrypt", module = "conscrypt-android")
+}
+
 baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
@@ -720,6 +726,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
+    // Robolectric's newer BOM conflicts with the app's strict crypto pin. Keep test
+    // providers aligned with the runtime we ship, including bcutil/bcpkix.
+    testImplementation(enforcedPlatform("org.bouncycastle:bc-jdk18on-bom:${libs.versions.bouncycastle.get()}"))
     testImplementation(kotlin("test-junit"))
     testImplementation("org.json:json:20240303")
     testImplementation(kotlin("test"))
