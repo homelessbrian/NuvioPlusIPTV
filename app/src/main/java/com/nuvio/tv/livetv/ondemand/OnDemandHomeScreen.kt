@@ -90,6 +90,7 @@ fun OnDemandHomeScreen(
     val scope = rememberCoroutineScope()
     val state by viewModel.home.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadHome() }
+    androidx.compose.runtime.DisposableEffect(viewModel) { onDispose { viewModel.stopHome() } }
 
     var showManage by remember { mutableStateOf(false) }
     // The card last highlighted, for the Menu button's "Fix Match".
@@ -149,8 +150,8 @@ fun OnDemandHomeScreen(
     val base = homeSettings ?: HomeUiState()
     // Movies or Series: one at a time (mixed rows were confusing). Remembered while the app runs.
     var kind by remember { mutableStateOf(OnDemandHomeTab.last) }
-    val hasMovies = state.rows.any { it.type == com.nuvio.tv.domain.model.ContentType.MOVIE }
-    val hasSeries = state.rows.any { it.type == com.nuvio.tv.domain.model.ContentType.SERIES }
+    val hasMovies = VodKind.MOVIE in state.pendingKinds || state.rows.any { it.type == com.nuvio.tv.domain.model.ContentType.MOVIE }
+    val hasSeries = VodKind.SERIES in state.pendingKinds || state.rows.any { it.type == com.nuvio.tv.domain.model.ContentType.SERIES }
     // Only one kind available: show that one.
     val shownKind = when {
         kind == VodKind.SERIES && !hasSeries && hasMovies -> VodKind.MOVIE
@@ -317,7 +318,7 @@ fun OnDemandHomeScreen(
             }
     ) {
         when {
-            state.loading && rows.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
+            (state.loading || shownKind in state.pendingKinds) && rows.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
             rows.isEmpty() -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 LiveText("Nothing to show yet", size = 20.sp, weight = FontWeight.SemiBold, color = NuvioTheme.colors.TextPrimary)
                 Spacer(Modifier.height(6.dp))
