@@ -70,8 +70,9 @@ class SportsRepository @Inject constructor(
     // In the app's cache (see SportsDiskCache); made again if "Clear cache" emptied it meanwhile.
     private val sportsDir = SportsDiskCache.directory(context.filesDir, context.cacheDir)
     private val dir: File get() = sportsDir.apply { mkdirs() }
-    // Test builds also try the guide's sports-shows table (checked against the whole guide).
+    // Keep the optional guide index and parity checks on the existing test-channel gate.
     private val matcher = SportsMatcher(guideDb, sportsDir, sportsTable = com.nuvio.tv.BuildConfig.NUVIO_CHANNEL == "test",
+        validateSportsTable = com.nuvio.tv.BuildConfig.NUVIO_CHANNEL == "test",
         checkpoint = ::matchingCheckpoint)
 
     private fun matchingCheckpoint() {
@@ -2315,7 +2316,7 @@ class SportsRepository @Inject constructor(
                 withTimeoutOrNull(10_000) { _loading.first { !it } }
                 delay(500)
             }
-            matcher.prepareTable(events.value, guideLeagues, f.words, now, gentle = !pageOnly())
+            matcher.configureTable(events.value, guideLeagues, f.words, now, gentle = !pageOnly())
             // All three days from one read of the guide (none at all when it hasn't changed).
             val days = sportsCatching {
                 matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, f.words, keys, shift, now)

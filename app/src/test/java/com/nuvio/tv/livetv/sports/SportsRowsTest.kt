@@ -124,14 +124,15 @@ class SportsRowsTest {
     }
 
     @Test
-    fun `team and name timelines keep five results and league timelines keep eight`() {
-        val past = List(12) { event("done-$it", at = now - (12 - it) * hour, state = GameState.POST, word = "Name") }
+    fun `team and name timelines keep five results and league timelines keep sixteen`() {
+        val past = List(20) { event("done-$it", at = now - (20 - it) * hour, state = GameState.POST, word = "Name") }
         val future = List(4) { event("next-$it", at = now + (it + 1) * hour, word = "Name") }
         val f = SportsFollows(teams = listOf(followed()), leagues = setOf("football/nfl"), words = listOf("Name"))
         val rows = equivalent(past + future, f).rows.filter { it.kind != SportsRow.Kind.UPCOMING }
-        assertEquals(listOf(5, 8, 5), rows.map { it.startIndex })
-        assertEquals(listOf(9, 12, 9), rows.map { it.events.size })
-        assertEquals(listOf(4, 7, 4), equivalent(past, f).rows.map { it.startIndex })
+        assertEquals(listOf(5, 16, 5), rows.map { it.startIndex })
+        assertEquals(listOf(9, 20, 9), rows.map { it.events.size })
+        assertEquals(listOf("done-15", "done-4", "done-15"), rows.map { it.events.first().id })
+        assertEquals(listOf(4, 15, 4), equivalent(past, f).rows.map { it.startIndex })
     }
 
     @Test
@@ -148,7 +149,74 @@ class SportsRowsTest {
         val team = page.rows.single { it.kind == SportsRow.Kind.TEAM }
         assertFalse(team.events.any { it.id == "duplicate" && it.state == GameState.PRE })
         assertTrue(team.events.any { it.id == "off-now" })
-        assertFalse(page.rows.single { it.kind == SportsRow.Kind.LEAGUE }.events.any { it.id == "old" })
+        assertTrue(page.rows.single { it.kind == SportsRow.Kind.LEAGUE }.events.any { it.id == "old" })
+    }
+
+    @Test
+    fun `league history includes the seven day boundary but excludes earlier rounds when this week has results`() {
+        val events = listOf(
+            event("outside-week", at = now - 7 * day - 1, state = GameState.POST),
+            event("week-edge", at = now - 7 * day, state = GameState.POST),
+            event("recent", at = now - day, state = GameState.POST),
+            event("future"))
+        val row = equivalent(events, SportsFollows(leagues = setOf("football/nfl"))).rows.single { it.kind == SportsRow.Kind.LEAGUE }
+        assertEquals(listOf("week-edge", "recent", "future"), row.events.map { it.id })
+        assertEquals(2, row.startIndex)
+    }
+
+    @Test
+    fun `quiet league history keeps only the latest round within the forty five day bound`() {
+        val events = listOf(
+            event("too-old", at = now - 45 * day - 1, state = GameState.POST),
+            event("lookback-edge", at = now - 45 * day, state = GameState.POST),
+            event("newest", at = now - 42 * day, state = GameState.POST),
+            event("future"))
+        val follows = SportsFollows(leagues = setOf("football/nfl"))
+        val row = equivalent(events, follows).rows.single { it.kind == SportsRow.Kind.LEAGUE }
+        assertEquals(listOf("lookback-edge", "newest", "future"), row.events.map { it.id })
+        val round = listOf(
+            event("outside-round", at = now - 24 * day - 1, state = GameState.POST),
+            event("round-edge", at = now - 24 * day, state = GameState.POST),
+            event("newest", at = now - 20 * day, state = GameState.POST),
+            event("future"))
+        assertEquals(listOf("round-edge", "newest", "future"),
+            equivalent(round, follows).rows.single { it.kind == SportsRow.Kind.LEAGUE }.events.map { it.id })
+    }
+
+    @Test
+    fun `future postponed duplicate cannot displace an earlier upcoming event as a recent result`() {
+        val postponed = event("same", at = now + 5 * day, state = GameState.OFF)
+        val upcoming = event("same", at = now + 4 * day)
+        val row = equivalent(listOf(postponed, upcoming), SportsFollows(leagues = setOf("football/nfl")))
+            .rows.single { it.kind == SportsRow.Kind.LEAGUE }
+        assertSame(upcoming, row.events.single())
+        assertEquals(0, row.startIndex)
+    }
+
+    @Test
+    fun `event leagues retain a season through twelve thirty one day months`() {
+        val league = "racing/f1"
+        val events = listOf(
+            event("outside-season", league, now - 12 * 31 * day - 1, GameState.POST),
+            event("season-edge", league, now - 12 * 31 * day, GameState.POST),
+            event("older-race", league, now - 100 * day, GameState.POST),
+            event("recent-race", league, now - 10 * day, GameState.POST),
+            event("next-race", league))
+        val row = equivalent(events, SportsFollows(leagues = setOf(league))).rows.single { it.kind == SportsRow.Kind.LEAGUE }
+        assertEquals(listOf("season-edge", "older-race", "recent-race", "next-race"), row.events.map { it.id })
+        assertEquals(3, row.startIndex)
+    }
+
+    @Test
+    fun `event league results cap at eighty while future events remain after them`() {
+        val league = "mma/ufc"
+        val results = (85 downTo 1).map { event("card-$it", league, now - it * day, GameState.POST) }
+        val row = equivalent(results + event("next-card", league), SportsFollows(leagues = setOf(league)))
+            .rows.single { it.kind == SportsRow.Kind.LEAGUE }
+        assertEquals(81, row.events.size)
+        assertEquals(80, row.startIndex)
+        assertEquals("card-80", row.events.first().id)
+        assertEquals("next-card", row.events.last().id)
     }
 
     @Test
@@ -214,10 +282,10 @@ class SportsRowsTest {
     }
 
     @Test
-    fun `randomized follows games duplicates and sport filters match the original builder`() {
+    fun `randomized follows games duplicates and sport filters match the independent reference`() {
         val random = Random(86)
         val leagues = listOf("football/nfl", "basketball/nba", "soccer/eng.1", "soccer/uefa.champions",
-            "rugby/union", "rugby/league", "lacrosse/pll", "tsdb/one", "tsdb/two", "unknown")
+            "rugby/union", "rugby/league", "lacrosse/pll", "racing/f1", "mma/ufc", "tsdb/one", "tsdb/two", "unknown")
         val words = listOf<String?>(null, null, "Name", "name", "\u0130", "i", "")
         repeat(300) { revision ->
             val events = List(random.nextInt(0, 100)) { i ->
@@ -237,12 +305,20 @@ class SportsRowsTest {
     }
 }
 
-/** Compatibility oracle: the pre-optimization builder. Keep its selection/order rules fixed. */
+/**
+ * Independent repeated-scan oracle. Selection follows Brian's deliberate history changes in
+ * 523aef10e (seven days / 16 league results), db94fcdb1 (past-only / last round), and
+ * 643698874 (12-month event seasons / 80 results). Grouping remains independent of SportsRows.
+ */
 private object ReferenceSportsRows {
     private const val HOUR = 3_600_000L
     private const val DAY = 24 * HOUR
     /** Results kept at the start of a team's row. */
     private const val RESULTS = 5
+    private const val LEAGUE_RESULTS = 16
+    private const val LEAGUE_BACK_DAYS = 45
+    private const val SEASON_RESULTS = 80
+    private const val SEASON_MONTHS = 12
 
     /** The keys of My Sports' rows (not Live & Upcoming), in your order (see [SportsFollows.order]). */
     fun rowKeys(f: SportsFollows): List<String> {
@@ -301,15 +377,22 @@ private object ReferenceSportsRows {
         for (id in leagueIds) {
             val l = SportsCatalog.league(id) ?: continue
             val all = known.filter { it.leagueId == id }
-            // This week (with the last two days' results); a league between rounds: its next games.
-            // The last couple of days' results, then every game ahead we have (up to five weeks;
-            // capped so a busy league like MLB stays a row you can get through).
-            val recent = all.filter { it.startMs >= now - 2 * DAY && (it.state == GameState.POST || it.state == GameState.OFF) }
+            val done = all.filter { it.startMs < now && (it.state == GameState.POST || it.state == GameState.OFF) }
+            val eventLeague = l.kind == LeagueKind.EVENT
+            val recent = if (eventLeague) {
+                done.filter { it.startMs >= now - SEASON_MONTHS * 31L * DAY }
+            } else {
+                done.filter { it.startMs >= now - 7 * DAY }.ifEmpty {
+                    val newest = done.maxOfOrNull { it.startMs } ?: 0L
+                    done.filter { it.startMs >= now - LEAGUE_BACK_DAYS * DAY && it.startMs >= newest - 4 * DAY }
+                }
+            }
             val ahead = all.filter { it.state == GameState.LIVE || ((it.state == GameState.PRE || it.state == GameState.OFF) && it.startMs >= now - 3 * HOUR) }
                 .sortedBy { it.startMs }.take(60)
             val games = recent + ahead
             if (games.isEmpty()) continue
-            rows += timeline("l:$id", l.name, SportsRow.Kind.LEAGUE, games.distinctBy { it.id }, now, league = l, results = 8)
+            rows += timeline("l:$id", l.name, SportsRow.Kind.LEAGUE, games.distinctBy { it.id }, now, league = l,
+                results = if (eventLeague) SEASON_RESULTS else LEAGUE_RESULTS)
         }
 
         // ---- names you follow

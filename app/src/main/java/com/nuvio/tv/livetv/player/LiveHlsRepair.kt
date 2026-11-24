@@ -34,32 +34,47 @@ internal class LenientHlsPlaylistParserFactory : HlsPlaylistParserFactory {
 
     private fun wrap(parser: ParsingLoadable.Parser<HlsPlaylist>): ParsingLoadable.Parser<HlsPlaylist> =
         ParsingLoadable.Parser { uri: Uri, input: InputStream ->
-            val bytes = readLimited(input)
+            val bytes = HlsRepair.readPlaylist(input)
                 ?: throw ParserException.createForMalformedManifest("Not a playlist (too big: a stream sent on a playlist link?)", null)
             val text = HlsRepair.fix(bytes)
                 ?: throw ParserException.createForMalformedManifest("Not a playlist (no #EXTM3U)", null)
             parser.parse(uri, ByteArrayInputStream(text.toByteArray(Charsets.UTF_8)))
         }
 
-    /** The playlist, or null when it's far bigger than any playlist (a video stream, endlessly). */
-    private fun readLimited(input: InputStream): ByteArray? {
-        val out = java.io.ByteArrayOutputStream()
-        val buf = ByteArray(16 * 1024)
-        while (true) {
-            val n = input.read(buf)
-            if (n < 0) return out.toByteArray()
-            out.write(buf, 0, n)
-            if (out.size() > MAX_BYTES) return null
-        }
-    }
-
-    private companion object {
-        const val MAX_BYTES = 4 * 1024 * 1024
-    }
 }
 
 /** The repairs themselves (plain text in, plain text out: no player parts, so they can be checked anywhere). */
 internal object HlsRepair {
+    /** Reject a mislabeled binary/live stream at its header, before reading a whole response. */
+    fun readPlaylist(input: InputStream): ByteArray? {
+        val out = java.io.ByteArrayOutputStream()
+        fun next(): Int = input.read().also { if (it >= 0) out.write(it) }
+        var b = next()
+        if (b == 0xEF) {
+            if (next() != 0xBB || next() != 0xBF) return null
+            b = next()
+        }
+        while (b == 9 || b == 10 || b == 13 || b == 32) {
+            if (out.size() > 2048) return null
+            b = next()
+        }
+        if (b != '#'.code) return null
+        val tag = StringBuilder("#")
+        repeat(6) {
+            val c = next()
+            if (c < 0) return null
+            tag.append(c.toChar())
+        }
+        if (tag.toString() !in setOf("#EXTM3U", "#EXTINF", "#EXT-X-")) return null
+        val buf = ByteArray(16 * 1024)
+        while (out.size() <= MAX_BYTES) {
+            val n = input.read(buf, 0, minOf(buf.size, MAX_BYTES + 1 - out.size()))
+            if (n < 0) return out.toByteArray()
+            out.write(buf, 0, n)
+        }
+        return null
+    }
+
     /** The playlist put right, or null when it isn't an HLS playlist at all. */
     fun fix(bytes: ByteArray): String? {
         // A TS stream starts with 0x47 every 188 bytes: certainly not a playlist.
@@ -100,4 +115,5 @@ internal object HlsRepair {
 
     private val HAS_BANDWIDTH = Regex("""[:,]\s*BANDWIDTH=""")
     private const val DEFAULT_BANDWIDTH = 5_000_000
+    private const val MAX_BYTES = 4 * 1024 * 1024
 }

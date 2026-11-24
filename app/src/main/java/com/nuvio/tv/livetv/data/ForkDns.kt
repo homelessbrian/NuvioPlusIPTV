@@ -7,10 +7,7 @@ import com.nuvio.tv.livetv.model.LiveTvLoadReport
 import com.nuvio.vpn.android.VpnPlaybackProtection
 import okhttp3.Dns
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
 import java.net.InetAddress
-import java.net.UnknownHostException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -31,13 +28,13 @@ enum class DnsChoice { SYSTEM, CLOUDFLARE, GOOGLE }
  *   and its own lookup stays in charge.
  *
  * Answers are remembered for a few minutes, so only the first lookup of a server is slower.
+ * All HTTPS fallback attempts share an eight-second budget. The normal Android resolver
+ * retains its platform timing (including local names and lookups while the VPN is on).
  * Per device (not synced): which lookup works depends on the network the device is on.
  */
 object ForkDns {
     private const val FILE = "livetv_dns"
     private const val KEY = "choice"
-    private const val MIN_TTL_S = 60L
-    private const val MAX_TTL_S = 600L
     private const val MAX_CACHE = 256
     private const val MAX_PROVIDER_HOSTS = 500
     private const val VPN_CHECK_MS = 5_000L
@@ -73,13 +70,13 @@ object ForkDns {
     }
 
     /** Sports, Calendar, sync: the chosen service, no automatic retry. */
-    val app: Dns = Lookup { false }
+    val app: Dns = lookup { false }
 
     /** Clients that only talk to IPTV providers (playlists, guides, On Demand, portals). */
-    val provider: Dns = Lookup { host -> addProviderHost(host); true }
+    val provider: Dns = lookup { host -> addProviderHost(host); true }
 
     /** The player: the chosen service; the automatic retry only for IPTV provider servers. */
-    val playback: Dns = Lookup { host -> host in providerHosts }
+    val playback: Dns = lookup { host -> host in providerHosts }
 
     /** The servers a playlist's channels play from, so playback gets the retry for them too. */
     fun addProviderHosts(channels: List<LiveChannel>) {
@@ -104,41 +101,15 @@ object ForkDns {
         return host.lowercase().takeIf { it.isNotEmpty() }
     }
 
-    private class Lookup(private val retryFor: (String) -> Boolean) : Dns {
-        override fun lookup(hostname: String): List<InetAddress> {
-            val host = hostname.lowercase()
-            val allowRetry = retryFor(host)
-            if (!isPublicName(host)) return Dns.SYSTEM.lookup(hostname)
-            val chosen = choice
-            if (chosen != DnsChoice.SYSTEM && !vpnIsOn()) {
-                cached(host)?.let { return it }
-                resolve(chosen, hostname)?.let { return it }
-                return Dns.SYSTEM.lookup(hostname)
-            }
-            try {
-                return Dns.SYSTEM.lookup(hostname)
-            } catch (notFound: UnknownHostException) {
-                if (!allowRetry || vpnIsOn()) throw notFound
-                cached(host)?.let { return it }
-                for (service in listOf(DnsChoice.CLOUDFLARE, DnsChoice.GOOGLE)) {
-                    val found = resolve(service, hostname) ?: continue
-                    if (reported.add(host)) LiveTvLoadReport.add("DNS: normal lookup couldn't find $host; ${label(service)} found it")
-                    return found
-                }
-                if (reported.add(host)) LiveTvLoadReport.add("DNS: $host not found (normal lookup, Cloudflare and Google)")
-                throw notFound
-            }
+    private fun lookup(retryFor: (String) -> Boolean): Dns = ForkDnsLookup(
+        retryFor, { choice }, ::vpnIsOn, ::cached, ::resolve,
+        report = { host, service ->
+            if (reported.add(host)) LiveTvLoadReport.add(
+                if (service == null) "DNS: $host not found (normal lookup, Cloudflare and Google)"
+                else "DNS: normal lookup couldn't find $host; ${label(service)} found it"
+            )
         }
-    }
-
-    /** Home-network names, plain IPs and "localhost" always use the normal lookup. */
-    private fun isPublicName(host: String): Boolean {
-        if (host.isEmpty() || '.' !in host || host == "localhost") return false
-        if (host.startsWith("[") || ':' in host) return false
-        if (host.all { it.isDigit() || it == '.' }) return false
-        val local = listOf(".local", ".lan", ".home", ".internal", ".localdomain", ".home.arpa")
-        return local.none { host.endsWith(it) }
-    }
+    )
 
     private fun vpnIsOn(): Boolean {
         val now = System.currentTimeMillis()
@@ -172,52 +143,13 @@ object ForkDns {
         DnsChoice.SYSTEM -> emptyList()
     }
 
-    /** The service's answer (IPv4 first, then IPv6), or null if it found nothing or couldn't be reached. */
-    private fun resolve(service: DnsChoice, hostname: String): List<InetAddress>? {
-        for (endpoint in endpoints(service)) {
-            val v4 = query(endpoint, hostname, type = 1) ?: continue
-            val all = if (v4.first.isNotEmpty()) v4 else (query(endpoint, hostname, type = 28) ?: v4)
-            if (all.first.isEmpty()) return null
-            val ttl = all.second.coerceIn(MIN_TTL_S, MAX_TTL_S)
-            if (cache.size >= MAX_CACHE) cache.clear()
-            cache[hostname.lowercase()] = Answer(all.first, System.currentTimeMillis() + ttl * 1000)
-            return all.first
-        }
-        return null
-    }
+    private val fallback by lazy { DnsFallbackResolver(client, ::endpoints) }
 
-    /** One question to one server: (addresses, shortest TTL), or null if the server couldn't be asked. */
-    private fun query(endpoint: String, hostname: String, type: Int): Pair<List<InetAddress>, Long>? = try {
-        val request = Request.Builder()
-            .url("$endpoint?name=${java.net.URLEncoder.encode(hostname, "UTF-8")}&type=$type")
-            .header("Accept", "application/dns-json")
-            .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
-            val json = JSONObject(response.body?.string().orEmpty())
-            val status = json.optInt("Status", -1)
-            // 0 = found, 3 = no such name: both are real answers. Anything else: ask the next server.
-            if (status != 0 && status != 3) return null
-            val answers = json.optJSONArray("Answer")
-            val list = ArrayList<InetAddress>()
-            var ttl = MAX_TTL_S
-            if (answers != null) for (i in 0 until answers.length()) {
-                val a = answers.optJSONObject(i) ?: continue
-                if (a.optInt("type") != type) continue
-                val data = a.optString("data")
-                val literal = when (type) {
-                    1 -> data.takeIf { d -> d.isNotEmpty() && d.all { it.isDigit() || it == '.' } }
-                    else -> data.takeIf { d -> d.isNotEmpty() && ':' in d && d.all { it.isLetterOrDigit() || it == ':' || it == '.' } }
-                } ?: continue
-                // A literal address: no lookup happens here.
-                val parsed = runCatching { InetAddress.getByName(literal) }.getOrNull() ?: continue
-                list += InetAddress.getByAddress(hostname, parsed.address)
-                ttl = minOf(ttl, a.optLong("TTL", MAX_TTL_S))
-            }
-            list to ttl
-        }
-    } catch (_: Exception) {
-        null
+    private fun resolve(services: List<DnsChoice>, hostname: String): DnsFallbackAnswer? {
+        val answer = fallback.resolve(services, hostname) ?: return null
+        if (cache.size >= MAX_CACHE) cache.clear()
+        cache[hostname.lowercase()] = Answer(answer.addresses, System.currentTimeMillis() + answer.ttlSeconds * 1000)
+        return answer
     }
 
     fun label(value: DnsChoice): String = when (value) {

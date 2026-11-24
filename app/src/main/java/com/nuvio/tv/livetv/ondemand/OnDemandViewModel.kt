@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.sync.withPermit
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -107,6 +106,7 @@ class OnDemandViewModel @Inject constructor(
             homeMatched.remove(item.uid)
             homeHits.remove(item.uid)
             homeDetailed.remove(item.uid)
+            markHomeChanged(item.uid)
             if (hit != null) useMatch(item, hit, detailed = true)
             else {
                 enrichOne(item, urgent = true)
@@ -215,6 +215,8 @@ class OnDemandViewModel @Inject constructor(
             homeDetailed.remove(item.uid)
             enrichOne(item, urgent = true)
             if (!homeMatched.containsKey(item.uid)) posterFor(item)
+            // The home row reuses unchanged cards: mark this one changed so the fix shows.
+            markHomeChanged(item.uid)
             updateHomeRows()
         }
     }
@@ -526,10 +528,35 @@ class OnDemandViewModel @Inject constructor(
     private val homeTried = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private var homeGroups: List<Pair<VodCategory, String>> = emptyList()
     private var homeEnrichJob: kotlinx.coroutines.Job? = null
+    private var homeLoadJob: Job? = null
+    private var homeGeneration = 0
+    private val homeInitialJobs = HashMap<String, Job>()
+    private val homeRefreshNeeded = HashSet<String>()
+    private val homeReadFailures = HashMap<String, Int>()
+    private val homeReadGate = kotlinx.coroutines.sync.Semaphore(2)
+    private var homeFocusRow: String? = null
+    private var homeActive = false
+    private val homeMetadataVersions = ConcurrentHashMap<String, Long>()
+    private val homeMetadataClock = java.util.concurrent.atomic.AtomicLong()
+    private data class CachedHomeRow(
+        val items: List<VodItem>, val metadataVersion: Long, val name: String,
+        val pattern: String, val hasMore: Boolean, val row: com.nuvio.tv.domain.model.CatalogRow
+    )
+    private val homeRowCache = ConcurrentHashMap<String, CachedHomeRow>()
+
+    private fun markHomeChanged(uid: String) { homeMetadataVersions[uid] = homeMetadataClock.incrementAndGet() }
 
     /** Builds the page: every group in your order, hidden and locked ones left out. */
     fun loadHome() {
-        viewModelScope.launch {
+        homeLoadJob?.cancel()
+        homeInitialJobs.values.toList().forEach { it.cancel() }
+        homeInitialJobs.clear()
+        homeEnrichJob?.cancel()
+        retryJob?.cancel()
+        val generation = ++homeGeneration
+        homeActive = true
+        homeLoadJob = viewModelScope.launch {
+          try {
             val user = prefs.userState.first()
             val cats = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
             val orderIndex = user.vodGroupOrder.withIndex().associate { (i, uid) -> uid to i }
@@ -554,29 +581,110 @@ class OnDemandViewModel @Inject constructor(
             homeGroups = visible.map { it to (user.vodGroupNames[it.uid]?.takeIf { n -> n.isNotBlank() } ?: it.name) }
             // Before anything is highlighted, the header names the first group's playlist.
             if (focusedPlaylist.value == null) focusedPlaylist.value = homeGroups.firstOrNull()?.first?.playlistId
-            homeItems.clear(); homeEnded.clear(); homeRead.clear()
+            // Keep usable rows while refreshing. Removed, hidden and locked groups are
+            // dropped immediately; Home's separately configured VOD rows have their own keys.
+            val allowed = visible.mapTo(HashSet()) { it.uid }
+            homeRowCache.keys.retainAll(allowed)
+            homeItems.keys.filter { !it.startsWith("homerow:") && it !in allowed }.forEach { homeItems.remove(it) }
+            homeRefreshNeeded.clear()
+            homeRefreshNeeded.addAll(allowed)
+            homeReadFailures.clear()
+            homeEnded.removeAll(allowed)
+            homeRead.keys.removeAll(allowed)
             homeSorts = user.vodSorts
-            // The first page of every group (each a quick read from the device's catalog).
-            for ((c, _) in homeGroups) {
-                val (sort, seed) = sortOf(c.uid)
-                val raw = repository.items(c.kind, c, emptySet(), false, HOME_PAGE, 0, sort, merge = settings.value.vodMergeDuplicates, seed = seed)
-                val page = dedupe(emptyList(), raw)
-                primePosters(page)
-                homeItems[c.uid] = page
-                homeRead[c.uid] = raw.size
-                if (raw.size < HOME_PAGE) homeEnded += c.uid
+            val rows = buildHomeRows()
+            val pending = pendingHomeKinds(rows)
+            _home.value = VodHomeState(rows = rows, groups = entries, loading = rows.isEmpty() && pending.isNotEmpty(), pendingKinds = pending)
+            if (generation != homeGeneration) return@launch
+            // Only a screenful per tab initially. Each completed row is published; more
+            // groups follow the focused row instead of loading hundreds before first paint.
+            VodKind.entries.forEach { requestHomeWindow(it, homeFocusRow) }
+          } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            if (generation == homeGeneration) {
+                _home.value = _home.value.copy(loading = false, pendingKinds = emptySet())
+                android.util.Log.w("OnDemand", "Could not load home groups", e)
             }
-            _home.value = VodHomeState(rows = buildHomeRows(), groups = entries, loading = false)
-            enrichHome()
+          }
         }
+    }
+
+    private fun requestHomeWindow(kind: VodKind, focused: String? = null) {
+        if (!homeActive) return
+        vodHomeWindow(homeGroups.map { it.first }, kind, focused, HOME_PREFETCH_ROWS).forEach { loadInitialHomeRow(it) }
+    }
+
+    private fun loadInitialHomeRow(category: VodCategory) {
+        val uid = category.uid
+        if (uid !in homeRefreshNeeded || (homeReadFailures[uid] ?: 0) >= 2 || homeInitialJobs[uid]?.isActive == true) return
+        val generation = homeGeneration
+        homeInitialJobs[uid] = viewModelScope.launch {
+            try {
+                homeReadGate.withPermit {
+                    val (sort, seed) = sortOf(uid)
+                    val raw = repository.items(category.kind, category, emptySet(), false, HOME_PAGE, 0, sort, merge = settings.value.vodMergeDuplicates, seed = seed)
+                    val page = dedupe(emptyList(), raw)
+                    primePosters(page)
+                    if (generation != homeGeneration) return@withPermit
+                    homeItems[uid] = page
+                    homeRead[uid] = raw.size
+                    homeRefreshNeeded.remove(uid)
+                    homeReadFailures.remove(uid)
+                    if (raw.size < HOME_PAGE) homeEnded += uid else homeEnded -= uid
+                    updateHomeRows()
+                    enrichHome()
+                    // Language filtering can empty a whole category. Continue until the
+                    // first screenful is usable rather than leaving later groups unreachable.
+                    if (page.isEmpty()) loadNextHomeRow(category.kind)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (generation == homeGeneration) {
+                    android.util.Log.w("OnDemand", "Could not read a home row", e)
+                    // One retry for transient storage/read failures; reopening the page
+                    // starts a fresh attempt. Keep any usable previous rows on screen.
+                    val failures = (homeReadFailures[uid] ?: 0) + 1
+                    homeReadFailures[uid] = failures
+                    if (failures == 1) viewModelScope.launch {
+                        kotlinx.coroutines.delay(1_000)
+                        if (homeActive && generation == homeGeneration) loadInitialHomeRow(category)
+                    }
+                    if (failures >= 2) loadNextHomeRow(category.kind)
+                    val pending = pendingHomeKinds(_home.value.rows)
+                    _home.value = _home.value.copy(loading = _home.value.rows.isEmpty() && pending.isNotEmpty(), pendingKinds = pending)
+                }
+            } finally { if (homeInitialJobs[uid] === coroutineContext[Job]) homeInitialJobs.remove(uid) }
+        }
+    }
+
+    private fun loadNextHomeRow(kind: VodKind) {
+        homeGroups.asSequence().map { it.first }.firstOrNull {
+            it.kind == kind && it.uid in homeRefreshNeeded && (homeReadFailures[it.uid] ?: 0) < 2 && homeInitialJobs[it.uid]?.isActive != true
+        }?.let { loadInitialHomeRow(it) }
+    }
+
+    /** Stop optional page work as soon as navigation takes the user away. */
+    fun stopHome() {
+        homeActive = false
+        homeLoadJob?.cancel()
+        homeInitialJobs.values.toList().forEach { it.cancel() }
+        homeInitialJobs.clear()
+        homeEnrichJob?.cancel()
+        homeFocusJob?.cancel()
+        homeFocusedUid = null
+        retryJob?.cancel()
     }
 
     /** More titles for one group, as you scroll along it. */
     fun loadMoreHome(uid: String) {
+        if (uid in homeRefreshNeeded) return
         if (uid in homeEnded) return
         val (c, _) = homeGroups.firstOrNull { it.first.uid == uid } ?: return
         // One page at a time per group (scrolling asks again and again near the end).
         if (!homeLoadingMore.add(uid)) return
+        val generation = homeGeneration
         viewModelScope.launch {
           try {
             val have = homeItems[uid].orEmpty()
@@ -589,15 +697,18 @@ class OnDemandViewModel @Inject constructor(
             // hundreds). Keep reading until there's something new, or the group has ended.
             var more: List<VodItem>
             var pages = 0
+            var ended = uid in homeEnded
             while (true) {
                 val raw = repository.items(c.kind, c, emptySet(), false, HOME_PAGE, offset, sort, merge = settings.value.vodMergeDuplicates, seed = seed)
                 offset += raw.size
-                if (raw.size < HOME_PAGE) homeEnded += uid
+                if (raw.size < HOME_PAGE) ended = true
                 more = dedupe(have, raw)
-                if (more.isNotEmpty() || uid in homeEnded || ++pages >= 40) break
+                if (more.isNotEmpty() || ended || ++pages >= 40) break
             }
-            homeRead[uid] = offset
             primePosters(more)
+            if (generation != homeGeneration || sortOf(uid) != (sort to seed)) return@launch
+            homeRead[uid] = offset
+            if (ended) homeEnded += uid
             homeItems[uid] = have + more
             updateHomeRows()
             enrichHome()
@@ -662,18 +773,24 @@ class OnDemandViewModel @Inject constructor(
         val saved = sort?.let { VodSort.encode(it) }
         homeSorts = if (saved == null) homeSorts - uid else homeSorts + (uid to saved)
         _home.value = _home.value.copy(groups = _home.value.groups.map { if (it.uid == uid) it.copy(sort = saved) else it })
-        viewModelScope.launch {
+        homeInitialJobs.remove(uid)?.cancel()
+        val generation = homeGeneration
+        homeInitialJobs[uid] = viewModelScope.launch {
+          try {
             prefs.setVodSort(uid, saved)
             val (c, _) = homeGroups.firstOrNull { it.first.uid == uid } ?: return@launch
             val (s, seed) = sortOf(uid)
             val raw = repository.items(c.kind, c, emptySet(), false, HOME_PAGE, 0, s, merge = settings.value.vodMergeDuplicates, seed = seed)
             val page = dedupe(emptyList(), raw)
             primePosters(page)
+            if (generation != homeGeneration) return@launch
+            homeRefreshNeeded.remove(uid)
             homeItems[uid] = page
             homeRead[uid] = raw.size
             if (raw.size < HOME_PAGE) homeEnded += uid else homeEnded -= uid
             updateHomeRows()
             enrichHome()
+          } finally { if (homeInitialJobs[uid] === coroutineContext[Job]) homeInitialJobs.remove(uid) }
         }
     }
     private var seeAllJob: kotlinx.coroutines.Job? = null
@@ -692,6 +809,7 @@ class OnDemandViewModel @Inject constructor(
      * for a row), in order. The page is redrawn a few times a second while they come in.
      */
     private suspend fun enrichAll(queue: List<VodItem>) {
+        if (refreshPictures(queue)) updateHomeRows()
         val dirty = java.util.concurrent.atomic.AtomicBoolean(false)
         kotlinx.coroutines.coroutineScope {
             val redraw = launch {
@@ -700,27 +818,22 @@ class OnDemandViewModel @Inject constructor(
                     if (dirty.getAndSet(false)) updateHomeRows()
                 }
             }
-            val gate = kotlinx.coroutines.sync.Semaphore(ENRICH_AT_ONCE)
-            queue.map { item ->
-                launch {
-                    gate.withPermit {
-                        if (!homeTried.add(item.uid)) return@withPermit
-                        // One title failing doesn't stop the others.
-                        try {
-                            if (enrichOne(item)) {
-                                homeTried.remove(item.uid)
-                                retryLater.set(true)
-                            }
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            // Stopped part-way (the rows were reloaded): not counted as tried, so the
-                            // next pass looks it up (it used to be skipped until the app restarted).
-                            homeTried.remove(item.uid)
-                            throw e
-                        } catch (e: Exception) { }
-                        dirty.set(true)
+            forEachVodWorker(queue, ENRICH_AT_ONCE) { item ->
+                if (!homeTried.add(item.uid)) return@forEachVodWorker
+                // One title failing doesn't stop the others.
+                try {
+                    if (enrichOne(item)) {
+                        homeTried.remove(item.uid)
+                        retryLater.set(true)
                     }
-                }
-            }.joinAll()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Stopped part-way (the rows were reloaded): not counted as tried, so the
+                    // next pass looks it up (it used to be skipped until the app restarted).
+                    homeTried.remove(item.uid)
+                    throw e
+                } catch (e: Exception) { }
+                dirty.set(true)
+            }
             redraw.cancel()
         }
         if (dirty.get()) updateHomeRows()
@@ -746,6 +859,21 @@ class OnDemandViewModel @Inject constructor(
     /** Provider pictures saved on the device, by title (see [VodPictures]). */
     private val icons = ConcurrentHashMap<String, String>()
 
+    /** A quota eviction must not leave a remembered file:// pointing at a missing file. */
+    private suspend fun refreshPictures(queue: List<VodItem>): Boolean {
+        val candidates = queue.filter { posters[it.uid] == null && !it.icon.isNullOrBlank() }
+        val saved = candidates.mapNotNull { it.icon }.distinct().mapNotNull { url ->
+            VodPictures.saved(appContext, url)?.let { url to it }
+        }.toMap()
+        var changed = false
+        for (item in candidates) {
+            val path = saved[item.icon]
+            val previous = if (path == null) icons.remove(item.uid) else icons.put(item.uid, path)
+            if (previous != path) { markHomeChanged(item.uid); changed = true }
+        }
+        return changed
+    }
+
     /**
      * The provider's own picture, saved on the device, for titles with nothing better: provider
      * picture servers are slow and often tell apps not to keep a copy, so a card showed it once
@@ -754,18 +882,16 @@ class OnDemandViewModel @Inject constructor(
     private suspend fun savePictures(queue: List<VodItem>) {
         val need = queue.filter { posters[it.uid] == null && homeMatched[it.uid] == null && icons[it.uid] == null && !it.icon.isNullOrBlank() }
         if (need.isEmpty()) return
-        var got = 0
-        kotlinx.coroutines.coroutineScope {
-            val gate = kotlinx.coroutines.sync.Semaphore(4)
-            need.map { item ->
-                launch {
-                    gate.withPermit {
-                        VodPictures.save(appContext, item.icon!!)?.let { icons[item.uid] = it; got++ }
-                    }
-                }
-            }.joinAll()
+        val got = java.util.concurrent.atomic.AtomicInteger()
+        forEachVodWorker(need, 4) { item ->
+            com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
+            VodPictures.save(appContext, item.icon!!)?.let {
+                icons[item.uid] = it
+                markHomeChanged(item.uid)
+                got.incrementAndGet()
+            }
         }
-        if (got > 0) updateHomeRows()
+        if (got.get() > 0) updateHomeRows()
     }
 
     fun stopSeeAll() { seeAllJob?.cancel() }
@@ -775,6 +901,7 @@ class OnDemandViewModel @Inject constructor(
         // Matches saved on earlier visits: the card comes back complete (poster, backdrop, logo,
         // details), with no lookup, like a row from your addons.
         val saved = repository.savedMatches(items.filter { !homeMatched.containsKey(it.uid) })
+        val cachedPosters = repository.cachedPosters(items.filter { !posters.containsKey(it.uid) })
         for (item in items) {
             VodHomeIds.rememberReal(item, null)
             (matchFixes.fixes.value[com.nuvio.tv.livetv.data.TitleMatchFixes.vodKey(item.uid)]?.let { it to true } ?: saved[item.uid])?.let { (hit, detailed) ->
@@ -787,20 +914,31 @@ class OnDemandViewModel @Inject constructor(
                 VodHomeIds.rememberReal(item, hit.meta.id)
             }
             if (posters[item.uid] == null) {
-                repository.cachedPoster(item)?.first?.takeIf { it.isNotBlank() }?.let { posters[item.uid] = it }
+                cachedPosters[item.uid]?.takeIf { it.isNotBlank() }?.let { posters[item.uid] = it }
             }
-            if (posters[item.uid] == null && icons[item.uid] == null) {
-                item.icon?.let { VodPictures.saved(appContext, it) }?.let { icons[item.uid] = it }
-            }
+            markHomeChanged(item.uid)
         }
+        refreshPictures(items)
     }
 
     /** The rows rebuilt off the main thread, then shown. */
     private suspend fun updateHomeRows() {
+        val request = homePublishVersion.incrementAndGet()
         val rows = buildHomeRows()
-        _home.value = _home.value.copy(rows = rows)
+        if (request != homePublishVersion.get()) return
+        val pending = pendingHomeKinds(rows)
+        _home.value = _home.value.copy(rows = rows, loading = rows.isEmpty() && pending.isNotEmpty(), pendingKinds = pending)
         if (homeRowSpecs.isNotEmpty()) publishHomeScreenRows()
     }
+    private val homePublishVersion = java.util.concurrent.atomic.AtomicLong()
+
+    private fun pendingHomeKinds(rows: List<com.nuvio.tv.domain.model.CatalogRow>): Set<VodKind> =
+        homeGroups.asSequence().map { it.first }
+            .filter { it.uid in homeRefreshNeeded && (homeReadFailures[it.uid] ?: 0) < 2 }
+            .map { it.kind }.filter { kind ->
+                val type = if (kind == VodKind.MOVIE) com.nuvio.tv.domain.model.ContentType.MOVIE else com.nuvio.tv.domain.model.ContentType.SERIES
+                rows.none { it.type == type }
+            }.toSet()
 
     // ============================================== On Demand rows on Nuvio's home screen
 
@@ -981,17 +1119,25 @@ class OnDemandViewModel @Inject constructor(
     private fun buildHomeRowsNow(): List<com.nuvio.tv.domain.model.CatalogRow> = homeGroups.mapNotNull { (c, name) ->
         val items = homeItems[c.uid].orEmpty()
         if (items.isEmpty()) return@mapNotNull null
-        VodHomeIds.row(
+        val stamp = items.maxOfOrNull { homeMetadataVersions[it.uid] ?: 0L } ?: 0L
+        val pattern = posterPattern
+        val hasMore = c.uid !in homeEnded
+        val cached = homeRowCache[c.uid]
+        if (cached != null && cached.items === items && cached.metadataVersion == stamp && cached.name == name &&
+            cached.pattern == pattern && cached.hasMore == hasMore) return@mapNotNull cached.row
+        val row = VodHomeIds.row(
             uid = c.uid,
             name = name,
             kind = c.kind,
             items = items.map { item ->
                 val matched = homeMatched[item.uid]
-                VodHomeIds.toMeta(item, matched, posters[item.uid] ?: icons[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name), posterPattern)
+                VodHomeIds.toMeta(item, matched, posters[item.uid] ?: icons[item.uid], names[item.uid] ?: OnDemandDatabase.displayTitle(item.name), pattern)
             },
-            hasMore = c.uid !in homeEnded,
+            hasMore = hasMore,
             page = (items.size + HOME_PAGE - 1) / HOME_PAGE
         )
+        homeRowCache[c.uid] = CachedHomeRow(items, stamp, name, pattern, hasMore, row)
+        row
     }
 
     /**
@@ -999,19 +1145,24 @@ class OnDemandViewModel @Inject constructor(
      * the background (what's on screen first), so the hero and cards look like Nuvio's own.
      */
     private fun enrichHome() {
+        if (!homeActive) return
         homeEnrichJob?.cancel()
+        retryJob?.cancel()
         homeEnrichJob = viewModelScope.launch {
             // What's on screen first (the first titles of the first rows), and titles still
             // showing the provider's picture before ones that already have a saved poster.
-            val queue = homeGroups.withIndex().flatMap { (row, g) ->
-                homeItems[g.first.uid].orEmpty().take(ENRICH_PER_ROW).withIndex().map { (i, item) -> Triple(row, i, item) }
+            val focused = homeGroups.firstOrNull { it.first.uid == homeFocusRow }?.first
+            val kind = focused?.kind ?: OnDemandHomeTab.last
+            val window = vodHomeWindow(homeGroups.map { it.first }, kind, homeFocusRow, HOME_PREFETCH_ROWS)
+            val queue = window.withIndex().flatMap { (row, g) ->
+                homeItems[g.uid].orEmpty().take(ENRICH_PER_ROW).withIndex().map { (i, item) -> Triple(row, i, item) }
             }.sortedBy { (row, i, item) ->
                 (if (posters[item.uid] != null) 2 else if (row < 4 && i < 8) 0 else 1)
             }.map { it.third }
             enrichAll(queue)
             // Full details (clear logos) for the first few titles of the first rows.
             var detailed = 0
-            for ((c, _) in homeGroups.take(3)) {
+            for (c in window.take(3)) {
                 for (item in homeItems[c.uid].orEmpty().take(6)) {
                     kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     if (!homeHits.containsKey(item.uid) || item.uid in homeDetailed) continue
@@ -1034,8 +1185,9 @@ class OnDemandViewModel @Inject constructor(
      * full details almost always do.
      */
     private suspend fun fetchDetails(uid: String) {
-        if (!homeDetailed.add(uid)) return
         val hit = homeHits[uid] ?: return
+        if (!homeDetailed.add(uid)) return
+        try {
         // Found on TMDB itself: its details came with it.
         if (hit.addonBaseUrl == VodMatchJson.TMDB_SOURCE) return
         val full = runCatching {
@@ -1057,8 +1209,13 @@ class OnDemandViewModel @Inject constructor(
             genres = meta.genres.takeIf { it.isNotEmpty() } ?: base.genres,
             trailerYtIds = meta.trailerYtIds.takeIf { it.isNotEmpty() } ?: base.trailerYtIds
         )
+        markHomeChanged(uid)
         // Saved complete, so the card comes back with its backdrop and logo straight away.
         homeItemByUid(uid)?.let { item -> repository.saveMatch(item, VodMatchJson.encode(hit.copy(meta = homeMatched[uid] ?: base)), true) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            homeDetailed.remove(uid)
+            throw e
+        }
     }
 
     private fun homeItemByUid(uid: String): VodItem? = homeItems.values.asSequence().flatten().firstOrNull { it.uid == uid }
@@ -1092,6 +1249,7 @@ class OnDemandViewModel @Inject constructor(
         // The title's own poster (your poster provider's is made from it when the card is drawn).
         (hit.meta.rawPosterUrl ?: hit.meta.poster)?.let { posters[item.uid] = it; repository.cachePoster(item, it, hit.meta.name) }
         hit.meta.name.takeIf { it.isNotBlank() }?.let { names[item.uid] = it }
+        markHomeChanged(item.uid)
         hit.meta.genres.takeIf { it.isNotEmpty() && hit.addonBaseUrl != VodMatchJson.TMDB_SOURCE }?.let { repository.fillGenres(item, it) }
         noteMatch(item, hit, detailed)
     }
@@ -1102,20 +1260,42 @@ class OnDemandViewModel @Inject constructor(
         repository.saveMatch(item, VodMatchJson.encode(hit), detailed)
     }
 
-    /** A card was highlighted: its details right away (the hero), if not found yet. */
+    private var homeFocusJob: Job? = null
+    private var homeFocusedUid: String? = null
+
+    /** Cached details stay immediate; network work follows settled remote focus. */
     fun focusHome(metaId: String) {
         val uid = VodHomeIds.uidOf(metaId) ?: return
         uid.split(':').getOrNull(1)?.let { focusedPlaylist.value = it }
-        if (uid in homeDetailed) return
         val item = homeItems.values.asSequence().flatten().firstOrNull { it.uid == uid } ?: return
-        homeTried += uid
-        viewModelScope.launch {
+        val row = "${item.kind.key}:${item.playlistId}:${item.categoryId}"
+        if (homeFocusRow != row && homeGroups.any { it.first.uid == row }) {
+            homeFocusRow = row
+            requestHomeWindow(item.kind, row)
+            enrichHome()
+        }
+        if (homeFocusedUid == uid && homeFocusJob?.isActive == true) return
+        homeFocusJob?.cancel()
+        homeFocusedUid = uid
+        homeFocusJob = viewModelScope.launch {
+          try {
+            if (uid !in homeDetailed) kotlinx.coroutines.delay(180)
+            if (refreshPictures(listOf(item))) updateHomeRows()
+            if (uid in homeDetailed) return@launch
+            homeTried += uid
             if (!homeMatched.containsKey(uid)) enrichOne(item, urgent = true)
-            if (!homeMatched.containsKey(uid)) return@launch
+            if (!homeMatched.containsKey(uid)) {
+                savePictures(listOf(item))
+                return@launch
+            }
             updateHomeRows()
             // Then the full details (clear logo…) for the hero.
             fetchDetails(uid)
             updateHomeRows()
+          } catch (e: kotlinx.coroutines.CancellationException) {
+            if (uid !in homeDetailed) homeTried.remove(uid)
+            throw e
+          }
         }
     }
 
@@ -1308,6 +1488,7 @@ class OnDemandViewModel @Inject constructor(
 
     private companion object {
         const val HOME_PAGE = 30
+        const val HOME_PREFETCH_ROWS = 4
         private val AFTER_SEPARATOR = Regex("""^.{1,40}?\s(?:-|–|—|:)\s+(.+)$""")
         /** A season at the end of a series name: "Loki S02", "Dark Season 1", "Casa Temporada 3". */
         private val SEASON_TAIL = Regex("(?i)[\\s\\-–—:._]*(?:(?:season|saison|temporada|staffel)\\s*\\d{1,2}|s\\d{1,2})(?:\\s*(?:e|ep|episode|x)\\s*\\d{1,4})?\\s*$")

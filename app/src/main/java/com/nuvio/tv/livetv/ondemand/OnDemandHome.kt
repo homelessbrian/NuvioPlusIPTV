@@ -14,7 +14,9 @@ data class VodHomeState(
     val rows: List<CatalogRow> = emptyList(),
     /** Every group, for Manage VOD Groups (including hidden ones). */
     val groups: List<VodGroupEntry> = emptyList(),
-    val loading: Boolean = true
+    val loading: Boolean = true,
+    /** A tab with no row yet is still being read; do not temporarily switch to the other tab. */
+    val pendingKinds: Set<VodKind> = emptySet()
 )
 
 /** One group as Manage VOD Groups shows it. */
