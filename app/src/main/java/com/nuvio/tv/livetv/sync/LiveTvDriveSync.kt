@@ -144,8 +144,8 @@ class LiveTvDriveSync @Inject constructor(
         scope.launch {
             if (_state.value.connected && _state.value.autoSync) pull(force = false)
         }
-        // When this TV's own setup last changed (not by a restore or sync): the restore prompt
-        // warns when the saved copy is older than that.
+        // Portable setup (including native VPN storage), not watch history/download status.
+        // The restore prompt warns when the saved copy predates those local setup changes.
         scope.launch {
             prefs.changes.drop(1).collect {
                 val now = System.currentTimeMillis()
