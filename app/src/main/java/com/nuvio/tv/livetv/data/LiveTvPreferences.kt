@@ -208,6 +208,7 @@ class LiveTvPreferences @Inject constructor(
         val homeRowShowNext = booleanPreferencesKey("home_row_show_next")
         val homeRowCompact = booleanPreferencesKey("home_row_compact")
         val bufferSize = stringPreferencesKey("buffer_size")
+        val adaptiveLiveBufferEnabled = booleanPreferencesKey("adaptive_live_buffer")
         val groupSort = stringPreferencesKey("group_sort")
         val timeshiftEnabled = booleanPreferencesKey("timeshift_enabled")
         val timeshiftMinutes = intPreferencesKey("timeshift_minutes")
@@ -702,6 +703,7 @@ class LiveTvPreferences @Inject constructor(
             homeRowShowNext = p[Keys.homeRowShowNext] ?: d.homeRowShowNext,
             homeRowCompact = p[Keys.homeRowCompact] ?: d.homeRowCompact,
             bufferSize = p[Keys.bufferSize] ?: d.bufferSize,
+            adaptiveLiveBufferEnabled = p[Keys.adaptiveLiveBufferEnabled] ?: d.adaptiveLiveBufferEnabled,
             groupSort = p[Keys.groupSort] ?: d.groupSort,
             timeshiftEnabled = p[Keys.timeshiftEnabled] ?: d.timeshiftEnabled,
             timeshiftMinutes = p[Keys.timeshiftMinutes] ?: d.timeshiftMinutes,
@@ -1053,6 +1055,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.homeRowShowNext] = s.homeRowShowNext
         p[Keys.homeRowCompact] = s.homeRowCompact
         p[Keys.bufferSize] = s.bufferSize
+        p[Keys.adaptiveLiveBufferEnabled] = s.adaptiveLiveBufferEnabled
         p[Keys.groupSort] = s.groupSort
         p[Keys.timeshiftEnabled] = s.timeshiftEnabled
         p[Keys.timeshiftMinutes] = s.timeshiftMinutes
@@ -2034,12 +2037,12 @@ class LiveTvPreferences @Inject constructor(
     private companion object {
         const val EPG_SEP = "\u0001"
         /**
-         * Per-TV keys that sync never copies. The last five depend on this TV's own screen and sound
-         * set-up (a receiver, a 24p screen, how much memory it has), so each TV keeps its own.
+         * Per-TV keys that sync never copies. Playback choices depend on this TV's screen, sound,
+         * connection and memory, so each TV keeps its own.
          */
         private val SYNC_EXCLUDED_BASE = setOf(
             "last_channel", "previous_channel", "last_group", "recent", "on_demand_imports", "channel_quality", "developer_tools", "recording_storage",
-            "audio_passthrough", "buffer_size", "match_frame_rate", "frame_rate_mode", "aspect_mode"
+            "audio_passthrough", "buffer_size", "adaptive_live_buffer", "match_frame_rate", "frame_rate_mode", "aspect_mode"
         )
         private val PROFILE_SUFFIX = Regex("""_p\d+$""")
         /** A playlist id (they are random UUIDs). */
