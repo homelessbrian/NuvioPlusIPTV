@@ -309,9 +309,8 @@ private fun LiveTvGuideScreenBody(
     }
     fun doRecord(ch: LiveChannel, p: EpgProgram) {
         val nowMs = System.currentTimeMillis()
-        val msg = if (nowMs >= p.startMs && nowMs < p.stopMs && recordingUntil.containsKey(ch.key)) viewModel.toggleRecording(ch)
+        if (nowMs >= p.startMs && nowMs < p.stopMs && recordingUntil.containsKey(ch.key)) viewModel.toggleRecording(ch)
         else viewModel.toggleScheduled(ch, p)
-        com.nuvio.tv.livetv.record.LiveTvNotice.show(msg)
     }
     fun doSeries(ch: LiveChannel, p: EpgProgram, newOnly: Boolean = false) {
         com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.toggleSeries(ch, p, newOnly))

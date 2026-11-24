@@ -1549,10 +1549,10 @@ fun LiveTvPlayerScreen(
                 onReset = { viewModel.updateSettings { it.copy(barHidden = "") } },
                 onRecord = if (archive) null else {
                     {
-                        toast = viewModel.toggleRecording(ch)
+                        viewModel.toggleRecording(ch) { toast = it }
                     }
                 },
-                onStartRecording = { stopAt -> toast = viewModel.startRecording(ch, stopAt) },
+                onStartRecording = { stopAt -> viewModel.startRecording(ch, stopAt) { toast = it } },
                 showEndStopMs = if (archive) null else viewModel.showEndStopMs(ch),
                 onFavorite = { viewModel.toggleFavorite(ch) },
                 onTimeAction = {
