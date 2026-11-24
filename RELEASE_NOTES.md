@@ -18,6 +18,8 @@
 
 ### Faster and lighter
 - The guide, On Demand and Sports use less memory, On Demand rows appear as they load, and the app opens faster with your saved channels (thanks to bArKEr)
+- The guide keeps only what's needed in memory while the full guide stays saved, so big guides no longer weigh the app down, and days ahead are still all there (thanks to bArKEr)
+- Big M3U playlists reload without holding a second copy, and pausing live TV, rewinding and recording are lighter on the box (thanks to bArKEr)
 - Copying recordings to a network folder is much lighter on the box
 
 ### Nuvio 1.2.0-beta.4
@@ -35,6 +37,9 @@
 - Seek thumbnails on recordings no longer slow down playback
 - A new poster from Fix Match shows on the Home card too
 - Trailers play on detail pages opened from More like this
+- A channel that hits a video error after the app comes back from the background tries again, and moves to the box's other video decoder if its own keeps failing (thanks to bArKEr)
+- On boxes with 2 GB of memory or less (like many Fire TVs), a big Live TV buffer no longer uses more memory than the box can spare (thanks to bArKEr)
+- Posters that failed to load try again later instead of staying blank, and posters already found still show while an add-on is slow (thanks to bArKEr)
 
 ## Special thanks
-- [@ghbarker](https://github.com/ghbarker) (bArKEr) for the Adaptive Live TV Buffer, the VPN fixes and a big round of speed and memory work
+- [@ghbarker](https://github.com/ghbarker) (bArKEr) for the Adaptive Live TV Buffer, the VPN and playback fixes, and a big round of speed and memory work
