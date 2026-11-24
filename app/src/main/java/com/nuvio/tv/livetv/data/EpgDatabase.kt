@@ -435,7 +435,9 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     /** One guide file being read in: [add] each guide channel's shows, then [finish] (or [abort]). */
     inner class SourceWriter internal constructor(private val src: String) {
         private val db = writableDatabase
-        private val stmt: android.database.sqlite.SQLiteStatement
+        private var fullStatement: android.database.sqlite.SQLiteStatement? = null
+        private var tailStatement: android.database.sqlite.SQLiteStatement? = null
+        private var tailSize = 0
         private var rows = 0
         private val gids = HashMap<String, Long>()
         private val meta = HashMap<String, LongArray>() // count, lastStop, placeholders
@@ -449,9 +451,26 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             markUnfinishedDead(db, src)
             purgeDead()
             db.beginTransaction()
-            stmt = db.compileStatement(
-                "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+        }
+
+        private fun statement(size: Int): android.database.sqlite.SQLiteStatement {
+            check(open) { "Source writer is closed" }
+            fun compile() = db.compileStatement(
+                "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) VALUES " +
+                    List(size) { "(?,?,?,?,?,?,?,?,?,?,?,?)" }.joinToString(",")
             )
+            if (size == SOURCE_INSERT_ROWS) return fullStatement ?: compile().also { fullStatement = it }
+            if (tailSize != size) {
+                tailStatement?.close()
+                tailStatement = null
+                tailSize = size
+            }
+            return tailStatement ?: compile().also { tailStatement = it }
+        }
+
+        private fun closeStatements() {
+            runCatching { fullStatement?.close() }; fullStatement = null
+            runCatching { tailStatement?.close() }; tailStatement = null
         }
 
         private fun gidFor(xid: String): Long = gids.getOrPut(xid) {
@@ -480,14 +499,24 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             val gid = gidFor(xid)
             val m = meta.getOrPut(xid) { LongArray(3) }
             if (!keepRows) countedOnly += xid
-            programs.forEach { p ->
+            var first = 0
+            while (first < programs.size) {
+                val count = minOf(SOURCE_INSERT_ROWS, programs.size - first)
                 if (keepRows) {
-                    bindListing(stmt, gid, p, 0L)
+                    val stmt = statement(count)
+                    stmt.clearBindings()
+                    for (i in 0 until count) bindListingValues(stmt, i * LISTING_COLUMNS, gid, programs[first + i], 0L)
                     stmt.executeInsert()
+                    // No references to the last batch's text need to survive until finish.
+                    stmt.clearBindings()
                 }
-                m[0]++
-                if (p.stopMs > m[1]) m[1] = p.stopMs
-                if (isPlaceholder(p.title)) m[2]++
+                for (i in first until first + count) {
+                    val p = programs[i]
+                    m[0]++
+                    if (p.stopMs > m[1]) m[1] = p.stopMs
+                    if (isPlaceholder(p.title)) m[2]++
+                }
+                first += count
             }
             if (!keepRows) return
             rows += programs.size
@@ -579,7 +608,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             }
             // Only once the save really went through (it can still fail here when storage is full).
             stored = ok
-            runCatching { stmt.close() }
+            closeStatements()
             // The listings this file had before, a batch at a time.
             runCatching { purgeDead() }
             return gids.keys.associateWith { xid ->
@@ -655,7 +684,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             val wasOpen = open
             open = false
             if (wasOpen) runCatching { db.endTransaction() }
-            runCatching { stmt.close() }
+            closeStatements()
             runCatching { markUnfinishedDead(db, src); purgeDead() }
         }
     }
@@ -1046,16 +1075,20 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
 
     private fun bindListing(stmt: android.database.sqlite.SQLiteStatement, gid: Long, p: EpgProgram, shiftMs: Long) {
         stmt.clearBindings()
-        stmt.bindLong(1, gid)
-        stmt.bindLong(2, p.startMs - shiftMs); stmt.bindLong(3, p.stopMs - shiftMs); stmt.bindString(4, p.title)
-        p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
-        p.category?.let { stmt.bindString(6, it) } ?: stmt.bindNull(6)
-        p.episode?.let { stmt.bindString(7, it) } ?: stmt.bindNull(7)
-        p.icon?.let { stmt.bindString(8, it) } ?: stmt.bindNull(8)
-        p.year?.let { stmt.bindLong(9, it.toLong()) } ?: stmt.bindNull(9)
-        if (p.people.isEmpty()) stmt.bindNull(10) else stmt.bindString(10, p.people.joinToString("\u001F"))
-        p.providerProgramId?.let { stmt.bindString(11, it) } ?: stmt.bindNull(11)
-        p.providerSourceIdentity?.let { stmt.bindString(12, it) } ?: stmt.bindNull(12)
+        bindListingValues(stmt, 0, gid, p, shiftMs)
+    }
+
+    private fun bindListingValues(stmt: android.database.sqlite.SQLiteStatement, offset: Int, gid: Long, p: EpgProgram, shiftMs: Long) {
+        stmt.bindLong(offset + 1, gid)
+        stmt.bindLong(offset + 2, p.startMs - shiftMs); stmt.bindLong(offset + 3, p.stopMs - shiftMs); stmt.bindString(offset + 4, p.title)
+        p.description?.let { stmt.bindString(offset + 5, it) } ?: stmt.bindNull(offset + 5)
+        p.category?.let { stmt.bindString(offset + 6, it) } ?: stmt.bindNull(offset + 6)
+        p.episode?.let { stmt.bindString(offset + 7, it) } ?: stmt.bindNull(offset + 7)
+        p.icon?.let { stmt.bindString(offset + 8, it) } ?: stmt.bindNull(offset + 8)
+        p.year?.let { stmt.bindLong(offset + 9, it.toLong()) } ?: stmt.bindNull(offset + 9)
+        if (p.people.isEmpty()) stmt.bindNull(offset + 10) else stmt.bindString(offset + 10, p.people.joinToString("\u001F"))
+        p.providerProgramId?.let { stmt.bindString(offset + 11, it) } ?: stmt.bindNull(offset + 11)
+        p.providerSourceIdentity?.let { stmt.bindString(offset + 12, it) } ?: stmt.bindNull(offset + 12)
     }
 
     // ------------------------------------------------------------ sports shows
@@ -1241,6 +1274,10 @@ private const val MAX_SHOW_MS = 6L * 60 * 60 * 1000
 
 /** Sports shows written to their table at a time (see [EpgDatabase.SportsRowsWriter]). */
 private const val BATCH = 2_000
+
+private const val LISTING_COLUMNS = 12
+/** 960 bound values stay below the 999-variable limit on older Android SQLite builds. */
+private const val SOURCE_INSERT_ROWS = 80
 
 /** Guide channels asked for in one query. */
 private const val GID_CHUNK = 400
