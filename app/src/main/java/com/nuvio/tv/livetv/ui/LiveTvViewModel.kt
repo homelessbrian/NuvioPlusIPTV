@@ -7,6 +7,7 @@ import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.LiveTvStatus
 import com.nuvio.tv.livetv.model.ChannelGroup
+import com.nuvio.tv.livetv.model.ChannelSort
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveTvSettings
@@ -1626,8 +1627,12 @@ class LiveTvViewModel @Inject constructor(
 
     // ------------------------------------------------------------ reorder / copy
 
-    /** Groups you can reorder: not Search or Recently watched (that one follows what you watch). */
-    fun canReorder(groupId: String) = groupId != ChannelGroup.SEARCH && groupId != ChannelGroup.RECENT
+    /**
+     * Groups you can reorder: not Search or Recently watched (that one follows what you watch),
+     * and only with Playlist order (Name and Number sort every group, so a moved channel wouldn't stay put).
+     */
+    fun canReorder(groupId: String) = groupId != ChannelGroup.SEARCH && groupId != ChannelGroup.RECENT &&
+        settings.value.channelSort == ChannelSort.PLAYLIST
 
     fun saveOrder(groupId: String, keys: List<String>) = viewModelScope.launch {
         when {
@@ -1819,12 +1824,14 @@ internal fun buildUi(
     val sortedVisible = sorted(visible)
 
     /**
-     * Your order from "Reorder channels" wins. A channel you haven't placed (one that was
-     * hidden when you reordered, or a new one) goes right after the channel above it in the
-     * normal order, not at the bottom of the group.
+     * With Playlist order, your order from "Reorder channels" wins. A channel you haven't placed
+     * (one that was hidden when you reordered, or a new one) goes right after the channel above
+     * it in the normal order, not at the bottom of the group. Name (A–Z) and Channel number sort
+     * every group, reordered ones included (the saved order comes back with Playlist order).
      */
     fun ordered(groupId: String, list: List<LiveChannel>): List<LiveChannel> {
-        val order = user.channelOrder[groupId] ?: return if (list === visible) sortedVisible else sorted(list)
+        val order = user.channelOrder[groupId]?.takeIf { s.channelSort == ChannelSort.PLAYLIST }
+            ?: return if (list === visible) sortedVisible else sorted(list)
         val byKeyHere = list.associateBy { it.key }
         val placed = order.mapNotNull { byKeyHere[it] }.distinctBy { it.key }
         val placedKeys = placed.mapTo(HashSet()) { it.key }

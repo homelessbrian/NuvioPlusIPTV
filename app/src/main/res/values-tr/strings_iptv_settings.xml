@@ -163,7 +163,7 @@
     <string name="iptv_settings_your_order">"Senin sıran"</string>
     <string name="iptv_settings_channels_in_a_group">"Gruptaki kanallar"</string>
     <string name="iptv_settings_channel_order">"Kanal sırası"</string>
-    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Favoriler dahil her gruptaki kanalların nasıl sıralandığı. Oynatma listesi sırası, favorilerde ve gruplarında kendi sıranı korur."</string>
+    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Favoriler dahil her gruptaki kanalların nasıl sıralandığı. Kendi sıranı (yeniden sıraladığın kanallar, favoriler ve grupların) yalnızca oynatma listesi sırası korur."</string>
     <string name="iptv_settings_channel_number">"Kanal numarası"</string>
     <string name="iptv_settings_name">"Ad"</string>
     <string name="iptv_settings_number_channels_1_2_3_in_each_group">"Her grupta kanalları 1, 2, 3… diye numarala"</string>
