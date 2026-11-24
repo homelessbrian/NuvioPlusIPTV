@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.nuvio.tv.domain.model.stableKey
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -103,8 +104,9 @@ fun OnDemandHomeScreen(
     // The Sort list over See all.
     var sortingUid by remember { mutableStateOf<String?>(null) }
     var opening by remember { mutableStateOf(false) }
-    var focusState by remember { mutableStateOf(HomeScreenFocusState()) }
-    var gridFocusState by remember { mutableStateOf(HomeScreenFocusState()) }
+    val focusEpoch by viewModel.homeFocusEpoch.collectAsStateWithLifecycle()
+    var focusState by remember(viewModel, focusEpoch) { mutableStateOf(viewModel.homeFocusState) }
+    var gridFocusState by remember(viewModel, focusEpoch) { mutableStateOf(viewModel.homeGridFocusState) }
 
     // Leaving this page (Back, the menu, opening a title): stop the trailer straight away, before
     // the switch animates. Tearing the trailer's player down mid-switch, while Home starts up its
@@ -160,6 +162,13 @@ fun OnDemandHomeScreen(
     }
     val wantedType = if (shownKind == VodKind.SERIES) com.nuvio.tv.domain.model.ContentType.SERIES else com.nuvio.tv.domain.model.ContentType.MOVIE
     val rows = remember(state.rows, wantedType) { state.rows.filter { it.type == wantedType } }
+    var focusedRowUid by remember { mutableStateOf<String?>(null) }
+    val rowFocused: (String?) -> Unit = { key ->
+        rows.firstOrNull { it.stableKey() == key }?.catalogId?.let { uid ->
+            focusedRowUid = uid
+            viewModel.focusHomeRow(uid)
+        }
+    }
     fun switchTo(k: VodKind) {
         if (k == kind) return
         kind = k
@@ -167,10 +176,13 @@ fun OnDemandHomeScreen(
         // A fresh start in the other list (the saved position belongs to the old one).
         focusState = HomeScreenFocusState()
         gridFocusState = HomeScreenFocusState()
+        viewModel.homeFocusState = focusState
+        viewModel.homeGridFocusState = gridFocusState
+        focusedRowUid = null
     }
     val homeRows = remember(rows) { rows.map { HomeRow.Catalog(it) } }
-    val gridItems = remember(rows) {
-        buildList {
+    val gridItems = remember(rows, base.homeLayout) {
+        if (base.homeLayout != HomeLayout.GRID) emptyList() else buildList {
             rows.forEach { r ->
                 add(GridItem.SectionDivider(r.catalogName, r.catalogId, r.addonBaseUrl, r.addonId, r.apiType))
                 r.items.forEach { add(GridItem.Content(it, r.addonBaseUrl, r.catalogId, r.catalogName, r.addonId)) }
@@ -234,21 +246,20 @@ fun OnDemandHomeScreen(
     // Opening a card: Nuvio's details page (Play there plays your provider's copy), or the
     // provider's own details for titles your addons don't know.
     val open: (String) -> Unit = { metaId ->
-        val item = viewModel.homeItem(metaId)
-        if (item != null && !opening) {
+        if (!opening) {
             opening = true
             scope.launch {
                 try {
-                    when (val t = viewModel.targetFor(item)) {
+                    when (val t = viewModel.homeTarget(metaId) ?: return@launch) {
                         is OnDemandTarget.Details -> onOpenDetail(t.itemId, t.itemType, t.addonBaseUrl, t.uid)
-                        is OnDemandTarget.Provider -> providerItem = item
+                        is OnDemandTarget.Provider -> providerItem = t.item
                     }
                 } finally { opening = false }
             }
         }
     }
     val onNavigateToDetail: (String, String, String) -> Unit = { id, _, _ -> open(id) }
-    val onItemFocus: (MetaPreview) -> Unit = { lastFocusedCard = it.id; viewModel.focusHome(it.id) }
+    val onItemFocus: (MetaPreview) -> Unit = { lastFocusedCard = it.id; viewModel.focusHome(it.id, seeAllUid ?: focusedRowUid) }
     // Grid layout: "On Demand - <playlist>" at the top, for the title you're on.
     val homeHeader by viewModel.homeHeader.collectAsStateWithLifecycle()
     val loadMore: (String, String, String) -> Unit = { catalogId, _, _ -> viewModel.loadMoreHome(catalogId) }
@@ -265,18 +276,18 @@ fun OnDemandHomeScreen(
     var optionsUid by remember { mutableStateOf<String?>(null) }
     var optionsItem by remember { mutableStateOf<VodItem?>(null) }
     val longPress: (MetaPreview) -> Unit = { card ->
-        val item = viewModel.homeItem(card.id)
-        if (item != null && !opening) {
+        if (!opening) {
             opening = true
             scope.launch {
                 try {
-                    val target = viewModel.optionsTarget(card.id)
+                    val options = viewModel.homeOptions(card.id) ?: return@launch
+                    val target = options.details
                     if (target != null) {
-                        optionsUid = item.uid
-                        optionsItem = item
+                        optionsUid = options.item.uid
+                        optionsItem = options.item
                         posterOptions.controller.show(target.first, target.second)
                     } else {
-                        providerItem = item
+                        providerItem = options.item
                     }
                 } finally { opening = false }
             }
@@ -347,7 +358,7 @@ fun OnDemandHomeScreen(
                     onLongPress = longPress
                 )
             }
-            else -> when (ui.homeLayout) {
+            else -> androidx.compose.runtime.key(focusEpoch) { when (ui.homeLayout) {
                 HomeLayout.CLASSIC -> ClassicHomeContent(
                     uiState = ui,
                     posterCardStyle = posterCardStyle,
@@ -368,13 +379,15 @@ fun OnDemandHomeScreen(
                     onItemFocus = onItemFocus,
                     catalogSeeAllLabel = "See all",
                     onSaveFocusState = { vi, vo, rk, ikm, m, ma, ri, ii ->
+                      if (focusEpoch == viewModel.homeFocusEpoch.value) {
                         focusState = focusState.copy(
                             verticalScrollIndex = vi, verticalScrollOffset = vo, focusedRowKey = rk,
                             focusedItemKeyByRow = ikm, catalogRowScrollStates = m, catalogRowScrollAnchors = ma,
                             focusedRowIndex = ri, focusedItemIndex = ii, hasSavedFocus = true
-                        )
+                        ).also { viewModel.homeFocusState = it }
+                      }
                     },
-                    onFocusedRowKeyChanged = {},
+                    onFocusedRowKeyChanged = rowFocused,
                     scrollToTopTrigger = 0,
                     onRequestLazyCatalogLoad = {}
                 )
@@ -395,10 +408,13 @@ fun OnDemandHomeScreen(
                     onItemFocus = onItemFocus,
                     catalogSeeAllLabel = "See all",
                     stickyTitle = homeHeader,
-                    onSaveGridFocusState = { vi, vo, _ ->
-                        gridFocusState = gridFocusState.copy(verticalScrollIndex = vi, verticalScrollOffset = vo, hasSavedFocus = true)
+                    onSaveGridFocusState = { vi, vo, key ->
+                      if (focusEpoch == viewModel.homeFocusEpoch.value) {
+                        gridFocusState = gridFocusState.copy(verticalScrollIndex = vi, verticalScrollOffset = vo, focusedItemKey = key, hasSavedFocus = true)
+                        viewModel.homeGridFocusState = gridFocusState
+                      }
                     },
-                    onFocusedRowKeyChanged = {},
+                    onFocusedRowKeyChanged = rowFocused,
                     scrollToTopTrigger = 0
                 )
                 HomeLayout.MODERN -> ModernHomeContent(
@@ -425,17 +441,19 @@ fun OnDemandHomeScreen(
                     onItemFocus = onItemFocus,
                     onPreloadAdjacentItem = {},
                     onSaveFocusState = { vi, vo, rk, ikm, m, ma, ri, ii ->
+                      if (focusEpoch == viewModel.homeFocusEpoch.value) {
                         focusState = focusState.copy(
                             verticalScrollIndex = vi, verticalScrollOffset = vo, focusedRowKey = rk,
                             focusedItemKeyByRow = ikm, catalogRowScrollStates = m, catalogRowScrollAnchors = ma,
                             focusedRowIndex = ri, focusedItemIndex = ii, hasSavedFocus = true
-                        )
+                        ).also { viewModel.homeFocusState = it }
+                      }
                     },
-                    onFocusedRowKeyChanged = {},
+                    onFocusedRowKeyChanged = rowFocused,
                     scrollToTopTrigger = 0,
                     onRequestLazyCatalogLoad = {}
                 )
-            }
+            } }
         }
 
         // Top right: Nuvio's search and Manage VOD Groups (not over See all).

@@ -84,6 +84,11 @@ object VodHomeIds {
     fun addonId(cardId: String): String? =
         uidOf(cardId)?.let { realIds[it] }?.match?.takeIf { !it.startsWith("tmdb:") }
 
+    /** Lightweight card anchors retain this identity when optional full details are evicted. */
+    internal fun matchId(cardId: String): String? = uidOf(cardId)?.let { realIds[it] }?.match
+
+    internal fun forgetMatch(item: VodItem) { realIds.remove(item.uid); rememberReal(item, null) }
+
     /** The real id a title's custom poster is made from: its match's id, else the provider's TMDB id. */
     fun posterId(item: VodItem, matched: MetaPreview?): String? =
         matched?.id?.takeIf { it.isNotBlank() && !it.startsWith(PREFIX) }
