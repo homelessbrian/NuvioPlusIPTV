@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -777,19 +778,31 @@ class OnDemandRepository @Inject constructor(
      * checked yet are checked first (a short wait, once per title) and the page read again
      * without the ones that turned out to be in another language.
      */
+    @OptIn(kotlinx.coroutines.InternalCoroutinesApi::class)
     suspend fun items(kind: VodKind, category: VodCategory?, hidden: Set<String>, newestFirst: Boolean, limit: Int, offset: Int, sort: VodSort = VodSort.DEFAULT, genre: String? = null, merge: Boolean = true, seed: Long = 0) =
         withContext(Dispatchers.IO) {
-            val hide = hidingForeign()
-            fun read() = runCatching { db.items(kind, category, hidden, newestFirst, limit, offset, sort, genre, merge, seed, hide) }.getOrDefault(emptyList())
-            var page = read()
-            if (hide && page.isNotEmpty()) {
-                // A page or two may come back with newly found titles to set aside.
-                repeat(2) {
-                    if (!languages.check(page, PAGE_CHECK_MS)) return@withContext page
-                    page = read()
+            val signal = android.os.CancellationSignal()
+            val queryContext = coroutineContext
+            val stop = coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion(onCancelling = true, invokeImmediately = true) { if (it != null) signal.cancel() }
+            try {
+                val hide = hidingForeign()
+                fun read(): List<VodItem> = try {
+                    signal.throwIfCanceled()
+                    db.items(kind, category, hidden, newestFirst, limit, offset, sort, genre, merge, seed, hide, signal)
+                } catch (e: android.os.OperationCanceledException) {
+                    queryContext.ensureActive()
+                    throw e
+                } catch (e: Exception) { emptyList() }
+                var page = read()
+                if (hide && page.isNotEmpty()) {
+                    // A page or two may come back with newly found titles to set aside.
+                    repeat(2) {
+                        if (!languages.check(page, PAGE_CHECK_MS)) return@withContext page
+                        page = read()
+                    }
                 }
-            }
-            page
+                page
+            } finally { stop?.dispose() }
         }
 
     /** One version of a title you can pick: where it's from and what it is. */
