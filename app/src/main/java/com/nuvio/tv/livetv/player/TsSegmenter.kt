@@ -25,11 +25,14 @@ class TsSegmenter(
     /** A piece was saved (its length in seconds); the playlist is already updated. */
     private val onSegment: (Double) -> Unit = {}
 ) {
-    data class Piece(val seq: Long, val name: String, val durationSec: Double, val discontinuity: Boolean = false)
+    data class Piece(val seq: Long, val name: String, val durationSec: Double, val discontinuity: Boolean = false) {
+        internal val playlistEntry = LivePlaylistWriter.entry(durationSec, name, discontinuity)
+    }
 
     val playlist: File = File(dir, "index.m3u8")
 
     private val pieces = ArrayList<Piece>()
+    private var maxPieceDurationSec = 0.0
     @Volatile var trimmedSec: Double = 0.0
         private set
     @Volatile var totalSec: Double = 0.0
@@ -177,17 +180,21 @@ class TsSegmenter(
         if (pieceBytes == 0L) { f.delete(); return }
         val len = currentLengthSec().coerceAtLeast(0.1)
         pieces += Piece(seq, f.name, len, discontinuity = pieceDiscontinuity)
+        maxPieceDurationSec = maxOf(maxPieceDurationSec, len)
         totalSec += len
         seq++
         // Rewind buffer: drop what's past the time limit.
         keepSec?.let { keep ->
             var kept = pieces.sumOf { it.durationSec }
+            var removedLongest = false
             while (pieces.size > 3 && kept > keep) {
                 val first = pieces.removeAt(0)
+                if (first.durationSec == maxPieceDurationSec) removedLongest = true
                 kept -= first.durationSec
                 trimmedSec += first.durationSec
                 runCatching { File(dir, first.name).delete() }
             }
+            if (removedLongest) maxPieceDurationSec = pieces.maxOf { it.durationSec }
         }
         writePlaylist(ended = false)
         onSegment(len)
@@ -198,22 +205,16 @@ class TsSegmenter(
         // A steady target length from the start (pieces can run longer than planned when the
         // stream rarely marks a clean cut): a target that grows mid-way, or pieces longer than
         // it, made the player think the playlist had stalled and give up.
-        val target = maxOf(20, kotlin.math.ceil(pieces.maxOf { it.durationSec }).toInt())
-        val sb = StringBuilder()
-        sb.append("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:").append(target).append('\n')
-        sb.append("#EXT-X-MEDIA-SEQUENCE:").append(pieces.first().seq).append('\n')
-        // A rewind buffer drops its oldest pieces, which an "EVENT" playlist isn't allowed to do.
-        if (keepSec == null) sb.append("#EXT-X-PLAYLIST-TYPE:EVENT\n")
-        pieces.forEach { pc ->
-            if (pc.discontinuity) sb.append("#EXT-X-DISCONTINUITY\n")
-            sb.append("#EXTINF:").append(String.format(java.util.Locale.US, "%.3f", pc.durationSec)).append(",\n")
-            sb.append(pc.name).append('\n')
-        }
-        if (ended) sb.append("#EXT-X-ENDLIST\n")
-        val tmp = File(dir, playlist.name + ".tmp")
+        val target = maxOf(20, kotlin.math.ceil(maxPieceDurationSec).toInt())
         runCatching {
-            tmp.writeText(sb.toString())
-            if (!tmp.renameTo(playlist)) { tmp.copyTo(playlist, overwrite = true); tmp.delete() }
+            LivePlaylistWriter.write(playlist) { writer ->
+                writer.append("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:").append(target.toString()).append('\n')
+                writer.append("#EXT-X-MEDIA-SEQUENCE:").append(pieces.first().seq.toString()).append('\n')
+                // A rewind buffer drops pieces, which an EVENT playlist cannot do.
+                if (keepSec == null) writer.append("#EXT-X-PLAYLIST-TYPE:EVENT\n")
+                pieces.forEach { writer.write(it.playlistEntry) }
+                if (ended) writer.append("#EXT-X-ENDLIST\n")
+            }
         }
     }
 
