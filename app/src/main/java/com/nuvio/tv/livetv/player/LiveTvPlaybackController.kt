@@ -1859,13 +1859,14 @@ class LiveTvPlaybackController @Inject constructor(
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minMs, maxMs, startMs, rebufferMs)
-            .setPrioritizeTimeOverSizeThresholds(true)
+            .setPrioritizeTimeOverSizeThresholds(!MemoryBudget.isLowRamTier)
             // The download-ahead lives in the app's memory. The player's own cap (about 130 MB
             // for video) is more than half of what a cheap stick gives an app, which made the
             // whole app stutter as memory ran short. Capped to about 30% of the memory the app can
             // really use (see playerBufferBytes):
-            // the same on boxes with plenty, smaller on low-memory ones. The minimum buffer
-            // time is always kept, so channels are just as steady.
+            // the same on boxes with plenty, smaller on low-memory ones. On small heaps the
+            // byte target also stops loading before the duration minimum: high-bitrate video
+            // must not consume the UI/decoder's memory to satisfy a large buffer setting.
             .setTargetBufferBytes(playerBufferBytes())
             .build()
         return ExoPlayer.Builder(context, renderers)
