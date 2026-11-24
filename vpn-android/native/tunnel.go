@@ -44,6 +44,8 @@ type httpTunnel struct {
 	tunnelHTTPS bool
 	mu          sync.Mutex
 	closed      bool
+	probeGate   chan struct{}
+	probeCancel context.CancelFunc
 	hijacked    map[net.Conn]bool
 	once        sync.Once
 }
@@ -309,26 +311,53 @@ func (t *httpTunnel) stats() (rx, tx, handshake int64) {
 func (t *httpTunnel) probe() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.gstatic.com/generate_204", nil)
+	return t.probeContext(ctx)
+}
+
+func (t *httpTunnel) probeContext(parent context.Context) bool {
+	t.mu.Lock()
+	if t.probeGate == nil {
+		t.probeGate = make(chan struct{}, 1)
+	}
+	gate := t.probeGate
+	t.mu.Unlock()
+	select {
+	case gate <- struct{}{}:
+		defer func() { <-gate }()
+	case <-parent.Done():
+		return false
+	}
+	ctx, cancel := context.WithCancel(parent)
 	t.mu.Lock()
 	transport := t.transport
+	if t.closed || transport == nil || ctx.Err() != nil {
+		t.mu.Unlock()
+		cancel()
+		return false
+	}
+	t.probeCancel = cancel
 	t.mu.Unlock()
-	if transport == nil {
+	defer func() {
+		cancel()
+		t.mu.Lock()
+		t.probeCancel = nil
+		t.mu.Unlock()
+	}()
+	if !probeHTTPS(ctx, transport) || ctx.Err() != nil {
 		return false
 	}
-	response, err := transport.RoundTrip(request)
-	if err != nil {
-		return false
-	}
-	response.Body.Close()
 	t.mu.Lock()
 	openVPN := t.packetLink != nil
+	available := !t.closed && t.transport == transport
 	t.mu.Unlock()
+	if !available {
+		return false
+	}
 	if openVPN {
-		return response.StatusCode == http.StatusNoContent
+		return true
 	}
 	rx, _, handshake := t.stats()
-	return response.StatusCode == http.StatusNoContent && rx > 0 && handshake > 0 && time.Now().UnixMilli()-handshake <= 180000
+	return rx > 0 && handshake > 0 && time.Now().UnixMilli()-handshake <= 180000
 }
 
 func (t *httpTunnel) egress() string {
@@ -364,6 +393,9 @@ func (t *httpTunnel) close() {
 	t.once.Do(func() {
 		t.mu.Lock()
 		t.closed = true
+		if t.probeCancel != nil {
+			t.probeCancel()
+		}
 		for connection := range t.hijacked {
 			connection.Close()
 		}
