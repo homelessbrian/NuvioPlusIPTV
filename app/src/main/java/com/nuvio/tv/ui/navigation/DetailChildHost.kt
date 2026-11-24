@@ -22,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRestorer
@@ -40,8 +39,6 @@ import com.nuvio.tv.ui.screens.cast.CastDetailScreen
 import java.util.WeakHashMap
 import com.nuvio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nuvio.tv.ui.screens.tmdb.TmdbEntityBrowseScreen
-import com.nuvio.tv.core.player.BackgroundTrailerController
-import com.nuvio.tv.core.player.LocalBackgroundTrailerController
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 internal const val DETAIL_CHILD_IDLE = "detail_child_idle"
@@ -72,7 +69,6 @@ internal fun DetailChildHost(
     var overlayOpen by rememberSaveable { mutableStateOf(false) }
     var closedEpoch by rememberSaveable { mutableIntStateOf(0) }
     val rebuildGate = remember { NestedDetailRebuildGate() }
-    val trailerController = LocalBackgroundTrailerController.current
     val overlayVisible = overlayOpen ||
         showingChild ||
         (!childRoutesRestored && savedChildRoutes.isNotEmpty()) ||
@@ -133,17 +129,11 @@ internal fun DetailChildHost(
                 content(childNav)
             }
         }
-        if (overlayVisible) {
-            val coverColor = NuvioTheme.colors.Background
+        if (overlayVisible && !showingChild) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .drawBehind {
-                        // Trailers play on the app's back layer; step aside while a stacked
-                        // detail page's trailer is showing so it isn't hidden behind this cover.
-                        val topIsDetail = childBackStack.lastOrNull()?.destination?.route == Screen.Detail.route
-                        if (!(topIsDetail && trailerController.isShowingTrailer())) drawRect(coverColor)
-                    }
+                    .background(NuvioTheme.colors.Background)
             )
         }
         CompositionLocalProvider(LocalDetailChildOverlayVisible provides false) {
@@ -241,15 +231,6 @@ internal fun DetailChildHost(
                     )
                 ) { nestedEntry ->
                     val nestedArgs = nestedEntry.arguments
-                    val detailBackground = NuvioTheme.colors.Background
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .drawBehind {
-                                // The page paints its own background whenever its trailer isn't showing.
-                                if (!trailerController.isShowingTrailer()) drawRect(detailBackground)
-                            }
-                    ) {
                     MetaDetailsScreen(
                         viewModel = hiltViewModel(nestedEntry),
                         heroBackdropUrl = nestedArgs?.getString("heroBackdropUrl")?.takeIf { it.isNotBlank() },
@@ -288,7 +269,6 @@ internal fun DetailChildHost(
                             )
                         }
                     )
-                    }
                 }
             }
         }
@@ -336,12 +316,6 @@ private fun NavBackStackEntry.toSavedChildRoute(): String? {
         }
         else -> null
     }
-}
-
-private fun BackgroundTrailerController?.isShowingTrailer(): Boolean {
-    val controller = this ?: return false
-    val url = controller.activeRequest?.videoUrl ?: return false
-    return controller.isRendering(url)
 }
 
 internal fun NavHostController.navigateNestedDetail(
