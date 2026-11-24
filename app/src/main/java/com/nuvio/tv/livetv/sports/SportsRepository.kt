@@ -801,6 +801,15 @@ class SportsRepository @Inject constructor(
                 SportsCatalog.leagues.filter { it.espnPath != null && (isMine(it, f) || SportsCatalog.shown(it, st)) }.map { it.id }.toSet()
             }.getOrDefault(emptySet())
             withContext(Dispatchers.IO) { runCatching { leagueData.update { it + readSavedScores(first) } } }
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val mine = SportsFollows.fromJson(prefs.sportsMineJson.first())
+                    val saved = readSavedAhead(mine)
+                    // Anything fetched meanwhile is newer than the saved copy.
+                    if (saved.isNotEmpty()) aheadData.update { saved + it }
+                    readSavedMine(mine)
+                }
+            }
             val tFirst = System.currentTimeMillis()
             scope.launch(com.nuvio.tv.livetv.data.BackgroundWork.quiet) { loadSavedTv() }
             withContext(com.nuvio.tv.livetv.data.BackgroundWork.quiet) { runCatching { loadCache(skip = first) } }
@@ -956,7 +965,7 @@ class SportsRepository @Inject constructor(
             if (active && !com.nuvio.tv.livetv.data.BackgroundWork.onDemandPlaying.value && extrasJob?.isActive != true) extrasJob = scope.launch {
                 val force = forceExtras.also { forceExtras = false }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
-                // What you follow comes first (your teams' schedules), then the rest side by side,
+                // Followed schedules and league rows come first in their lanes; the rest runs side by side,
                 // rather than eight jobs one after another with yours in the middle.
                 suspend fun lane(name: String, block: suspend () -> Unit) {
                     val t0 = System.currentTimeMillis()
@@ -970,11 +979,11 @@ class SportsRepository @Inject constructor(
                     lane("non-league update") { updateTsdb(System.currentTimeMillis(), force) }
                 }
                 val windows: suspend () -> Unit = {
-                    lane("week ahead") { updateWeek(System.currentTimeMillis(), force) }
-                    com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
                     lane("weeks further ahead") { updateAhead(System.currentTimeMillis(), force) }
                     com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
                     lane("past days") { updatePast(System.currentTimeMillis()) }
+                    com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
+                    lane("week ahead") { updateWeek(System.currentTimeMillis(), force) }
                 }
                 val extras: suspend () -> Unit = {
                     if (System.currentTimeMillis() - lastTv > 4 * HOUR) {
@@ -1443,11 +1452,16 @@ class SportsRepository @Inject constructor(
         val noSchedule = f.teams.flatMap { listOf(it.leagueId) + SportsCatalog.relatedLeagues(it.leagueId) }
             .filter { it.startsWith("rugby/") || it.startsWith("rugby-league/") || it.startsWith("australian-football/") }
         val ids = (f.pins + f.leagues + noSchedule).toSet()
-        if (aheadData.value.keys.any { it.removePrefix(SEASON_KEY) !in ids }) aheadData.update { m -> m.filterKeys { it.removePrefix(SEASON_KEY) in ids } }
+        val dropped = aheadData.value.keys.filter { it.removePrefix(SEASON_KEY) !in ids }
+        if (dropped.isNotEmpty()) {
+            aheadData.update { m -> m.filterKeys { it.removePrefix(SEASON_KEY) in ids } }
+            dropped.forEach { k -> sportsCatching { aheadFile(k).delete() } }
+        }
         val due = ids.mapNotNull { SportsCatalog.league(it) }.filter { l ->
             l.espnPath != null && now - (aheadData.value[l.id]?.fetchedAt ?: 0L) > (if (force) HOUR else 6 * HOUR)
         }
-        if (due.isEmpty()) return
+        // Nothing due here still checks the seasons (they have their own clock, and may not be saved yet).
+        if (due.isEmpty()) { updateSeasonPast(now, ids); return }
         // ESPN takes a whole month ("202611") though not a range of days: the months the next
         // five weeks touch, kept from a week ahead on (the week before is in [weekData]), and the
         // months the last [LEAGUE_BACK_DAYS] days touch, for their results.
@@ -1479,6 +1493,7 @@ class SportsRepository @Inject constructor(
                     }
             }
             aheadData.update { it + (l.id to LeagueData(parsed, at, null)) }
+            saveGames(aheadFile(l.id), at, parsed)
         }
         updateSeasonPast(now, ids)
     }
@@ -1514,6 +1529,7 @@ class SportsRepository @Inject constructor(
                     .distinctBy { it.id }
             }
             aheadData.update { it + (SEASON_KEY + l.id to LeagueData(parsed, at, null)) }
+            saveGames(aheadFile(SEASON_KEY + l.id), at, parsed)
         }
     }
 
@@ -1558,6 +1574,8 @@ class SportsRepository @Inject constructor(
                 val at = System.currentTimeMillis()
                 val parsed = raws.flatMap { raw -> sportsCatching { SportsFeeds.parseScoreboard(l, raw) }.getOrDefault(emptyList()) }.distinctBy { it.id }
                 weekData.update { it + ("p|" + l.id to LeagueData(parsed, if (raws.isEmpty()) at - HOUR else at, null)) }
+                // A league with a My Sports row: kept for next time (see readSavedMine).
+                if (raws.isNotEmpty() && l.id in rowLeagues) saveGames(pastFile(l.id), at, parsed)
             }
         }
     }
@@ -1904,6 +1922,109 @@ class SportsRepository @Inject constructor(
         }
     }
 
+    /** Where a followed league's weeks ahead ("ah_") or season ("as_", [SEASON_KEY]) are saved. */
+    private fun aheadFile(key: String): File =
+        if (key.startsWith(SEASON_KEY)) File(dir, "as_${safe(key.removePrefix(SEASON_KEY))}.json") else File(dir, "ah_${safe(key)}.json")
+
+    /**
+     * Your leagues' weeks ahead and seasons as last saved, so their My Sports rows (UFC, F1,
+     * golf: nothing this week) show as soon as the page opens instead of after every league's
+     * week has been fetched. Kept at their saved time, so they're fetched again when due.
+     */
+    private fun readSavedAhead(f: SportsFollows): Map<String, LeagueData> {
+        val now = System.currentTimeMillis()
+        val out = HashMap<String, LeagueData>()
+        for (id in (f.pins + f.leagues).toSet()) {
+            val l = SportsCatalog.league(id) ?: continue
+            if (l.espnPath == null) continue
+            for (key in listOf(id, SEASON_KEY + id)) {
+                val file = aheadFile(key)
+                if (!file.exists()) continue
+                runCatching {
+                    if (now - file.lastModified() > 7 * DAY) return@runCatching
+                    val (savedAt, games) = readGames(l, file.readText(), "ah|$key") ?: return@runCatching
+                    out[key] = LeagueData(games, savedAt, null)
+                }
+            }
+        }
+        return out
+    }
+
+    /** A league's week ahead as last saved (left out when over 3 days old). */
+    private fun readSavedWeek(l: League, now: Long): LeagueData? {
+        val file = File(dir, "wk_${safe(l.id)}.json")
+        if (!file.exists()) return null
+        return runCatching {
+            if (now - file.lastModified() > 3 * DAY + HOUR) return@runCatching null
+            val (savedAt, games) = readGames(l, file.readText(), "wk|" + l.id) ?: return@runCatching null
+            // Checked since without a change: as fresh as that check.
+            val at = maxOf(savedAt, file.lastModified())
+            if (now - at > 3 * DAY) return@runCatching null
+            LeagueData(games, at, null)
+        }.getOrNull()
+    }
+
+    /** Where a followed league's last week of results (2 to 7 days back) is saved. */
+    private fun pastFile(leagueId: String): File = File(dir, "pa_${safe(leagueId)}.json")
+
+    /**
+     * Everything you follow, as last saved, read straight away so My Sports has it when the
+     * page opens: your leagues' week ahead and last week's results, and your teams' seasons
+     * (these used to wait for the slow pass over every league, and last week's results
+     * weren't saved at all).
+     */
+    private fun readSavedMine(f: SportsFollows) {
+        val now = System.currentTimeMillis()
+        val leagues = followedLeagueIds(f).mapNotNull { SportsCatalog.league(it) }.filter { it.espnPath != null }
+        val wk = HashMap<String, LeagueData>()
+        for (l in leagues) readSavedWeek(l, now)?.let { wk[l.id] = it }
+        // Last week's results, for the leagues with a row of their own.
+        for (id in (f.pins + f.leagues).toSet()) {
+            val l = SportsCatalog.league(id)?.takeIf { it.espnPath != null } ?: continue
+            val file = pastFile(id)
+            if (!file.exists()) continue
+            runCatching {
+                if (now - file.lastModified() > 2 * DAY) return@runCatching
+                val (savedAt, games) = readGames(l, file.readText(), "pa|$id") ?: return@runCatching
+                wk["p|$id"] = LeagueData(games, savedAt, null)
+            }
+        }
+        if (wk.isNotEmpty()) weekData.update { wk + it }
+        val sched = HashMap<String, LeagueData>()
+        for (t in f.teams) {
+            // The schedule as already worked out (short form), when it's as new as the raw answers:
+            // reading and parsing ESPN's whole season answers for every followed team took seconds.
+            val quick = File(dir, "ts2_${safe(t.key)}.json")
+            val rawFile = File(dir, "ts_${safe(t.key)}.json")
+            if (quick.exists() && (!rawFile.exists() || quick.lastModified() >= rawFile.lastModified() - 5_000L)) {
+                val got = runCatching {
+                    val text = quick.readText()
+                    val nl = text.indexOf('\n')
+                    val at = text.substring(1, nl).toLong()
+                    SportsEventCodec.decode(text.substring(nl + 1))?.let { LeagueData(it, at, null) }
+                }.getOrNull()
+                if (got != null) { sched[t.key] = got; continue }
+            }
+            val file = rawFile
+            if (!file.exists()) continue
+            runCatching {
+                val text = file.readText()
+                val nl = text.indexOf('\n')
+                val at = text.substring(0, nl).toLong()
+                val raws = text.substring(nl + 1).split(RAW_SEP).mapNotNull { part ->
+                    val tab = part.indexOf('\t')
+                    if (tab <= 0) null else SportsCatalog.league(part.substring(0, tab))?.let { it to part.substring(tab + 1) }
+                }
+                if (raws.isNotEmpty()) {
+                    val worked = LeagueData(mergeSchedule(raws), at, null)
+                    sched[t.key] = worked
+                    sportsCatching { quick.writeText("P$at\n" + SportsEventCodec.encode(worked.events)) }
+                }
+            }
+        }
+        if (sched.isNotEmpty()) scheduleData.update { sched + it }
+    }
+
     /** The saved scores of [ids] (leagues read from their files; too old ones are left out). */
     private fun readSavedScores(ids: Set<String>): Map<String, LeagueData> {
         val now = System.currentTimeMillis()
@@ -1947,17 +2068,8 @@ class SportsRepository @Inject constructor(
     private fun readSavedWeeks(now: Long): HashMap<String, LeagueData> {
         val wk = HashMap<String, LeagueData>()
         for (l in SportsCatalog.leagues) {
-            if (l.espnPath == null) continue
-            val file = File(dir, "wk_${safe(l.id)}.json")
-            if (!file.exists()) continue
-            runCatching {
-                if (now - file.lastModified() > 3 * DAY + HOUR) return@runCatching
-                val (savedAt, games) = readGames(l, file.readText(), "wk|" + l.id) ?: return@runCatching
-                // Checked since without a change: as fresh as that check.
-                val at = maxOf(savedAt, file.lastModified())
-                if (now - at > 3 * DAY) return@runCatching
-                wk[l.id] = LeagueData(games, at, null)
-            }
+            if (l.espnPath == null || l.id in weekData.value) continue
+            readSavedWeek(l, now)?.let { wk[l.id] = it }
         }
         return wk
     }
@@ -2011,43 +2123,10 @@ class SportsRepository @Inject constructor(
         // The week ahead, team seasons and non-league football, as last saved.
         val wk = runCatching { wkTask.get() }.getOrElse { HashMap() }
         pool.shutdown()
-        weekData.value = wk
+        // Preserve followed leagues and recent results loaded first, or newer fetched data.
+        weekData.update { wk + it }
         lap("week files")
         val f = follows.value
-        val sched = HashMap<String, LeagueData>()
-        for (t in f.teams) {
-            // The schedule as already worked out (short form), when it's as new as the raw answers:
-            // reading and parsing ESPN's whole season answers for every followed team took seconds.
-            val quick = File(dir, "ts2_${safe(t.key)}.json")
-            val rawFile = File(dir, "ts_${safe(t.key)}.json")
-            if (quick.exists() && (!rawFile.exists() || quick.lastModified() >= rawFile.lastModified() - 5_000L)) {
-                val got = runCatching {
-                    val text = quick.readText()
-                    val nl = text.indexOf('\n')
-                    val at = text.substring(1, nl).toLong()
-                    SportsEventCodec.decode(text.substring(nl + 1))?.let { LeagueData(it, at, null) }
-                }.getOrNull()
-                if (got != null) { sched[t.key] = got; continue }
-            }
-            val file = rawFile
-            if (!file.exists()) continue
-            runCatching {
-                val text = file.readText()
-                val nl = text.indexOf('\n')
-                val at = text.substring(0, nl).toLong()
-                val raws = text.substring(nl + 1).split(RAW_SEP).mapNotNull { part ->
-                    val tab = part.indexOf('\t')
-                    if (tab <= 0) null else SportsCatalog.league(part.substring(0, tab))?.let { it to part.substring(tab + 1) }
-                }
-                if (raws.isNotEmpty()) {
-                    val worked = LeagueData(mergeSchedule(raws), at, null)
-                    sched[t.key] = worked
-                    sportsCatching { quick.writeText("P$at\n" + SportsEventCodec.encode(worked.events)) }
-                }
-            }
-        }
-        scheduleData.value = sched
-        lap("team schedules")
         val ts = HashMap<String, LeagueData>()
         for (id in (followedLeagueIds(f).filter { it.startsWith("tsdb/") } + tsdbAlias.keys).distinct()) {
             val l = SportsCatalog.league(id) ?: continue
