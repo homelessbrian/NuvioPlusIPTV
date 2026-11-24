@@ -70,8 +70,8 @@ class SportsRepository @Inject constructor(
     // In the app's cache (see SportsDiskCache); made again if "Clear cache" emptied it meanwhile.
     private val sportsDir = SportsDiskCache.directory(context.filesDir, context.cacheDir)
     private val dir: File get() = sportsDir.apply { mkdirs() }
-    // Runtime use and expensive diagnostic parity scans are separate policies.
-    private val matcher = SportsMatcher(guideDb, sportsDir, sportsTable = true,
+    // Keep the optional guide index and parity checks on the existing test-channel gate.
+    private val matcher = SportsMatcher(guideDb, sportsDir, sportsTable = com.nuvio.tv.BuildConfig.NUVIO_CHANNEL == "test",
         validateSportsTable = com.nuvio.tv.BuildConfig.NUVIO_CHANNEL == "test",
         checkpoint = ::matchingCheckpoint)
 
