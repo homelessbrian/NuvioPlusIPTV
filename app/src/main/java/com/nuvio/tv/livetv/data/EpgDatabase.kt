@@ -1060,13 +1060,16 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
 
     // ------------------------------------------------------------ sports shows
     //
-    // Test builds: the guide's shows that name a sport, a competition or a team (with their text
+    // The guide's shows that name a sport, a competition or a team (with their text
     // already cleaned up for matching), so Sports' channel search reads a few thousand rows instead
     // of the whole guide. Built by SportsMatcher from one read of the guide, and only good for the
     // guide [revision] it was built from. Its tables are made the first time they're used.
 
     /** What the sports-shows table holds: the guide it came from, the time span read, how many shows. */
-    class SportsRowsInfo(val stamp: String, val rev: Long, val fromMs: Long, val toMs: Long, val rows: Int)
+    class SportsRowsInfo(
+        val stamp: String, val rev: Long, val fromMs: Long, val toMs: Long, val rows: Int,
+        val formatVersion: Int, val textBytes: Long, val wordCount: Int, val wordTextBytes: Long
+    )
 
     private fun ensureSportsTables(db: SQLiteDatabase) {
         db.execSQL(
@@ -1084,7 +1087,9 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             if (!c.moveToFirst()) return@use null
             val stamp = c.getString(0) ?: return@use null
             val f = stamp.split('|')
-            if (f.size < 4) null else SportsRowsInfo(stamp, f[0].toLong(), f[1].toLong(), f[2].toLong(), f[3].toInt())
+            if (f.size < 4) null else SportsRowsInfo(stamp, f[0].toLong(), f[1].toLong(), f[2].toLong(), f[3].toInt(),
+                f.getOrNull(5)?.toIntOrNull() ?: 0, f.getOrNull(6)?.toLongOrNull() ?: Long.MAX_VALUE,
+                f.getOrNull(7)?.toIntOrNull() ?: Int.MAX_VALUE, f.getOrNull(8)?.toLongOrNull() ?: Long.MAX_VALUE)
         }
     }.getOrNull()
 
@@ -1103,6 +1108,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         private val db = writableDatabase
         private val startedAt = changes
         private val buffer = ArrayList<Array<Any?>>(BATCH)
+        private var bufferedTextBytes = 0L
+        private var totalTextBytes = 0L
         private var open = true
         var rows = 0
             private set
@@ -1123,8 +1130,14 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
 
         fun add(ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) {
             buffer += arrayOf(ch, start, stop, title, descr, cat, nt, nd)
+            val textBytes = (ch.length.toLong() + title.length + (descr?.length ?: 0) +
+                (cat?.length ?: 0) + nt.length + nd.length) * 2
+            bufferedTextBytes += textBytes
+            totalTextBytes += textBytes
             rows++
-            if (buffer.size >= BATCH) { db.beginTransaction(); try { flush(); db.setTransactionSuccessful() } finally { db.endTransaction() } }
+            if (buffer.size >= BATCH || bufferedTextBytes >= 2L * 1024 * 1024) {
+                db.beginTransaction(); try { flush(); db.setTransactionSuccessful() } finally { db.endTransaction() }
+            }
         }
 
         /** Writes what's waiting, inside the caller's transaction. */
@@ -1142,6 +1155,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             }
             stmt.close()
             buffer.clear()
+            bufferedTextBytes = 0L
         }
 
         /** Marks the table finished for guide [rev] — unless the guide changed while it was read (then it's left unfinished, never used). */
@@ -1157,7 +1171,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                     words.forEach { w.clearBindings(); w.bindString(1, it); w.executeInsert() }
                     w.close()
                     db.insertWithOnConflict("meta", null, ContentValues().apply {
-                        put("k", "sports_rows"); put("v", "$rev|$fromMs|$toMs|$rows|${System.currentTimeMillis()}")
+                        put("k", "sports_rows")
+                        put("v", "$rev|$fromMs|$toMs|$rows|${System.currentTimeMillis()}|$SPORTS_ROWS_FORMAT|$totalTextBytes|${words.size}|${words.sumOf { it.length.toLong() * 2 }}")
                     }, SQLiteDatabase.CONFLICT_REPLACE)
                 }
                 db.setTransactionSuccessful()
@@ -1171,6 +1186,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         fun abort() {
             open = false
             buffer.clear()
+            bufferedTextBytes = 0L
         }
     }
 
@@ -1183,7 +1199,9 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         minStopMs: Long,
         onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) -> Unit
     ) {
-        val sql = "SELECT ch, start, stop, title, descr, cat, nt, nd FROM sports_rows WHERE start >= ? AND start < ? AND stop > ?"
+        // Keep the original guide traversal order (the insertion order), including aliases and
+        // ties, so which duplicate listing names an event stays the same as the full scan.
+        val sql = "SELECT ch, start, stop, title, descr, cat, nt, nd FROM sports_rows INDEXED BY sports_rows_start WHERE start >= ? AND start < ? AND stop > ? ORDER BY rowid"
         readableDatabase.rawQuery(sql, arrayOf(fromMs.toString(), toMs.toString(), minStopMs.toString())).use { c ->
             while (c.moveToNext()) {
                 onRow(
@@ -1221,6 +1239,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     }
 
     companion object {
+        /** Published sports index includes measured capacity metadata; legacy tables rebuild lazily. */
+        internal const val SPORTS_ROWS_FORMAT = 1
         /** A guide channel made for one playlist channel's own listings (Xtream archive, no guide file). */
         const val OWN_SOURCE = "__own__"
 
