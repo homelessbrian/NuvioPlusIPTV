@@ -1729,7 +1729,8 @@ private fun LegacySidebarScaffold(
         !com.nuvio.tv.livetv.ui.LiveTvFullscreen.pending
 
     LaunchedEffect(currentRoute) {
-        longPressBackHeld.value = false
+        // A held Back can navigate Sports to full screen. Only its UP releases the
+        // Activity's guard; clearing it here lets the same press reach the new page.
         drawerState.setValue(DrawerValue.Closed)
     }
 
