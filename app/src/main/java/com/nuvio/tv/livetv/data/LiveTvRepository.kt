@@ -2437,7 +2437,8 @@ class LiveTvRepository @Inject constructor(
 
         val byTvgId = HashMap<String, MutableList<LiveChannel>>()
         val byName = HashMap<String, MutableList<LiveChannel>>()
-        channels.forEach { c ->
+        // No guide can use these indexes when this setup has no EPG sources.
+        if (targets.isNotEmpty()) channels.forEach { c ->
             if (c.key in overrides) return@forEach
             c.tvgId?.lowercase()?.let { byTvgId.getOrPut(it) { ArrayList() }.add(c) }
             normalize(c.tvgName ?: "").takeIf { it.isNotEmpty() }?.let { byName.getOrPut(it) { ArrayList() }.add(c) }
