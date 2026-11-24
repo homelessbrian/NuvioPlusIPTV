@@ -98,8 +98,9 @@ func TestProbeBlockedGoogleUsesHealthyCloudflareAndCancelsLosers(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	})
+	tunnel := &httpTunnel{transport: transport, packetLink: io.NopCloser(strings.NewReader(""))}
 	start := time.Now()
-	if !shortProbe(t, transport, time.Second) {
+	if !tunnel.probe() {
 		t.Fatal("working tunnel was rejected when Google was blocked")
 	}
 	deadline := time.Now().Add(500 * time.Millisecond)
