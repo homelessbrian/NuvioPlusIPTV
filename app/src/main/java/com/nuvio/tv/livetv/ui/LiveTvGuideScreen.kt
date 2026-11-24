@@ -719,7 +719,7 @@ private fun LiveTvGuideScreenBody(
         LiveTvFullscreen.pending = false
         // A recording picked in Recordings or the Calendar.
         com.nuvio.tv.livetv.record.RecordingLaunch.take()?.let { r ->
-            if (!viewModel.playRecording(r.recordingId, r.fromStart)) {
+            if (!viewModel.playRecording(r.recordingId, r.fromStart, r.poster)) {
                 com.nuvio.tv.livetv.record.LiveTvNotice.show("That recording can't be played")
                 fullscreenShown = false
                 com.nuvio.tv.livetv.record.RecordingLaunch.takeReturn()?.let { onReturnTo(it) }

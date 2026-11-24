@@ -1597,8 +1597,8 @@ private fun PlaybackNavHost(
             // Live TV fork: recorded shows, played full screen in Live TV's own player (its seek
             // bar, 30 s skips); Back comes back here.
             com.nuvio.tv.livetv.record.RecordingsScreen(
-                onPlay = { _, _, _, recordingId, fromStart ->
-                    com.nuvio.tv.livetv.record.RecordingLaunch.open(recordingId, fromStart, Screen.Recordings.route)
+                onPlay = { _, _, poster, recordingId, fromStart ->
+                    com.nuvio.tv.livetv.record.RecordingLaunch.open(recordingId, fromStart, Screen.Recordings.route, poster)
                     navController.navigate(Screen.LiveTvPlayer.route) { launchSingleTop = true }
                 },
                 onOpenSettings = { navController.navigate(Screen.RecordingSettings.route) { launchSingleTop = true } }

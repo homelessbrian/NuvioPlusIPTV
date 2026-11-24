@@ -556,8 +556,14 @@ fun LiveTvPlayerScreen(
     val anyBackups = backups.isNotEmpty() || gameBackups != null
     // Playlist names in the app's order: the Backups lists' headings and their order.
     val playlistNamesForBackups by viewModel.playlistNames.collectAsStateWithLifecycle()
-    val poster by androidx.compose.runtime.produceState<String?>(initialValue = null, watchingTitle, current?.key) {
+    val poster by androidx.compose.runtime.produceState<String?>(initialValue = null, watchingTitle, current?.key, catchupSession?.recordingId) {
         value = null
+        // A recording: the poster Recordings showed (or found the same way), never a 24/7 or
+        // no-guide channel's.
+        catchupSession?.takeIf { it.recordingId != null }?.let { s ->
+            value = runCatching { viewModel.recordingPosterFor(s) }.getOrNull()
+            return@produceState
+        }
         // In archive playback the guide entry isn't the live one, so no movie/series hint.
         val hintProgram = if (playback.catchupTitle == null) nowProgram else null
         value = watchingTitle?.let { viewModel.posterFor(it, hintProgram, current) }

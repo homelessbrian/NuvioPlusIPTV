@@ -578,7 +578,9 @@ class LiveTvViewModel @Inject constructor(
         val program: EpgProgram,
         val baseOffsetMs: Long,
         /** A recording from Recordings playing as its own show (the "program" is the recording). */
-        val recordingId: String? = null
+        val recordingId: String? = null,
+        /** That recording's poster as Recordings showed it (null: looked up here). */
+        val recordingPoster: String? = null
     )
 
     /**
@@ -586,7 +588,7 @@ class LiveTvViewModel @Inject constructor(
      * the catch-up seek bar; from where you left off unless [fromStart]. False if it can't
      * (gone, or nothing saved).
      */
-    fun playRecording(recordingId: String, fromStart: Boolean): Boolean {
+    fun playRecording(recordingId: String, fromStart: Boolean, poster: String? = null): Boolean {
         val rec = recorder.recordings.value.firstOrNull { it.id == recordingId } ?: return false
         val file = recorder.playlistFile(rec)
         if (!file.isFile) return false
@@ -607,7 +609,7 @@ class LiveTvViewModel @Inject constructor(
             startMs = base, stopMs = base + lengthMs, title = rec.title,
             description = rec.description, episode = rec.episode
         )
-        _catchup.value = CatchupSession(channel, program, 0L, recordingId = rec.id)
+        _catchup.value = CatchupSession(channel, program, 0L, recordingId = rec.id, recordingPoster = poster)
         _recordingEnded.value = null
         recordingSavedAt = 0L
         playback.playSavedRecording(channel, file, rec.title, rec.id, resume)
@@ -1167,6 +1169,24 @@ class LiveTvViewModel @Inject constructor(
             ),
             urgent = urgent
         ) ?: channel?.let { channelPoster(it, urgent = urgent) } // 24/7 channel, episode not found: the show's poster
+    }
+
+    /**
+     * The poster for a recording playing here, found the way Recordings finds it: from the
+     * recording's own title, description and episode (not as a channel with no guide), and
+     * none for sports (the channel's logo, as in Recordings).
+     */
+    suspend fun recordingPosterFor(session: CatchupSession): String? {
+        session.recordingPoster?.let { return it }
+        if (!settings.value.showPosters) return null
+        val program = session.program
+        if (com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(session.channel.name, program.title)) return null
+        return posterResolver.posterFor(
+            program.title,
+            com.nuvio.tv.livetv.data.LiveTvPosterResolver.typeHint(program, null),
+            com.nuvio.tv.livetv.data.LiveTvPosterResolver.Clues(description = program.description),
+            urgent = true
+        )
     }
 
     // ------------------------------------------------------------ show details on demand
