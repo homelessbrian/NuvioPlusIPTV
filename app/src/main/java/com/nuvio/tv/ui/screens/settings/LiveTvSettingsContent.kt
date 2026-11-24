@@ -1389,6 +1389,12 @@ internal fun LiveTvSettingsContent(
                         }
                     )
                     SettingsToggleRow(
+                        context.getString(R.string.iptv_settings_adaptive_live_buffer),
+                        context.getString(R.string.iptv_settings_adaptive_live_buffer_description),
+                        s.adaptiveLiveBufferEnabled,
+                        { update { it.copy(adaptiveLiveBufferEnabled = !it.adaptiveLiveBufferEnabled) } }
+                    )
+                    SettingsToggleRow(
                         context.getString(R.string.iptv_settings_reconnect_automatically),
                         context.getString(R.string.iptv_settings_tries_the_stream_again_by_itself_if_it),
                         s.autoReconnect,

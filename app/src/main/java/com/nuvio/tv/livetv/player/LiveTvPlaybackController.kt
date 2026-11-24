@@ -77,6 +77,10 @@ class LiveTvPlaybackController @Inject constructor(
     private val stalker: StalkerGateway,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val adaptiveBuffer = AdaptiveLiveBuffer(scope, ::isAdaptiveRemoteLiveSource)
+
+    var adaptiveLiveBufferEnabled: Boolean = false
+        set(value) { field = value; adaptiveBuffer.enabled = value }
 
     private var _player: ExoPlayer? = null
     val player: ExoPlayer? get() = _player
@@ -707,6 +711,7 @@ class LiveTvPlaybackController @Inject constructor(
      * end of it, creeping towards live.
      */
     internal fun localRecordingSource(uri: android.net.Uri, offsetMs: Long = 8_000): androidx.media3.exoplayer.source.MediaSource {
+        adaptiveBuffer.sourceChanged()
         val item = MediaItem.Builder()
             // A network folder recording's pieces leave this box once copied: played through the
             // recordings server, which fetches those from the network folder.
@@ -838,7 +843,7 @@ class LiveTvPlaybackController @Inject constructor(
         releaseJob?.cancel()
         attachCount++
         if (!watchingFullscreen) { watchingFullscreen = true; watchFullscreen() }
-        return _player ?: buildPlayer().also { _player = it }
+        return _player ?: buildPlayer().also { _player = it; adaptiveBuffer.attach(it) }
     }
 
     /** Releases the player shortly after the last screen detaches (lets route changes hand it over). */
@@ -873,6 +878,7 @@ class LiveTvPlaybackController @Inject constructor(
         /** The caller sets the player's source itself right after (a recording from Recordings). */
         sourceLater: Boolean = false,
     ) {
+        if (currentChannel?.key != channel.key) adaptiveBuffer.sourceChanged(newChannel = true)
         if (stalkerStream == null && overrideUrl == null && catchupTitle == null && channel.stalkerRef != null &&
             currentChannel?.key == channel.key && activeStalkerRef == channel.stalkerRef && _state.value.error == null &&
             (stalkerResolveJob?.isActive == true || _player?.playbackState?.let { it != Player.STATE_IDLE } == true)
@@ -1223,6 +1229,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     fun stop() {
+        adaptiveBuffer.sourceChanged(newChannel = true)
         stalkerMediaPolicy?.retire()
         stalkerMediaPolicy = null
         stalkerMimeType = null
@@ -1431,6 +1438,7 @@ class LiveTvPlaybackController @Inject constructor(
      */
     fun onAppBackground() {
         appInBackground = true
+        adaptiveBuffer.setForeground(false)
         val p = _player ?: return
         if (p.playWhenReady) {
             pausedForBackground = true
@@ -1490,6 +1498,7 @@ class LiveTvPlaybackController @Inject constructor(
     /** Back in the app: carry on, jumping to the live edge for live channels. */
     fun onAppForeground() {
         appInBackground = false
+        adaptiveBuffer.setForeground(true)
         backgroundJob?.cancel()
         backgroundJob = null
         resumeAfterBackground?.let { r ->
@@ -1844,14 +1853,15 @@ class LiveTvPlaybackController @Inject constructor(
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
             ): androidx.media3.exoplayer.audio.AudioSink? {
-                if (passthrough) return super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
                 // Pretend the output only takes plain PCM: Dolby / DTS gets decoded here.
                 @Suppress("DEPRECATION")
-                return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                val sink = if (passthrough) super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
+                else androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
                     .setAudioCapabilities(androidx.media3.exoplayer.audio.AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .build()
+                return sink?.let { adaptiveBuffer.wrapAudioSink(it, enableAudioTrackPlaybackParams) }
             }
         }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
@@ -1875,6 +1885,7 @@ class LiveTvPlaybackController @Inject constructor(
             "xlarge" -> listOf(60_000, 150_000, 5_000, 10_000)
             else -> listOf(25_000, 60_000, 2_000, 4_000)
         }
+        val targetBufferBytes = playerBufferBytes()
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minMs, maxMs, startMs, rebufferMs)
             .setPrioritizeTimeOverSizeThresholds(!MemoryBudget.isLowRamTier)
@@ -1885,10 +1896,10 @@ class LiveTvPlaybackController @Inject constructor(
             // the same on boxes with plenty, smaller on low-memory ones. On small heaps the
             // byte target also stops loading before the duration minimum: high-bitrate video
             // must not consume the UI/decoder's memory to satisfy a large buffer setting.
-            .setTargetBufferBytes(playerBufferBytes())
+            .setTargetBufferBytes(targetBufferBytes)
             .build()
         return ExoPlayer.Builder(context, renderers)
-            .setLoadControl(loadControl)
+            .setLoadControl(adaptiveBuffer.wrapLoadControl(loadControl, targetBufferBytes))
             // Take part in Android's audio focus like other media apps: when something else starts
             // playing sound (another app, a launcher's video wallpaper with sound…), Live TV pauses.
             .setAudioAttributes(
@@ -2486,6 +2497,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private fun buildMediaSource(url: String, headers: Map<String, String>, isLive: Boolean): androidx.media3.exoplayer.source.MediaSource {
+        adaptiveBuffer.sourceChanged()
         // A YouTube highlight from Sports: its picture and sound are two files, played together
         // the way trailers are (read in pieces, as YouTube slows down whole-file downloads).
         if (currentChannel?.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) {
@@ -2505,6 +2517,21 @@ class LiveTvPlaybackController @Inject constructor(
         ).build(url, headers, isLive)
     }
 
+    private fun isAdaptiveRemoteLiveSource(): Boolean {
+        val p = _player ?: return false
+        val channel = currentChannel ?: return false
+        if (_state.value.catchupTitle != null || savedRecordingId != null || savedRecordingPlaylist != null ||
+            _recordingPlayback.value != null || _shiftStartedAt.value != null || timeshift.session != null ||
+            replayLocal || alwaysBuffer || p.mediaItemCount != 1 || currentWindowIsPlaceholder(p)) return false
+        if (channel.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID ||
+            // Addons may reuse a live game's key for its replay. Remembering live playback
+            // is not enough: ambiguous links and static replays keep their normal rate.
+            (channel.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID &&
+                (!sawLive || !p.isCurrentMediaItemLive))) return false
+        val scheme = p.currentMediaItem?.localConfiguration?.uri?.scheme
+        return scheme.equals("http", true) || scheme.equals("https", true)
+    }
+
     /**
      * Where a replay with its own timeline (an addon replay, a highlight) had got to, so reloading
      * it after a freeze or an error carries on there instead of starting over. Unset otherwise.
@@ -2521,6 +2548,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private fun release() {
+        adaptiveBuffer.release()
         stalkerMediaPolicy?.retire()
         stalkerMediaPolicy = null
         stalkerMimeType = null

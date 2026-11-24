@@ -661,6 +661,8 @@ data class LiveTvSettings(
     val homeRowCompact: Boolean = false,
     /** Live TV buffer: "none" (the least the player can run on), "small" (fast channel changes), "normal", "large", "xlarge". */
     val bufferSize: String = "normal",
+    /** Build a local live-playback cushion with gentle, pitch-preserving speed adjustment. */
+    val adaptiveLiveBufferEnabled: Boolean = false,
     /** Group list order: "custom" (yours, from Reorder groups), "playlist" or "name" (A–Z). */
     val groupSort: String = "custom",
     /** Pause and rewind live TV (channels without catch-up): record while paused. */
