@@ -4,6 +4,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VodBrowsePolicyTest {
+    @Test fun `mutation bookends reject preexisting readers and builds until all writers finish`() {
+        val cache = VodBrowseCache()
+        val rows = VodBrowseCache.Rows(longArrayOf(1), intArrayOf(2))
+        val before = cache.revision()
+        cache.put("unrelated", rows, before)
+        cache.beginMutation()
+        assertFalse(cache.readable(before))
+        assertNull(cache.get("unrelated"))
+        cache.beginMutation()
+        val during = cache.revision()
+        cache.endMutation(" AND genre LIKE ?")
+        assertFalse(cache.readable(during))
+        cache.put("stale", rows, during)
+        cache.endMutation(" AND fl IS NULL")
+        assertFalse(cache.readable(before))
+        assertTrue(cache.readable(cache.revision()))
+        assertSame(rows, cache.get("unrelated"))
+        assertNull(cache.get("stale"))
+    }
+
     @Test fun `browse id budget evicts least recently used query and rejects stale builds`() {
         val cache = VodBrowseCache(5)
         fun rows(n: Int) = VodBrowseCache.Rows(LongArray(n), IntArray(n))
