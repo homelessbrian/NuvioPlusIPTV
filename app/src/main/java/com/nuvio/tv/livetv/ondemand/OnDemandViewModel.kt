@@ -751,7 +751,13 @@ class OnDemandViewModel @Inject constructor(
      * picture servers are slow and often tell apps not to keep a copy, so a card showed it once
      * and went grey when it was drawn again.
      */
+    private suspend fun refreshPictures(queue: List<VodItem>): Boolean {
+        val candidates = queue.filter { posters[it.uid] == null && !it.icon.isNullOrBlank() }
+        return VodPictures.refreshPaths(appContext, candidates.associate { it.uid to it.icon!! }, icons)
+    }
+
     private suspend fun savePictures(queue: List<VodItem>) {
+        if (refreshPictures(queue)) updateHomeRows()
         val need = queue.filter { posters[it.uid] == null && homeMatched[it.uid] == null && icons[it.uid] == null && !it.icon.isNullOrBlank() }
         if (need.isEmpty()) return
         var got = 0
@@ -789,10 +795,8 @@ class OnDemandViewModel @Inject constructor(
             if (posters[item.uid] == null) {
                 repository.cachedPoster(item)?.first?.takeIf { it.isNotBlank() }?.let { posters[item.uid] = it }
             }
-            if (posters[item.uid] == null && icons[item.uid] == null) {
-                item.icon?.let { VodPictures.saved(appContext, it) }?.let { icons[item.uid] = it }
-            }
         }
+        refreshPictures(items)
     }
 
     /** The rows rebuilt off the main thread, then shown. */
@@ -1110,8 +1114,12 @@ class OnDemandViewModel @Inject constructor(
         val item = homeItems.values.asSequence().flatten().firstOrNull { it.uid == uid } ?: return
         homeTried += uid
         viewModelScope.launch {
+            if (refreshPictures(listOf(item))) updateHomeRows()
             if (!homeMatched.containsKey(uid)) enrichOne(item, urgent = true)
-            if (!homeMatched.containsKey(uid)) return@launch
+            if (!homeMatched.containsKey(uid)) {
+                savePictures(listOf(item))
+                return@launch
+            }
             updateHomeRows()
             // Then the full details (clear logo…) for the hero.
             fetchDetails(uid)
