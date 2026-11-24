@@ -62,7 +62,7 @@ class LiveTvRecorder @Inject constructor(
      * Joins each recording into one file per show as it records, copies network folder
      * recordings across, and keeps other TVs' recordings on the network folder in the list.
      */
-    private val recordingFiles = RecordingFiles(context, scope) { load() }
+    private val recordingFiles = RecordingFiles(context, scope, onLibraryChanged = { load() }, onIdle = { stopServiceIfIdle() })
     /** Catch-up downloads going on: recording id -> the provider (playlist) it's from. */
     private val catchupSources = ConcurrentHashMap<String, String>()
 
@@ -1022,7 +1022,16 @@ class LiveTvRecorder @Inject constructor(
             val info = File(d, "info.json")
             val read = runCatching { LiveTvRecording.fromJson(JSONObject(info.readText()), d.absolutePath) }.getOrNull() ?: return@forEach
             // Another TV's recording on the network folder: shown as it is there, never changed here.
-            if (NetworkFolderStore.isNetworkDir(d) && NetworkMarker.isMirror(d)) { out += read.copy(fromOtherTv = true); return@forEach }
+            if (NetworkFolderStore.isNetworkDir(d) && NetworkMarker.isMirror(d)) {
+                // That TV stopped sending it part way (closed, asleep, off the network): ended here,
+                // so it can be watched as far as it got or deleted, instead of "recording" for good.
+                out += if (read.isRecording && recordingFiles.mirrorStalled(d)) read.copy(
+                    fromOtherTv = true, status = RecordingStatus.DONE,
+                    endedAtMs = NetworkMarker.mirrorChangedAt(d).takeIf { it > 0 } ?: d.lastModified(),
+                    problem = "The other TV stopped sending this before it finished, so it may stop early"
+                ) else read.copy(fromOtherTv = true)
+                return@forEach
+            }
             val rec = read
             if (!jobs.containsKey(rec.id) && recordingFiles.needsWork(d)) recordingFiles.track(d)
             if (rec.isRecording && !jobs.containsKey(rec.id)) {
@@ -1044,7 +1053,10 @@ class LiveTvRecorder @Inject constructor(
     }
 
     fun stopServiceIfIdle() {
-        if (jobs.isEmpty() || _recordings.value.none { it.isRecording }) LiveTvRecordingService.stop(context)
+        // A recording that's done here can still be going across to the network folder (a fast
+        // catch-up download outruns the copy): the service keeps the app awake until it's there.
+        if (recordingFiles.hasNetworkWork()) return
+        if (jobs.isEmpty() || _recordings.value.none { it.isRecording && !it.fromOtherTv }) LiveTvRecordingService.stop(context)
     }
 
     private fun open(url: String, headers: Map<String, String>): HttpURLConnection =

@@ -31,6 +31,8 @@ internal class RecordingFiles(
     private val scope: CoroutineScope,
     /** Recording folders were added or removed here (another TV's recordings came or went). */
     private val onLibraryChanged: () -> Unit,
+    /** Nothing left to join or copy (the recorder can let its background service go). */
+    private val onIdle: () -> Unit = {},
 ) {
     /** Recording folders with work left. */
     private val pending = ConcurrentHashMap.newKeySet<String>()
@@ -56,6 +58,13 @@ internal class RecordingFiles(
 
     fun untrack(dir: File) { pending -= dir.absolutePath; made.remove(dir.name) }
 
+    /**
+     * Something still has to go across to the network folder (and the folder can be reached).
+     * Keeps the recording service going after a recording ends, so a tablet or phone that
+     * downloaded faster than it could copy doesn't leave the other TVs with half a recording.
+     */
+    fun hasNetworkWork(): Boolean = problem == null && pending.any { NetworkFolderStore.isNetworkDir(File(it)) }
+
     /** At start: a recording folder with work left over (the app closed part way). */
     fun needsWork(dir: File): Boolean {
         if (NetworkMarker.isMirror(dir)) return false
@@ -63,7 +72,7 @@ internal class RecordingFiles(
         if (NetworkFolderStore.isNetworkDir(dir)) {
             if (waitingBytes(dir) > 0) return true
             val metaAt = metaFiles(dir).maxOfOrNull { it.lastModified() } ?: 0L
-            if (metaAt > NetworkMarker.metaAt(dir)) return true
+            if (metaAt > NetworkMarker.metaAt(dir) || detailsUnsent(dir)) return true
         }
         return false
     }
@@ -80,6 +89,7 @@ internal class RecordingFiles(
                 val fast = NetworkFolderStore.bufferMb(context) <= 100
                 delay(if (problem != null) 10_000L else if (fast) 1_500L else 4_000L)
             }
+            runCatching { onIdle() }
         }
     }
 
@@ -144,9 +154,20 @@ internal class RecordingFiles(
         if (NetworkFolderStore.isNetworkDir(dir)) {
             if (waitingBytes(dir) > 0) return true
             val metaAt = metaFiles(dir).maxOfOrNull { it.lastModified() } ?: 0L
-            if (metaAt > NetworkMarker.metaAt(dir)) return true
+            if (metaAt > NetworkMarker.metaAt(dir) || detailsUnsent(dir)) return true
         }
         return false
+    }
+
+    /**
+     * info.json differs from what was last sent. File times alone can miss the last change: a
+     * catch-up download rewrites it many times a second, and some storage keeps times to the
+     * second, so "finished" could look no newer than the last "still recording" that went across.
+     * Recordings sent before this check existed have nothing to compare with and count as sent.
+     */
+    private fun detailsUnsent(dir: File): Boolean {
+        val sent = NetworkMarker.infoCrc(dir)
+        return sent >= 0 && sent != infoCrc(dir)
     }
 
     // ---------------------------------------------------------------- joining
@@ -317,10 +338,12 @@ internal class RecordingFiles(
     private fun sendDetails(dir: File, folder: SmbFolder) {
         val meta = metaFiles(dir)
         val at = meta.maxOfOrNull { it.lastModified() } ?: return
-        if (at <= NetworkMarker.metaAt(dir)) return
+        val crc = infoCrc(dir)
+        val sentCrc = NetworkMarker.infoCrc(dir)
+        if (at <= NetworkMarker.metaAt(dir) && (sentCrc < 0 || sentCrc == crc)) return
         ensureRemoteDir(folder, dir.name)
         sendMeta(dir, dir.name, meta, folder)
-        NetworkMarker.setMetaAt(dir, at, folder.config.label)
+        NetworkMarker.setMetaAt(dir, at, folder.config.label, crc)
     }
 
     private fun sendMeta(dir: File, id: String, meta: List<File>, folder: SmbFolder) {
@@ -454,7 +477,7 @@ internal class RecordingFiles(
         ensureRemoteDir(folder, src.name)
         val meta = metaFiles(tmp)
         sendMeta(tmp, src.name, meta, folder)
-        NetworkMarker.setMetaAt(tmp, meta.maxOfOrNull { it.lastModified() } ?: 0L, folder.config.label)
+        NetworkMarker.setMetaAt(tmp, meta.maxOfOrNull { it.lastModified() } ?: 0L, folder.config.label, infoCrc(tmp))
         if (!tmp.renameTo(dst)) { tmp.deleteRecursively(); throw IllegalStateException("couldn't finish setting it up") }
         return dst
     }
@@ -525,7 +548,9 @@ internal class RecordingFiles(
      * nothing when there's no network folder or it can't be reached.
      */
     fun syncLibrary() {
-        val folder = NetworkFolderStore.folder(context) ?: return
+        // No network folder any more: other TVs' recordings go from the list (they come back,
+        // as they are now, if the folder is set up again).
+        val folder = NetworkFolderStore.folder(context) ?: run { dropMirrors(); return }
         val label = folder.config.label
         val remote = runCatching { folder.listFolders(NetworkFolderStore.META_DIR).filter { !it.startsWith(".") }.toSet() }.getOrNull() ?: return
         val root = NetworkFolderStore.root(context).apply { mkdirs() }
@@ -538,6 +563,7 @@ internal class RecordingFiles(
                 tmp.deleteRecursively(); tmp.mkdirs()
                 if (!fetchDetails(folder, id, tmp)) { tmp.deleteRecursively(); return@runCatching }
                 NetworkMarker.setMirror(tmp, label)
+                NetworkMarker.mirrorChecked(tmp, changed = true)
                 File(tmp, JoinIndex.DONE_NAME).writeText("")
                 if (tmp.renameTo(File(root, id))) changed = true else tmp.deleteRecursively()
             }.onFailure { tmp.deleteRecursively() }
@@ -561,7 +587,8 @@ internal class RecordingFiles(
 
     /**
      * Another TV's recording that's still being made: its playlists and join index again, at most
-     * every few seconds (unless [force]). True if its details changed (it finished, say).
+     * every few seconds (unless [force]). True if its details changed (it finished, say) or it
+     * has just stopped changing for long enough to count as given up on ([mirrorStalled]).
      */
     fun refreshMirror(dir: File, force: Boolean = false): Boolean {
         if (!NetworkMarker.isMirror(dir)) return false
@@ -570,9 +597,41 @@ internal class RecordingFiles(
         mirrorFetchedAt[dir.name] = now
         val folder = NetworkFolderStore.folder(context) ?: return false
         val before = runCatching { File(dir, "info.json").readText() }.getOrNull()
-        runCatching { fetchDetails(folder, dir.name, dir) }
+        val sigBefore = mirrorSig(dir)
+        val stalledBefore = mirrorStalled(dir)
+        val fetched = runCatching { fetchDetails(folder, dir.name, dir) }.getOrDefault(false)
         val after = runCatching { File(dir, "info.json").readText() }.getOrNull()
-        return before != after
+        // Only a look that worked counts: not reaching the folder isn't the other TV going quiet.
+        if (fetched) NetworkMarker.mirrorChecked(dir, changed = mirrorSig(dir) != sigBefore)
+        return before != after || mirrorStalled(dir) != stalledBefore
+    }
+
+    /**
+     * Another TV's recording that still says "recording", but whose details on the network folder
+     * haven't changed for [MIRROR_STALL_MS] while this TV kept looking. A recording sends new
+     * details every few seconds, so that TV stopped (closed, asleep, off the network) before it
+     * finished: it's shown as ended, so it can be watched as far as it got, or deleted. If that TV
+     * carries on later, the new details bring it back as recording.
+     */
+    fun mirrorStalled(dir: File): Boolean {
+        if (!NetworkMarker.isMirror(dir) || info(dir)?.isRecording != true) return false
+        val changedAt = NetworkMarker.mirrorChangedAt(dir)
+        return changedAt > 0 && NetworkMarker.mirrorCheckedAt(dir) - changedAt >= MIRROR_STALL_MS
+    }
+
+    /** What another TV's recording looks like here: its details and the size of its playlists and join index. */
+    private fun mirrorSig(dir: File): String =
+        (runCatching { File(dir, "info.json").readText() }.getOrDefault("")) + "|" +
+            (dir.listFiles()?.filter { it.name == JoinIndex.NAME || it.name.endsWith(".m3u8") }
+                ?.sortedBy { it.name }?.joinToString(",") { "${it.name}:${it.length()}" } ?: "")
+
+    /** Other TVs' recordings are only copies of their details: gone when there's no network folder. */
+    private fun dropMirrors() {
+        val root = NetworkFolderStore.root(context)
+        val mirrors = root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") && NetworkMarker.isMirror(it) }.orEmpty()
+        if (mirrors.isEmpty()) return
+        mirrors.forEach { it.deleteRecursively() }
+        onLibraryChanged()
     }
 
     /** Copies a recording's details (info.json, playlists, join index) from the network folder into [into]. */
@@ -590,6 +649,10 @@ internal class RecordingFiles(
 
     // ---------------------------------------------------------------- helpers
 
+    private fun infoCrc(dir: File): Long = runCatching {
+        java.util.zip.CRC32().apply { update(File(dir, "info.json").readBytes()) }.value
+    }.getOrDefault(0L)
+
     private fun info(dir: File): LiveTvRecording? =
         runCatching { LiveTvRecording.fromJson(JSONObject(File(dir, "info.json").readText()), dir.absolutePath) }.getOrNull()
 
@@ -600,6 +663,9 @@ internal class RecordingFiles(
 
         /** The largest file a FAT32 drive can hold. */
         private const val FOUR_GB = 0xFFFFFFFFL
+
+        /** Another TV's recording whose details haven't changed this long is taken as given up on. */
+        const val MIRROR_STALL_MS = 10L * 60_000
 
         fun isMeta(f: File): Boolean =
             f.name == "info.json" || f.name == NetworkMarker.NAME || f.name == JoinIndex.NAME || f.name == JoinIndex.DONE_NAME ||
