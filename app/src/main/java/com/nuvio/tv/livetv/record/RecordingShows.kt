@@ -71,7 +71,12 @@ internal data class RecordedShow(
     val episodes: List<LiveTvRecording>
 ) : RecordedEntry
 
-private val EPISODE_NUMBERS = Regex("""(?i)s\s*0*(\d{1,3})\s*[.\- ]?\s*e\s*0*(\d{1,4})""")
+internal val RECORDING_EPISODE_NUMBERS = Regex("""(?i)s\s*0*(\d{1,3})\s*[.\- ]?\s*e\s*0*(\d{1,4})""")
+private val EPISODE_NUMBERS = RECORDING_EPISODE_NUMBERS
+
+/** What a recording is about: the guide's description, else the one found for it (TMDB / your addons). */
+internal fun recordingAbout(rec: LiveTvRecording, found: Map<String, String>): String? =
+    rec.description?.trim()?.takeIf { it.isNotBlank() } ?: found[rec.id]
 
 private fun episodeNumbers(episode: String?): Pair<Int, Int>? =
     episode?.let { EPISODE_NUMBERS.find(it) }?.let { it.groupValues[1].toInt() to it.groupValues[2].toInt() }
@@ -195,6 +200,7 @@ internal fun RecordedFolderCard(
 internal fun RecordedShowPage(
     show: RecordedShow,
     art: Map<String, RecordingArt>,
+    about: Map<String, String> = emptyMap(),
     resumeTick: Int,
     resumeOf: (LiveTvRecording) -> Long?,
     isWatched: (LiveTvRecording) -> Boolean,
@@ -311,6 +317,7 @@ internal fun RecordedShowPage(
                         EpisodeRow(
                             rec = rec,
                             art = art[rec.id],
+                            about = recordingAbout(rec, about),
                             state = states[rec.id] ?: EpisodeState(false, null),
                             modifier = Modifier.focusRequester(episodeFocus.getValue(rec.id))
                                 .onFocusChanged { if (it.isFocused) lastEpisodeId = rec.id },
@@ -328,6 +335,7 @@ internal fun RecordedShowPage(
 private fun EpisodeRow(
     rec: LiveTvRecording,
     art: RecordingArt?,
+    about: String?,
     state: EpisodeState,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -394,6 +402,10 @@ private fun EpisodeRow(
                 size = 13.sp,
                 color = if (failed) colors.Error else colors.TextSecondary
             )
+            // What the episode is about: only on the highlighted one, so the list stays short.
+            if (focused && !failed && about != null) {
+                LiveText(about, size = 13.sp, color = colors.TextPrimary, maxLines = 3, modifier = Modifier.padding(top = 2.dp))
+            }
         }
         Spacer(Modifier.width(12.dp))
         when {
