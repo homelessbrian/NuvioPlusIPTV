@@ -153,7 +153,7 @@ class LiveTvRepository @Inject constructor(
             scheduleCompact()
             // Checking for playlist / guide updates uses the network and a lot of processing,
             // so when this starts with the app it waits a little, out of Nuvio's way.
-            if (updateCheckDelayMs > 0) delay(updateCheckDelayMs)
+            if (updateCheckDelayMs > 0 && _channels.value.isNotEmpty()) delay(updateCheckDelayMs)
             refreshStale()
             firstCheckDone = true
             // Then keep checking while the app stays open. TV boxes keep the app running for

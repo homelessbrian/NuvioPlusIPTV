@@ -92,7 +92,7 @@ class LiveTvHomeRowViewModel @Inject constructor(
     init {
         // Google Drive sync (if connected): pick up a newer setup from another TV.
         driveSync.start()
-        repository.ensureLoaded()
+        repository.ensureLoaded(updateCheckDelayMs = 20_000)
         repository.refreshIfStale()
         viewModelScope.launch {
             while (true) {
