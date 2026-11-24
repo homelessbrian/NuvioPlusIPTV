@@ -73,13 +73,21 @@ internal class RecordingFiles(
         loop = scope.launch {
             var idle = 0
             while (isActive) {
-                val more = runCatching { pass() }.getOrDefault(true)
+                // Copying runs at low priority so watching and browsing always come first.
+                val more = lowPriority { runCatching { pass() }.getOrDefault(true) }
                 if (!more) { if (++idle >= 3) break } else idle = 0
                 // Small allowance: each piece goes across as soon as it's done.
                 val fast = NetworkFolderStore.bufferMb(context) <= 100
                 delay(if (problem != null) 10_000L else if (fast) 1_500L else 4_000L)
             }
         }
+    }
+
+    private inline fun <T> lowPriority(block: () -> T): T {
+        val tid = android.os.Process.myTid()
+        val was = runCatching { android.os.Process.getThreadPriority(tid) }.getOrDefault(android.os.Process.THREAD_PRIORITY_DEFAULT)
+        runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND) }
+        try { return block() } finally { runCatching { android.os.Process.setThreadPriority(was) } }
     }
 
     /** One round over the folders with work. True while there's more to do. */
@@ -219,11 +227,12 @@ internal class RecordingFiles(
         RandomAccessFile(File(dir, f.path), "rw").use { raf ->
             raf.seek(offset)
             piece.inputStream().use { input ->
-                val buf = ByteArray(BUFFER)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    raf.write(buf, 0, n)
+                SmbFolder.withBuffer { buf ->
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        raf.write(buf, 0, n)
+                    }
                 }
             }
             if (raf.length() < offset + piece.length()) throw java.io.IOException("the joined file came out short")
@@ -589,7 +598,6 @@ internal class RecordingFiles(
         @Volatile var current: RecordingFiles? = null
             private set
 
-        private const val BUFFER = 1 shl 20
         /** The largest file a FAT32 drive can hold. */
         private const val FOUR_GB = 0xFFFFFFFFL
 

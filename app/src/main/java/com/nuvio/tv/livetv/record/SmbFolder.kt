@@ -7,7 +7,6 @@ import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2CreateOptions
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.mssmb2.SMBApiException
-import com.hierynomus.security.bc.BCSecurityProvider
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
 import com.hierynomus.smbj.auth.AuthenticationContext
@@ -20,6 +19,7 @@ import java.io.File
 import java.io.OutputStream
 import java.util.EnumSet
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * A shared folder on another computer or a NAS (Windows file sharing, "SMB"), where
@@ -143,16 +143,19 @@ class SmbFolder(val config: NetworkFolderConfig) : Closeable {
             EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE)
         ).use { f ->
             local.inputStream().use { input ->
-                val buf = ByteArray(BUFFER)
-                var at = 0L
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    var off = 0
-                    while (off < n) {
-                        val w = f.write(buf, at, off, n - off).toInt()
-                        if (w <= 0) throw java.io.IOException("the network folder stopped taking data")
-                        off += w; at += w
+                withBuffer { buf ->
+                    val startNs = System.nanoTime()
+                    var at = 0L
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        var off = 0
+                        while (off < n) {
+                            val w = f.write(buf, at, off, n - off).toInt()
+                            if (w <= 0) throw java.io.IOException("the network folder stopped taking data")
+                            off += w; at += w
+                        }
+                        pace(startNs, at)
                     }
                 }
             }
@@ -178,16 +181,19 @@ class SmbFolder(val config: NetworkFolderConfig) : Closeable {
             EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE)
         ).use { f ->
             local.inputStream().use { input ->
-                val buf = ByteArray(BUFFER)
-                var at = offset
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    var off = 0
-                    while (off < n) {
-                        val w = f.write(buf, at, off, n - off).toInt()
-                        if (w <= 0) throw java.io.IOException("the network folder stopped taking data")
-                        off += w; at += w
+                withBuffer { buf ->
+                    val startNs = System.nanoTime()
+                    var at = offset
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        var off = 0
+                        while (off < n) {
+                            val w = f.write(buf, at, off, n - off).toInt()
+                            if (w <= 0) throw java.io.IOException("the network folder stopped taking data")
+                            off += w; at += w
+                        }
+                        pace(startNs, at - offset)
                     }
                 }
             }
@@ -272,16 +278,17 @@ class SmbFolder(val config: NetworkFolderConfig) : Closeable {
             SMB2CreateDisposition.FILE_OPEN,
             EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE)
         ).use { f ->
-            val buf = ByteArray(BUFFER)
             // Never asks past the end (some servers answer that badly and drop the connection).
             val length = f.fileInformation.standardInformation.endOfFile
             var at = offset
             var left = minOf(count, (length - offset).coerceAtLeast(0L))
-            while (left > 0) {
-                val n = f.read(buf, at, 0, minOf(buf.size.toLong(), left).toInt())
-                if (n <= 0) break
-                out.write(buf, 0, n)
-                at += n; left -= n
+            withBuffer { buf ->
+                while (left > 0) {
+                    val n = f.read(buf, at, 0, minOf(buf.size.toLong(), left).toInt())
+                    if (n <= 0) break
+                    out.write(buf, 0, n)
+                    at += n; left -= n
+                }
             }
         }
     }
@@ -343,18 +350,43 @@ class SmbFolder(val config: NetworkFolderConfig) : Closeable {
     }
 
     companion object {
-        private const val BUFFER = 1 shl 20
+        /** Copy chunk size. Smaller chunks mean far less memory thrown away per piece copied. */
+        internal const val BUFFER = 256 * 1024
+
+        /**
+         * Most a recording is copied across at (bytes a second): well above any live stream, so
+         * copying keeps up, but catching up on a backlog no longer takes over the processor.
+         */
+        private const val MAX_COPY_BYTES_PER_SEC = 8L * 1024 * 1024
+
+        /** One copy buffer kept for reuse (a second one at the same time is made fresh). */
+        @PublishedApi internal val spare = AtomicReference<ByteArray?>(null)
+
+        internal inline fun <T> withBuffer(block: (ByteArray) -> T): T {
+            val buf = spare.getAndSet(null) ?: ByteArray(BUFFER)
+            try { return block(buf) } finally { spare.set(buf) }
+        }
+
+        /** Waits as needed so [sent] bytes since [startNs] stay under the copy speed limit. */
+        private fun pace(startNs: Long, sent: Long) {
+            val dueMs = sent * 1000 / MAX_COPY_BYTES_PER_SEC
+            val tookMs = (System.nanoTime() - startNs) / 1_000_000
+            if (dueMs > tookMs) Thread.sleep(dueMs - tookMs)
+        }
 
         /** A file sharing client set up the way every network folder connection uses. */
         internal fun newClient(): SMBClient = SMBClient(
             SmbConfig.builder()
-                // Android's own security library lacks a piece Windows logins need (MD4).
-                .withSecurityProvider(BCSecurityProvider())
+                // Android's own security code for signing/encrypting; the bundled library only for
+                // what Android lacks (like the MD4 step Windows logins need).
+                .withSecurityProvider(SmbSecurity())
                 .withAuthenticators(NtlmAuthenticator.Factory())
                 .withMultiProtocolNegotiate(true)
                 .withDfsEnabled(false)
                 .withTimeout(20, TimeUnit.SECONDS)
                 .withSoTimeout(45, TimeUnit.SECONDS)
+                // Smaller pieces per network message: much less memory made and thrown away.
+                .withWriteBufferSize(BUFFER)
                 .build()
         )
 
