@@ -2223,6 +2223,8 @@ class LiveTvRepository @Inject constructor(
         else -> context.withAppLocale().resources.getQuantityString(R.plurals.iptv_repository_status_adding_playlists, names.size, names.size)
     }
 
+    private class ChannelEntryFailure(cause: Throwable) : RuntimeException(cause)
+
     /**
      * Makes one channel list from every playlist that's on (numbers carry on from one playlist
      * to the next). Only playlists that changed are read again: the others' channels are taken
@@ -2277,63 +2279,91 @@ class LiveTvRepository @Inject constructor(
             }
             read++
             if (fixedMessage == null) setStatus(loading = true, message = readingChannelsMessage(pl.name, read, toRead))
-            // Movies and episodes are left out while reading (see the check below), counted for
-            // the stray-entry check.
+            val firstNumber = counter
+            val tail = PlaylistChannelTail(out, usedKeys, firstNumber)
+            // Classify each link once, before its entry is built. The whole-playlist ratio is
+            // known only at EOF; a bit per unmarked channel lets us remove strays afterward.
             var vodLinks = 0
-            val skipVod: ((String) -> Boolean)? = if (pl.isStalker) null else { url -> isVodEntry(url).also { if (it) vodLinks++ } }
-            val parsed = runCatching { openMaybeGzip(file).reader(Charsets.UTF_8).buffered(64 * 1024).use { M3uParser.parse(it, skipVod) } }
-                .onFailure { Log.w(TAG, "Parse ${pl.name} failed", it) }
-                .getOrNull() ?: continue
-            embeddedEpgUrls[pl.id] = parsed.epgUrls
+            var liveLinks = 0
+            var unmarkedLinks = 0
+            var parsedEntries = 0
+            var linkKind = PlaylistLinks.Kind.UNMARKED
+            val skipVod: ((String) -> Boolean)? = if (pl.isStalker) null else { url ->
+                linkKind = PlaylistLinks.classify(url)
+                (linkKind == PlaylistLinks.Kind.VOD).also { if (it) vodLinks++ }
+            }
             // The playlist's own User-Agent: one shared copy for every channel with no headers of its own.
             val playlistAgent = pl.effectiveUserAgent
             val agentOnly = if (playlistAgent.isNotBlank()) mapOf("User-Agent" to playlistAgent) else emptyMap()
-            val hideStrays = !pl.isStalker && prefs.currentSettings().hideStrayEntries &&
-                isMarkedPlaylist(parsed.entries.count { LIVE_PATH.containsMatchIn(it.url) } + vodLinks, parsed.entries.count { !LIVE_PATH.containsMatchIn(it.url) })
-            var strays = 0
-            for (e in parsed.entries) {
-                if (hideStrays && isStrayEntry(e)) { strays++; continue }
-                // Many providers' M3U links ("m3u_plus") also list every movie and episode,
-                // often 100,000+ entries. Those aren't TV channels, and loading them all into the
-                // guide used enough memory to crash Live TV on some devices.
-                if (!pl.isStalker && isVodEntry(e.url)) continue
-                val portalRef = if (pl.isStalker) decodeStalkerEntry(e.url) ?: continue else null
-                val groupTitle = if (portalRef != null && e.group?.startsWith("stalker-group:") == true) {
-                    runCatching { String(android.util.Base64.decode(e.group.removePrefix("stalker-group:"), android.util.Base64.NO_WRAP), Charsets.UTF_8) }.getOrDefault("Uncategorized")
-                } else e.group?.ifBlank { null } ?: "Uncategorized"
-                val baseKey = if (portalRef != null) "${pl.id}|stalker|${portalRef.providerId.encodeURLParameter()}" else "${pl.id}|${e.tvgId ?: ""}|${e.name}"
-                var key = baseKey
-                var n = 2
-                while (!usedKeys.add(key)) { key = "$baseKey#${n++}" }
-                val number = e.chno ?: counter
-                counter = maxOf(counter, number) + 1
-                val headers = if (playlistAgent.isNotBlank() && "User-Agent" !in e.headers) {
-                    if (e.headers.isEmpty()) agentOnly else e.headers + ("User-Agent" to playlistAgent)
-                } else e.headers
-                out += LiveChannel(
-                    key = key,
-                    sourceId = pl.id,
-                    sourceName = pl.name,
-                    name = e.name,
-                    tvgId = portalRef?.providerId ?: e.tvgId,
-                    tvgName = if (portalRef != null) e.name else e.tvgName,
-                    logo = e.logo,
-                    groupId = if (multi) "${pl.id}::$groupTitle" else groupTitle,
-                    // Names stay exactly as the playlist has them (the playlist is shown, if you want
-                    // it, with "Group by playlist").
-                    group = groupTitle,
-                    number = number,
-                    url = if (portalRef != null) "stalker:${pl.id}:${portalRef.providerId}" else pl.m3uStreamLink(e.url),
-                    headers = headers,
-                    catchup = e.catchup,
-                    drm = e.drm,
-                    tvgShiftMinutes = e.tvgShiftMinutes,
-                    autoNumber = e.chno == null,
-                    stalkerRef = portalRef
-                )
+            val parsed = runCatching {
+                openMaybeGzip(file).reader(Charsets.UTF_8).buffered(64 * 1024).use { reader ->
+                    M3uParser.read(reader, skipVod) { e ->
+                        try {
+                            parsedEntries++
+                            if (!pl.isStalker) {
+                                if (linkKind == PlaylistLinks.Kind.LIVE) liveLinks++ else {
+                                    unmarkedLinks++
+                                    tail.unmarkedEntry()
+                                }
+                            }
+                            val portalRef = if (pl.isStalker) decodeStalkerEntry(e.url) ?: return@read else null
+                            val groupTitle = if (portalRef != null && e.group?.startsWith("stalker-group:") == true) {
+                                runCatching { String(android.util.Base64.decode(e.group.removePrefix("stalker-group:"), android.util.Base64.NO_WRAP), Charsets.UTF_8) }.getOrDefault("Uncategorized")
+                            } else e.group?.ifBlank { null } ?: "Uncategorized"
+                            val baseKey = if (portalRef != null) "${pl.id}|stalker|${portalRef.providerId.encodeURLParameter()}" else "${pl.id}|${e.tvgId ?: ""}|${e.name}"
+                            var key = baseKey
+                            var n = 2
+                            while (!usedKeys.add(key)) { key = "$baseKey#${n++}" }
+                            val number = e.chno ?: counter
+                            counter = maxOf(counter, number) + 1
+                            val headers = if (playlistAgent.isNotBlank() && "User-Agent" !in e.headers) {
+                                if (e.headers.isEmpty()) agentOnly else e.headers + ("User-Agent" to playlistAgent)
+                            } else e.headers
+                            out += LiveChannel(
+                                key = key,
+                                sourceId = pl.id,
+                                sourceName = pl.name,
+                                name = e.name,
+                                tvgId = portalRef?.providerId ?: e.tvgId,
+                                tvgName = if (portalRef != null) e.name else e.tvgName,
+                                logo = e.logo,
+                                groupId = if (multi) "${pl.id}::$groupTitle" else groupTitle,
+                                // Names stay exactly as the playlist has them (the playlist is shown, if you want
+                                // it, with "Group by playlist").
+                                group = groupTitle,
+                                number = number,
+                                url = if (portalRef != null) "stalker:${pl.id}:${portalRef.providerId}" else pl.m3uStreamLink(e.url),
+                                headers = headers,
+                                catchup = e.catchup,
+                                drm = e.drm,
+                                tvgShiftMinutes = e.tvgShiftMinutes,
+                                autoNumber = e.chno == null,
+                                stalkerRef = portalRef
+                            )
+                        } catch (failure: Throwable) {
+                            // Conversion used to run after parsing, outside its recoverable failure
+                            // handler. Keep that distinction instead of swallowing a build failure.
+                            throw ChannelEntryFailure(failure)
+                        }
+                    }
+                }
             }
+            parsed.exceptionOrNull()?.let { failure ->
+                if (failure is ChannelEntryFailure) throw failure.cause!!
+                Log.w(TAG, "Parse ${pl.name} failed", failure)
+            }
+            if (parsed.isFailure) {
+                tail.rollback()
+                counter = firstNumber
+                continue
+            }
+            embeddedEpgUrls[pl.id] = parsed.getOrThrow()
+            val hideStrays = !pl.isStalker && prefs.currentSettings().hideStrayEntries &&
+                isMarkedPlaylist(liveLinks + vodLinks, unmarkedLinks)
+            if (hideStrays) counter = tail.removeStrays(counter) { EPISODE_NAME.containsMatchIn(it) }
+            val strays = tail.removed
             if (strays > 0) LIVE_REPORT.add("${pl.name}: left out $strays stray entr${if (strays == 1) "y" else "ies"} (episode-named, no live/movie/series link)")
-            prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(channelCount = parsed.entries.size - strays) else it } }
+            prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(channelCount = parsedEntries - strays) else it } }
         }
         loadGroupOrder()
         builtSegments = segments
@@ -4072,9 +4102,6 @@ class LiveTvRepository @Inject constructor(
                 """to be announced|tba|tbd|n/?a|off air|no data|no epg|not available|information not available|""" +
                 """regular programming|scheduled programming|paid programming|coming soon|no program guide available)\.?"""
         )
-        private val VOD_PATH = Regex("""/(movie|movies|series|vod)/""", RegexOption.IGNORE_CASE)
-        private val VOD_EXT = Regex("""\.(mp4|mkv|avi|mov|wmv|m4v|webm|flv)(\?|$)""", RegexOption.IGNORE_CASE)
-
         /** A movie or episode in an M3U (by its link), not a live channel. */
         /** An Xtream channel, movie or episode link, with the login in it. */
         private val XTREAM_CHANNEL_LINK = Regex(
@@ -4082,9 +4109,8 @@ class LiveTvRepository @Inject constructor(
             RegexOption.IGNORE_CASE
         )
 
-        fun isVodEntry(url: String): Boolean = VOD_PATH.containsMatchIn(url) || VOD_EXT.containsMatchIn(url)
+        fun isVodEntry(url: String): Boolean = PlaylistLinks.classify(url) == PlaylistLinks.Kind.VOD
 
-        private val LIVE_PATH = Regex("""/live/""", RegexOption.IGNORE_CASE)
         /** "S01E02", "S1 E2", "S01.E02": named like a series episode, not a channel. */
         private val EPISODE_NAME = Regex("""\bS\d{1,3}\s*[._-]?\s*E\d{1,4}\b""", RegexOption.IGNORE_CASE)
 
@@ -4102,7 +4128,7 @@ class LiveTvRepository @Inject constructor(
          * ("EURO Russian" with "RU | Telekanal S02 E02"). A marked live channel is never one.
          */
         internal fun isStrayEntry(e: M3uEntry): Boolean =
-            !LIVE_PATH.containsMatchIn(e.url) && EPISODE_NAME.containsMatchIn(e.name)
+            !PlaylistLinks.hasLivePath(e.url) && EPISODE_NAME.containsMatchIn(e.name)
 
         /** "Programming", "No information", "To Be Announced"… (no real show to show a poster for). */
         fun isPlaceholderTitle(title: String): Boolean = PLACEHOLDER_TITLES.matches(title.trim().lowercase())
