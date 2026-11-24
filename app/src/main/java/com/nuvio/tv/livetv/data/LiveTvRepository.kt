@@ -2576,7 +2576,8 @@ class LiveTvRepository @Inject constructor(
             }
         }
 
-        // Clearing up an earlier run was interrupted in (the app closed mid-update) is finished first.
+        // What an earlier run left when it was interrupted (the app closed mid-update) is marked for
+        // clearing up; the deleting itself happens in the background, after the guide is on screen.
         guideDb.tidy()
 
         /**

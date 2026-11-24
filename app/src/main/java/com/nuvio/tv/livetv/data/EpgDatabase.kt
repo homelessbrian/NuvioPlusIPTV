@@ -911,7 +911,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         } finally {
             changes++
         }
-        runCatching { purgeDead(); emptyOut() }
+        clearUpLater()
     }
 
     private fun putAuto(db: SQLiteDatabase, auto: Map<String, EpgAssignment>) {
@@ -976,7 +976,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         } finally {
             changes++
         }
-        runCatching { purgeDead(); emptyOut() }
+        clearUpLater()
     }
 
     /**
@@ -1058,7 +1058,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         } finally {
             changes++
         }
-        runCatching { purgeDead(); emptyOut() }
+        clearUpLater()
     }
 
     /**
@@ -1134,16 +1134,22 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         } finally {
             changes++
         }
-        runCatching { purgeDead(); emptyOut() }
+        clearUpLater()
     }
 
     // ------------------------------------------------------------ clearing up
 
     /**
-     * Deletes guide channel rows marked for deleting and their listings, a batch at a time (each
-     * its own short step, so nothing else waits long and the pending changes stay small).
+     * Deletes guide channel rows marked for deleting and their listings, a small batch at a time
+     * with a short break after each, at low priority: on a slower box a big clear-up (an update
+     * cut short by the app closing or updating) otherwise kept the processor busy at full speed
+     * for a long while, right when the app was opening.
      */
     private fun purgeDead() {
+        gently { purgeDeadNow() }
+    }
+
+    private fun purgeDeadNow() {
         val db = writableDatabase
         while (true) {
             val gids = ArrayList<Long>()
@@ -1158,17 +1164,23 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             } finally {
                 db.endTransaction()
             }
+            if (gids.size == PURGE_BATCH) Thread.sleep(PURGE_PAUSE_MS)
         }
     }
 
     /** Deletes the listings of guide channels nobody points at any more ([releaseUnused]), a batch at a time. */
     private fun emptyOut() {
+        gently { emptyOutNow() }
+    }
+
+    private fun emptyOutNow() {
         val db = writableDatabase
         val gids = ArrayList<Long>()
         db.rawQuery(
             "SELECT gid FROM guide_ch WHERE state = $EMPTIED AND EXISTS (SELECT 1 FROM listings WHERE listings.gid = guide_ch.gid)", null
         ).use { c -> while (c.moveToNext()) gids += c.getLong(0) }
-        gids.chunked(PURGE_BATCH).forEach { part ->
+        gids.chunked(PURGE_BATCH).forEachIndexed { i, part ->
+            if (i > 0) Thread.sleep(PURGE_PAUSE_MS)
             db.beginTransaction()
             try {
                 db.execSQL("DELETE FROM listings WHERE gid IN (${part.joinToString(",")})")
@@ -1179,13 +1191,64 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         }
     }
 
-    /** Finishes any clearing up an earlier run was interrupted in (cheap when there's nothing to do). */
+    /** Runs [block] with this thread at low priority, then puts its priority back. */
+    private inline fun gently(block: () -> Unit) {
+        val tid = android.os.Process.myTid()
+        val before = runCatching { android.os.Process.getThreadPriority(tid) }.getOrNull()
+        if (before != null && before < android.os.Process.THREAD_PRIORITY_BACKGROUND) {
+            runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND) }
+        }
+        try {
+            block()
+        } finally {
+            if (before != null && before < android.os.Process.THREAD_PRIORITY_BACKGROUND) {
+                runCatching { android.os.Process.setThreadPriority(before) }
+            }
+        }
+    }
+
+    /** A clear-up is waiting to run or running, so asking again doesn't queue another. */
+    private val clearUpQueued = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** One low-priority thread of its own, so a clear-up never takes a thread guide updates need. */
+    private val clearUpThread by lazy {
+        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread({
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+                r.run()
+            }, "nuvio-tidy").apply { isDaemon = true }
+        }
+    }
+
+    /**
+     * Clears up what's marked for deleting in the background, after a short wait, instead of
+     * making whoever stored the guide wait for it (the new guide goes on screen first).
+     */
+    private fun clearUpLater() {
+        if (!clearUpQueued.compareAndSet(false, true)) return
+        runCatching {
+            clearUpThread.execute {
+                try {
+                    Thread.sleep(CLEAR_UP_DELAY_MS)
+                    clearUpQueued.set(false)
+                    runCatching { purgeDead(); emptyOut() }
+                } catch (_: InterruptedException) {
+                    clearUpQueued.set(false)
+                }
+            }
+        }.onFailure { clearUpQueued.set(false) }
+    }
+
+    /**
+     * Finishes any clearing up an earlier run was interrupted in. Only the quick part (marking
+     * what an abandoned read left) happens now; the deleting happens in the background.
+     */
     fun tidy() {
         runCatching {
             // Only called when no guide file is being read in: anything still unfinished was abandoned.
             writableDatabase.execSQL("UPDATE guide_ch SET state = $DEAD WHERE state = $PENDING")
-            purgeDead(); emptyOut()
         }
+        clearUpLater()
     }
 
     private fun bindListing(stmt: android.database.sqlite.SQLiteStatement, gid: Long, p: EpgProgram, shiftMs: Long) {
@@ -1367,7 +1430,11 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
      * of the file is empty (a guide removed, far fewer days kept). The space an updated guide's
      * old listings leave is used again by its next update, so the file isn't rewritten for that.
      */
-    fun compact(): Long = SqliteCompact.compactIfWasteful(writableDatabase, "guide", emptyShare = 0.6)
+    fun compact(): Long {
+        // Anything still waiting to be cleared up goes first, so its space is given back too.
+        runCatching { purgeDead(); emptyOut() }
+        return SqliteCompact.compactIfWasteful(writableDatabase, "guide", emptyShare = 0.6)
+    }
 
     fun clear() {
         changes++
@@ -1420,4 +1487,8 @@ private const val SOURCE_INSERT_ROWS = 80
 private const val GID_CHUNK = 400
 
 /** Guide channels whose listings are deleted in one step. */
-private const val PURGE_BATCH = 200
+private const val PURGE_BATCH = 40
+/** Break between clear-up steps, so the screen and guide reads get the processor and the database. */
+private const val PURGE_PAUSE_MS = 30L
+/** How long a background clear-up waits first, so it doesn't land while the app is opening. */
+private const val CLEAR_UP_DELAY_MS = 20_000L
