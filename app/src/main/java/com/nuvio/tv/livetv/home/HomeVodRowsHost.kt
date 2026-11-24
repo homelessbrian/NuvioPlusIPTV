@@ -90,8 +90,9 @@ fun HomeVodRowsHost(
             lifecycleOwner.lifecycle.removeObserver(observer)
             if (VodHomeIds.homeHooks === hooks) {
                 VodHomeIds.homeHooks = null
+                // The rows stay on Home while a title opened from them is on screen, so Back
+                // lands on the same card (cleared, Home came back without them and lost its place).
                 vod.stopHomeScreenRows()
-                rowsModel.setVodRows(emptyMap())
             }
         }
     }
