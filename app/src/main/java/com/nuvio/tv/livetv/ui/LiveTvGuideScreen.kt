@@ -536,11 +536,11 @@ private fun LiveTvGuideScreenBody(
     val rangeKeys = remember(channels, row) {
         channels.drop((row - 8).coerceAtLeast(0)).take(32).map { it.key }
     }
-    LaunchedEffect(windowStart, rangeKeys, guideGeneration) {
+    LaunchedEffect(windowStart, rangeKeys, guideGeneration, settings.epgOffsetMinutes) {
         viewModel.ensureGuideRange(windowStart - 2 * 3_600_000L,
             windowStart + guideWindowMs(settings) + 6 * 3_600_000L, rangeKeys)
     }
-    LaunchedEffect(ui.selectedGroupId, ui.channels.size, guideGeneration) {
+    LaunchedEffect(ui.selectedGroupId, ui.channels.size, guideGeneration, settings.epgOffsetMinutes) {
         delay(400) // flicking through groups: only the one you stop on
         viewModel.ensureGroupFullRange(ui.channels.map { it.key })
     }

@@ -276,7 +276,7 @@ class LiveTvRecordingScheduler @Inject constructor(
             watchNetwork()
             scope.launch { forgetDeletedPlaylists() }
             // New guide listings: look for new airings of series.
-            repository.programs.debounce(10_000).collect { if (_series.value.isNotEmpty()) expandSeries() }
+            repository.guideContentChanges.debounce(10_000).collect { if (_series.value.isNotEmpty()) expandSeries() }
         }
     }
 

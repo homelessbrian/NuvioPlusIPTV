@@ -4,7 +4,7 @@ import com.nuvio.tv.livetv.model.EpgProgram
 import java.util.IdentityHashMap
 
 /**
- * Extra guide hours belong to recently browsed channels, never to the all-channel window.
+ * Extra guide hours belong to recently browsed channels, never to an all-channel time span.
  * Accessed under the repository's range mutex. The database remains the complete guide.
  */
 internal class GuideRangeCache(
@@ -36,17 +36,24 @@ internal class GuideRangeCache(
 
     data class Retained(val programs: Map<String, List<EpgProgram>>, val incomplete: Set<String>)
 
-    /** Startup's longer all-channel read must union, rather than replace, browsed hours. */
+    /** A new all-channel baseline must union, rather than replace, browsed hours. */
     fun mergeBase(
         read: Map<String, List<EpgProgram>>,
         keep: Map<String, List<EpgProgram>>,
         base: Window,
         visible: Set<String> = emptySet(),
-        viewport: Window? = null
+        viewport: Window? = null,
+        basePrograms: Map<String, List<EpgProgram>>? = null,
+        pinnedWindows: Map<String, List<Window>> = emptyMap()
     ): Retained {
         val merged = HashMap(read)
-        keep.forEach { (channel, list) -> merged[channel] = mergeGuideShows(merged[channel], list) }
-        return retain(merged, base, visible, viewport, trimBase = true)
+        val shared = IdentityHashMap<List<EpgProgram>, IdentityHashMap<List<EpgProgram>, List<EpgProgram>>>()
+        keep.forEach { (channel, list) ->
+            val current = merged[channel]
+            merged[channel] = if (current.isNullOrEmpty() || current === list) list else shared.getOrPut(current) { IdentityHashMap() }
+                .getOrPut(list) { mergeGuideShows(current, list) }
+        }
+        return retain(merged, base, visible, viewport, trimBase = true, basePrograms = basePrograms, pinnedWindows = pinnedWindows)
     }
 
     /**
@@ -60,18 +67,26 @@ internal class GuideRangeCache(
         base: Window,
         visible: Set<String> = emptySet(),
         viewport: Window? = null,
-        trimBase: Boolean = false
+        trimBase: Boolean = false,
+        basePrograms: Map<String, List<EpgProgram>>? = null,
+        pinnedWindows: Map<String, List<Window>> = emptyMap()
     ): Retained {
         var next: HashMap<String, List<EpgProgram>>? = null
         val incomplete = HashSet<String>()
-        val filtered = IdentityHashMap<List<EpgProgram>, MutableMap<Pair<Window?, Window?>, List<EpgProgram>>>()
+        val filtered = IdentityHashMap<List<EpgProgram>, MutableMap<Triple<Window?, List<Window>, List<EpgProgram>?>, List<EpgProgram>>>()
+        fun shownWindows(channel: String): List<Window> {
+            val pins = pinnedWindows[channel].orEmpty()
+            return viewport?.takeIf { channel in visible }?.let { pins + it } ?: pins
+        }
+        fun isBase(channel: String, p: EpgProgram) = if (basePrograms == null) base.includes(p)
+            else basePrograms[channel].orEmpty().any { it.startMs == p.startMs }
         fun keep(channel: String, extra: Window?) {
             val list = (next ?: programs)[channel] ?: return
-            val shown = viewport.takeIf { channel in visible }
+            val shown = shownWindows(channel)
             val byWindow = filtered.getOrPut(list) { HashMap() }
-            val kept = byWindow.getOrPut(extra to shown) {
-                if (list.all { base.includes(it) || extra?.includes(it) == true || shown?.includes(it) == true }) list
-                else list.filter { base.includes(it) || extra?.includes(it) == true || shown?.includes(it) == true }
+            val kept = byWindow.getOrPut(Triple(extra, shown, basePrograms?.get(channel))) {
+                if (list.all { p -> isBase(channel, p) || extra?.includes(p) == true || shown.any { it.includes(p) } }) list
+                else list.filter { p -> isBase(channel, p) || extra?.includes(p) == true || shown.any { it.includes(p) } }
             }
             if (kept !== list) {
                 val out = next ?: HashMap(programs).also { next = it }
@@ -85,24 +100,28 @@ internal class GuideRangeCache(
         }
         val costs = HashMap<String, Int>()
         windows.keys.forEach { channel ->
-            costs[channel] = (next ?: programs)[channel].orEmpty().count { !base.includes(it) }
+            costs[channel] = (next ?: programs)[channel].orEmpty().count { !isBase(channel, it) }
         }
         var count = costs.values.sum()
         // Snapshot iteration: access-order lookups above may change recency, removals below do.
         while (windows.size > maxChannels || count > maxPrograms) {
-            val candidate = windows.keys.firstOrNull { it !in visible }
+            val candidate = windows.keys.firstOrNull { it !in visible && it !in pinnedWindows }
             if (candidate == null) {
                 // Retain just the displayed hours if a long full-group prefetch filled the budget.
                 windows.keys.toList().forEach { channel ->
-                    keep(channel, viewport)
+                    val shown = shownWindows(channel)
+                    keep(channel, null)
                     incomplete += channel
                     val known = windows[channel]!!
-                    val from = maxOf(known.from, viewport?.from ?: Long.MAX_VALUE)
-                    val to = minOf(known.to, viewport?.to ?: Long.MIN_VALUE)
+                    val covered = shown.mapNotNull { window ->
+                        val from = maxOf(known.from, window.from)
+                        val to = minOf(known.to, window.to)
+                        if (from < to) Window(from, to) else null
+                    }
                     // A prefetch can finish before the new viewport's query. Keeping any rows
                     // already there must not claim that the missing hours were read as well.
-                    if (from < to) windows[channel] = Window(from, to)
-                    else if ((next ?: programs)[channel].orEmpty().any { !base.includes(it) }) {
+                    if (covered.isNotEmpty()) windows[channel] = covered.last()
+                    else if ((next ?: programs)[channel].orEmpty().any { !isBase(channel, it) }) {
                         // Visible rows can predate the latest complete read. Keep charging them
                         // to the budget, without claiming any interval is fully covered.
                         windows[channel] = Window(Long.MAX_VALUE, Long.MIN_VALUE)
@@ -121,6 +140,7 @@ internal class GuideRangeCache(
 
 /** Keep existing records at duplicate start times, including their already-loaded details. */
 internal fun mergeGuideShows(current: List<EpgProgram>?, added: List<EpgProgram>): List<EpgProgram> {
+    if (current === added) return added
     if (current.isNullOrEmpty()) return added
     val starts = current.mapTo(HashSet()) { it.startMs }
     val extra = added.filter { it.startMs !in starts }
