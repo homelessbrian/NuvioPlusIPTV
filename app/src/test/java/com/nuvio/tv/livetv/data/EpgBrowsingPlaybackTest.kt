@@ -85,4 +85,16 @@ class EpgBrowsingPlaybackTest {
         assertNotNull(database.program("channel-a", 0))
         assertEquals(600, database.channelRange("channel-a", 0, 600_000).size)
     }
+
+    @Test fun `future browsing reads only requested channels and a revisit reads the stored rows`() {
+        val future = database.range(500_000, 510_000, light = true, channels = listOf("channel-a", "channel-alias"))
+        assertEquals(setOf("channel-a", "channel-alias"), future.keys)
+        assertEquals(10, future.getValue("channel-a").size)
+        assertSame(future["channel-a"], future["channel-alias"])
+
+        // Releasing an in-memory window does not delete catch-up, search or scheduling data.
+        val revisited = database.range(500_000, 510_000, light = true, channels = listOf("channel-a"))
+        assertEquals(future["channel-a"], revisited["channel-a"])
+        assertEquals(600, database.channelRange("channel-a", 0, 600_000).size)
+    }
 }

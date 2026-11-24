@@ -136,7 +136,13 @@ class HomePosterWatchedTest {
             tvRecommendationManager = mockk(relaxed = true),
             serverCatalog = mockk(relaxed = true),
             trailerPlayerPool = mockk(relaxed = true),
-            backgroundTrailerController = mockk(relaxed = true)
+            backgroundTrailerController = mockk(relaxed = true),
+            homeLiveRows = mockk(relaxed = true) {
+                every { shownRows } returns MutableStateFlow(emptyList())
+                every { names } returns MutableStateFlow(emptyMap())
+                every { emptyRowIds } returns MutableStateFlow(emptySet())
+                every { vodRows } returns MutableStateFlow(emptyMap())
+            }
         )
         viewModel.startupGracePeriodActive = false
         viewModel.currentTmdbSettings = TmdbSettings(enabled = false)

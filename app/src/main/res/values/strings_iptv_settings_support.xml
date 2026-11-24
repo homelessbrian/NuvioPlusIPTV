@@ -17,6 +17,9 @@
     <string name="iptv_settings_support_report_title">Live TV start-up report</string>
     <string name="iptv_settings_support_report_subtitle">Since the app started. ▲ ▼ to scroll.</string>
     <string name="iptv_settings_support_report_empty">Nothing yet: open Live TV first.</string>
+    <string name="iptv_settings_support_capture_start">Capture screen performance for 5 minutes</string>
+    <string name="iptv_settings_support_capture_stop">Stop performance capture</string>
+    <string name="iptv_settings_support_capture_hint">Close this report and use Guide, Sports or Multiview. Reopen it to see frame and stall measurements. Capture stops while the app is in the background.</string>
     <string name="iptv_settings_support_report_send">Send the whole report</string>
     <string name="iptv_settings_support_report_no_network">Connect this TV to Wi-Fi to send the report from your phone.</string>
     <string name="iptv_settings_support_report_phone_instructions">1. Put your phone on the same Wi-Fi as this TV.\n2. Scan this code with your phone\'s camera, or type the address below.\n3. Tap Copy short report (it fits in one Discord message), then paste it in your message.</string>

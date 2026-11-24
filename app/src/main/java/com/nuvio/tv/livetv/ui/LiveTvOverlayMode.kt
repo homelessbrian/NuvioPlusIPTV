@@ -568,8 +568,7 @@ private fun OverlayModeContent(
             Spacer(Modifier.height(14.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (recordLabel != null) MenuItem(recordLabel, Modifier.focusRequester(first)) {
-                    val msg = if (onNow && recordingNow) viewModel.toggleRecording(ch) else viewModel.toggleScheduled(ch, p)
-                    com.nuvio.tv.livetv.record.LiveTvNotice.show(msg)
+                    if (onNow && recordingNow) viewModel.toggleRecording(ch) else viewModel.toggleScheduled(ch, p)
                     recordMenu = null
                     activity++
                 }

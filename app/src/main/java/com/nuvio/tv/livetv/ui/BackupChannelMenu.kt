@@ -132,13 +132,12 @@ internal fun BackupChannelMenu(
                     item { MenuHeader("Record", first = playing && !canRestart) }
                     item {
                         MenuItem(recordLabel, if (playing && !canRestart) Modifier.focusRequester(first) else Modifier) {
-                            val msg = when {
+                            when {
                                 recordingNow -> viewModel.toggleRecording(channel)
                                 program != null -> viewModel.toggleScheduled(channel, program)
                                 // No listings: record from now (an hour, as the play bar's Record does).
                                 else -> viewModel.toggleRecording(channel)
                             }
-                            LiveTvNotice.show(msg)
                             onDismiss()
                         }
                     }

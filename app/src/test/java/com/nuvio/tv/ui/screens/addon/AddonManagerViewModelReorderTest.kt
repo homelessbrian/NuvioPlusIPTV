@@ -79,7 +79,18 @@ class AddonManagerViewModelReorderTest {
             tmdbCollectionSourceResolver = mockk<TmdbCollectionSourceResolver>(relaxed = true),
             traktPublicListSourceResolver = mockk<TraktPublicListSourceResolver>(relaxed = true),
             trackingAddonConsentController = mockk<TrackingAddonConsentController>(relaxed = true),
-            context = mockk<Context>(relaxed = true)
+            context = mockk<Context>(relaxed = true),
+            homeLiveRows = mockk(relaxed = true) {
+                every { rows } returns MutableStateFlow(emptyList())
+                every { names } returns MutableStateFlow(emptyMap())
+                every { emptyRowIds } returns MutableStateFlow(emptySet())
+            },
+            homeRowChoices = mockk(relaxed = true) {
+                every { favoritesCount } returns MutableStateFlow(0)
+                every { groups } returns MutableStateFlow(emptyList())
+                every { sportsChoices } returns MutableStateFlow(emptyList())
+                every { vodGroups } returns MutableStateFlow(emptyList())
+            }
         )
         return vm to addonRepository
     }

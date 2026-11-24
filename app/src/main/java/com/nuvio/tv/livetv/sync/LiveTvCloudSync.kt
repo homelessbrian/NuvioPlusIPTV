@@ -129,14 +129,10 @@ class LiveTvCloudSync @Inject constructor(
     fun start() {
         if (started || !available) return
         started = true
-        com.nuvio.vpn.android.VpnPlaybackProtection.observeBackupChanges {
-            scope.launch { delay(8_000); if (!applying && isOn()) syncIfChanged() }
-        }
         drive.importListener = { scope.launch { runImport() } }
         // A QR sign-in, or a TV that was already signed in when the app opened: both arrive here.
         scope.launch { authManager.authState.collect { onAuthState(it) } }
-        // This TV's Live TV settings changed: sync shortly after (not for per-TV things like the
-        // last channel watched, which aren't part of the setup).
+        // Portable setup or native VPN backup changed. Per-TV history/status never gets here.
         scope.launch {
             prefs.changes.drop(1).debounce(8_000).collect {
                 if (!applying && isOn()) syncIfChanged()

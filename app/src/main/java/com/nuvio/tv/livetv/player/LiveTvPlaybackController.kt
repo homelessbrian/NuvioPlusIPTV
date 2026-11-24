@@ -560,8 +560,13 @@ class LiveTvPlaybackController @Inject constructor(
     fun playFromRecording(playlist: java.io.File, fromStart: Boolean = false) {
         val p = _player ?: return
         _recordingPlayback.value = playlist
-        _recordingStarting.value = true
         shiftJob?.cancel()
+        if (appInBackground) {
+            _recordingStarting.value = false
+            resumeAfterBackground = { playFromRecording(playlist, fromStart) }
+            return
+        }
+        _recordingStarting.value = true
         shiftJob = scope.launch {
           try {
             var waited = 0
@@ -574,7 +579,12 @@ class LiveTvPlaybackController @Inject constructor(
             if (!playlist.exists()) {
                 // Nothing came in: back to the live stream.
                 _recordingPlayback.value = null
-                currentChannel?.let { ch -> currentUrl = null; play(ch) }
+                currentUrl = null
+                resumeAfterRecordingFailure()
+                return@launch
+            }
+            if (appInBackground) {
+                resumeAfterBackground = { playFromRecording(playlist, fromStart) }
                 return@launch
             }
             p.setMediaSource(localRecordingSource(android.net.Uri.fromFile(playlist), 15_000))
@@ -590,6 +600,11 @@ class LiveTvPlaybackController @Inject constructor(
             _recordingStarting.value = false
           }
         }
+    }
+
+    /** A failed commit must not restart sound after the app was backgrounded during IO. */
+    fun resumeAfterRecordingFailure() {
+        if (appInBackground) resumeAfterBackground = { retry() } else retry()
     }
 
     /** Watching a recording that ended (or failed): carry on with the channel live. */
@@ -1402,6 +1417,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private var pausedForBackground = false
+    private var appInBackground = false
 
     private var backgroundJob: Job? = null
     /** Set when the channel's connection was let go in the background: how to pick it up again. */
@@ -1414,6 +1430,7 @@ class LiveTvPlaybackController @Inject constructor(
      * drop the channel; going to the launcher does. Scheduled recordings carry on.
      */
     fun onAppBackground() {
+        appInBackground = true
         val p = _player ?: return
         if (p.playWhenReady) {
             pausedForBackground = true
@@ -1472,6 +1489,7 @@ class LiveTvPlaybackController @Inject constructor(
 
     /** Back in the app: carry on, jumping to the live edge for live channels. */
     fun onAppForeground() {
+        appInBackground = false
         backgroundJob?.cancel()
         backgroundJob = null
         resumeAfterBackground?.let { r ->
@@ -1859,13 +1877,14 @@ class LiveTvPlaybackController @Inject constructor(
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minMs, maxMs, startMs, rebufferMs)
-            .setPrioritizeTimeOverSizeThresholds(true)
+            .setPrioritizeTimeOverSizeThresholds(!MemoryBudget.isLowRamTier)
             // The download-ahead lives in the app's memory. The player's own cap (about 130 MB
             // for video) is more than half of what a cheap stick gives an app, which made the
             // whole app stutter as memory ran short. Capped to about 30% of the memory the app can
             // really use (see playerBufferBytes):
-            // the same on boxes with plenty, smaller on low-memory ones. The minimum buffer
-            // time is always kept, so channels are just as steady.
+            // the same on boxes with plenty, smaller on low-memory ones. On small heaps the
+            // byte target also stops loading before the duration minimum: high-bitrate video
+            // must not consume the UI/decoder's memory to satisfy a large buffer setting.
             .setTargetBufferBytes(playerBufferBytes())
             .build()
         return ExoPlayer.Builder(context, renderers)

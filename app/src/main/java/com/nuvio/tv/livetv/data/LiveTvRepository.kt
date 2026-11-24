@@ -153,7 +153,7 @@ class LiveTvRepository @Inject constructor(
             scheduleCompact()
             // Checking for playlist / guide updates uses the network and a lot of processing,
             // so when this starts with the app it waits a little, out of Nuvio's way.
-            if (updateCheckDelayMs > 0) delay(updateCheckDelayMs)
+            if (updateCheckDelayMs > 0 && _channels.value.isNotEmpty()) delay(updateCheckDelayMs)
             refreshStale()
             firstCheckDone = true
             // Then keep checking while the app stays open. TV boxes keep the app running for
@@ -1155,7 +1155,7 @@ class LiveTvRepository @Inject constructor(
 
     // ---------------------------------------------------------------- guide database
 
-    /** The time span currently loaded from the guide database (all of it if the database isn't used). */
+    /** The near-now span loaded for every channel; browsing never widens this to future days. */
     @Volatile private var loadedFrom = Long.MAX_VALUE
     @Volatile private var loadedTo = Long.MIN_VALUE
     @Volatile private var guideInDb = false
@@ -1166,6 +1166,31 @@ class LiveTvRepository @Inject constructor(
     @Volatile private var guideHoles = false
     @Volatile private var holeRefreshTried = false
     private val rangeMutex = Mutex()
+    // This is optional browsing prefetch; the full guide always remains in SQLite.
+    private val guidePrefetchLimit = if (com.nuvio.tv.ui.screens.settings.MemoryBudget.isLowRamTier) 128 else MAX_FULL_RANGE_CHANNELS
+    private val guideRangeCache = GuideRangeCache(maxChannels = guidePrefetchLimit,
+        maxPrograms = if (com.nuvio.tv.ui.screens.settings.MemoryBudget.isLowRamTier) 24_000 else 80_000)
+    private var browseRangeJob: kotlinx.coroutines.Job? = null
+    private data class GuideViewport(val keys: Set<String>, val window: GuideRangeCache.Window?)
+    @Volatile private var guideViewport = GuideViewport(emptySet(), null)
+
+    /** Called under [rangeMutex], after adding extra hours or moving the near-now window. */
+    private fun retainGuideRanges(programs: Map<String, List<EpgProgram>>, trimBase: Boolean = false): Map<String, List<EpgProgram>> {
+        val viewport = guideViewport
+        val kept = guideRangeCache.retain(programs, GuideRangeCache.Window(loadedFrom, loadedTo),
+            viewport.keys, viewport.window, trimBase)
+        fullRangeChannels.removeAll(kept.incomplete)
+        return kept.programs
+    }
+
+    /** A complete base-window read, merged with valid extra hours; called under [rangeMutex]. */
+    private fun publishGuideBase(read: Map<String, List<EpgProgram>>, keep: Map<String, List<EpgProgram>> = _programs.value) {
+        val viewport = guideViewport
+        val retained = guideRangeCache.mergeBase(read, keep, GuideRangeCache.Window(loadedFrom, loadedTo),
+            viewport.keys, viewport.window)
+        fullRangeChannels.removeAll(retained.incomplete)
+        _programs.value = retained.programs
+    }
 
     private fun defaultWindow(now: Long = System.currentTimeMillis()) = (now - 3 * HOUR) to (now + 12 * HOUR + RANGE_SLACK_MS)
 
@@ -1283,13 +1308,19 @@ class LiveTvRepository @Inject constructor(
         val first = pre?.window.orEmpty()
         val token = guideShowing.incrementAndGet()
         if (!replacing) _programs.value = first
-        fullRangeChannels.clear(); _guideGeneration.value++
+        browseRangeJob?.cancel()
+        fullRangeJob?.cancel()
+        rangeMutex.withLock {
+            guideRangeCache.clear()
+            fullRangeChannels.clear()
+            loadedFrom = from
+            loadedTo = to
+        }
         _autoMatches.value = runCatching { guideDb.autoMatches() }.getOrDefault(_autoMatches.value)
-        loadedFrom = from
-        loadedTo = to
         guideInDb = true
         lightPrograms = true
         epgDetailsPending = true
+        _guideGeneration.value++
         LIVE_REPORT.add("First channels' listings ready: ${first.size} channels")
         // Everything else (short form), in the background.
         rangeBusy.set(true)
@@ -1300,13 +1331,12 @@ class LiveTvRepository @Inject constructor(
             suspend fun publish(got: Map<String, List<EpgProgram>>, gotFrom: Long, gotTo: Long): Boolean = rangeMutex.withLock {
                 // A newer guide went on screen meanwhile (an update finished): this read is old.
                 if (token != guideShowing.get()) return@withLock false
-                val merged = HashMap<String, List<EpgProgram>>(got)
                 // Replacing an out-of-date guide: only what was read from this one is kept.
-                val keep = if (replacing) first else _programs.value
-                keep.forEach { (k, v) -> if ((merged[k]?.size ?: 0) < v.size) merged[k] = v }
-                _programs.value = merged
+                val extraKeys = guideRangeCache.channels()
+                val keep = if (replacing) first + _programs.value.filterKeys { it in extraKeys } else _programs.value
                 loadedFrom = minOf(loadedFrom, gotFrom)
                 loadedTo = maxOf(loadedTo, gotTo)
+                publishGuideBase(got, keep)
                 true
             }
             // Every channel's hours around now first (what the guide shows when it opens), so a
@@ -1375,23 +1405,29 @@ class LiveTvRepository @Inject constructor(
     fun guideReadBusy(): Boolean = rangeBusy.get()
     @Volatile private var pendingRange: Pair<Long, Long>? = null
 
-    fun ensureRange(fromMs: Long, toMs: Long) {
-        dropOldHours(fromMs)
-        if (!guideInDb || (fromMs >= loadedFrom && toMs <= loadedTo)) return
+    fun ensureRange(fromMs: Long, toMs: Long, channelKeys: List<String>? = null) {
+        if (!guideInDb) return
+        if (channelKeys != null) ensureBrowseRange(fromMs, toMs, channelKeys)
+        dropOldHours()
+        // Only the hours around now are kept for every channel. Future/catch-up scrolling
+        // reads the displayed channels below, instead of widening one global window forever.
+        val now = System.currentTimeMillis()
+        val nearFrom = now - 3 * HOUR
+        val nearTo = now + 12 * HOUR
+        if (nearFrom >= loadedFrom && nearTo <= loadedTo) return
         if (!rangeBusy.compareAndSet(false, true)) {
-            // One read at a time (each covers every channel): remember the widest request.
-            val p = pendingRange
-            pendingRange = if (p == null) fromMs to toMs else minOf(p.first, fromMs) to maxOf(p.second, toMs)
+            pendingRange = nearFrom to nearTo
             return
         }
+        val token = guideShowing.get()
         scope.launch(BackgroundWork.reads) {
           try {
             // Read without holding the lock (a big read used to make everything else wait for it,
             // like a group you just opened); only the merge is locked.
-            val from = minOf(fromMs, loadedFrom)
+            val from = minOf(nearFrom, loadedFrom)
             // A few hours extra ahead: the guide asks for "12 hours from now" every 30 seconds,
             // and without slack each ask went past what was loaded by 30 seconds.
-            val to = maxOf(toMs + RANGE_SLACK_MS, loadedTo)
+            val to = maxOf(nearTo + RANGE_SLACK_MS, loadedTo)
             // Only the hours not loaded yet. It used to read everything from the earliest hour
             // loaded to the latest again, for every channel, each time the guide was scrolled
             // further ahead: the further you went, the longer each read took, so new listings
@@ -1406,7 +1442,8 @@ class LiveTvRepository @Inject constructor(
                 browsingRange(f, t, light = lightPrograms) ?: return@launch
             }
             rangeMutex.withLock {
-                if (fromMs >= loadedFrom && toMs <= loadedTo) return@withLock
+                if (token != guideShowing.get()) return@withLock
+                if (nearFrom >= loadedFrom && nearTo <= loadedTo) return@withLock
                 val merged = HashMap(_programs.value)
                 reads.forEach { got ->
                     // Shows running across the edge come back in both reads: once each.
@@ -1423,40 +1460,48 @@ class LiveTvRepository @Inject constructor(
         }
     }
 
+    /** The visible rows, with a small margin, at the guide's current horizontal position. */
+    private fun ensureBrowseRange(fromMs: Long, toMs: Long, channelKeys: List<String>) {
+        val keys = channelKeys.distinct().take(60)
+        guideViewport = GuideViewport(keys.toSet(), GuideRangeCache.Window(fromMs, toMs))
+        browseRangeJob?.cancel()
+        if (keys.isEmpty()) return
+        val token = guideShowing.get()
+        browseRangeJob = scope.launch(BackgroundWork.reads) {
+            val todo = rangeMutex.withLock {
+                keys.filter { !(fromMs >= loadedFrom && toMs <= loadedTo) && !guideRangeCache.covers(it, fromMs, toMs) }
+            }
+            if (todo.isEmpty()) return@launch
+            val got = browsingRange(fromMs, toMs, lightPrograms, todo) ?: return@launch
+            rangeMutex.withLock {
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (token != guideShowing.get()) return@withLock
+                val merged = HashMap(_programs.value)
+                got.forEach { (key, list) -> merged[key] = addShows(merged[key], list) }
+                guideRangeCache.record(todo, fromMs, toMs)
+                _programs.value = retainGuideRanges(merged)
+            }
+        }
+    }
+
     @Volatile private var lastDropAt = 0L
 
     /**
-     * Lets go of listings that ended long ago. New hours were added as time passed but old ones
-     * were never dropped, and TV boxes keep the app open for days: memory slowly filled with
-     * days of past listings for every channel, and the app got slower the longer the box stayed
-     * on. Anything older than a day before what the guide asks for goes (at most every 30
-     * minutes); scrolling back for catch-up reads those hours from the guide database again.
-     * Only when the guide is kept in the database, so nothing is ever lost.
+     * Moves the all-channel window with the clock, at most every 30 minutes. Extra hours
+     * survive only for bounded recently browsed channels. Catch-up stays in the database.
      */
-    private fun dropOldHours(fromMs: Long) {
+    private fun dropOldHours() {
         if (!guideInDb || loadedFrom == Long.MAX_VALUE) return
         val now = System.currentTimeMillis()
         if (now - lastDropAt < 30 * 60_000L) return
-        val cutoff = minOf(fromMs - RANGE_SLACK_MS, now - 24 * HOUR)
+        val cutoff = now - 3 * HOUR
         if (loadedFrom >= cutoff) return
         lastDropAt = now
         scope.launch(BackgroundWork.quiet) {
             rangeMutex.withLock {
                 if (loadedFrom >= cutoff) return@withLock
-                val cur = _programs.value
-                var changed = false
-                val next = HashMap<String, List<EpgProgram>>(cur.size)
-                cur.forEach { (key, list) ->
-                    // Lists are in start order: only ones that begin before the cutoff change
-                    // (the others are kept as they are, so their guide rows needn't redraw).
-                    if (list.isNotEmpty() && list[0].stopMs <= cutoff) {
-                        changed = true
-                        val kept = list.filter { it.stopMs > cutoff }
-                        if (kept.isNotEmpty()) next[key] = kept
-                    } else next[key] = list
-                }
-                if (changed) _programs.value = next
                 loadedFrom = cutoff
+                _programs.value = retainGuideRanges(_programs.value, trimBase = true)
             }
         }
     }
@@ -1479,34 +1524,40 @@ class LiveTvRepository @Inject constructor(
     /**
      * The group on screen: its channels' listings for every day the guide keeps (Guide Days
      * Ahead), read in the background, so scrolling ahead in it never runs into the end of
-     * what's loaded. Only the group's channels (at most [MAX_FULL_RANGE_CHANNELS], from the
-     * top): all days for every channel of every playlist would be too much for smaller boxes.
+     * what's loaded. Only the group's first 128 channels on small heaps, or at most
+     * [MAX_FULL_RANGE_CHANNELS] otherwise. Visible rows beyond that are read on demand.
      */
     fun ensureFullRange(channelKeys: List<String>) {
         if (!guideInDb || channelKeys.isEmpty()) return
-        val todo = channelKeys.take(MAX_FULL_RANGE_CHANNELS).filter { it !in fullRangeChannels }
-        if (todo.isEmpty()) return
+        val keys = channelKeys.take(guidePrefetchLimit)
         fullRangeJob?.cancel()
+        val token = guideShowing.get()
         fullRangeJob = scope.launch(BackgroundWork.reads) {
             val settings = prefs.currentSettings()
             val now = System.currentTimeMillis()
             val from = now - HOUR
             val to = now + settings.epgFutureDays.coerceAtLeast(1) * 24 * HOUR
+            val todo = rangeMutex.withLock {
+                keys.filter { it !in fullRangeChannels || !guideRangeCache.covers(it, from, to - HOUR) }
+            }
             // A batch at a time, so the first channels fill in quickly and a group change
             // stops the rest.
             for (batch in todo.chunked(60)) {
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 val got = browsingRange(from, to, light = lightPrograms, channels = batch) ?: return@launch
                 rangeMutex.withLock {
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    if (token != guideShowing.get()) return@launch
                     val merged = HashMap(_programs.value)
                     batch.forEach { ch ->
                         val list = got[ch].orEmpty()
                         val cur = merged[ch]
                         merged[ch] = if (list.isEmpty()) cur ?: return@forEach else addShows(cur, list)
                     }
-                    _programs.value = merged
+                    guideRangeCache.record(batch, from, to)
+                    fullRangeChannels += batch
+                    _programs.value = retainGuideRanges(merged)
                 }
-                fullRangeChannels += batch
             }
         }
     }
@@ -1617,8 +1668,11 @@ class LiveTvRepository @Inject constructor(
                             if (past.isNotEmpty()) guideDb.putChannelRange(ch.key, from, pastEnd, past)
                             if (later.isNotEmpty()) guideDb.putChannelRange(ch.key, later.first().startMs, later.last().stopMs, later)
                         }
-                        _programs.value = _programs.value + (ch.key to merged)
-                        loadedFrom = minOf(loadedFrom, from)
+                        rangeMutex.withLock {
+                            if (guideInDb) guideRangeCache.track(ch.key)
+                            val next = _programs.value + (ch.key to merged)
+                            _programs.value = if (guideInDb) retainGuideRanges(next) else next
+                        }
                         if (missingOnly && !apiFillReported) {
                             apiFillReported = true
                             LIVE_REPORT.add("Guide: listings for channels the guide file doesn't cover are coming from the Xtream API (first: ${ch.name})")
@@ -1674,8 +1728,9 @@ class LiveTvRepository @Inject constructor(
                 if (guideInDb) guideDb.putChannelRange(ch.key, from, to, merged)
                 val current = _programs.value[ch.key].orEmpty()
                 val all = (current + merged).associateBy { it.startMs }.values.sortedBy { it.startMs }
-                _programs.value = _programs.value + (ch.key to all)
-                loadedFrom = minOf(loadedFrom, from)
+                if (guideInDb) guideRangeCache.track(ch.key)
+                val next = _programs.value + (ch.key to all)
+                _programs.value = if (guideInDb) retainGuideRanges(next) else next
             }
         }
     }
@@ -1705,7 +1760,9 @@ class LiveTvRepository @Inject constructor(
             rangeMutex.withLock {
                 val cur = _programs.value
                 val merged = addShows(cur[channelKey], list)
-                if (merged !== cur[channelKey]) _programs.value = cur + (channelKey to merged)
+                guideRangeCache.record(listOf(channelKey), now - settings.epgPastHours.coerceAtLeast(1) * HOUR,
+                    now + settings.epgFutureDays.coerceAtLeast(1) * 24 * HOUR)
+                _programs.value = retainGuideRanges(cur + (channelKey to merged))
             }
         }
     }
@@ -1715,12 +1772,7 @@ class LiveTvRepository @Inject constructor(
      * kept as they are, the rest go in, in start order. The one way every read adds listings,
      * so the guide and overlay mode always have the same shows.
      */
-    private fun addShows(cur: List<EpgProgram>?, list: List<EpgProgram>): List<EpgProgram> {
-        if (cur.isNullOrEmpty()) return list
-        val starts = cur.mapTo(HashSet()) { it.startMs }
-        val extra = list.filter { it.startMs !in starts }
-        return if (extra.isEmpty()) cur else (cur + extra).sortedBy { it.startMs }
-    }
+    private fun addShows(cur: List<EpgProgram>?, list: List<EpgProgram>): List<EpgProgram> = mergeGuideShows(cur, list)
 
     /** Everything the matched guide depends on; a different value means the cache is stale. */
     private suspend fun guideFingerprint(settings: LiveTvSettings, targets: List<EpgTarget>): String {
@@ -2348,7 +2400,12 @@ class LiveTvRepository @Inject constructor(
     private suspend fun buildProgramsInner(settings: LiveTvSettings, targets: List<EpgTarget>, forceRead: Boolean = false) = withContext(BackgroundWork.cpu()) {
         val all = _channels.value
         if (all.isEmpty()) {
-            _programs.value = emptyMap()
+            rangeMutex.withLock {
+                guideShowing.incrementAndGet()
+                guideRangeCache.clear()
+                fullRangeChannels.clear()
+                _programs.value = emptyMap()
+            }
             return@withContext
         }
         // Channels no profile shows (hidden, or in a hidden group, in every profile) get no
@@ -2779,12 +2836,16 @@ class LiveTvRepository @Inject constructor(
             rangeMutex.withLock {
                 // A stored guide still being put on screen from before this update is dropped.
                 guideShowing.incrementAndGet()
+                guideRangeCache.clear()
+                fullRangeChannels.clear()
                 _programs.value = window
                 loadedFrom = winFrom
                 loadedTo = winTo
             }
             lightPrograms = true
-            fullRangeChannels.clear(); _guideGeneration.value++
+            browseRangeJob?.cancel()
+            fullRangeJob?.cancel()
+            _guideGeneration.value++
             guideInDb = true
             saveSkipped(skipped)
             if (skipped.isNotEmpty()) LIVE_REPORT.add("Guide: ${skipped.size} hidden channels left out")
@@ -2990,19 +3051,41 @@ class LiveTvRepository @Inject constructor(
 
         val changed = changes.keys
         // Stored guide first (when the guide is kept in the database), then what's on screen.
-        if (guideInDb) {
-            val fp = guideFingerprint(settings, targets)
-            guideDb.setChannels(fp, changed, newLinks, newListings, { isPlaceholder(it) }, newAuto, guideParts(settings, targets, fp))
-        }
-        _programs.value = HashMap(_programs.value).apply {
-            changed.forEach { remove(it) }
-            newPrograms.forEach { (k, l) ->
-                val shown = if (guideInDb) l.filter { it.stopMs > loadedFrom && it.startMs < loadedTo } else l
-                if (shown.isNotEmpty()) put(k, shown)
+        val rereadBase = guideInDb && rangeBusy.get()
+        val token = rangeMutex.withLock {
+            // No old-assignment cursor may republish rows after this remap or mark them covered.
+            val token = guideShowing.incrementAndGet()
+            browseRangeJob?.cancel()
+            fullRangeJob?.cancel()
+            if (guideInDb) {
+                val fp = guideFingerprint(settings, targets)
+                guideDb.setChannels(fp, changed, newLinks, newListings, { isPlaceholder(it) }, newAuto, guideParts(settings, targets, fp))
             }
+            _programs.value = HashMap(_programs.value).apply {
+                changed.forEach { remove(it) }
+                newPrograms.forEach { (k, l) ->
+                    val shown = if (guideInDb) l.filter { it.stopMs > loadedFrom && it.startMs < loadedTo } else l
+                    if (shown.isNotEmpty()) put(k, shown)
+                }
+            }
+            guideRangeCache.removeAll(changed)
+            fullRangeChannels.removeAll(changed)
+            token
         }
         _autoMatches.value = (_autoMatches.value - changed) + newAuto
-        fullRangeChannels.removeAll(changed)
+        _guideGeneration.value++
+        if (rereadBase) scope.launch(BackgroundWork.reads) {
+            // A remap during startup invalidated its unfinished bulk read. Finish populating
+            // every channel's near-now hours, keeping the current guide visible meanwhile.
+            val (from, to) = defaultWindow()
+            val got = browsingRange(from, to, lightPrograms) ?: return@launch
+            rangeMutex.withLock {
+                if (token != guideShowing.get()) return@withLock
+                loadedFrom = from
+                loadedTo = to
+                publishGuideBase(got)
+            }
+        }
         val logos = HashMap(_epgLogos.value).apply { changed.forEach { remove(it) }; putAll(newIcons) }
         _epgLogos.value = logos
         saveEpgLogos(logos)
@@ -3089,7 +3172,7 @@ class LiveTvRepository @Inject constructor(
             .build()
         http.newCall(request).execute().use { response ->
             if (response.code == 304 && target.exists()) {
-                target.setLastModified(System.currentTimeMillis()) // checked again after the usual interval
+                DownloadContent.touch(target) // checked again after the usual interval
                 reportAs?.let { LIVE_REPORT.add("Guide \"$it\": server said not changed since last time; kept the copy we have") }
                 return@withContext false
             }
@@ -3101,6 +3184,7 @@ class LiveTvRepository @Inject constructor(
             val tmp = File(target.parentFile, target.name + ".tmp")
             // With a label: how much has come in so far, so a big download doesn't look frozen.
             val total = body.contentLength().takeIf { it > 0 }
+            var downloadedDecoded: String? = null
             // A download cut off part-way (connection lost, storage full) must not leave its
             // half-written file behind: guides are often 50–200 MB. The copy from before stays.
             try {
@@ -3113,6 +3197,9 @@ class LiveTvRepository @Inject constructor(
                     input.mark(2)
                     val alreadyZipped = input.read() == 0x1f && input.read() == 0x8b
                     input.reset()
+                    // Plain responses are already passing through the copy loop: remember
+                    // decoded content without unzipping the saved copy again afterward.
+                    val decodedDigest = if (alreadyZipped) null else MessageDigest.getInstance("MD5")
                     val fileOut = tmp.outputStream()
                     (if (alreadyZipped) fileOut else fastGzip(fileOut)).use { out ->
                         val buf = ByteArray(64 * 1024)
@@ -3122,6 +3209,7 @@ class LiveTvRepository @Inject constructor(
                             val n = input.read(buf)
                             if (n < 0) break
                             out.write(buf, 0, n)
+                            decodedDigest?.update(buf, 0, n)
                             read += n
                             if (progressLabel != null) {
                                 val now = System.currentTimeMillis()
@@ -3132,6 +3220,7 @@ class LiveTvRepository @Inject constructor(
                             }
                         }
                     }
+                    downloadedDecoded = decodedDigest?.let { DownloadContent.fingerprint(it) }
                 }
             } catch (e: Throwable) {
                 tmp.delete()
@@ -3141,17 +3230,19 @@ class LiveTvRepository @Inject constructor(
                 tmp.delete()
                 error("Empty response")
             }
-            runCatching {
+            val comparison = try { DownloadContent.compare(target, tmp, downloadedDecoded) }
+            catch (error: Throwable) { tmp.delete(); throw error }
+            fun rememberResponse() { runCatching {
                 meta.writeText(response.header("ETag").orEmpty() + "\n" + response.header("Last-Modified").orEmpty())
-            }
-            val same = target.exists() && (
-                if (isGzip(target) == isGzip(tmp)) target.length() == tmp.length() && sameContent(target, tmp)
-                else sameDecoded(target, tmp)
-            )
+            } }
             val serverDate = response.header("Last-Modified")?.let { " (server's date: $it)" }.orEmpty()
-            if (same) {
+            if (comparison.same) {
                 tmp.delete()
-                target.setLastModified(System.currentTimeMillis())
+                if (comparison.decodedFingerprint != null && DownloadContent.cached(target) == null) {
+                    DownloadContent.remember(target, comparison.decodedFingerprint)
+                }
+                DownloadContent.touch(target)
+                rememberResponse()
                 reportAs?.let { LIVE_REPORT.add("Guide \"$it\": downloaded ${sizeLabel(target.length())} zipped, same as the copy we had$serverDate") }
                 return@withContext false
             }
@@ -3161,6 +3252,8 @@ class LiveTvRepository @Inject constructor(
                 tmp.delete()
             }
             markChanged(target)
+            DownloadContent.remember(target, comparison.decodedFingerprint)
+            rememberResponse()
             true
         }
     }
@@ -3296,12 +3389,11 @@ class LiveTvRepository @Inject constructor(
             ?: "${f.length()}"
 
     private fun markChanged(f: File) {
-        runCatching { stampFile(f).writeText(System.currentTimeMillis().toString()) }
+        runCatching {
+            val previous = stampFile(f).takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull() ?: 0L
+            stampFile(f).writeText(maxOf(System.currentTimeMillis(), previous + 1).toString())
+        }
     }
-
-    private fun isGzip(f: File): Boolean = runCatching {
-        f.inputStream().use { val a = it.read(); val b = it.read(); a == 0x1f && b == 0x8b }
-    }.getOrDefault(false)
 
     /**
      * Same content once unzipped. A saved copy is zipped to save space after each update, so a
@@ -3312,22 +3404,6 @@ class LiveTvRepository @Inject constructor(
         fun digest(f: File): ByteArray {
             val md = java.security.MessageDigest.getInstance("MD5")
             openMaybeGzip(f).use { input ->
-                val buf = ByteArray(64 * 1024)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    md.update(buf, 0, n)
-                }
-            }
-            return md.digest()
-        }
-        digest(a).contentEquals(digest(b))
-    }.getOrDefault(false)
-
-    private fun sameContent(a: File, b: File): Boolean = runCatching {
-        fun digest(f: File): ByteArray {
-            val md = java.security.MessageDigest.getInstance("MD5")
-            f.inputStream().use { input ->
                 val buf = ByteArray(64 * 1024)
                 while (true) {
                     val n = input.read(buf)
@@ -3921,11 +3997,13 @@ class LiveTvRepository @Inject constructor(
             val zipped = file.inputStream().use { val a = it.read(); val b = it.read(); a == 0x1f && b == 0x8b }
             if (zipped) return
             val tmp = File(file.parentFile, file.name + ".zip.tmp")
-            file.inputStream().use { input -> fastGzip(tmp.outputStream()).use { out -> input.copyTo(out, 64 * 1024) } }
+            val decodedDigest = MessageDigest.getInstance("MD5")
+            java.security.DigestInputStream(file.inputStream(), decodedDigest).use { input -> fastGzip(tmp.outputStream()).use { out -> input.copyTo(out, 64 * 1024) } }
             val modified = file.lastModified()
             if (!stampFile(file).exists()) markChanged(file)
             if (!tmp.renameTo(file)) { tmp.copyTo(file, overwrite = true); tmp.delete() }
             file.setLastModified(modified)
+            DownloadContent.remember(file, DownloadContent.fingerprint(decodedDigest))
             LIVE_REPORT.add("Saved \"${file.name}\" zipped to save space")
         }.onFailure {
             runCatching { File(file.parentFile, file.name + ".zip.tmp").delete() }
@@ -3940,7 +4018,8 @@ class LiveTvRepository @Inject constructor(
         val b1 = input.read()
         val b2 = input.read()
         input.reset()
-        return if (b1 == 0x1f && b2 == 0x8b) BufferedInputStream(GZIPInputStream(input, 64 * 1024)) else input
+        val decoded = if (b1 == 0x1f && b2 == 0x8b) BufferedInputStream(GZIPInputStream(input, 64 * 1024)) else input
+        return if (file.name.endsWith(".xml") || file.name.endsWith(".m3u")) DownloadContent.observe(file, decoded) else decoded
     }
 
     private fun sizeLabel(bytes: Long): String = when {

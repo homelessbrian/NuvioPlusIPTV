@@ -20,6 +20,7 @@ import com.nuvio.tv.livetv.model.LiveUserState
 import com.nuvio.tv.livetv.model.PlaylistSource
 import com.nuvio.tv.livetv.model.Reminder
 import com.nuvio.tv.livetv.model.ZapMode
+import com.nuvio.tv.livetv.sync.SetupSyncProjection
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -1778,8 +1781,44 @@ class LiveTvPreferences @Inject constructor(
 
     // ---------- Google Drive sync ----------
 
-    /** Fires whenever anything in Live TV's stored data changes. */
-    val changes: Flow<Unit> = store.data.map { }
+    /**
+     * Only portable setup changes trigger automatic export. The initial stored snapshot still
+     * emits once, as before; callers drop it because startup performs its own reconciliation.
+     * VPN profiles/selections live outside DataStore and use their existing backup observer.
+     */
+    val changes: Flow<Unit> = channelFlow {
+        val vpnChanges = Channel<Unit>(Channel.CONFLATED)
+        // Listen before taking the initial stored snapshot. A native edit during startup is
+        // buffered until after the initial emission, so callers' drop(1) cannot discard it.
+        val observer = com.nuvio.vpn.android.VpnPlaybackProtection.observeBackupChanges { vpnChanges.trySend(Unit) }
+        try {
+            val projection = SetupSyncProjection({ it in SYNC_EXCLUDED }, ::syncString)
+            var previous = projection.values(store.data.first())
+            send(Unit)
+            launch { for (change in vpnChanges) send(Unit) }
+            store.data.collect { stored ->
+                val current = projection.values(stored)
+                if (current != previous) {
+                    previous = current
+                    send(Unit)
+                }
+            }
+        } finally {
+            observer.close()
+            vpnChanges.close()
+        }
+    }
+
+    /** Kept identical for change detection and the portable backup payload. */
+    private fun syncString(name: String, value: String): String = when (name) {
+        Keys.playlists.name -> encodePlaylists(decodePlaylists(value).map {
+            it.copy(lastUpdatedMs = 0, lastError = null, channelCount = 0, serverTimezone = "", catchupNoHlsSince = 0L)
+        })
+        Keys.epgs.name -> encodeEpgs(decodeEpgs(value).map {
+            it.copy(lastUpdatedMs = 0, lastError = null, programCount = 0, fallbackUserAgent = "")
+        })
+        else -> value
+    }
 
     /**
      * Everything worth carrying to another TV, as JSON: sources, settings, favorites, hidden
@@ -1798,19 +1837,7 @@ class LiveTvPreferences @Inject constructor(
                 is Long -> JSONObject().put("t", "l").put("v", value)
                 is Set<*> -> JSONObject().put("t", "s").put("v", JSONArray(value.map { it.toString() }))
                 is String -> {
-                    val v = when (name) {
-                        // Download status and what this TV learned about the server (its time zone,
-                        // whether HLS catch-up works) stay per TV: they differ between boxes, and
-                        // syncing them made each TV look changed to the other, so both reloaded.
-                        Keys.playlists.name -> encodePlaylists(decodePlaylists(value).map {
-                            it.copy(lastUpdatedMs = 0, lastError = null, channelCount = 0, serverTimezone = "", catchupNoHlsSince = 0L)
-                        })
-                        Keys.epgs.name -> encodeEpgs(decodeEpgs(value).map {
-                            it.copy(lastUpdatedMs = 0, lastError = null, programCount = 0, fallbackUserAgent = "")
-                        })
-                        else -> value
-                    }
-                    JSONObject().put("t", "str").put("v", v)
+                    JSONObject().put("t", "str").put("v", syncString(name, value))
                 }
                 else -> null
             } ?: return@forEach
