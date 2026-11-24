@@ -686,11 +686,21 @@ class LiveTvRecorder @Inject constructor(
                             // drive every 5 s got slower the longer it recorded (slow on USB drives).
                             var sizeNow = dirSize(dir)
                             var lowChecks = 0
+                            // Catch-up to the network folder comes in only as fast as it goes across.
+                            val holdForNetwork = finite && NetworkFolderStore.isNetworkDir(dir)
+                            var sinceHoldCheck = 0L
                             while (scope.isActive && rec.id !in stopRequested && System.currentTimeMillis() < currentStop(rec.id)) {
                                 val n = input.read(buf)
                                 if (n < 0) break
                                 segmenter.write(buf, 0, n)
                                 sizeNow += n
+                                if (holdForNetwork) {
+                                    sinceHoldCheck += n
+                                    if (sinceHoldCheck >= HOLD_CHECK_BYTES) {
+                                        sinceHoldCheck = 0
+                                        if (!holdForCopy(rec, dir)) break
+                                    }
+                                }
                                 val now = System.currentTimeMillis()
                                 if (now - lastSave > 5_000) {
                                     lastSave = now
@@ -819,6 +829,30 @@ class LiveTvRecorder @Inject constructor(
     }
 
     /**
+     * Catch-up to the network folder: waits (blocking, on the recording's own thread) while the
+     * download is too far ahead of the copy, so it comes in no faster than it can go across.
+     * False when the recording should stop instead (stopped, out of time, or the folder stuck).
+     */
+    private fun holdForCopy(rec: LiveTvRecording, dir: File): Boolean {
+        var heldSince = 0L
+        while (recordingFiles.shouldHold(dir)) {
+            if (!scope.isActive || rec.id in stopRequested || System.currentTimeMillis() >= currentStop(rec.id)) return false
+            val now = System.currentTimeMillis()
+            if (heldSince == 0L) heldSince = now
+            recordingFiles.kick()
+            if (now - heldSince > 60_000L) recordingFiles.heldStopReason()?.let { why ->
+                if (stopReasons.putIfAbsent(rec.id, why) == null) {
+                    stopRequested += rec.id
+                    LiveTvNotice.show("\"${rec.title}\": $why")
+                }
+                return false
+            }
+            Thread.sleep(500)
+        }
+        return true
+    }
+
+    /**
      * HLS channel: saves each piece as it appears ([com.nuvio.tv.livetv.player.HlsPieces]): a live
      * channel from its newest pieces (a short lead-in, not its whole look-back window), a catch-up
      * show all of it; a separate sound stream too. Returns a problem, or null.
@@ -870,6 +904,11 @@ class LiveTvRecorder @Inject constructor(
             audio.write(audioFile, ended)
             video.write(videoFile, ended)
             if (!masterWritten) { hls.writeMaster(playlist, choice!!, videoFile.name, audioFile.name); masterWritten = true }
+        }
+        // Catch-up to the network folder: before each piece, wait while too much is still to go
+        // across (the pieces saved so far are listed first, so they can be sent meanwhile).
+        if (finite && NetworkFolderStore.isNetworkDir(dir)) listOfNotNull(video, audio).forEach { t ->
+            t.beforePiece = { if (recordingFiles.shouldHold(dir)) { writePlaylists(ended = false); holdForCopy(rec, dir) } }
         }
         var problem: String? = null
         var lastProgressAt = System.currentTimeMillis()
@@ -1091,6 +1130,8 @@ class LiveTvRecorder @Inject constructor(
         const val HLS_GIVE_UP_MS = 20_000L
         /** A catch-up download this much shorter than asked for was cut off (links go by the minute). */
         const val SHORT_SLACK_SEC = 120.0
+        /** A catch-up download to the network folder checks how far ahead of the copy it is this often. */
+        const val HOLD_CHECK_BYTES = 4L * 1024 * 1024
         const val HLS_SENT_NOTHING = "The HLS replay sent nothing"
     }
 }
