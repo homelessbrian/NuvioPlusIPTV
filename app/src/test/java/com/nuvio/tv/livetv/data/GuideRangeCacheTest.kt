@@ -136,4 +136,73 @@ class GuideRangeCacheTest {
         cache.removeAll(listOf("archive"))
         assertFalse(cache.covers("archive", 20, 30))
     }
+
+    @Test fun `explicit now and next survive far apart times without retaining global intervening hours`() {
+        val cache = GuideRangeCache()
+        val rows = shows(0, 10, 1_000, 2_000)
+        val baseline = mapOf("channel" to listOf(rows[1], rows[2]))
+        val kept = cache.retain(mapOf("channel" to rows), base, trimBase = true, basePrograms = baseline)
+        assertEquals(listOf(10L, 1_000L), kept.programs.getValue("channel").map { it.startMs })
+    }
+
+    @Test fun `clock replacement releases ended baseline shows and preserves alias list sharing`() {
+        val cache = GuideRangeCache()
+        val before = shows(10, 20)
+        val after = shows(20, 30)
+        val read = mapOf("channel" to after, "alias" to after)
+        val kept = cache.mergeBase(read, mapOf("channel" to before, "alias" to before), base, basePrograms = read)
+        assertEquals(listOf(20L, 30L), kept.programs.getValue("channel").map { it.startMs })
+        assertSame(kept.programs["channel"], kept.programs["alias"])
+    }
+
+    @Test fun `adding a baseline to a shared browsed list does not create one list per alias`() {
+        val cache = GuideRangeCache()
+        val now = shows(10, 20)
+        val browsed = shows(10, 20, 30, 31)
+        val read = mapOf("channel" to now, "alias" to now)
+        cache.record(read.keys, 30, 40)
+        val kept = cache.mergeBase(read, mapOf("channel" to browsed, "alias" to browsed), base, basePrograms = read)
+        assertEquals(4, kept.programs.getValue("channel").size)
+        assertSame(kept.programs["channel"], kept.programs["alias"])
+    }
+
+    @Test fun `overlay schedule keeps its own visible hours while unrelated full guides are evicted`() {
+        val cache = GuideRangeCache(maxPrograms = 1)
+        val baseline = mapOf("old" to shows(10, 20), "overlay" to shows(10, 20))
+        cache.record(listOf("old", "overlay"), 0, 1_000)
+        val rows = mapOf("old" to shows(10, 20, 400), "overlay" to shows(10, 20, 300, 301, 500))
+        val kept = cache.retain(rows, base, basePrograms = baseline,
+            pinnedWindows = mapOf("overlay" to listOf(GuideRangeCache.Window(300, 302))))
+        assertEquals(listOf(10L, 20L), kept.programs.getValue("old").map { it.startMs })
+        assertEquals(listOf(10L, 20L, 300L, 301L), kept.programs.getValue("overlay").map { it.startMs })
+        assertTrue(cache.covers("overlay", 300, 302))
+        assertFalse(cache.covers("overlay", 300, 501))
+    }
+
+    @Test fun `active replay retains its current and next programme after the overlay closes and other windows evict`() {
+        val cache = GuideRangeCache(maxChannels = 1, maxPrograms = 1)
+        val baseline = mapOf("replay" to shows(100, 101), "other" to shows(100, 101))
+        cache.record(listOf("replay"), 0, 4)
+        cache.record(listOf("other"), 300, 400)
+        val rows = mapOf("replay" to shows(0, 1, 2, 3, 100, 101), "other" to shows(100, 101, 300, 301))
+        val kept = cache.retain(rows, base, basePrograms = baseline,
+            pinnedWindows = mapOf("replay" to listOf(GuideRangeCache.Window(0, 4))))
+        val replay = kept.programs.getValue("replay")
+        val current = replay.first { 1L >= it.startMs && 1L < it.stopMs }
+        assertEquals(1L, current.startMs)
+        assertEquals(2L, replay.first { it.startMs >= current.stopMs }.startMs)
+        assertEquals(listOf(100L, 101L), kept.programs.getValue("other").map { it.startMs })
+    }
+
+    @Test fun `same channel replay and visible guide keep disjoint windows without their intervening gap`() {
+        val cache = GuideRangeCache(maxPrograms = 1)
+        val baseline = mapOf("channel" to shows(100, 101))
+        cache.record(listOf("channel"), 0, 1_000)
+        val kept = cache.retain(mapOf("channel" to shows(0, 1, 100, 101, 400, 500, 501, 900)), base,
+            visible = setOf("channel"), viewport = GuideRangeCache.Window(500, 502), basePrograms = baseline,
+            pinnedWindows = mapOf("channel" to listOf(GuideRangeCache.Window(0, 2))))
+        assertEquals(listOf(0L, 1L, 100L, 101L, 500L, 501L), kept.programs.getValue("channel").map { it.startMs })
+        assertTrue(cache.covers("channel", 500, 502))
+        assertFalse(cache.covers("channel", 0, 502))
+    }
 }
