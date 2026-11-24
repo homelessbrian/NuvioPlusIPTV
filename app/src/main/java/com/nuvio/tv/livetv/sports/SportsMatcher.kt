@@ -907,10 +907,10 @@ internal class SportsMatcher(
     ): List<List<Pair<String, EpgProgram>>> {
         val out = List(slots.size) { ArrayList<Pair<String, EpgProgram>>() }
         // Every word looked for, by its first word, so a show only needs checking against the few that start like one of its own words.
-        val byFirst = byFirstWord(words)
+        val wordIndex = SportsGuideWords(words)
         val seen = List(slots.size) { HashSet<String>() }
         fun consider(channels: List<String>, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) {
-            val m = matchedWords(nt, nd, byFirst) ?: return
+            val m = wordIndex.matched(nt, nd) ?: return
             for (i in slots.indices) {
                 val s = slots[i]
                 if (start < s.fromMs || start >= s.toMs || stop <= s.minStopMs) continue
@@ -936,29 +936,11 @@ internal class SportsMatcher(
         return out
     }
 
-    /** Words by their first word (see [matchedWords]). */
+    /** Words by their first word for the optional bounded index. */
     private fun byFirstWord(words: Collection<String>): Map<String, List<String>> {
         val byFirst = HashMap<String, MutableList<String>>()
         words.forEach { w -> byFirst.getOrPut(w.substringBefore(' ')) { ArrayList() } += w }
         return byFirst
-    }
-
-    /** The words in [byFirst] that a show's cleaned-up title [nt] or description [nd] has, or null for none. */
-    private fun matchedWords(nt: String, nd: String, byFirst: Map<String, List<String>>): HashSet<String>? {
-        var matched: HashSet<String>? = null
-        fun look(text: String) {
-            if (text.isEmpty()) return
-            for (tok in text.split(' ')) {
-                if (tok.isEmpty()) continue
-                val cands = byFirst[tok] ?: continue
-                for (w in cands) {
-                    if (hasWord(nt, w) || hasWord(nd, w)) (matched ?: HashSet<String>().also { matched = it }).add(w)
-                }
-            }
-        }
-        look(nt)
-        look(nd)
-        return matched
     }
 
     // ------------------------------------------------------------------ where the guide is read from
