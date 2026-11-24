@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Même chaîne"</string>
+    <string name="livetv_backups_addon_tag">"Extension"</string>
+    <string name="livetv_backups_playlist_tag">"Playlist"</string>
+    <string name="livetv_backups_quality_other">"Autre qualité"</string>
+    <string name="iptv_backup_order_title">"Secours et chaînes du match"</string>
+    <string name="iptv_backup_order_row_subtitle">"Comment la liste de secours et les chaînes d'un match dans les chaînes rapides sont groupées et triées"</string>
+    <string name="iptv_backup_order_gear_hint">"Titres et leur ordre"</string>
+    <string name="iptv_backup_order_group_by">"Grouper par"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK pour changer. Dans chaque titre, les chaînes suivent l'autre ordre ci-dessous"</string>
+    <string name="iptv_backup_order_by_source">"Playlist / extension"</string>
+    <string name="iptv_backup_order_by_quality">"Qualité"</string>
+    <string name="iptv_backup_order_no_headings">"Sans titres"</string>
+    <string name="iptv_backup_order_sources">"Ordre des playlists et extensions"</string>
+    <string name="iptv_backup_order_sources_hint">"les flèches en déplacent une ; les nouvelles vont en bas"</string>
+    <string name="iptv_backup_order_qualities">"Ordre des qualités"</string>
+    <string name="iptv_backup_order_qualities_hint">"placez FHD avant 4K si la 4K saccade sur ce téléviseur"</string>
+    <string name="iptv_backup_order_quality_unknown">"Qualité absente du nom"</string>
+    <string name="iptv_backup_order_reset">"Revenir à l'ordre par défaut"</string>
+    <string name="iptv_backup_order_no_sources">"Aucune playlist ni extension pour l'instant"</string>
+</resources>

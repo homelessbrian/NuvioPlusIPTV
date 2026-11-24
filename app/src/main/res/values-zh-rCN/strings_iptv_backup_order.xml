@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"同一频道"</string>
+    <string name="livetv_backups_addon_tag">"插件"</string>
+    <string name="livetv_backups_playlist_tag">"播放列表"</string>
+    <string name="livetv_backups_quality_other">"其他画质"</string>
+    <string name="iptv_backup_order_title">"备用与比赛频道"</string>
+    <string name="iptv_backup_order_row_subtitle">"备用列表和快捷频道中比赛频道的分组与排序方式"</string>
+    <string name="iptv_backup_order_gear_hint">"标题及其顺序"</string>
+    <string name="iptv_backup_order_group_by">"分组方式"</string>
+    <string name="iptv_backup_order_group_by_hint">"按 OK 切换。每个标题下，频道按下方另一种顺序排列"</string>
+    <string name="iptv_backup_order_by_source">"播放列表 / 插件"</string>
+    <string name="iptv_backup_order_by_quality">"画质"</string>
+    <string name="iptv_backup_order_no_headings">"无标题"</string>
+    <string name="iptv_backup_order_sources">"播放列表和插件顺序"</string>
+    <string name="iptv_backup_order_sources_hint">"箭头移动一项；新的放在最后"</string>
+    <string name="iptv_backup_order_qualities">"画质顺序"</string>
+    <string name="iptv_backup_order_qualities_hint">"如果这台电视播放 4K 卡顿，把 FHD 放到 4K 上面"</string>
+    <string name="iptv_backup_order_quality_unknown">"名称中没有画质"</string>
+    <string name="iptv_backup_order_reset">"恢复默认顺序"</string>
+    <string name="iptv_backup_order_no_sources">"还没有播放列表或插件"</string>
+</resources>

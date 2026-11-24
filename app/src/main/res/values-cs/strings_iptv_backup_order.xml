@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Stejný kanál"</string>
+    <string name="livetv_backups_addon_tag">"Doplněk"</string>
+    <string name="livetv_backups_playlist_tag">"Playlist"</string>
+    <string name="livetv_backups_quality_other">"Jiná kvalita"</string>
+    <string name="iptv_backup_order_title">"Záložní a kanály zápasu"</string>
+    <string name="iptv_backup_order_row_subtitle">"Jak se seskupuje a řadí seznam záloh a kanály zápasu v Rychlých kanálech"</string>
+    <string name="iptv_backup_order_gear_hint">"Nadpisy a jejich pořadí"</string>
+    <string name="iptv_backup_order_group_by">"Seskupit podle"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK to změní. V každém nadpisu jdou kanály podle druhého pořadí níže"</string>
+    <string name="iptv_backup_order_by_source">"Playlist / doplněk"</string>
+    <string name="iptv_backup_order_by_quality">"Kvalita"</string>
+    <string name="iptv_backup_order_no_headings">"Bez nadpisů"</string>
+    <string name="iptv_backup_order_sources">"Pořadí playlistů a doplňků"</string>
+    <string name="iptv_backup_order_sources_hint">"šipky posunou položku; nové jdou na konec"</string>
+    <string name="iptv_backup_order_qualities">"Pořadí kvality"</string>
+    <string name="iptv_backup_order_qualities_hint">"dejte FHD nad 4K, pokud se 4K na této TV seká"</string>
+    <string name="iptv_backup_order_quality_unknown">"Kvalita není v názvu"</string>
+    <string name="iptv_backup_order_reset">"Zpět na výchozí pořadí"</string>
+    <string name="iptv_backup_order_no_sources">"Zatím žádné playlisty ani doplňky"</string>
+</resources>

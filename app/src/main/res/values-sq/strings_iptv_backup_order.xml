@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"I njëjti kanal"</string>
+    <string name="livetv_backups_addon_tag">"Shtesë"</string>
+    <string name="livetv_backups_playlist_tag">"Listë"</string>
+    <string name="livetv_backups_quality_other">"Cilësi tjetër"</string>
+    <string name="iptv_backup_order_title">"Rezervat dhe kanalet e ndeshjes"</string>
+    <string name="iptv_backup_order_row_subtitle">"Si grupohen dhe renditen lista e rezervave dhe kanalet e një ndeshjeje te Kanalet e shpejta"</string>
+    <string name="iptv_backup_order_gear_hint">"Titujt dhe rendi i tyre"</string>
+    <string name="iptv_backup_order_group_by">"Grupo sipas"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK e ndryshon. Brenda çdo titulli kanalet ndjekin rendin tjetër më poshtë"</string>
+    <string name="iptv_backup_order_by_source">"Listë / shtesë"</string>
+    <string name="iptv_backup_order_by_quality">"Cilësia"</string>
+    <string name="iptv_backup_order_no_headings">"Pa tituj"</string>
+    <string name="iptv_backup_order_sources">"Rendi i listave dhe shtesave"</string>
+    <string name="iptv_backup_order_sources_hint">"shigjetat lëvizin një; të rejat shkojnë në fund"</string>
+    <string name="iptv_backup_order_qualities">"Rendi i cilësisë"</string>
+    <string name="iptv_backup_order_qualities_hint">"vendosni FHD mbi 4K nëse 4K ngec në këtë televizor"</string>
+    <string name="iptv_backup_order_quality_unknown">"Cilësia nuk është në emër"</string>
+    <string name="iptv_backup_order_reset">"Kthehu te rendi i parazgjedhur"</string>
+    <string name="iptv_backup_order_no_sources">"Ende nuk ka lista ose shtesa"</string>
+</resources>

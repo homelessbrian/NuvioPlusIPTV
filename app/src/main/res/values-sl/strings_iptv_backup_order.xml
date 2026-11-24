@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Isti kanal"</string>
+    <string name="livetv_backups_addon_tag">"Dodatek"</string>
+    <string name="livetv_backups_playlist_tag">"Seznam"</string>
+    <string name="livetv_backups_quality_other">"Druga kakovost"</string>
+    <string name="iptv_backup_order_title">"Rezervni in kanali tekme"</string>
+    <string name="iptv_backup_order_row_subtitle">"Kako se združujejo in razvrščajo seznam rezerv in kanali tekme v Hitrih kanalih"</string>
+    <string name="iptv_backup_order_gear_hint">"Naslovi in njihov vrstni red"</string>
+    <string name="iptv_backup_order_group_by">"Združi po"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK spremeni. Znotraj vsakega naslova kanali sledijo drugemu vrstnemu redu spodaj"</string>
+    <string name="iptv_backup_order_by_source">"Seznam / dodatek"</string>
+    <string name="iptv_backup_order_by_quality">"Kakovost"</string>
+    <string name="iptv_backup_order_no_headings">"Brez naslovov"</string>
+    <string name="iptv_backup_order_sources">"Vrstni red seznamov in dodatkov"</string>
+    <string name="iptv_backup_order_sources_hint">"puščici premakneta enega; novi gredo na dno"</string>
+    <string name="iptv_backup_order_qualities">"Vrstni red kakovosti"</string>
+    <string name="iptv_backup_order_qualities_hint">"postavite FHD nad 4K, če se 4K na tem TV-ju zatika"</string>
+    <string name="iptv_backup_order_quality_unknown">"Kakovost ni v imenu"</string>
+    <string name="iptv_backup_order_reset">"Nazaj na privzeti vrstni red"</string>
+    <string name="iptv_backup_order_no_sources">"Še ni seznamov ali dodatkov"</string>
+</resources>

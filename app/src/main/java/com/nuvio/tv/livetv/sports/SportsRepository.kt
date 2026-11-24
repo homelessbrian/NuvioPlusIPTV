@@ -396,6 +396,9 @@ class SportsRepository @Inject constructor(
         }
     }.stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
+    /** Add-ons that give live game streams (Backups & Game Channels' order). */
+    suspend fun liveStreamAddonNames(): List<String> = addonSource.liveStreamAddonNames()
+
     // ---- games from the sports addons you have installed (see SportsAddonSource)
 
     private val _addonVod = MutableStateFlow<Map<String, List<ChannelMatch>>>(emptyMap())

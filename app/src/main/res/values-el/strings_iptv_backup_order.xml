@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Ίδιο κανάλι"</string>
+    <string name="livetv_backups_addon_tag">"Πρόσθετο"</string>
+    <string name="livetv_backups_playlist_tag">"Λίστα"</string>
+    <string name="livetv_backups_quality_other">"Άλλη ποιότητα"</string>
+    <string name="iptv_backup_order_title">"Εφεδρικά και κανάλια αγώνα"</string>
+    <string name="iptv_backup_order_row_subtitle">"Πώς ομαδοποιούνται και ταξινομούνται η εφεδρική λίστα και τα κανάλια ενός αγώνα στα Γρήγορα κανάλια"</string>
+    <string name="iptv_backup_order_gear_hint">"Επικεφαλίδες και η σειρά τους"</string>
+    <string name="iptv_backup_order_group_by">"Ομαδοποίηση κατά"</string>
+    <string name="iptv_backup_order_group_by_hint">"Το OK το αλλάζει. Σε κάθε επικεφαλίδα τα κανάλια ακολουθούν την άλλη σειρά παρακάτω"</string>
+    <string name="iptv_backup_order_by_source">"Λίστα / πρόσθετο"</string>
+    <string name="iptv_backup_order_by_quality">"Ποιότητα"</string>
+    <string name="iptv_backup_order_no_headings">"Χωρίς επικεφαλίδες"</string>
+    <string name="iptv_backup_order_sources">"Σειρά λιστών και πρόσθετων"</string>
+    <string name="iptv_backup_order_sources_hint">"τα βέλη μετακινούν ένα· τα νέα πάνε στο τέλος"</string>
+    <string name="iptv_backup_order_qualities">"Σειρά ποιότητας"</string>
+    <string name="iptv_backup_order_qualities_hint">"βάλτε το FHD πάνω από το 4K αν το 4K κολλάει σε αυτή την τηλεόραση"</string>
+    <string name="iptv_backup_order_quality_unknown">"Η ποιότητα δεν αναφέρεται στο όνομα"</string>
+    <string name="iptv_backup_order_reset">"Επαναφορά προεπιλεγμένης σειράς"</string>
+    <string name="iptv_backup_order_no_sources">"Δεν υπάρχουν ακόμα λίστες ή πρόσθετα"</string>
+</resources>

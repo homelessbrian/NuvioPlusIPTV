@@ -231,6 +231,9 @@ class LiveTvPreferences @Inject constructor(
         val panelRowLists = stringPreferencesKey("panel_row_lists")
         val panelRowLast = stringPreferencesKey("panel_row_last")
         val panelRowOpens = stringPreferencesKey("panel_row_opens")
+        val backupGroupBy = stringPreferencesKey("backup_group_by")
+        val backupSourceOrder = stringPreferencesKey("backup_source_order")
+        val backupQualityOrder = stringPreferencesKey("backup_quality_order")
         val channelSurf = booleanPreferencesKey("channel_surf")
         val barHidden = stringPreferencesKey("bar_hidden")
         val guideInfoHidden = stringPreferencesKey("guide_info_hidden")
@@ -726,6 +729,9 @@ class LiveTvPreferences @Inject constructor(
             panelRowLists = p[Keys.panelRowLists] ?: d.panelRowLists,
             panelRowLast = p[Keys.panelRowLast] ?: d.panelRowLast,
             panelRowOpens = p[Keys.panelRowOpens] ?: d.panelRowOpens,
+            backupGroupBy = p[Keys.backupGroupBy] ?: d.backupGroupBy,
+            backupSourceOrder = p[Keys.backupSourceOrder] ?: d.backupSourceOrder,
+            backupQualityOrder = p[Keys.backupQualityOrder] ?: d.backupQualityOrder,
             channelSurf = p[Keys.channelSurf] ?: d.channelSurf,
             barHidden = p[Keys.barHidden] ?: d.barHidden,
             guideInfoHidden = p[Keys.guideInfoHidden] ?: d.guideInfoHidden,
@@ -1077,6 +1083,9 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.panelRowLists] = s.panelRowLists
         p[Keys.panelRowLast] = s.panelRowLast
         p[Keys.panelRowOpens] = s.panelRowOpens
+        p[Keys.backupGroupBy] = s.backupGroupBy
+        p[Keys.backupSourceOrder] = s.backupSourceOrder
+        p[Keys.backupQualityOrder] = s.backupQualityOrder
         p[Keys.channelSurf] = s.channelSurf
         p[Keys.barHidden] = s.barHidden
         p[Keys.guideInfoHidden] = s.guideInfoHidden

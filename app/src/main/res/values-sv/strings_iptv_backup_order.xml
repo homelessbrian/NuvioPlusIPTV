@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Samma kanal"</string>
+    <string name="livetv_backups_addon_tag">"Tillägg"</string>
+    <string name="livetv_backups_playlist_tag">"Spellista"</string>
+    <string name="livetv_backups_quality_other">"Annan kvalitet"</string>
+    <string name="iptv_backup_order_title">"Reserver &amp; matchkanaler"</string>
+    <string name="iptv_backup_order_row_subtitle">"Hur reservlistan och en matchs kanaler i Snabbkanaler grupperas och sorteras"</string>
+    <string name="iptv_backup_order_gear_hint">"Rubriker och deras ordning"</string>
+    <string name="iptv_backup_order_group_by">"Gruppera efter"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK ändrar. Inom varje rubrik följer kanalerna den andra ordningen nedan"</string>
+    <string name="iptv_backup_order_by_source">"Spellista / tillägg"</string>
+    <string name="iptv_backup_order_by_quality">"Kvalitet"</string>
+    <string name="iptv_backup_order_no_headings">"Inga rubriker"</string>
+    <string name="iptv_backup_order_sources">"Ordning för spellistor &amp; tillägg"</string>
+    <string name="iptv_backup_order_sources_hint">"pilarna flyttar en; nya hamnar längst ner"</string>
+    <string name="iptv_backup_order_qualities">"Kvalitetsordning"</string>
+    <string name="iptv_backup_order_qualities_hint">"sätt FHD över 4K om 4K hackar på den här TV:n"</string>
+    <string name="iptv_backup_order_quality_unknown">"Kvalitet saknas i namnet"</string>
+    <string name="iptv_backup_order_reset">"Tillbaka till standardordning"</string>
+    <string name="iptv_backup_order_no_sources">"Inga spellistor eller tillägg än"</string>
+</resources>

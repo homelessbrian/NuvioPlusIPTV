@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Tas pats kanalas"</string>
+    <string name="livetv_backups_addon_tag">"Priedas"</string>
+    <string name="livetv_backups_playlist_tag">"Grojaraštis"</string>
+    <string name="livetv_backups_quality_other">"Kita kokybė"</string>
+    <string name="iptv_backup_order_title">"Atsarginiai ir rungtynių kanalai"</string>
+    <string name="iptv_backup_order_row_subtitle">"Kaip sugrupuojamas ir rikiuojamas atsarginių sąrašas bei rungtynių kanalai greituosiuose kanaluose"</string>
+    <string name="iptv_backup_order_gear_hint">"Antraštės ir jų tvarka"</string>
+    <string name="iptv_backup_order_group_by">"Grupuoti pagal"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK keičia. Kiekvienoje antraštėje kanalai eina pagal kitą tvarką žemiau"</string>
+    <string name="iptv_backup_order_by_source">"Grojaraštis / priedas"</string>
+    <string name="iptv_backup_order_by_quality">"Kokybė"</string>
+    <string name="iptv_backup_order_no_headings">"Be antraščių"</string>
+    <string name="iptv_backup_order_sources">"Grojaraščių ir priedų tvarka"</string>
+    <string name="iptv_backup_order_sources_hint">"rodyklės perkelia vieną; nauji eina į apačią"</string>
+    <string name="iptv_backup_order_qualities">"Kokybės tvarka"</string>
+    <string name="iptv_backup_order_qualities_hint">"dėkite FHD virš 4K, jei 4K šiame televizoriuje stringa"</string>
+    <string name="iptv_backup_order_quality_unknown">"Kokybės nėra pavadinime"</string>
+    <string name="iptv_backup_order_reset">"Grąžinti numatytąją tvarką"</string>
+    <string name="iptv_backup_order_no_sources">"Dar nėra grojaraščių ar priedų"</string>
+</resources>

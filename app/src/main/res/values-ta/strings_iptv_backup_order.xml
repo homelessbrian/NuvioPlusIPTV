@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"அதே சேனல்"</string>
+    <string name="livetv_backups_addon_tag">"துணைநிரல்"</string>
+    <string name="livetv_backups_playlist_tag">"பிளேலிஸ்ட்"</string>
+    <string name="livetv_backups_quality_other">"வேறு தரம்"</string>
+    <string name="iptv_backup_order_title">"காப்பு மற்றும் போட்டி சேனல்கள்"</string>
+    <string name="iptv_backup_order_row_subtitle">"விரைவு சேனல்களில் காப்புப் பட்டியலும் ஒரு போட்டியின் சேனல்களும் எப்படி குழுவாக்கி வரிசைப்படுத்தப்படுகின்றன"</string>
+    <string name="iptv_backup_order_gear_hint">"தலைப்புகளும் அவற்றின் வரிசையும்"</string>
+    <string name="iptv_backup_order_group_by">"இதன்படி குழுவாக்கு"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK மாற்றும். ஒவ்வொரு தலைப்பிலும் சேனல்கள் கீழே உள்ள மற்ற வரிசையைப் பின்பற்றும்"</string>
+    <string name="iptv_backup_order_by_source">"பிளேலிஸ்ட் / துணைநிரல்"</string>
+    <string name="iptv_backup_order_by_quality">"தரம்"</string>
+    <string name="iptv_backup_order_no_headings">"தலைப்புகள் இல்லை"</string>
+    <string name="iptv_backup_order_sources">"பிளேலிஸ்ட் &amp; துணைநிரல் வரிசை"</string>
+    <string name="iptv_backup_order_sources_hint">"அம்புகள் ஒன்றை நகர்த்தும்; புதியவை கீழே செல்லும்"</string>
+    <string name="iptv_backup_order_qualities">"தர வரிசை"</string>
+    <string name="iptv_backup_order_qualities_hint">"இந்த டிவியில் 4K தடுமாறினால் FHD-ஐ 4K-க்கு மேலே வையுங்கள்"</string>
+    <string name="iptv_backup_order_quality_unknown">"பெயரில் தரம் இல்லை"</string>
+    <string name="iptv_backup_order_reset">"இயல்பு வரிசைக்குத் திரும்பு"</string>
+    <string name="iptv_backup_order_no_sources">"இன்னும் பிளேலிஸ்ட் அல்லது துணைநிரல் இல்லை"</string>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Cùng kênh"</string>
+    <string name="livetv_backups_addon_tag">"Tiện ích"</string>
+    <string name="livetv_backups_playlist_tag">"Danh sách phát"</string>
+    <string name="livetv_backups_quality_other">"Chất lượng khác"</string>
+    <string name="iptv_backup_order_title">"Kênh dự phòng &amp; kênh trận đấu"</string>
+    <string name="iptv_backup_order_row_subtitle">"Cách danh sách dự phòng và các kênh của trận đấu trong Kênh nhanh được nhóm và sắp xếp"</string>
+    <string name="iptv_backup_order_gear_hint">"Tiêu đề và thứ tự"</string>
+    <string name="iptv_backup_order_group_by">"Nhóm theo"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK để đổi. Trong mỗi tiêu đề, kênh theo thứ tự còn lại bên dưới"</string>
+    <string name="iptv_backup_order_by_source">"Danh sách phát / tiện ích"</string>
+    <string name="iptv_backup_order_by_quality">"Chất lượng"</string>
+    <string name="iptv_backup_order_no_headings">"Không tiêu đề"</string>
+    <string name="iptv_backup_order_sources">"Thứ tự danh sách phát &amp; tiện ích"</string>
+    <string name="iptv_backup_order_sources_hint">"mũi tên di chuyển một mục; mục mới ở cuối"</string>
+    <string name="iptv_backup_order_qualities">"Thứ tự chất lượng"</string>
+    <string name="iptv_backup_order_qualities_hint">"đặt FHD trên 4K nếu 4K bị giật trên TV này"</string>
+    <string name="iptv_backup_order_quality_unknown">"Tên không có chất lượng"</string>
+    <string name="iptv_backup_order_reset">"Trở về thứ tự mặc định"</string>
+    <string name="iptv_backup_order_no_sources">"Chưa có danh sách phát hoặc tiện ích"</string>
+</resources>

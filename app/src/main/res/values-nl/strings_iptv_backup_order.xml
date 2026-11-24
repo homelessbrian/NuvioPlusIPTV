@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Zelfde zender"</string>
+    <string name="livetv_backups_addon_tag">"Add-on"</string>
+    <string name="livetv_backups_playlist_tag">"Playlist"</string>
+    <string name="livetv_backups_quality_other">"Andere kwaliteit"</string>
+    <string name="iptv_backup_order_title">"Back-ups &amp; wedstrijdzenders"</string>
+    <string name="iptv_backup_order_row_subtitle">"Hoe de back-uplijst en de zenders van een wedstrijd in Snelle zenders worden gegroepeerd en gesorteerd"</string>
+    <string name="iptv_backup_order_gear_hint">"Kopjes en hun volgorde"</string>
+    <string name="iptv_backup_order_group_by">"Groeperen op"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK wijzigt het. Binnen elk kopje volgen zenders de andere volgorde hieronder"</string>
+    <string name="iptv_backup_order_by_source">"Playlist / add-on"</string>
+    <string name="iptv_backup_order_by_quality">"Kwaliteit"</string>
+    <string name="iptv_backup_order_no_headings">"Geen kopjes"</string>
+    <string name="iptv_backup_order_sources">"Volgorde van playlists &amp; add-ons"</string>
+    <string name="iptv_backup_order_sources_hint">"de pijlen verplaatsen er één; nieuwe komen onderaan"</string>
+    <string name="iptv_backup_order_qualities">"Kwaliteitsvolgorde"</string>
+    <string name="iptv_backup_order_qualities_hint">"zet FHD boven 4K als 4K hapert op deze tv"</string>
+    <string name="iptv_backup_order_quality_unknown">"Kwaliteit niet in de naam"</string>
+    <string name="iptv_backup_order_reset">"Terug naar standaardvolgorde"</string>
+    <string name="iptv_backup_order_no_sources">"Nog geen playlists of add-ons"</string>
+</resources>

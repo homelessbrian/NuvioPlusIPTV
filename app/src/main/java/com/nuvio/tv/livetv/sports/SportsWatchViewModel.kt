@@ -34,6 +34,9 @@ class SportsWatchViewModel @Inject constructor(
     private val selection: SportsWatchSelection,
 ) : ViewModel() {
     val settings = repo.settings
+
+    /** Add-ons that give live game streams, for the gear panel's Backups & game channels page. */
+    suspend fun liveStreamAddonNames(): List<String> = repo.liveStreamAddonNames()
     val currentProfile: StateFlow<Int> = profiles.activeProfileId
     private val openingProfile = currentProfile.value
     private val leases = ConcurrentHashMap.newKeySet<SportsViewingLease>()

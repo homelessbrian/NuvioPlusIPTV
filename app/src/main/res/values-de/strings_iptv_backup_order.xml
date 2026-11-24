@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Gleicher Sender"</string>
+    <string name="livetv_backups_addon_tag">"Add-on"</string>
+    <string name="livetv_backups_playlist_tag">"Playlist"</string>
+    <string name="livetv_backups_quality_other">"Andere Qualität"</string>
+    <string name="iptv_backup_order_title">"Ersatzsender &amp; Spielsender"</string>
+    <string name="iptv_backup_order_row_subtitle">"Wie die Ersatzliste und die Sender eines Spiels in den Schnellsendern gruppiert und sortiert werden"</string>
+    <string name="iptv_backup_order_gear_hint">"Überschriften und ihre Reihenfolge"</string>
+    <string name="iptv_backup_order_group_by">"Gruppieren nach"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK ändert es. Innerhalb jeder Überschrift folgen die Sender der anderen Reihenfolge unten"</string>
+    <string name="iptv_backup_order_by_source">"Playlist / Add-on"</string>
+    <string name="iptv_backup_order_by_quality">"Qualität"</string>
+    <string name="iptv_backup_order_no_headings">"Keine Überschriften"</string>
+    <string name="iptv_backup_order_sources">"Reihenfolge von Playlists &amp; Add-ons"</string>
+    <string name="iptv_backup_order_sources_hint">"die Pfeile verschieben einen Eintrag; neue kommen ans Ende"</string>
+    <string name="iptv_backup_order_qualities">"Reihenfolge der Qualität"</string>
+    <string name="iptv_backup_order_qualities_hint">"FHD über 4K setzen, wenn 4K auf diesem TV ruckelt"</string>
+    <string name="iptv_backup_order_quality_unknown">"Qualität nicht im Namen"</string>
+    <string name="iptv_backup_order_reset">"Standardreihenfolge wiederherstellen"</string>
+    <string name="iptv_backup_order_no_sources">"Noch keine Playlists oder Add-ons"</string>
+</resources>

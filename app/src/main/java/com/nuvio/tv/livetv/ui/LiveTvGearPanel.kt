@@ -95,6 +95,9 @@ internal fun GearPanel(
     /** Every group that can be added to Quick Channels (asked when its pages open). */
     quickGroups: () -> List<RowGroupOption>,
     onQuickUpdate: ((com.nuvio.tv.livetv.model.LiveTvSettings) -> com.nuvio.tv.livetv.model.LiveTvSettings) -> Unit,
+    /** Playlist id → name in the app's order, and the live-stream add-ons: Backups & game channels' order. */
+    backupPlaylists: Map<String, String> = emptyMap(),
+    backupAddons: suspend () -> List<String> = { emptyList() },
     /** Cycles how dark the play bar is (Standard, Darker, Solid). */
     onBackground: () -> Unit,
     onToggle: (String) -> Unit,
@@ -129,6 +132,7 @@ internal fun GearPanel(
             page == "quickAdd" -> page = "quick"
             page == "recordTime" -> page = "record"
             page == "quick" -> page = ""
+            page == "backups" -> page = ""
             customizing || sizing || page != "" -> { customizing = false; sizing = false; page = "" }
             else -> onDismiss()
         }
@@ -166,6 +170,8 @@ internal fun GearPanel(
                     onUpdate = onQuickUpdate,
                     onAdd = { page = "quickAdd" }
                 )
+            } else if (page == "backups") {
+                BackupOrderPage(quickSettings, backupPlaylists, backupAddons, first, onQuickUpdate)
             } else if (page != "") {
                 // ---- Audio, Subtitles, Sleep timer, Stream info: one page each, like the others
                 val title = when (page) {
@@ -407,6 +413,18 @@ internal fun GearPanel(
                     }
                     LiveText(
                         quickChannelsLabel(quickSettings),
+                        size = 13.sp, weight = FontWeight.Medium, color = gearText(focused)
+                    )
+                    LiveText("›", size = 15.sp, color = gearText(focused, dim = true))
+                }
+                // Backups & game channels: headings and order (the same choices as Settings).
+                GearRow(Modifier.fillMaxWidth(), onClick = { page = "backups" }) { focused ->
+                    Column(Modifier.weight(1f)) {
+                        LiveText(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_title), size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused))
+                        LiveText(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_gear_hint), size = 10.sp, color = gearText(focused, dim = true))
+                    }
+                    LiveText(
+                        com.nuvio.tv.ui.screens.settings.backupGroupByLabel(quickSettings),
                         size = 13.sp, weight = FontWeight.Medium, color = gearText(focused)
                     )
                     LiveText("›", size = 15.sp, color = gearText(focused, dim = true))
@@ -665,4 +683,90 @@ private fun GearArrow(icon: ImageVector, desc: String, enabled: Boolean, onClick
 private fun roundUpTo5Min(ms: Long): Long {
     val step = 5 * 60_000L
     return (ms + step - 1) / step * step
+}
+
+/**
+ * The gear panel's Backups & game channels page: Group by, then the playlist / add-on order and
+ * the quality order, each moved with the arrows (as Settings › Live TV › Playback).
+ */
+@Composable
+private fun BackupOrderPage(
+    settings: com.nuvio.tv.livetv.model.LiveTvSettings,
+    playlists: Map<String, String>,
+    addonNames: suspend () -> List<String>,
+    first: FocusRequester,
+    onUpdate: ((com.nuvio.tv.livetv.model.LiveTvSettings) -> com.nuvio.tv.livetv.model.LiveTvSettings) -> Unit
+) {
+    val bo = com.nuvio.tv.livetv.model.BackupOrder
+    val addons by androidx.compose.runtime.produceState(emptyList<String>()) { value = runCatching { addonNames() }.getOrDefault(emptyList()) }
+    val sources = bo.sources(settings, playlists.keys.toList(), addons)
+    val qualities = bo.qualities(settings)
+    val playlistTag = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_playlist_tag)
+    val addonTag = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_addon_tag)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+        LiveText("‹  " + androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_title), size = 14.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
+    }
+    Spacer(Modifier.height(6.dp))
+    @Composable
+    fun heading(text: String) = LiveText(
+        text.uppercase(), size = 10.sp, weight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.55f),
+        modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 2.dp)
+    )
+    @Composable
+    fun orderRow(key: String, title: String, subtitle: String?, index: Int, size: Int, onMove: (Int) -> Unit) = androidx.compose.runtime.key(key) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            GearRow(Modifier.weight(1f), onClick = {}) { focused ->
+                Column(Modifier.weight(1f)) {
+                    LiveText(title, size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused), maxLines = 1)
+                    subtitle?.let { LiveText(it, size = 10.sp, color = gearText(focused, dim = true), maxLines = 1) }
+                }
+            }
+            GearArrow(Icons.Default.KeyboardArrowUp, "Move up", enabled = index > 0) { onMove(-1) }
+            GearArrow(Icons.Default.KeyboardArrowDown, "Move down", enabled = index < size - 1) { onMove(1) }
+        }
+    }
+    fun <T> moved(l: List<T>, i: Int, by: Int): List<T>? {
+        val j = i + by
+        if (i < 0 || j !in l.indices) return null
+        return l.toMutableList().apply { add(j, removeAt(i)) }
+    }
+    Column(
+        Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        GearRow(Modifier.fillMaxWidth().focusRequester(first), onClick = {
+            onUpdate {
+                it.copy(backupGroupBy = when (bo.groupBy(it)) {
+                    bo.SOURCE -> bo.QUALITY
+                    bo.QUALITY -> bo.NONE
+                    else -> bo.SOURCE
+                })
+            }
+        }) { focused ->
+            Column(Modifier.weight(1f)) {
+                LiveText(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_group_by), size = 13.sp, weight = if (focused) FontWeight.Bold else FontWeight.Medium, color = gearText(focused))
+                LiveText(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_group_by_hint), size = 10.sp, color = gearText(focused, dim = true), maxLines = 2)
+            }
+            LiveText(com.nuvio.tv.ui.screens.settings.backupGroupByLabel(settings), size = 13.sp, weight = FontWeight.Medium, color = gearText(focused))
+        }
+        heading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_sources))
+        if (sources.isEmpty()) LiveText(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_no_sources), size = 12.sp, color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(10.dp))
+        sources.forEachIndexed { i, k ->
+            val addon = bo.isAddonKey(k)
+            orderRow("s:$k", if (addon) bo.addonName(k) else playlists[k] ?: k, if (addon) addonTag else playlistTag, i, sources.size) { by ->
+                moved(sources, i, by)?.let { l -> onUpdate { bo.withSources(it, l) } }
+            }
+        }
+        heading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_qualities))
+        qualities.forEachIndexed { i, q ->
+            orderRow("q:$q", com.nuvio.tv.ui.screens.settings.backupQualityLabel(q), null, i, qualities.size) { by ->
+                moved(qualities, i, by)?.let { l -> onUpdate { bo.withQualities(it, l) } }
+            }
+        }
+        if (settings.backupSourceOrder.isNotBlank() || settings.backupQualityOrder.isNotBlank()) {
+            GearRow(Modifier.fillMaxWidth(), onClick = { onUpdate { bo.reset(it) } }) { focused ->
+                LiveText(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_reset), size = 13.sp, weight = FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
+            }
+        }
+    }
 }

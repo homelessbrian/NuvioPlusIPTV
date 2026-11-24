@@ -251,6 +251,7 @@ private sealed interface LiveDialog {
     data object HighlightChoice : LiveDialog
     data object CustomGroups : LiveDialog
     data object ChannelRow : LiveDialog
+    data object BackupOrder : LiveDialog
     data object ConfirmRestore : LiveDialog
     data object BackupPhone : LiveDialog
     data object BackupsOnTv : LiveDialog
@@ -1255,6 +1256,12 @@ internal fun LiveTvSettingsContent(
                             if (n == 1) context.getString(R.string.iptv_settings_1_list) else context.getString(R.string.iptv_settings_1_s_lists, n)
                         },
                         onClick = { dialog = LiveDialog.ChannelRow }
+                    )
+                    SettingsActionRow(
+                        title = context.getString(R.string.iptv_backup_order_title),
+                        subtitle = context.getString(R.string.iptv_backup_order_row_subtitle),
+                        value = backupGroupByLabel(s),
+                        onClick = { dialog = LiveDialog.BackupOrder }
                     )
                     SettingsActionRow(
                         title = context.getString(R.string.iptv_settings_play_bar_background),
@@ -2631,6 +2638,13 @@ internal fun LiveTvSettingsContent(
         LiveDialog.ChannelRow -> ChannelRowDialog(
             settings = s,
             groups = remember(playlists, user.customGroups, user.groupNames) { viewModel.rowGroupOptions() },
+            onUpdate = { t -> update(t) },
+            onDismiss = close
+        )
+        LiveDialog.BackupOrder -> BackupOrderDialog(
+            settings = s,
+            playlists = playlists,
+            addonNames = { viewModel.liveStreamAddonNames() },
             onUpdate = { t -> update(t) },
             onDismiss = close
         )

@@ -702,6 +702,12 @@ data class LiveTvSettings(
     val panelRowLast: String = "",
     /** Which list the Channel Row opens on: "last" (the one used last) or "first". */
     val panelRowOpens: String = "last",
+    /** Headings in the Backups list and a game's channels: "SOURCE" (playlist / add-on), "QUALITY" or "NONE". See [BackupOrder]. */
+    val backupGroupBy: String = "SOURCE",
+    /** Playlists (ids) and add-ons ("addon|name"), one per line, in the order chosen. Empty: the app's order. */
+    val backupSourceOrder: String = "",
+    /** Qualities ("4K,FHD,HD,SD,?"), in the order chosen. Empty: best first. */
+    val backupQualityOrder: String = "",
     /** Channel surfing: Up / Down show other channels on the info bar; OK switches. */
     val channelSurf: Boolean = false,
     /** Parts of the full-screen bar switched off (⚙ → Play bar layout), comma separated. */
@@ -1034,7 +1040,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-24 16:45"
+    const val KIT_STAMP = "2026-11-24 17:30"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String
