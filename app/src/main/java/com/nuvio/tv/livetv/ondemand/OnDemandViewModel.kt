@@ -215,6 +215,8 @@ class OnDemandViewModel @Inject constructor(
             homeDetailed.remove(item.uid)
             enrichOne(item, urgent = true)
             if (!homeMatched.containsKey(item.uid)) posterFor(item)
+            // The home row reuses unchanged cards: mark this one changed so the fix shows.
+            markHomeChanged(item.uid)
             updateHomeRows()
         }
     }

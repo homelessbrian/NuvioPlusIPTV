@@ -234,7 +234,22 @@ class LiveTvRecorder @Inject constructor(
             preparedStorage?.let(::discardPreparedStorage)
             return it
         }
-        val prepared = preparedStorage ?: prepareStorage(title)
+        // Scheduled starts come here without preparing first: a folder that can't be made must
+        // end as a failed recording, not an error thrown into the scheduler (that closes the app).
+        val prepared = preparedStorage ?: try { prepareStorage(title) } catch (e: Exception) {
+            val problem = e.message ?: "The recording folder could not be created"
+            LiveTvNotice.show("Couldn't start recording \"$title\": $problem")
+            val failedAt = System.currentTimeMillis()
+            val failed = LiveTvRecording(
+                id = "rec$failedAt", channelKey = channel.key, channelName = channel.name, channelLogo = channel.logo,
+                title = title, episode = episode, description = description,
+                programStartMs = programStartMs, programStopMs = programStopMs,
+                startedAtMs = failedAt, stopAtMs = stopAtMs, dir = "", seriesId = seriesId,
+                fromCatchup = finite, expectedSec = expectedSec ?: 0.0
+            ).copy(status = RecordingStatus.FAILED, endedAtMs = failedAt, problem = problem)
+            runCatching { onFinished(failed) }
+            return failed
+        }
         val now = prepared.startedAtMs
         val id = prepared.id
         val dir = prepared.dir
