@@ -54,6 +54,7 @@ In a show's info (hold OK), **▲ / ▼** read the whole description and **Back*
 | **OK** on a game | Game info: channels, score, Remind me, Record |
 | **Hold OK** on a game | Watch it in the video window (again: full screen) |
 | **◀ / ▶** on the big card | Your next games |
+| **◀** on the first game in a row | Stays there (use **Back** to go up to the top) |
 | **▲** from the games | The top bar: My Sports, All Events, 🏆 Tables, your sports (and the day tabs on All Events) |
 | **Hold Back** | Full screen on the game in the video window |
 | **Back** | First back up to the top (the highlight, or the My Sports button) · again opens the side menu |
