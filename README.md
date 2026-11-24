@@ -24,15 +24,13 @@
 
 ## 🆕 New in this update
 
-- **🎞️ Record to a network folder:** save recordings to a NAS or shared folder, with **Find on Network** to pick it. One file per show, and every TV on the same folder shares one library. You can also record to any folder on a USB drive. [More below](#%EF%B8%8F-recordings).
-- **🗂️ Recordings, redone:** Recorded, Scheduled and Series tabs with posters, **Fix Match** for the wrong poster, **Delete Recordings After**, and its own tab in Live TV settings.
-- **🏆 A new Sports hub:** a game preview and league table beside the list, a game page with tabs and a guide line under every channel, **Top Players with photos**, and team colours while you watch. [More below](#-sports-hub).
-- **🎬 More highlights:** from the sports' own YouTube channels (UFC, F1, boxing, tennis, darts and more), for older games and past races too.
-- **🏠 Live TV, Sports and On Demand rows on Home:** add them from **Settings → Content & Discovery → Home Screen Rows**.
-- **⭐ Better sources:** **Best quality** auto-play with your own **Quality rules**, and **Set up for this TV**, which checks your box, screen and sound and suggests settings.
-- **📺 Live TV:** **favorite groups**, **Show on Profiles**, a **Backup File** you can save and restore, **Lock Playlist Logins**, and a **User agent** box for guides.
-- **🤾 Handball,** Czech and Slovak leagues, and college tables with conferences.
-- **Built on Nuvio 1.2.0-beta.3,** with automatic audio-based subtitle sync, trailer subtitles, star ratings and drag-to-reorder collections.
+- **🗂️ Backups with headings:** the Backups list and a game's channels in Quick Channels are grouped by playlist, add-on or quality, in the order you pick.
+- **📶 Adaptive Live TV Buffer:** a new switch that builds a 20-second cushion so channels stall less.
+- **📺 A steadier guide:** shows that already aired stay in the guide after an update, and **Find & stream** opens the movie or series page straight away.
+- **⏺️ Recordings:** episode descriptions (from TMDB when the guide has none), the recording's poster on the play bar, and playback that picks up by itself after a freeze.
+- **🏆 Sports:** what you follow loads first when the app opens.
+- **⚡ Faster and lighter:** less memory for the guide, On Demand and Sports, and a faster start.
+- **Built on Nuvio 1.2.0-beta.4,** with built-in Usenet, Blu-ray disc titles, Simkl rewatches and much faster audio sync.
 
 ---
 
@@ -221,6 +219,7 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **TiviMate-style guide:** channels down the side, a timeline across, and a line marking "now" (which you can hide). It fits **8 or more channels** on screen.
 - **Guide Size:** Compact, Standard, Large or Extra Large. It sets the size of overlay mode too.
 - **Opens straight away:** the guide is on screen as soon as Live TV opens, and updates happen quietly in the background.
+- **Past shows stay put:** shows that already aired stay in the guide when a guide update stops listing them (up to your **Past Shows Kept** setting).
 - **Fast browsing:** hold Left to step back through earlier shows at double speed.
 - **Two-Line Channel Names** for long names.
 - **Group list:**
@@ -253,7 +252,7 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
   - **Watch past shows** with a seek bar, or **restart what's on now**. Skips land where you aimed, even with providers that are slow to jump.
   - **Follow-on playback:** carries straight on into the next show.
   - **Guide time shift** and **Catch-up time shift** (up to 24 hours) for providers that are off.
-- **Backup channels:** a button on the info bar lists the other copies of the channel you're watching, hidden ones included, so you can switch when one is having trouble. Copies match even when the name has a sound layout like 5.1.
+- **Backup channels:** a button on the info bar lists the other copies of the channel you're watching, hidden ones included, so you can switch when one is having trouble. Copies match even when the name has a sound layout like 5.1. **Backups & Game Channels** (Settings → Live TV → Playback, or the play bar's gear) groups the list by playlist, add-on or quality, in the order you pick.
 - **DNS:** System (your network's normal lookup), Cloudflare or Google, for when channels say your provider's server can't be found or your internet company blocks IPTV. On System, the app tries Cloudflare and Google by itself when it needs to. The VPN takes care of this while it's on.
 - **Update now** downloads your playlist again in full, and **deleting a playlist** clears everything it left behind.
 - **Include movies & series (On Demand)** switch for M3U playlists, when you add or edit one.
@@ -275,7 +274,8 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Recordings carry on with the app closed or the box in standby**, and catch-up saves wait for the connection to come back.
 - **Watch while it records,** with skipping back and forward.
 - **Recordings button (●)** next to the guide's ⚙.
-- **Size and details** for every recording: channel, air time, length, size and where it's saved.
+- **Size and details** for every recording: channel, air time, length, size and where it's saved, plus the episode's description (from TMDB when the guide had none).
+- **Keeps playing:** a recording that freezes or hits an error picks up from the same spot by itself.
 
 ### 🗂️ Channel management
 - **Favorite groups:** hold OK on a group and choose **Add to favorite groups**. They sit at the top with a star.
@@ -312,6 +312,7 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Smooth playback:**
   - **Keeps the TV awake** while you watch (no screen saver).
   - **Match frame rate** (Off, On start, or On start/stop, as in Nuvio's player) and **audio passthrough** settings.
+  - **Adaptive Live TV Buffer** (Settings → Live TV → Playback): builds a 20-second cushion by playing live TV a touch slower, so channels stall less.
   - **Auto-reconnect,** plus automatic recovery from frozen or stuck streams, with the reason shown when a stream fails.
 
 ### 🔒 Parental controls
@@ -329,7 +330,7 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **Live TV in Nuvio search:**
   - **Your order:** choose which results come first.
   - **Preview behind search:** live channels play in the background while you search.
-- **Find & stream in Nuvio:** see a movie in the guide, and stream it through your own addons and debrid.
+- **Find & stream in Nuvio:** see a movie in the guide, and stream it through your own addons and debrid. With one clear match it opens the movie or series page straight away.
 - **Setup Sync** (or Google Drive sync): your setup on every TV and phone, combined correctly when you use more than one.
 - **Settings in order:** Live TV, On Demand, Sports, Calendar and VPN sit together under Playback.
 
@@ -362,7 +363,7 @@ Requires **Android 7.0 or newer** (Fire OS 6 or later). It installs **alongside*
 
 **On a phone or tablet?** Get **[Nuvio + IPTV Mobile](https://github.com/homelessbrian/NuvioPlusIPTV-Mobile/releases)** instead.
 
-**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.2.0-beta.3).
+**Updating:** updates appear **inside the app**. Each new Nuvio release is followed by a matching Nuvio + IPTV version (currently based on Nuvio 1.2.0-beta.4).
 
 ---
 
