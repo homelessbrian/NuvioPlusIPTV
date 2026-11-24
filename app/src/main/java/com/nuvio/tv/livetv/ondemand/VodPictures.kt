@@ -22,6 +22,7 @@ object VodPictures {
     private const val CACHE_BYTES = 64L * 1024 * 1024
     private const val TOUCH_INTERVAL_MS = 60L * 60 * 1000
     private val fileLock = Any()
+    private val activeDownloads = HashSet<File>()
     private var cachedBytes: Long? = null
 
     private val http by lazy {
@@ -90,12 +91,16 @@ object VodPictures {
                     failed += url
                     return@withContext null
                 }
-                val download = File.createTempFile(f.name, ".tmp", f.parentFile).also { tmp = it }
+                val download = synchronized(fileLock) {
+                    val directory = f.parentFile!!
+                    if (cachedBytes == null) cachedBytes = VodPictureFiles.trim(directory, CACHE_BYTES, MAX_AGE_MS, System.currentTimeMillis(), activeDownloads)
+                    File.createTempFile(f.name, ".tmp", directory).also { tmp = it; activeDownloads += it }
+                }
                 body.byteStream().use { input -> download.outputStream().buffered().use { VodPictureFiles.copyBounded(input, it, MAX_BYTES) } }
                 if (download.length() == 0L) { failed += url; return@withContext null }
                 synchronized(fileLock) {
                     val directory = f.parentFile!!
-                    var bytes = cachedBytes ?: VodPictureFiles.trim(directory, CACHE_BYTES, MAX_AGE_MS, System.currentTimeMillis())
+                    var bytes = cachedBytes ?: VodPictureFiles.trim(directory, CACHE_BYTES, MAX_AGE_MS, System.currentTimeMillis(), activeDownloads)
                     val previous = f.length()
                     if (!download.renameTo(f)) {
                         if (f.exists() && !f.delete()) throw java.io.IOException("Cannot replace provider picture")
@@ -104,7 +109,7 @@ object VodPictures {
                     f.setLastModified(System.currentTimeMillis())
                     bytes += f.length() - previous
                     // No directory scan per image. Scan only on startup/tidy or quota pressure.
-                    cachedBytes = if (bytes > CACHE_BYTES) VodPictureFiles.trim(directory, CACHE_BYTES, MAX_AGE_MS, System.currentTimeMillis()) else bytes
+                    cachedBytes = if (bytes > CACHE_BYTES) VodPictureFiles.trim(directory, CACHE_BYTES, MAX_AGE_MS, System.currentTimeMillis(), activeDownloads) else bytes
                 }
             }
             "file://" + f.absolutePath
@@ -114,7 +119,12 @@ object VodPictures {
             failed += url
             null
         } finally {
-            tmp?.delete()
+            synchronized(fileLock) {
+                tmp?.let { download ->
+                    activeDownloads.remove(download)
+                    if (download.exists() && !download.delete()) cachedBytes = null
+                }
+            }
         }
     }
 
@@ -122,7 +132,7 @@ object VodPictures {
     fun tidy(context: Context) {
         runCatching {
             synchronized(fileLock) {
-                cachedBytes = VodPictureFiles.trim(dir(context), CACHE_BYTES, MAX_AGE_MS, System.currentTimeMillis())
+                cachedBytes = VodPictureFiles.trim(dir(context), CACHE_BYTES, MAX_AGE_MS, System.currentTimeMillis(), activeDownloads)
             }
         }
     }

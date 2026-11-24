@@ -19,9 +19,11 @@ internal object VodPictureFiles {
         }
     }
 
-    /** Oldest access first. Temporary downloads are private to the writer, not cache entries. */
-    fun trim(directory: File, maxBytes: Long, maxAgeMs: Long, now: Long): Long {
-        val entries = directory.listFiles().orEmpty().filter { it.isFile && !it.name.endsWith(".tmp") }
+    /** Only registered, active downloads are exempt; a prior process's orphan is removable. */
+    fun trim(directory: File, maxBytes: Long, maxAgeMs: Long, now: Long, activeDownloads: Set<File> = emptySet()): Long {
+        val entries = directory.listFiles().orEmpty().filter { file ->
+            file.isFile && file !in activeDownloads && !(file.name.endsWith(".tmp") && file.delete())
+        }
         var bytes = 0L
         val keep = ArrayList<File>(entries.size)
         entries.forEach { file ->

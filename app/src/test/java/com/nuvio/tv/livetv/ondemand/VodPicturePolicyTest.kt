@@ -31,12 +31,14 @@ class VodPicturePolicyTest {
             val recent = file("recent", 900)
             val newest = file("newest", 950)
             val temporary = file("writer.tmp", 2)
-            assertEquals(8L, VodPictureFiles.trim(directory, 8, 950, 1_000))
+            val orphan = file("abandoned.tmp", 999)
+            assertEquals(8L, VodPictureFiles.trim(directory, 8, 950, 1_000, setOf(temporary)))
             assertFalse(expired.exists())
             assertFalse(old.exists())
             assertTrue(recent.exists())
             assertTrue(newest.exists())
             assertTrue(temporary.exists())
+            assertFalse("Even a recent orphan from another process is removable", orphan.exists())
         } finally { directory.deleteRecursively() }
     }
 }
