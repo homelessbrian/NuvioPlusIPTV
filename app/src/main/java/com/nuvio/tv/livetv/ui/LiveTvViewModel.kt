@@ -255,6 +255,14 @@ class LiveTvViewModel @Inject constructor(
                     // A long full-screen session still needs the playing channel's now/next,
                     // without restarting all-channel browsing work alongside the video.
                     playback.playingChannel?.key?.let { repository.loadChannelsNow(listOf(it)) }
+                    // Quick Channels, Up/Down browsing and the Multiview picker show what's on now
+                    // on other channels too, and only now/next is kept for them: once the app has
+                    // settled (not while the first channel starts), refill the pairs that ran out.
+                    // Only channels whose show has ended are read, a few at a time.
+                    if (android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime() > 60_000L) {
+                        repository.loadChannelsNow(uiState.value.channels.take(32).map { it.key })
+                        repository.ensureRange(_now.value - 3 * 3_600_000L, _now.value + 12 * 3_600_000L)
+                    }
                 } else {
                     repository.loadChannelsNow(uiState.value.channels.take(32).map { it.key })
                     repository.ensureRange(_now.value - 3 * 3_600_000L, _now.value + 12 * 3_600_000L)
