@@ -3172,7 +3172,7 @@ class LiveTvRepository @Inject constructor(
             .build()
         http.newCall(request).execute().use { response ->
             if (response.code == 304 && target.exists()) {
-                target.setLastModified(System.currentTimeMillis()) // checked again after the usual interval
+                DownloadContent.touch(target) // checked again after the usual interval
                 reportAs?.let { LIVE_REPORT.add("Guide \"$it\": server said not changed since last time; kept the copy we have") }
                 return@withContext false
             }
@@ -3184,6 +3184,7 @@ class LiveTvRepository @Inject constructor(
             val tmp = File(target.parentFile, target.name + ".tmp")
             // With a label: how much has come in so far, so a big download doesn't look frozen.
             val total = body.contentLength().takeIf { it > 0 }
+            var downloadedDecoded: String? = null
             // A download cut off part-way (connection lost, storage full) must not leave its
             // half-written file behind: guides are often 50–200 MB. The copy from before stays.
             try {
@@ -3196,6 +3197,9 @@ class LiveTvRepository @Inject constructor(
                     input.mark(2)
                     val alreadyZipped = input.read() == 0x1f && input.read() == 0x8b
                     input.reset()
+                    // Plain responses are already passing through the copy loop: remember
+                    // decoded content without unzipping the saved copy again afterward.
+                    val decodedDigest = if (alreadyZipped) null else MessageDigest.getInstance("MD5")
                     val fileOut = tmp.outputStream()
                     (if (alreadyZipped) fileOut else fastGzip(fileOut)).use { out ->
                         val buf = ByteArray(64 * 1024)
@@ -3205,6 +3209,7 @@ class LiveTvRepository @Inject constructor(
                             val n = input.read(buf)
                             if (n < 0) break
                             out.write(buf, 0, n)
+                            decodedDigest?.update(buf, 0, n)
                             read += n
                             if (progressLabel != null) {
                                 val now = System.currentTimeMillis()
@@ -3215,6 +3220,7 @@ class LiveTvRepository @Inject constructor(
                             }
                         }
                     }
+                    downloadedDecoded = decodedDigest?.let { DownloadContent.fingerprint(it) }
                 }
             } catch (e: Throwable) {
                 tmp.delete()
@@ -3224,17 +3230,19 @@ class LiveTvRepository @Inject constructor(
                 tmp.delete()
                 error("Empty response")
             }
-            runCatching {
+            val comparison = try { DownloadContent.compare(target, tmp, downloadedDecoded) }
+            catch (error: Throwable) { tmp.delete(); throw error }
+            fun rememberResponse() { runCatching {
                 meta.writeText(response.header("ETag").orEmpty() + "\n" + response.header("Last-Modified").orEmpty())
-            }
-            val same = target.exists() && (
-                if (isGzip(target) == isGzip(tmp)) target.length() == tmp.length() && sameContent(target, tmp)
-                else sameDecoded(target, tmp)
-            )
+            } }
             val serverDate = response.header("Last-Modified")?.let { " (server's date: $it)" }.orEmpty()
-            if (same) {
+            if (comparison.same) {
                 tmp.delete()
-                target.setLastModified(System.currentTimeMillis())
+                if (comparison.decodedFingerprint != null && DownloadContent.cached(target) == null) {
+                    DownloadContent.remember(target, comparison.decodedFingerprint)
+                }
+                DownloadContent.touch(target)
+                rememberResponse()
                 reportAs?.let { LIVE_REPORT.add("Guide \"$it\": downloaded ${sizeLabel(target.length())} zipped, same as the copy we had$serverDate") }
                 return@withContext false
             }
@@ -3244,6 +3252,8 @@ class LiveTvRepository @Inject constructor(
                 tmp.delete()
             }
             markChanged(target)
+            DownloadContent.remember(target, comparison.decodedFingerprint)
+            rememberResponse()
             true
         }
     }
@@ -3379,12 +3389,11 @@ class LiveTvRepository @Inject constructor(
             ?: "${f.length()}"
 
     private fun markChanged(f: File) {
-        runCatching { stampFile(f).writeText(System.currentTimeMillis().toString()) }
+        runCatching {
+            val previous = stampFile(f).takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull() ?: 0L
+            stampFile(f).writeText(maxOf(System.currentTimeMillis(), previous + 1).toString())
+        }
     }
-
-    private fun isGzip(f: File): Boolean = runCatching {
-        f.inputStream().use { val a = it.read(); val b = it.read(); a == 0x1f && b == 0x8b }
-    }.getOrDefault(false)
 
     /**
      * Same content once unzipped. A saved copy is zipped to save space after each update, so a
@@ -3395,22 +3404,6 @@ class LiveTvRepository @Inject constructor(
         fun digest(f: File): ByteArray {
             val md = java.security.MessageDigest.getInstance("MD5")
             openMaybeGzip(f).use { input ->
-                val buf = ByteArray(64 * 1024)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    md.update(buf, 0, n)
-                }
-            }
-            return md.digest()
-        }
-        digest(a).contentEquals(digest(b))
-    }.getOrDefault(false)
-
-    private fun sameContent(a: File, b: File): Boolean = runCatching {
-        fun digest(f: File): ByteArray {
-            val md = java.security.MessageDigest.getInstance("MD5")
-            f.inputStream().use { input ->
                 val buf = ByteArray(64 * 1024)
                 while (true) {
                     val n = input.read(buf)
@@ -4004,11 +3997,13 @@ class LiveTvRepository @Inject constructor(
             val zipped = file.inputStream().use { val a = it.read(); val b = it.read(); a == 0x1f && b == 0x8b }
             if (zipped) return
             val tmp = File(file.parentFile, file.name + ".zip.tmp")
-            file.inputStream().use { input -> fastGzip(tmp.outputStream()).use { out -> input.copyTo(out, 64 * 1024) } }
+            val decodedDigest = MessageDigest.getInstance("MD5")
+            java.security.DigestInputStream(file.inputStream(), decodedDigest).use { input -> fastGzip(tmp.outputStream()).use { out -> input.copyTo(out, 64 * 1024) } }
             val modified = file.lastModified()
             if (!stampFile(file).exists()) markChanged(file)
             if (!tmp.renameTo(file)) { tmp.copyTo(file, overwrite = true); tmp.delete() }
             file.setLastModified(modified)
+            DownloadContent.remember(file, DownloadContent.fingerprint(decodedDigest))
             LIVE_REPORT.add("Saved \"${file.name}\" zipped to save space")
         }.onFailure {
             runCatching { File(file.parentFile, file.name + ".zip.tmp").delete() }
@@ -4023,7 +4018,8 @@ class LiveTvRepository @Inject constructor(
         val b1 = input.read()
         val b2 = input.read()
         input.reset()
-        return if (b1 == 0x1f && b2 == 0x8b) BufferedInputStream(GZIPInputStream(input, 64 * 1024)) else input
+        val decoded = if (b1 == 0x1f && b2 == 0x8b) BufferedInputStream(GZIPInputStream(input, 64 * 1024)) else input
+        return if (file.name.endsWith(".xml") || file.name.endsWith(".m3u")) DownloadContent.observe(file, decoded) else decoded
     }
 
     private fun sizeLabel(bytes: Long): String = when {
