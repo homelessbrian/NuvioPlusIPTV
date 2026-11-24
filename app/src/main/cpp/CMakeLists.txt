@@ -90,3 +90,9 @@ target_compile_features(nuvioseekthumb PRIVATE cxx_std_17)
 target_compile_options(nuvioseekthumb PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-deprecated-declarations)
 target_link_options(nuvioseekthumb PRIVATE "-Wl,-z,max-page-size=16384")
 target_link_libraries(nuvioseekthumb ${log-lib} dl m)
+
+# Sports guide candidate filtering; UTF16 ASCII fast path with managed Unicode fallback.
+add_library(nuviosportstext SHARED sports/sports_text.c)
+target_compile_features(nuviosportstext PRIVATE c_std_11)
+target_compile_options(nuviosportstext PRIVATE -O2 -Wall -Wextra)
+target_link_options(nuviosportstext PRIVATE "-Wl,-z,max-page-size=16384")

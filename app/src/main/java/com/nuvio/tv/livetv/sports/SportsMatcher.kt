@@ -28,6 +28,13 @@ internal class SportsMatcher(
     /** Periodic cooperative checks, outside the innermost text/term comparisons. */
     private val checkpoint: () -> Unit = {}
 ) {
+    private var nativeTextEnabled = true
+
+    /** A reference run uses the identical pipeline with the managed text path. */
+    internal constructor(db: EpgDatabase, dir: File?, sportsTable: Boolean, checkpoint: () -> Unit,
+        nativeTextEnabled: Boolean) : this(db = db, dir = dir, sportsTable = sportsTable, checkpoint = checkpoint) {
+        this.nativeTextEnabled = nativeTextEnabled
+    }
 
     class Input(
         val events: List<SportsEvent>,
@@ -650,11 +657,8 @@ internal class SportsMatcher(
                         }
                     }
                     if (src == From.GUIDE) {
-                        val pace = Pacer(false)
-                        db.scanListingsGrouped(from, to, from) { channels, start, stop, title, descr, cat ->
-                            pace.tick()
-                            consider(channels, start, stop, title, descr, cat, norm(title), if (wantDesc && !descr.isNullOrEmpty()) norm(descr) else "")
-                        }
+                        scanGuideText(from, to, from, wantDesc, gentle = false,
+                            words = titleWords + followed, onRow = ::consider)
                     } else {
                         readRows(src, from, to, from, wantDesc, gentle = false) { ch, start, stop, title, descr, cat, nt, nd ->
                             consider(listOf(ch), start, stop, title, descr, cat, nt, nd)
@@ -911,11 +915,7 @@ internal class SportsMatcher(
             }
         }
         if (src == From.GUIDE) {
-            val pace = Pacer(gentle)
-            db.scanListingsGrouped(from, to, minStop) { channels, start, stop, title, descr, cat ->
-                pace.tick()
-                consider(channels, start, stop, title, descr, cat, norm(title), if (descr.isNullOrEmpty()) "" else norm(descr))
-            }
+            scanGuideText(from, to, minStop, wantDesc = true, gentle = gentle, words = words, onRow = ::consider)
         } else {
             readRows(src, from, to, minStop, wantDesc = true, gentle = gentle) { ch, start, stop, title, descr, cat, nt, nd ->
                 consider(listOf(ch), start, stop, title, descr, cat, nt, nd)
@@ -952,6 +952,22 @@ internal class SportsMatcher(
     // ------------------------------------------------------------------ where the guide is read from
 
     private enum class From { GUIDE, TABLE }
+
+    private fun scanGuideText(
+        from: Long, to: Long, minStop: Long, wantDesc: Boolean, gentle: Boolean, words: Collection<String>,
+        paceAliases: Boolean = false, onVisited: (Int) -> Unit = {},
+        onRow: (List<String>, Long, Long, String, String?, String?, String, String) -> Unit,
+    ) {
+        val pace = Pacer(gentle)
+        SportsGuideText(words, wantDesc, checkpoint, onRow, nativeEnabled = nativeTextEnabled).use { text ->
+            db.scanListingsGrouped(from, to, minStop) { channels, start, stop, title, descr, cat ->
+                if (paceAliases) channels.forEach { pace.tick() } else pace.tick()
+                onVisited(channels.size)
+                text.add(channels, start, stop, title, descr, cat)
+            }
+            text.finish()
+        }
+    }
 
     /**
      * Guide shows starting in [from, to) and still on after [minStop], with their title and
@@ -1083,9 +1099,11 @@ internal class SportsMatcher(
         val writer = db.startSportsRows()
         var read = 0
         val ok = try {
-            readRows(From.GUIDE, from, to, from, wantDesc = true, gentle = gentle) { ch, start, stop, title, descr, cat, nt, nd ->
-                read++
-                if (matchedWords(nt, nd, byFirst) != null) writer.add(ch, start, stop, title, descr, cat, nt, nd)
+            scanGuideText(from, to, from, wantDesc = true, gentle = gentle, words = words,
+                paceAliases = true, onVisited = { read += it }) { channels, start, stop, title, descr, cat, nt, nd ->
+                channels.forEach { ch ->
+                    if (matchedWords(nt, nd, byFirst) != null) writer.add(ch, start, stop, title, descr, cat, nt, nd)
+                }
             }
             writer.finish(rev, from, to, words)
         } catch (e: Throwable) {
