@@ -232,6 +232,11 @@ internal object NetworkMarker {
     fun bytes(dir: File): Long = read(dir).optLong("bytes")
     fun metaAt(dir: File): Long = read(dir).optLong("metaAt")
     fun folder(dir: File): String = read(dir).optString("folder")
+    /** Checksum of the info.json last sent to the network folder (-1: not known, sent before this was kept). */
+    fun infoCrc(dir: File): Long = read(dir).optLong("infoCrc", -1L)
+    /** Another TV's recording: when its details were last fetched, and when they last changed. */
+    fun mirrorCheckedAt(dir: File): Long = read(dir).optLong("checkedAt")
+    fun mirrorChangedAt(dir: File): Long = read(dir).optLong("changedAt")
     /** Another TV's recording (this TV only shows it). */
     fun isMirror(dir: File): Boolean = File(dir, NAME).isFile && read(dir).optBoolean("mirror")
 
@@ -242,7 +247,16 @@ internal object NetworkMarker {
     fun set(dir: File, bytes: Long) = write(dir, read(dir).put("bytes", bytes))
 
     @Synchronized
-    fun setMetaAt(dir: File, at: Long, folder: String) = write(dir, read(dir).put("metaAt", at).put("folder", folder))
+    fun setMetaAt(dir: File, at: Long, folder: String, infoCrc: Long) =
+        write(dir, read(dir).put("metaAt", at).put("folder", folder).put("infoCrc", infoCrc))
+
+    @Synchronized
+    fun mirrorChecked(dir: File, changed: Boolean) {
+        val now = System.currentTimeMillis()
+        val o = read(dir).put("checkedAt", now)
+        if (changed || o.optLong("changedAt") <= 0L) o.put("changedAt", now)
+        write(dir, o)
+    }
 
     @Synchronized
     fun setMirror(dir: File, folder: String) = write(dir, read(dir).put("mirror", true).put("folder", folder))

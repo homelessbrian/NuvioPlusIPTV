@@ -41,7 +41,7 @@ internal fun liveTvChannelVisibility(
 internal fun sortLiveTvChannels(channels: List<LiveChannel>, sort: ChannelSort): List<LiveChannel> = when (sort) {
     ChannelSort.PLAYLIST -> channels
     ChannelSort.NUMBER -> channels.sortedBy { it.number }
-    ChannelSort.NAME -> channels.sortedBy { it.name.lowercase() }
+    ChannelSort.NAME -> ChannelNameSort.sort(channels)
 }
 
 /** Exactly the guide's allVisibleChannels policy without building groups, programs or timers. */

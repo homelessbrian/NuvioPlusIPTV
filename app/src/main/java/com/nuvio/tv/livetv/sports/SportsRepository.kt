@@ -70,8 +70,9 @@ class SportsRepository @Inject constructor(
     // In the app's cache (see SportsDiskCache); made again if "Clear cache" emptied it meanwhile.
     private val sportsDir = SportsDiskCache.directory(context.filesDir, context.cacheDir)
     private val dir: File get() = sportsDir.apply { mkdirs() }
-    // Test builds also try the guide's sports-shows table (checked against the whole guide).
+    // Keep the optional guide index and parity checks on the existing test-channel gate.
     private val matcher = SportsMatcher(guideDb, sportsDir, sportsTable = com.nuvio.tv.BuildConfig.NUVIO_CHANNEL == "test",
+        validateSportsTable = com.nuvio.tv.BuildConfig.NUVIO_CHANNEL == "test",
         checkpoint = ::matchingCheckpoint)
 
     private fun matchingCheckpoint() {
@@ -222,7 +223,7 @@ class SportsRepository @Inject constructor(
         val (l, w, f, g, t) = inputs
         val now = System.currentTimeMillis()
         val workStart = System.nanoTime()
-        val espn = l.values.flatMap { it.events } + w.values.flatMap { it.events }
+        val espn = RugbyLive.fixAll(l.values.flatMap { it.events } + w.values.flatMap { it.events }, rugby, now)
         // Only a score moving (the usual change, every few seconds while games are on) leaves
         // everything that isn't an ESPN game exactly as it was: reused instead of worked out again.
         val minute = now / 60_000L
@@ -274,7 +275,7 @@ class SportsRepository @Inject constructor(
             }
         }
         // Rugby: ESPN's match minute stays at 1', so TheSportsDB's minute (or the half) instead.
-        val espn = RugbyLive.fixAll(l.values.flatMap { it.events } + w.values.flatMap { it.events }, rugby, now)
+
         // A match ESPN lists, found again in the guide (or a schedule file) under a guide-only
         // league of the same sport, shows once: the ESPN one, with its score. "The same match":
         // within 3 hours, with one of ESPN's team names in the title. Any sport, not just rugby.
@@ -431,6 +432,9 @@ class SportsRepository @Inject constructor(
             out
         }
     }.stateIn(scope, SharingStarted.Eagerly, emptyMap())
+
+    /** Add-ons that give live game streams (Backups & Game Channels' order). */
+    suspend fun liveStreamAddonNames(): List<String> = addonSource.liveStreamAddonNames()
 
     // ---- games from the sports addons you have installed (see SportsAddonSource)
 
@@ -2536,7 +2540,7 @@ class SportsRepository @Inject constructor(
                 withTimeoutOrNull(10_000) { _loading.first { !it } }
                 delay(500)
             }
-            matcher.prepareTable(events.value, guideLeagues, f.words, now, gentle = !pageOnly())
+            matcher.configureTable(events.value, guideLeagues, f.words, now, gentle = !pageOnly())
             // All three days from one read of the guide (none at all when it hasn't changed).
             val days = sportsCatching {
                 matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, f.words, keys, shift, now)

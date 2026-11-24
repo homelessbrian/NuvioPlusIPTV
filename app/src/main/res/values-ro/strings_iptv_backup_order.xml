@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Același canal"</string>
+    <string name="livetv_backups_addon_tag">"Supliment"</string>
+    <string name="livetv_backups_playlist_tag">"Listă"</string>
+    <string name="livetv_backups_quality_other">"Altă calitate"</string>
+    <string name="iptv_backup_order_title">"Rezerve și canalele meciului"</string>
+    <string name="iptv_backup_order_row_subtitle">"Cum sunt grupate și sortate lista de rezerve și canalele unui meci din Canale rapide"</string>
+    <string name="iptv_backup_order_gear_hint">"Titluri și ordinea lor"</string>
+    <string name="iptv_backup_order_group_by">"Grupează după"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK schimbă. În fiecare titlu, canalele urmează cealaltă ordine de mai jos"</string>
+    <string name="iptv_backup_order_by_source">"Listă / supliment"</string>
+    <string name="iptv_backup_order_by_quality">"Calitate"</string>
+    <string name="iptv_backup_order_no_headings">"Fără titluri"</string>
+    <string name="iptv_backup_order_sources">"Ordinea listelor și suplimentelor"</string>
+    <string name="iptv_backup_order_sources_hint">"săgețile mută unul; cele noi merg la final"</string>
+    <string name="iptv_backup_order_qualities">"Ordinea calității"</string>
+    <string name="iptv_backup_order_qualities_hint">"pune FHD deasupra 4K dacă 4K se blochează pe acest TV"</string>
+    <string name="iptv_backup_order_quality_unknown">"Calitatea nu apare în nume"</string>
+    <string name="iptv_backup_order_reset">"Înapoi la ordinea implicită"</string>
+    <string name="iptv_backup_order_no_sources">"Încă nu există liste sau suplimente"</string>
+</resources>

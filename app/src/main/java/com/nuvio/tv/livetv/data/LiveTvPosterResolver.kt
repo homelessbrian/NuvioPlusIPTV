@@ -69,20 +69,20 @@ class LiveTvPosterResolver @Inject constructor(
      * details page with your metadata and posters. Null if none of your catalogs has it.
      */
     suspend fun matchFor(title: String, series: Boolean, year: Int?, imdbId: String? = null, urgent: Boolean = false): Hit? {
-        // If addons keep failing (rate limits, offline), pause lookups for a minute.
-        if (System.currentTimeMillis() < pausedUntil) return null
         val query = LiveTvSearchBridge.cleanTitle(title).ifBlank { title.trim() }
         if (query.length < 2) return null
         val key = matchKey(query, series, year, imdbId)
         matchCache[key]?.let { return it }
         if (key in noMatch) return null
+        // Back off new network work without hiding a match already found for this title.
+        if (System.currentTimeMillis() < pausedUntil) return null
         // On Demand has its own small queue, so browsing movies never holds up the guide's posters.
         // Opening a title ([urgent]) doesn't wait behind poster lookups in the queue.
         return withContext(if (urgent) Urgency(true) else kotlin.coroutines.EmptyCoroutineContext) { (if (urgent) urgentPermits else vodPermits).withPermit {
             val attempt = Attempt()
             val hit = runCatching {
                 lookup(query, TypeHint(if (series) Kind.SERIES else Kind.MOVIE, strong = true), Clues(imdbId = imdbId, year = year), attempt, strictYear = true)
-            }.getOrNull()
+            }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrNull()
             if (hit != null) matchCache[key] = hit else if (attempt.reached) noMatch += key
             if (hit == null && !attempt.reached) {
                 if (++failuresInARow >= 5) { pausedUntil = System.currentTimeMillis() + 60_000; failuresInARow = 0 }
@@ -112,7 +112,7 @@ class LiveTvPosterResolver @Inject constructor(
      * Recordings: the title in your addons' catalogs that a recorded show's name matches (movie
      * or series), so its artwork (backdrop and logo) can be shown. Null if there's no good match.
      */
-    suspend fun titleFor(name: String, hint: TypeHint? = null): Hit? {
+    suspend fun titleFor(name: String, hint: TypeHint? = null, urgent: Boolean = false): Hit? {
         if (LiveTvRepository.isPlaceholderTitle(name) || isGenericName(name)) return null
         val query = LiveTvSearchBridge.cleanTitle(name).ifBlank { name.trim() }
         if (query.length < 2) return null
@@ -120,8 +120,9 @@ class LiveTvPosterResolver @Inject constructor(
         val key = normalize(query) + (hint?.let { "|" + it.kind + it.strong } ?: "")
         titleHits[key]?.let { return it }
         val clues = LiveTvSearchBridge.yearInTitle(name)?.let { Clues(year = it) } ?: Clues()
-        val hit = withContext(Urgency(false)) {
-            permits.withPermit {
+        // [urgent]: someone is waiting for it (Find & stream in the guide): the fast lane.
+        val hit = withContext(Urgency(urgent)) {
+            (if (urgent) urgentTitlePermits else permits).withPermit {
                 val attempt = Attempt()
                 val queries = listOf(query) + showNameCandidates(name, null).filter { normalize(it) != key }.take(1)
                 var found: Hit? = null

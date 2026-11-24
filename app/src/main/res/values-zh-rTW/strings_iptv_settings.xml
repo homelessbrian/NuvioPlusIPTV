@@ -163,7 +163,7 @@
     <string name="iptv_settings_your_order">"你的順序"</string>
     <string name="iptv_settings_channels_in_a_group">"分組中的頻道"</string>
     <string name="iptv_settings_channel_order">"頻道順序"</string>
-    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"每個分組（包括收藏）中頻道的排序方式。“播放清單順序”會保留你在收藏和自建分組中的順序。"</string>
+    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"每個分組（包括收藏）中頻道的排序方式。只有“播放清單順序”會保留你自己的順序（重新排列的頻道、收藏和自建分組）。"</string>
     <string name="iptv_settings_channel_number">"頻道編號"</string>
     <string name="iptv_settings_name">"名稱"</string>
     <string name="iptv_settings_number_channels_1_2_3_in_each_group">"在每個分組中按 1、2、3… 編號"</string>

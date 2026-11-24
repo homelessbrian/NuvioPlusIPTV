@@ -22,10 +22,12 @@ internal class SportsMatcher(
     /** Where what was found in the guide is saved, so a restart with the same guide doesn't search it all again. */
     private val dir: File? = null,
     /**
-     * Test builds: read the guide's sports-shows table instead of the whole guide (see
-     * [prepareTable]); after each rebuild the whole guide is read once more and the two compared.
+     * Read the optional guide index when its revision, time window and terms cover a query.
      */
     private val sportsTable: Boolean = false,
+    /** Diagnostic builds can compare indexed reads against the full guide once per rebuild. */
+    private val validateSportsTable: Boolean = false,
+    private val indexLimits: SportsChannelIndex.Limits = SportsChannelIndex.Limits(),
     /** Periodic cooperative checks, outside the innermost text/term comparisons. */
     private val checkpoint: () -> Unit = {}
 ) {
@@ -701,24 +703,29 @@ internal class SportsMatcher(
                         }
                     }
                 }
-                val src = pickSource(rev, from, to, titleWords + followed)
+                var src = pickSource(rev, from, to, titleWords + followed)
                 val t0 = System.currentTimeMillis()
-                collect(src, out)
+                val collected = sportsCatching { collect(src, out) }
+                if (collected.isFailure && src == From.TABLE) {
+                    rejectTable("read failed; whole guide used")
+                    out.values.forEach { it.clear() }
+                    src = From.GUIDE
+                    collect(src, out)
+                } else collected.getOrThrow()
                 if (src == From.TABLE) {
                     val tTable = System.currentTimeMillis() - t0
                     if (checkDays) {
-                        checkDays = false
                         val full = days.associate { it.first to ArrayList<Pair<String, EpgProgram>>() }
                         val t1 = System.currentTimeMillis()
                         collect(From.GUIDE, full)
+                        checkDays = false
                         val tFull = System.currentTimeMillis() - t1
                         fun ids(m: Map<Long, List<Pair<String, EpgProgram>>>) =
-                            m.flatMapTo(HashSet()) { (ds, l) -> l.map { (ch, p) -> "$ds|$ch|${p.startMs}" } }
+                            m.mapValues { (_, list) -> canonicalHits(list) }
                         val a = ids(out); val b = ids(full)
-                        if (a == b) tableNote("check: guide-only sports and followed names the same (${b.size} shows; table ${tTable} ms, whole guide ${tFull / 1000} s)")
+                        if (a == b) tableNote("check: guide-only sports and followed names the same (${full.values.sumOf { it.size }} shows; table ${tTable} ms, whole guide ${tFull / 1000} s)")
                         else {
-                            tableNote("check: guide-only sports DIFFER (table ${a.size} shows, whole guide ${b.size}; " +
-                                "missing ${(b - a).take(3).joinToString { it.substringAfter('|') }}); the whole guide's result is used")
+                            rejectTable("guide-only sports differ; whole guide used")
                             days.forEach { (ds, _) -> out[ds]?.clear(); out[ds]?.addAll(full[ds].orEmpty()) }
                         }
                     }
@@ -903,7 +910,12 @@ internal class SportsMatcher(
         val minStop = slots.minOf { it.minStopMs }
         val src = pickSource(rev, from, to, words)
         val t0 = System.currentTimeMillis()
-        val out = hitsBySlot(src, slots, words, from, to, minStop, gentle)
+        val out = if (src == From.TABLE) sportsCatching {
+            hitsBySlot(src, slots, words, from, to, minStop, gentle)
+        }.getOrElse {
+            rejectTable("read failed; whole guide used")
+            return hitsBySlot(From.GUIDE, slots, words, from, to, minStop, gentle)
+        } else hitsBySlot(src, slots, words, from, to, minStop, gentle)
         if (src != From.TABLE) return out
         val tTable = System.currentTimeMillis() - t0
         if (!checkSlots) {
@@ -911,18 +923,18 @@ internal class SportsMatcher(
             return out
         }
         // First use since it was built: the whole guide too, to check nothing is missed.
-        checkSlots = false
         val t1 = System.currentTimeMillis()
         val full = hitsBySlot(From.GUIDE, slots, words, from, to, minStop, gentle)
+        checkSlots = false
         val tFull = System.currentTimeMillis() - t1
         val differ = slots.indices.filter { i ->
-            out[i].mapTo(HashSet()) { (ch, p) -> "$ch|${p.startMs}" } != full[i].mapTo(HashSet()) { (ch, p) -> "$ch|${p.startMs}" }
+            canonicalHits(out[i]) != canonicalHits(full[i])
         }
         if (differ.isEmpty()) {
             tableNote("check: same shows for all ${slots.size} half-hours (table $tTable ms, whole guide ${tFull / 1000} s)")
             return out
         }
-        tableNote("check: ${differ.size} of ${slots.size} half-hours DIFFER (" +
+        rejectTable("check: ${differ.size} of ${slots.size} half-hours DIFFER (" +
             differ.take(3).joinToString { i -> slots[i].slot.first().title.take(40) } + "); the whole guide's result is used")
         return full
     }
@@ -938,7 +950,7 @@ internal class SportsMatcher(
     ): List<List<Pair<String, EpgProgram>>> {
         val out = List(slots.size) { ArrayList<Pair<String, EpgProgram>>() }
         // Every word looked for, by its first word, so a show only needs checking against the few that start like one of its own words.
-        val byFirst = byFirstWord(words)
+        val wordIndex = SportsGuideWords(words)
         val seen = List(slots.size) { HashSet<String>() }
         // The part that has to run in the guide's order (who gets which show); the text matching before it doesn't.
         fun place(channels: List<String>, start: Long, stop: Long, title: String, descr: String?, cat: String?, m: Set<String>) {
@@ -954,7 +966,7 @@ internal class SportsMatcher(
             }
         }
         fun consider(channels: List<String>, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) {
-            val m = matchedWords(nt, nd, byFirst) ?: return
+            val m = wordIndex.matched(nt, nd) ?: return
             place(channels, start, stop, title, descr, cat, m)
         }
         // A guide repeats itself: the same show (title and description) is on many channels and
@@ -969,7 +981,7 @@ internal class SportsMatcher(
                 @Suppress("UNCHECKED_CAST")
                 return if (known === none) null else known as HashSet<String>
             }
-            val m = matchedWords(norm(title), if (descr.isNullOrEmpty()) "" else norm(descr), byFirst)
+            val m = wordIndex.matched(norm(title), if (descr.isNullOrEmpty()) "" else norm(descr))
             if (memo.size < MEMO_MAX) memo[key] = m ?: none
             return m
         }
@@ -1042,29 +1054,11 @@ internal class SportsMatcher(
         return out
     }
 
-    /** Words by their first word (see [matchedWords]). */
+    /** Words by their first word for the optional bounded index. */
     private fun byFirstWord(words: Collection<String>): Map<String, List<String>> {
         val byFirst = HashMap<String, MutableList<String>>()
         words.forEach { w -> byFirst.getOrPut(w.substringBefore(' ')) { ArrayList() } += w }
         return byFirst
-    }
-
-    /** The words in [byFirst] that a show's cleaned-up title [nt] or description [nd] has, or null for none. */
-    private fun matchedWords(nt: String, nd: String, byFirst: Map<String, List<String>>): HashSet<String>? {
-        var matched: HashSet<String>? = null
-        fun look(text: String) {
-            if (text.isEmpty()) return
-            for (tok in text.split(' ')) {
-                if (tok.isEmpty()) continue
-                val cands = byFirst[tok] ?: continue
-                for (w in cands) {
-                    if (hasWord(nt, w) || hasWord(nd, w)) (matched ?: HashSet<String>().also { matched = it }).add(w)
-                }
-            }
-        }
-        look(nt)
-        look(nd)
-        return matched
     }
 
     // ------------------------------------------------------------------ where the guide is read from
@@ -1128,18 +1122,48 @@ internal class SportsMatcher(
     /** The table was just (re)built: the next guide reads also read the whole guide, to compare. */
     @Volatile private var checkSlots = false
     @Volatile private var checkDays = false
+    @Volatile private var rejectedTable: String? = null
+    @Volatile private var limitedRevision: Long? = null
+    private class TableRequest(val events: List<SportsEvent>, val leagues: List<League>,
+        val followedWords: List<String>, val now: Long, val gentle: Boolean)
+    @Volatile private var tableRequest: TableRequest? = null
+
+    /** Stage inputs only. Cached day/slot results never pay for optional index preparation. */
+    fun configureTable(events: List<SportsEvent>, leagues: List<League>, followedWords: List<String>, now: Long, gentle: Boolean) {
+        tableRequest = TableRequest(events, leagues, followedWords, now, gentle)
+    }
     private val tableNotes = ArrayList<String>()
 
     private fun tableNote(text: String) = synchronized(tableNotes) { tableNotes += text }
 
+    private fun rejectTable(reason: String) {
+        rejectedTable = tableState?.stamp
+        tableNote(reason)
+    }
+
+    private fun canonicalHits(hits: List<Pair<String, EpgProgram>>): List<Pair<String, EpgProgram>> =
+        hits.distinctBy { (channel, program) -> channel to program.startMs }
+
     private fun takeTableNotes(): String = synchronized(tableNotes) {
-        if (tableNotes.isEmpty()) "" else (" · guide sports table (test build): " + tableNotes.joinToString("; ")).also { tableNotes.clear() }
+        if (tableNotes.isEmpty()) "" else (" · guide sports table: " + tableNotes.joinToString("; ")).also { tableNotes.clear() }
     }
 
     private fun refreshTable() {
         val info = db.sportsRowsInfo()
         if (info?.stamp == tableState?.stamp) return
-        tableState = info?.let { TableState(it.stamp, it.rev, it.fromMs, it.toMs, it.rows, db.sportsRowsWords()) }
+        // Old test builds published no capacity metadata. Never load/reuse their unrestricted
+        // word set or rows; a real cache miss rebuilds them using the current limits.
+        tableState = info?.takeIf {
+            it.formatVersion == EpgDatabase.SPORTS_ROWS_FORMAT && it.rows in 0..indexLimits.rows &&
+                it.textBytes in 0..indexLimits.textBytes && it.wordCount in 0..indexLimits.words &&
+                it.wordTextBytes in 0..indexLimits.wordTextBytes
+        }?.let {
+            val words = db.sportsRowsWords()
+            if (words.size != it.wordCount || words.sumOf { word -> word.length.toLong() * 2 } != it.wordTextBytes) null
+            else TableState(it.stamp, it.rev, it.fromMs, it.toMs, it.rows, words)
+        }
+        checkSlots = validateSportsTable && tableState != null
+        checkDays = validateSportsTable && tableState != null
     }
 
     /**
@@ -1148,7 +1172,16 @@ internal class SportsMatcher(
      */
     private fun pickSource(rev: Long?, from: Long, to: Long, words: Collection<String>): From {
         if (!sportsTable || rev == null) return From.GUIDE
+        refreshTable()
+        if (!tableCovers(rev, from, to, words)) {
+            tableRequest?.let { request ->
+                // Requests outside the index's normal build span keep the direct guide path.
+                if (from >= request.now - 60 * HOUR && to <= request.now + 8 * 24 * HOUR)
+                    prepareTable(request.events, request.leagues, request.followedWords, request.now, request.gentle)
+            }
+        }
         val t = tableState ?: return From.GUIDE
+        if (t.stamp == rejectedTable || t.rows > indexLimits.rows) return From.GUIDE
         if (t.rev != rev || from < t.fromMs || to > t.toMs) return From.GUIDE
         if (!t.words.containsAll(words)) {
             tableNote("whole guide read: ${(words - t.words).size} words the table wasn't built for")
@@ -1157,25 +1190,39 @@ internal class SportsMatcher(
         return From.TABLE
     }
 
+    private fun tableCovers(rev: Long, from: Long, to: Long, words: Collection<String>): Boolean =
+        tableState?.let { it.stamp != rejectedTable && it.rev == rev && from >= it.fromMs &&
+            to <= it.toMs && it.words.containsAll(words) } == true
+
     /**
-     * Test builds: makes sure the guide's sports-shows table is there for the guide stored now and
+     * Makes sure the guide's sports-shows table is there for the guide stored now and
      * holds every show naming a word these games (or the guide-only sports and names you follow)
      * are looked for by; otherwise rebuilds it from one read of the guide. Runs before the
-     * searches ([guideEventsDays], [match]).
+     * uncached database reads. [configureTable] keeps this work out of result-cache hits.
      */
     fun prepareTable(events: List<SportsEvent>, leagues: List<League>, followedWords: List<String>, now: Long, gentle: Boolean) {
         checkpoint()
         if (!sportsTable) return
         sportsCatching {
             val rev = db.revision()
+            if (limitedRevision == rev) return
             refreshTable()
             val words = tableWords(events, leagues, followedWords)
             val t = tableState
+            if (t != null && t.rev == rev && t.stamp == rejectedTable) return
             if (t != null && t.rev == rev && t.words.containsAll(words) &&
                 t.fromMs <= now - 50 * HOUR && t.toMs >= now + AHEAD_MS + 12 * HOUR
             ) return
             // Same guide: the words it was built for stay, so it isn't rebuilt back and forth.
             val all = if (t != null && t.rev == rev) words + t.words else words
+            if (all.size > indexLimits.words || all.sumOf { it.length.toLong() * 2 } > indexLimits.wordTextBytes) {
+                limitedRevision = rev
+                tableNote("term budget reached; whole guide used")
+                return
+            }
+            // The writer clears its published stamp first. No failed/aborted rebuild may leave
+            // the old in-memory state pointing at a partially written table.
+            tableState = null
             buildTable(rev, now - 60 * HOUR, now + 8 * 24 * HOUR, all, gentle)
             refreshTable()
         }.onFailure { tableNote("couldn't be built (${it.javaClass.simpleName})") }
@@ -1199,11 +1246,30 @@ internal class SportsMatcher(
         val t0 = System.currentTimeMillis()
         val byFirst = byFirstWord(words)
         val writer = db.startSportsRows()
+        val budget = SportsChannelIndex.Budget(indexLimits)
+        val pace = Pacer(gentle)
         var read = 0
         val ok = try {
-            readRows(From.GUIDE, from, to, from, wantDesc = true, gentle = gentle) { ch, start, stop, title, descr, cat, nt, nd ->
-                read++
-                if (matchedWords(nt, nd, byFirst) != null) writer.add(ch, start, stop, title, descr, cat, nt, nd)
+            db.scanListingsGrouped(from, to, from) { channels, start, stop, title, descr, cat ->
+                val nt = norm(title)
+                val nd = if (descr.isNullOrEmpty()) "" else norm(descr)
+                if (channels.isEmpty()) return@scanListingsGrouped
+                // Check before the text work as before, then once per remaining alias. The
+                // shared listing only needs one boolean answer, not a set for every alias.
+                pace.tick()
+                val keep = hasAnySportsGuideWord(nt, nd, byFirst)
+                channels.forEachIndexed { i, ch ->
+                    if (i > 0) pace.tick()
+                    read++
+                    if (!keep) return@forEachIndexed
+                    val textBytes = (ch.length.toLong() + title.length + (descr?.length ?: 0) +
+                        (cat?.length ?: 0) + nt.length + nd.length) * 2
+                    if (!budget.add(textBytes)) {
+                        limitedRevision = rev
+                        throw IllegalStateException("Sports index storage budget reached")
+                    }
+                    writer.add(ch, start, stop, title, descr, cat, nt, nd)
+                }
             }
             writer.finish(rev, from, to, words)
         } catch (e: Throwable) {
@@ -1212,7 +1278,7 @@ internal class SportsMatcher(
         }
         val secs = (System.currentTimeMillis() - t0) / 1000
         if (ok) {
-            checkSlots = true; checkDays = true
+            checkSlots = validateSportsTable; checkDays = validateSportsTable
             tableNote("built: ${writer.rows} of $read shows kept, for ${words.size} words, in $secs s")
         } else {
             tableNote("guide changed while it was built (${secs} s): whole guide read until the next try")
@@ -1896,6 +1962,27 @@ internal class SportsMatcher(
             )
         }
     }
+}
+
+/** The index only asks whether a show names any term; its scoring readers still need full sets. */
+internal fun hasAnySportsGuideWord(nt: String, nd: String, byFirst: Map<String, List<String>>): Boolean =
+    byFirst.isNotEmpty() && (hasAnySportsGuideWordIn(nt, nt, nd, byFirst) || hasAnySportsGuideWordIn(nd, nt, nd, byFirst))
+
+private fun hasAnySportsGuideWordIn(text: String, nt: String, nd: String, byFirst: Map<String, List<String>>): Boolean {
+    var start = 0
+    while (start < text.length) {
+        val space = text.indexOf(' ', start)
+        val end = if (space < 0) text.length else space
+        if (end > start) {
+            val candidates = byFirst[text.substring(start, end)]
+            if (candidates != null) for (word in candidates) {
+                if (hasWord(nt, word) || hasWord(nd, word)) return true
+            }
+        }
+        if (end == text.length) break
+        start = end + 1
+    }
+    return false
 }
 
 /** The key a team's own channel is saved under: the same club or country in every competition. */

@@ -77,6 +77,10 @@ class LiveTvPlaybackController @Inject constructor(
     private val stalker: StalkerGateway,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val adaptiveBuffer = AdaptiveLiveBuffer(scope, ::isAdaptiveRemoteLiveSource)
+
+    var adaptiveLiveBufferEnabled: Boolean = false
+        set(value) { field = value; adaptiveBuffer.enabled = value }
 
     private var _player: ExoPlayer? = null
     val player: ExoPlayer? get() = _player
@@ -457,8 +461,10 @@ class LiveTvPlaybackController @Inject constructor(
      * bar (Up to seek, 30 s skips), starting [startAtMs] in. Nothing is asked of the provider.
      */
     fun playSavedRecording(channel: LiveChannel, playlist: java.io.File, title: String, recordingId: String, startAtMs: Long) {
-        play(channel, overrideUrl = android.net.Uri.fromFile(playlist).toString(), catchupTitle = title)
+        play(channel, overrideUrl = android.net.Uri.fromFile(playlist).toString(), catchupTitle = title, sourceLater = true)
         val p = _player ?: return
+        recordingReloads = 0
+        recordingWatchFrom = -1L
         savedRecordingId = recordingId
         savedRecordingPlaylist = playlist
         replayLocal = true
@@ -479,12 +485,92 @@ class LiveTvPlaybackController @Inject constructor(
         }
     }
 
+    /** Reloads of the recording playing ([playSavedRecording]) since it last played smoothly. */
+    private var recordingReloads = 0
+    /** Where the recording was at the last stall check, and since when it hasn't moved (-1: not watching). */
+    private var recordingWatchFrom = -1L
+    private var recordingStillSince = 0L
+    private var recordingSmoothSince = 0L
+
+    /**
+     * Opens the recording playing here again at [atMs] (after an error or a freeze, a VPN change
+     * or Reload): through the same source as [playSavedRecording], never as a plain file.
+     */
+    private fun reloadSavedRecording(atMs: Long) {
+        val p = _player ?: return
+        val playlist = savedRecordingPlaylist ?: return
+        val id = savedRecordingId ?: return
+        reconnectJob?.cancel()
+        _state.value = _state.value.copy(error = null, isBuffering = true)
+        recordingWatchFrom = -1L
+        recordingSmoothSince = 0L
+        p.stop()
+        p.setMediaSource(localRecordingSource(android.net.Uri.fromFile(playlist), 0L))
+        p.prepare()
+        p.playWhenReady = true
+        shiftJob?.cancel()
+        shiftJob = scope.launch {
+            var waited = 0
+            while (waited < 8_000 && p.playbackState != Player.STATE_READY) { delay(100); waited += 100 }
+            if (savedRecordingId == id && atMs > 0 && kotlin.math.abs(p.currentPosition - atMs) > 3_000) p.seekTo(atMs)
+        }
+    }
+
+    /** A recording that errored or froze: open it again from the same spot, a few times, before giving up. */
+    private fun recoverSavedRecording(why: String) {
+        val p = _player ?: return
+        val at = p.currentPosition.coerceAtLeast(0L)
+        if (recordingReloads >= MAX_RECORDING_RELOADS) {
+            com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording: $why; still not playing after $recordingReloads reloads")
+            recordingWatchFrom = -1L
+            p.stop()
+            _state.value = _state.value.copy(error = "This recording stopped playing", isBuffering = false)
+            return
+        }
+        recordingReloads++
+        com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording: $why; opening it again from ${at / 1000} s (try $recordingReloads)")
+        _state.value = _state.value.copy(error = null, isBuffering = true)
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            delay(recordingReloads * 1_000L)
+            if (savedRecordingId != null) reloadSavedRecording(at)
+        }
+    }
+
+    /** The recording playing here: a freeze (no progress while it should play) reloads it. */
+    private fun checkRecordingStall(p: ExoPlayer, now: Long) {
+        if (!p.playWhenReady || pausedForBackground || _state.value.error != null ||
+            p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED ||
+            reconnectJob?.isActive == true
+        ) { recordingWatchFrom = -1L; recordingSmoothSince = 0L; return }
+        val pos = p.currentPosition
+        if (recordingWatchFrom < 0 || pos != recordingWatchFrom) {
+            recordingWatchFrom = pos
+            recordingStillSince = now
+            if (p.isPlaying) {
+                if (recordingSmoothSince == 0L) recordingSmoothSince = now
+                // A minute of smooth playing: any later trouble gets the full number of tries again.
+                if (now - recordingSmoothSince > 60_000L) recordingReloads = 0
+            }
+            return
+        }
+        recordingSmoothSince = 0L
+        if (now - recordingStillSince < RECORDING_STALL_MS) return
+        recordingWatchFrom = -1L
+        recoverSavedRecording("froze at ${pos / 1000} s")
+    }
+
     /** Plays [playlist] (a recording that's still being made), a few seconds behind live. */
     fun playFromRecording(playlist: java.io.File, fromStart: Boolean = false) {
         val p = _player ?: return
         _recordingPlayback.value = playlist
-        _recordingStarting.value = true
         shiftJob?.cancel()
+        if (appInBackground) {
+            _recordingStarting.value = false
+            resumeAfterBackground = { playFromRecording(playlist, fromStart) }
+            return
+        }
+        _recordingStarting.value = true
         shiftJob = scope.launch {
           try {
             var waited = 0
@@ -497,7 +583,12 @@ class LiveTvPlaybackController @Inject constructor(
             if (!playlist.exists()) {
                 // Nothing came in: back to the live stream.
                 _recordingPlayback.value = null
-                currentChannel?.let { ch -> currentUrl = null; play(ch) }
+                currentUrl = null
+                resumeAfterRecordingFailure()
+                return@launch
+            }
+            if (appInBackground) {
+                resumeAfterBackground = { playFromRecording(playlist, fromStart) }
                 return@launch
             }
             p.setMediaSource(localRecordingSource(android.net.Uri.fromFile(playlist), 15_000))
@@ -513,6 +604,11 @@ class LiveTvPlaybackController @Inject constructor(
             _recordingStarting.value = false
           }
         }
+    }
+
+    /** A failed commit must not restart sound after the app was backgrounded during IO. */
+    fun resumeAfterRecordingFailure() {
+        if (appInBackground) resumeAfterBackground = { retry() } else retry()
     }
 
     /** Watching a recording that ended (or failed): carry on with the channel live. */
@@ -615,6 +711,7 @@ class LiveTvPlaybackController @Inject constructor(
      * end of it, creeping towards live.
      */
     internal fun localRecordingSource(uri: android.net.Uri, offsetMs: Long = 8_000): androidx.media3.exoplayer.source.MediaSource {
+        adaptiveBuffer.sourceChanged()
         val item = MediaItem.Builder()
             // A network folder recording's pieces leave this box once copied: played through the
             // recordings server, which fetches those from the network folder.
@@ -746,7 +843,7 @@ class LiveTvPlaybackController @Inject constructor(
         releaseJob?.cancel()
         attachCount++
         if (!watchingFullscreen) { watchingFullscreen = true; watchFullscreen() }
-        return _player ?: buildPlayer().also { _player = it }
+        return _player ?: buildPlayer().also { _player = it; adaptiveBuffer.attach(it) }
     }
 
     /** Releases the player shortly after the last screen detaches (lets route changes hand it over). */
@@ -778,7 +875,10 @@ class LiveTvPlaybackController @Inject constructor(
         catchupExpectWallMs: Long? = null,
         stalkerStream: StalkerStreamRef? = null,
         reconnectAttempt: Int = 0,
+        /** The caller sets the player's source itself right after (a recording from Recordings). */
+        sourceLater: Boolean = false,
     ) {
+        if (currentChannel?.key != channel.key) adaptiveBuffer.sourceChanged(newChannel = true)
         if (stalkerStream == null && overrideUrl == null && catchupTitle == null && channel.stalkerRef != null &&
             currentChannel?.key == channel.key && activeStalkerRef == channel.stalkerRef && _state.value.error == null &&
             (stalkerResolveJob?.isActive == true || _player?.playbackState?.let { it != Player.STATE_IDLE } == true)
@@ -800,7 +900,7 @@ class LiveTvPlaybackController @Inject constructor(
         stalkerMimeType = null
         if (ref == null) {
             playResolved(channel, overrideUrl, catchupTitle, fallback, fallbacks, catchupStartMs,
-                catchupLeadMs, catchupPrimaryUrl, catchupExpectWallMs)
+                catchupLeadMs, catchupPrimaryUrl, catchupExpectWallMs, sourceLater = sourceLater)
             return
         }
         // Let go of the previous provider connection while the new temporary link is obtained.
@@ -848,6 +948,7 @@ class LiveTvPlaybackController @Inject constructor(
         catchupExpectWallMs: Long? = null,
         previousChannelKey: String? = currentChannel?.key,
         reconnectAttempt: Int = 0,
+        sourceLater: Boolean = false,
     ) {
         // Something chosen to play (back from the background through a launcher row, say):
         // that wins over picking up what was on before.
@@ -868,7 +969,7 @@ class LiveTvPlaybackController @Inject constructor(
         wallCheckedFor = null
         if (previousChannelKey != channel.key) {
             // A new channel starts on the hardware decoder again.
-            softwareVideoChannel = null
+            decoderFallback.reset()
             neverStartedCount = 0
             sawLive = false
             audioHandled = false
@@ -947,6 +1048,9 @@ class LiveTvPlaybackController @Inject constructor(
             stalkerMimeType != StalkerMimeProbe.HLS && stalkerMimeType != StalkerMimeProbe.DASH &&
             !url.substringBefore('?').endsWith(".m3u8", ignoreCase = true) && startReplayCache(channel, url)
         ) return
+        // A recording from Recordings: its own source comes next. Starting it here as a plain
+        // file first could fail on a recording joined into one file (its pieces aren't there).
+        if (sourceLater) return
         archiveStartPending = catchupTitle != null
         p.setMediaSource(buildMediaSource(url, channel.headers, isLive = catchupTitle == null))
         p.prepare()
@@ -1125,6 +1229,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     fun stop() {
+        adaptiveBuffer.sourceChanged(newChannel = true)
         stalkerMediaPolicy?.retire()
         stalkerMediaPolicy = null
         stalkerMimeType = null
@@ -1179,7 +1284,12 @@ class LiveTvPlaybackController @Inject constructor(
 
     private fun checkStall() {
         val p = _player ?: return
-        if (_shiftStartedAt.value != null || _recordingPlayback.value != null || savedRecordingId != null) { lastProgressAt = android.os.SystemClock.elapsedRealtime(); return }
+        if (savedRecordingId != null) {
+            lastProgressAt = android.os.SystemClock.elapsedRealtime()
+            checkRecordingStall(p, lastProgressAt)
+            return
+        }
+        if (_shiftStartedAt.value != null || _recordingPlayback.value != null) { lastProgressAt = android.os.SystemClock.elapsedRealtime(); return }
         val now = android.os.SystemClock.elapsedRealtime()
         val ch = currentChannel
         // Paused, in the background, nothing playing, or already showing an error: not a stall.
@@ -1301,6 +1411,11 @@ class LiveTvPlaybackController @Inject constructor(
         (activeStalkerRef ?: channel.stalkerRef)?.let { ref -> { stalker.prepare(channel.sourceId, ref) } }
 
     fun retry() {
+        if (savedRecordingId != null) {
+            recordingReloads = 0
+            reloadSavedRecording(_player?.currentPosition?.coerceAtLeast(0L) ?: 0L)
+            return
+        }
         val ch = currentChannel ?: return
         if (activeStalkerRef != null) { restartStalker(); return }
         val url = currentUrl
@@ -1309,6 +1424,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private var pausedForBackground = false
+    private var appInBackground = false
 
     private var backgroundJob: Job? = null
     /** Set when the channel's connection was let go in the background: how to pick it up again. */
@@ -1321,6 +1437,8 @@ class LiveTvPlaybackController @Inject constructor(
      * drop the channel; going to the launcher does. Scheduled recordings carry on.
      */
     fun onAppBackground() {
+        appInBackground = true
+        adaptiveBuffer.setForeground(false)
         val p = _player ?: return
         if (p.playWhenReady) {
             pausedForBackground = true
@@ -1345,7 +1463,11 @@ class LiveTvPlaybackController @Inject constructor(
         val start = archiveStartWallMs
         val pos = p.currentPosition
         val clip = playingClip()
+        val stoppedVideoMime = p.videoFormat?.sampleMimeType
         resumeAfterBackground = {
+            if (decoderFallback.retryAfterBackgroundStop(ch.key, stoppedVideoMime)) {
+                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Resuming after background stop: retrying the recovered video decoder")
+            }
             if (title != null) {
                 // Catch-up: the same replay, back where you were.
                 play(ch, url, title, catchupStartMs = start)
@@ -1379,6 +1501,8 @@ class LiveTvPlaybackController @Inject constructor(
 
     /** Back in the app: carry on, jumping to the live edge for live channels. */
     fun onAppForeground() {
+        appInBackground = false
+        adaptiveBuffer.setForeground(true)
         backgroundJob?.cancel()
         backgroundJob = null
         resumeAfterBackground?.let { r ->
@@ -1717,13 +1841,12 @@ class LiveTvPlaybackController @Inject constructor(
      * 1 GB box that reports a 512 MB "large" heap it can't back, that is half the reported heap,
      * so the download-ahead is about 75 MB there instead of about 150 MB.
      */
-    private fun playerBufferBytes(): Int {
-        val heapMb = MemoryBudget.heapMb.takeIf { it > 0 } ?: 512L
-        return ((heapMb shl 20) * 3 / 10).coerceIn(32L shl 20, 160L shl 20).toInt()
-    }
+    private fun playerBufferPolicy() = LiveTvBufferPolicy.forDevice(
+        MemoryBudget.heapMb,
+        com.nuvio.tv.ui.screens.player.NuvioExoPlayerPerformanceHelper.getDevicePhysicalRamBytes(context)
+    )
 
-    /** The channel playing on a software video decoder after its hardware decoder failed. */
-    @Volatile private var softwareVideoChannel: String? = null
+    private val decoderFallback = LiveTvDecoderFallback()
 
     private fun buildPlayer(): ExoPlayer {
         val passthrough = audioPassthrough
@@ -1733,14 +1856,15 @@ class LiveTvPlaybackController @Inject constructor(
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
             ): androidx.media3.exoplayer.audio.AudioSink? {
-                if (passthrough) return super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
                 // Pretend the output only takes plain PCM: Dolby / DTS gets decoded here.
                 @Suppress("DEPRECATION")
-                return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                val sink = if (passthrough) super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
+                else androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
                     .setAudioCapabilities(androidx.media3.exoplayer.audio.AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .build()
+                return sink?.let { adaptiveBuffer.wrapAudioSink(it, enableAudioTrackPlaybackParams) }
             }
         }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
@@ -1749,7 +1873,7 @@ class LiveTvPlaybackController @Inject constructor(
             // decoder failed (see onPlayerError), hardware as normal everywhere else.
             .setMediaCodecSelector { mime, secure, tunneling ->
                 val all = androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling)
-                if (softwareVideoChannel == null || softwareVideoChannel != currentChannel?.key ||
+                if (!decoderFallback.usesSoftware(currentChannel?.key, mime) ||
                     !androidx.media3.common.MimeTypes.isVideo(mime)
                 ) all else all.filter { it.softwareOnly }.ifEmpty { all }
             }
@@ -1764,19 +1888,23 @@ class LiveTvPlaybackController @Inject constructor(
             "xlarge" -> listOf(60_000, 150_000, 5_000, 10_000)
             else -> listOf(25_000, 60_000, 2_000, 4_000)
         }
+        val bufferPolicy = playerBufferPolicy()
+        val targetBufferBytes = bufferPolicy.targetBytes
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minMs, maxMs, startMs, rebufferMs)
-            .setPrioritizeTimeOverSizeThresholds(true)
+            .setPrioritizeTimeOverSizeThresholds(bufferPolicy.prioritizeTime)
             // The download-ahead lives in the app's memory. The player's own cap (about 130 MB
             // for video) is more than half of what a cheap stick gives an app, which made the
             // whole app stutter as memory ran short. Capped to about 30% of the memory the app can
-            // really use (see playerBufferBytes):
-            // the same on boxes with plenty, smaller on low-memory ones. The minimum buffer
-            // time is always kept, so channels are just as steady.
-            .setTargetBufferBytes(playerBufferBytes())
+            // really use (see playerBufferPolicy):
+            // the same on boxes with plenty, smaller on low-memory ones. On small heaps the
+            // byte target also stops loading before the duration minimum on 1-2 GiB devices:
+            // high-bitrate video
+            // must not consume the UI/decoder's memory to satisfy a large buffer setting.
+            .setTargetBufferBytes(targetBufferBytes)
             .build()
         return ExoPlayer.Builder(context, renderers)
-            .setLoadControl(loadControl)
+            .setLoadControl(adaptiveBuffer.wrapLoadControl(loadControl, targetBufferBytes))
             // Take part in Android's audio focus like other media apps: when something else starts
             // playing sound (another app, a launcher's video wallpaper with sound…), Live TV pauses.
             .setAudioAttributes(
@@ -2047,8 +2175,8 @@ class LiveTvPlaybackController @Inject constructor(
             if (_recordingPlayback.value != null) { Log.w(TAG, "Playing from the recording failed", error); recordingPlaybackEnded(); return }
             // A recording from Recordings: there's nothing else to try, so say so.
             if (savedRecordingId != null) {
-                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Recording: couldn't be played (${error.errorCodeName})")
-                _state.value = _state.value.copy(error = "This recording couldn't be played", isBuffering = false)
+                Log.w(TAG, "Recording playback error", error)
+                recoverSavedRecording("playback error ${error.errorCodeName}")
                 return
             }
             // The saved catch-up couldn't be played: play the replay straight from the provider.
@@ -2135,8 +2263,15 @@ class LiveTvPlaybackController @Inject constructor(
             // The TV's hardware video decoder failed on this channel: play it once more on
             // Android's software decoder before showing an error (a decoder taken away for a
             // moment just reconnects as usual).
-            if (ch != null && p != null && error.errorCode in VIDEO_DECODER_ERRORS && softwareVideoChannel != ch.key) {
-                softwareVideoChannel = ch.key
+            val failedMime = (error as? androidx.media3.exoplayer.ExoPlaybackException)?.rendererFormat?.sampleMimeType
+                ?: p?.videoFormat?.sampleMimeType
+            val transientDecoderFailure = error.errorCode in TRANSIENT_VIDEO_DECODER_ERRORS &&
+                generateSequence(error.cause) { it.cause }.take(8).any {
+                    it is android.media.MediaCodec.CodecException && (it.isTransient || it.isRecoverable)
+                }
+            if (ch != null && p != null && error.errorCode in VIDEO_DECODER_ERRORS &&
+                decoderFallback.fallBack(ch.key, failedMime, transientDecoderFailure)
+            ) {
                 com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Channel ${ch.name}: video decoder failed (${error.errorCodeName}); trying the software decoder")
                 val url = currentUrl ?: ch.url
                 p.setMediaSource(buildMediaSource(url, ch.headers, isLive = _state.value.catchupTitle == null))
@@ -2374,6 +2509,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private fun buildMediaSource(url: String, headers: Map<String, String>, isLive: Boolean): androidx.media3.exoplayer.source.MediaSource {
+        adaptiveBuffer.sourceChanged()
         // A YouTube highlight from Sports: its picture and sound are two files, played together
         // the way trailers are (read in pieces, as YouTube slows down whole-file downloads).
         if (currentChannel?.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) {
@@ -2393,6 +2529,21 @@ class LiveTvPlaybackController @Inject constructor(
         ).build(url, headers, isLive)
     }
 
+    private fun isAdaptiveRemoteLiveSource(): Boolean {
+        val p = _player ?: return false
+        val channel = currentChannel ?: return false
+        if (_state.value.catchupTitle != null || savedRecordingId != null || savedRecordingPlaylist != null ||
+            _recordingPlayback.value != null || _shiftStartedAt.value != null || timeshift.session != null ||
+            replayLocal || alwaysBuffer || p.mediaItemCount != 1 || currentWindowIsPlaceholder(p)) return false
+        if (channel.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID ||
+            // Addons may reuse a live game's key for its replay. Remembering live playback
+            // is not enough: ambiguous links and static replays keep their normal rate.
+            (channel.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID &&
+                (!sawLive || !p.isCurrentMediaItemLive))) return false
+        val scheme = p.currentMediaItem?.localConfiguration?.uri?.scheme
+        return scheme.equals("http", true) || scheme.equals("https", true)
+    }
+
     /**
      * Where a replay with its own timeline (an addon replay, a highlight) had got to, so reloading
      * it after a freeze or an error carries on there instead of starting over. Unset otherwise.
@@ -2409,6 +2560,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private fun release() {
+        adaptiveBuffer.release()
         stalkerMediaPolicy?.retire()
         stalkerMediaPolicy = null
         stalkerMimeType = null
@@ -2441,6 +2593,13 @@ class LiveTvPlaybackController @Inject constructor(
                 val channel = currentChannel ?: return@launch
                 val url = currentUrl ?: return@launch
                 val active = _player ?: return@launch
+                // A recording from Recordings is on this box (or the recordings server): reopen it the same way.
+                if (savedRecordingId != null) {
+                    val wasPlaying = active.playWhenReady
+                    reloadSavedRecording(active.currentPosition.coerceAtLeast(0L))
+                    active.playWhenReady = wasPlaying
+                    return@launch
+                }
                 val resume = active.playWhenReady
                 val position = active.currentPosition
                 val live = _state.value.catchupTitle == null
@@ -2464,6 +2623,10 @@ class LiveTvPlaybackController @Inject constructor(
         /** This much further behind live than it normally plays counts as "behind live" in a sports addon game. */
         private const val OWN_BEHIND_MS = 8_000L
         private const val MAX_RECONNECTS = 8
+        /** A recording from Recordings: reloads after an error or a freeze before saying it stopped. */
+        private const val MAX_RECORDING_RELOADS = 3
+        /** A recording from Recordings with no progress for this long while it should play = frozen. */
+        private const val RECORDING_STALL_MS = 10_000L
         /** No progress for this long while it should be playing = stalled. */
         private const val STALL_MS = 15_000L
         /** How far a replay's own clock may be from the time asked for before it counts as a different show. */
@@ -2477,6 +2640,10 @@ class LiveTvPlaybackController @Inject constructor(
             PlaybackException.ERROR_CODE_DECODING_FAILED,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
             PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+        )
+        private val TRANSIENT_VIDEO_DECODER_ERRORS = setOf(
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED,
         )
         /** No picture this long after the video moved to a new screen = stuck. */
         private const val FRAME_TIMEOUT_MS = 2_500L

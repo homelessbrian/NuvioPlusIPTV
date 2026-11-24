@@ -85,7 +85,7 @@ private sealed interface ScheduleRow {
 internal fun LiveTvOverlayMode(
     viewModel: LiveTvViewModel,
     onClose: () -> Unit,
-    onFindInNuvio: (String) -> Unit
+    onFindInNuvio: (EpgProgram, LiveChannel) -> Unit
 ) {
     // Guide Size (Settings → Live TV) sets the size of overlay mode too: text, icons and rows.
     val sizeSettings by viewModel.settings.collectAsStateWithLifecycle()
@@ -124,7 +124,7 @@ private fun odp(v: Float): androidx.compose.ui.unit.Dp = (v * LocalOverlayScale.
 private fun OverlayModeContent(
     viewModel: LiveTvViewModel,
     onClose: () -> Unit,
-    onFindInNuvio: (String) -> Unit
+    onFindInNuvio: (EpgProgram, LiveChannel) -> Unit
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val programs by viewModel.programs.collectAsStateWithLifecycle()
@@ -236,7 +236,17 @@ private fun OverlayModeContent(
     }
     // Land on what's on now when a schedule opens.
     // The full schedule (all days) for the channel being browsed, from the guide database.
-    LaunchedEffect(scheduleChannel?.key) { scheduleChannel?.let { viewModel.ensureChannelSchedule(it.key) } }
+    val guideGeneration by viewModel.guideGeneration.collectAsStateWithLifecycle()
+    LaunchedEffect(level, scheduleChannel?.key, settledChannel?.key, settings.overlayShowDetails, settings.epgOffsetMinutes, guideGeneration) {
+        when (level) {
+            OverlayLevel.CHANNELS -> if (settings.overlayShowDetails) {
+                settledChannel?.let { viewModel.ensureSchedulePreview(it.key) }
+            } else viewModel.releaseScheduleViewport()
+            OverlayLevel.SCHEDULE, OverlayLevel.DATES -> scheduleChannel?.let { viewModel.ensureChannelSchedule(it.key) }
+            else -> viewModel.releaseScheduleViewport()
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(viewModel) { onDispose { viewModel.releaseScheduleViewport() } }
     LaunchedEffect(scheduleChannel, schedule.size) {
         if (schedule.isEmpty()) return@LaunchedEffect
         val live = schedule.indexOfFirst { it is ScheduleRow.Show && now >= it.program.startMs && now < it.program.stopMs }
@@ -517,7 +527,7 @@ private fun OverlayModeContent(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 MenuItem("Find & stream in Nuvio", Modifier.focusRequester(first)) {
                     futurePrompt = null
-                    onFindInNuvio(com.nuvio.tv.livetv.data.LiveTvPosterResolver.searchTitleFor(p, ch))
+                    onFindInNuvio(p, ch)
                 }
                 MenuItem(
                     if (user.reminders.any { it.channelKey == ch.key && it.startMs == p.startMs }) "Cancel reminder" else "Remind me"
@@ -568,8 +578,7 @@ private fun OverlayModeContent(
             Spacer(Modifier.height(14.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (recordLabel != null) MenuItem(recordLabel, Modifier.focusRequester(first)) {
-                    val msg = if (onNow && recordingNow) viewModel.toggleRecording(ch) else viewModel.toggleScheduled(ch, p)
-                    com.nuvio.tv.livetv.record.LiveTvNotice.show(msg)
+                    if (onNow && recordingNow) viewModel.toggleRecording(ch) else viewModel.toggleScheduled(ch, p)
                     recordMenu = null
                     activity++
                 }
@@ -1154,12 +1163,22 @@ private fun BackupFlyoutContent(
     val now by viewModel.now.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()
-    // Watching a game: the other channels showing it first (they're what people want when a game's
-    // stream drops), then this channel's own copies; one list to move through, each part under a
-    // heading. Otherwise just the copies.
-    val channels = remember(copies, gameChannels) { gameChannels + copies }
-    val headed = gameChannels.isNotEmpty()
-    fun rowAt(i: Int): Int = i + (if (headed) 1 else 0) + (if (headed && copies.isNotEmpty() && i >= gameChannels.size) 1 else 0)
+    // A game's other channels and this channel's copies together, under the headings chosen in
+    // Backups & Game Channels (playlist / add-on, quality or none); one list to move through.
+    val sections = rememberBackupSections(copies, gameChannels, settings, playlistNames)
+    val channels = remember(sections) { sections.flatMap { it.channels } }
+    val gameKeys = remember(gameChannels) { gameChannels.mapTo(HashSet()) { it.key } }
+    val sameKeys = remember(copies, gameChannels, playingKey) { sameChannelKeys(copies, gameChannels, playingKey) }
+    val headed = sections.any { it.title.isNotBlank() }
+    // The list row of each channel (headings take a row each).
+    val rowOf = remember(sections, headed) {
+        var r = 0
+        val out = IntArray(channels.size)
+        var i = 0
+        sections.forEach { sec -> if (headed) r++; sec.channels.forEach { _ -> out[i++] = r++ } }
+        out
+    }
+    fun rowAt(i: Int): Int = rowOf.getOrElse(i) { i }
     // Opens on the first copy that isn't the one playing.
     var index by remember { mutableIntStateOf(channels.indexOfFirst { it.key != playingKey }.coerceAtLeast(0)) }
     var activity by remember { mutableIntStateOf(0) }
@@ -1237,39 +1256,61 @@ private fun BackupFlyoutContent(
     ) {
         PanelHeader {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                LiveText("Backups", size = osp(17f), weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f)) {
+                    LiveText("Backups", size = osp(17f), weight = FontWeight.SemiBold)
+                    if (gameTitle.isNotBlank() && gameChannels.isNotEmpty()) LiveText(
+                        androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle),
+                        color = NuvioTheme.colors.TextSecondary, size = osp(11f), maxLines = 1
+                    )
+                }
                 LiveText("${channels.size}", color = NuvioTheme.colors.TextSecondary, size = osp(12f))
             }
         }
         LazyColumn(state = state, modifier = Modifier.fillMaxSize()) {
-            if (headed) item(key = "head:game") {
-                FlyoutSection(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle))
-            }
-            itemsIndexed(gameChannels, key = { _, c -> "game:" + c.key }) { i, ch ->
-                FlyoutRow(viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames, gameGuide = gameGuide)
-            }
-            if (headed && copies.isNotEmpty()) item(key = "head:copies") {
-                FlyoutSection(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_other_copies, copies.firstOrNull { it.key == playingKey }?.name ?: copies.first().name))
-            }
-            itemsIndexed(copies, key = { _, c -> c.key }) { j, ch ->
-                val i = gameChannels.size + j
-                FlyoutRow(viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames)
+            var start = 0
+            sections.forEach { sec ->
+                val base = start
+                start += sec.channels.size
+                if (headed) item(key = "head:" + sec.key) { FlyoutSection(sec.title, sec.addon, sec.channels.size) }
+                itemsIndexed(sec.channels, key = { _, c -> c.key }) { j, ch ->
+                    val i = base + j
+                    FlyoutRow(
+                        viewModel, ch, i == index, i == restingIndex, playingKey, programs, now, settings.showChannelLogos, playlistNames,
+                        gameGuide = if (ch.key in gameKeys) gameGuide else null,
+                        sameChannel = ch.key in sameKeys
+                    )
+                }
             }
         }
     }
 }
 
-/** A heading in the backup flyout ("Other copies of ESPN", "Also showing Bears vs Lions"). */
+/** A heading in the backup flyout: a playlist, an add-on ([addon]) or a quality, with how many it holds. */
 @Composable
-private fun FlyoutSection(text: String) {
-    LiveText(
-        text,
-        color = NuvioTheme.colors.TextSecondary,
-        size = osp(12f),
-        weight = FontWeight.SemiBold,
-        maxLines = 1,
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp)
-    )
+private fun FlyoutSection(text: String, addon: Boolean, count: Int) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LiveText(
+            text.uppercase(),
+            color = NuvioTheme.colors.TextSecondary,
+            size = osp(11f),
+            weight = FontWeight.SemiBold,
+            maxLines = 1,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        if (addon) {
+            Spacer(Modifier.width(6.dp))
+            LiveText(
+                androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_addon_tag),
+                color = NuvioTheme.colors.TextSecondary, size = osp(9f), weight = FontWeight.Bold,
+                modifier = Modifier.border(1.dp, NuvioTheme.colors.TextSecondary.copy(alpha = 0.4f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp)
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        LiveText("$count", color = NuvioTheme.colors.TextSecondary, size = osp(11f))
+    }
 }
 
 @Composable
@@ -1284,7 +1325,9 @@ private fun FlyoutRow(
     showLogos: Boolean,
     playlistNames: Map<String, String>,
     /** A game channel: what its guide says about the game, coloured, before what's on. */
-    gameGuide: ((LiveChannel, EpgProgram?) -> com.nuvio.tv.livetv.sports.GuideLine?)? = null
+    gameGuide: ((LiveChannel, EpgProgram?) -> com.nuvio.tv.livetv.sports.GuideLine?)? = null,
+    /** A copy of the playing channel in a list that also has a game's other channels. */
+    sameChannel: Boolean = false
 ) {
     val p = programs[ch.key]?.firstOrNull { now >= it.startMs && now < it.stopMs }
         ?: viewModel.currentProgram(ch.key)
@@ -1322,7 +1365,11 @@ private fun FlyoutRow(
             // The group always shows here (even when hidden on the play bar): it's what tells
             // same-named copies apart (UK, World, another language).
             LiveText(
-                listOfNotNull(from.takeIf { it.isNotBlank() }, ch.group.takeIf { it.isNotBlank() }, if (ch.key == playingKey) "Watching" else null).joinToString(" · "),
+                listOfNotNull(
+                    from.takeIf { it.isNotBlank() }, ch.group.takeIf { it.isNotBlank() },
+                    if (ch.key == playingKey) "Watching" else null,
+                    if (sameChannel) androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_same_channel) else null
+                ).joinToString(" · "),
                 color = dim, size = osp(12f), maxLines = 1,
                 marquee = isFocused && resting
             )

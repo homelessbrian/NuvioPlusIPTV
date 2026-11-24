@@ -100,6 +100,18 @@ class SportsAddonSource @Inject constructor(
         synchronized(lock) { soFar() }
     }
 
+    /**
+     * Your switched-on add-ons that can give live game streams (the ones [find] gets streams from),
+     * by name: Settings' playlist / add-on order for the Backups list.
+     */
+    suspend fun liveStreamAddonNames(): List<String> {
+        val installed = runCatching { addons.getInstalledAddons().first() }.getOrNull().orEmpty().enabledAddons()
+        return installed.filter { a ->
+            a.catalogs.any { isLiveCatalog(it) } ||
+                a.catalogs.any { it.apiType.equals("sport", true) && !isVodCatalog(it) && !needsGenre(it) }
+        }.map { it.displayName }.distinct()
+    }
+
     private suspend fun forAddon(a: Addon, ev: SportsEvent): Found {
         val live = a.catalogs.filter { isLiveCatalog(it) }.let { strong ->
             if (strong.isNotEmpty()) strong

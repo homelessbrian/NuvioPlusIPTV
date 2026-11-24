@@ -317,6 +317,7 @@ class HomeLiveRowsViewModel @Inject constructor(
             while (true) {
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitIdle()
                 _now.value = System.currentTimeMillis()
+                repository.loadChannelsNow(selections.value.values.flatten().map { it.key }.distinct())
                 repository.ensureRange(_now.value - 3 * 3_600_000L, _now.value + 12 * 3_600_000L)
                 delay(30_000)
             }

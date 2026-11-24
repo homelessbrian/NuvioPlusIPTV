@@ -204,12 +204,12 @@ private fun rememberLiveTvSearchResultsEnabled(
                 seen += c.key
             }
             if (out.size < MAX_HITS) {
+                val matches = viewModel.searchUpcomingGuide(q,
+                    ui.allVisibleChannels.asSequence().filter { it.key !in seen }.map { it.key }.toList(), now, UPCOMING_WINDOW_MS)
                 for (c in ui.allVisibleChannels) {
                     if (out.size >= MAX_HITS) break
                     if (c.key in seen) continue
-                    val match = programs[c.key]?.firstOrNull {
-                        it.stopMs > now && it.startMs < now + UPCOMING_WINDOW_MS && it.title.contains(q, ignoreCase = true)
-                    } ?: continue
+                    val match = matches[c.key] ?: continue
                     out += LiveSearchHit(c, match, matchedProgram = true)
                 }
             }

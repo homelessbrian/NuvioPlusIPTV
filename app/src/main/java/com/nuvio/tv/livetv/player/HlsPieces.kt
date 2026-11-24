@@ -171,9 +171,7 @@ internal object HlsPieces {
     }.getOrDefault(listOf(playlist))
 
     fun writeAtomically(file: File, text: String) {
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(text)
-        if (!tmp.renameTo(file)) { tmp.copyTo(file, overwrite = true); tmp.delete() }
+        LivePlaylistWriter.write(file) { it.write(text) }
     }
 
     /** One playlist being saved: the picture (with or without sound) or a separate sound stream. */
@@ -185,9 +183,13 @@ internal object HlsPieces {
         private val headers: Map<String, String>,
         private val connect: (String, Map<String, String>) -> HttpURLConnection
     ) {
-        data class Saved(val dur: Double, val name: String, val disc: Boolean)
+        data class Saved(val dur: Double, val name: String, val disc: Boolean) {
+            internal val playlistEntry = LivePlaylistWriter.entry(dur, name, disc)
+        }
 
-        val saved = ArrayList<Saved>()
+        private val savedPieces = ArrayList<Saved>()
+        val saved: List<Saved> get() = savedPieces
+        private var retainedSec = 0.0
         var target = 6
             private set
         private var lastSeq = -1L
@@ -205,12 +207,14 @@ internal object HlsPieces {
         var lastSourceSeq = -1L
             private set
 
-        val totalSec: Double get() = saved.sumOf { it.dur }
+        val totalSec: Double get() = retainedSec
 
         /** Checked while a piece downloads: true stops it part way (a long piece can take minutes). */
         var stopNow: () -> Boolean = { false }
         /** When [stopNow] cuts a piece: true keeps what came in (stopped by hand), false drops it. */
         var keepCut: () -> Boolean = { false }
+        /** Called before each piece is downloaded (may wait, e.g. for a recording's copy to catch up). */
+        var beforePiece: () -> Unit = {}
 
         fun fetch(): Media {
             // Use the owned connector for manifests as well as pieces (VPN/session policy).
@@ -270,6 +274,8 @@ internal object HlsPieces {
                 if (stopNow()) break
                 val p = m.pieces[i]
                 if (p.seq <= lastSeq) continue
+                beforePiece()
+                if (stopNow()) break
                 val name = "${prefix}seg$named.${if (mapLine != null) "m4s" else "ts"}"
                 // 1.0 = the whole piece; less = cut part way by a stop (its share of the length).
                 var got: Double? = null
@@ -280,7 +286,8 @@ internal object HlsPieces {
                 }
                 if (got == null) continue
                 val dur = p.dur * got
-                saved += Saved(dur, name, saved.isNotEmpty() && (gap || (p.disc && i > from)))
+                savedPieces += Saved(dur, name, saved.isNotEmpty() && (gap || (p.disc && i > from)))
+                retainedSec += dur
                 gap = false
                 named++
                 lastSeq = p.seq
@@ -293,33 +300,33 @@ internal object HlsPieces {
 
         /** Drops the oldest pieces past [keepSec] (keeps at least 3). Returns the seconds dropped. */
         fun trim(keepSec: Double): Double {
+            val originalSize = saved.size
             var total = totalSec
             var dropped = 0.0
             while (saved.size > 3 && total > keepSec) {
-                val first = saved.removeAt(0)
+                val first = savedPieces.removeAt(0)
                 removed++
                 if (first.disc) discSeq++
                 total -= first.dur
                 dropped += first.dur
                 runCatching { File(dir, first.name).delete() }
             }
+            // Keep the same summation order as a fresh fold after trimming, including boundaries.
+            if (saved.size != originalSize) retainedSec = saved.sumOf { it.dur }
             return dropped
         }
 
         fun write(file: File, ended: Boolean) {
             if (saved.isEmpty()) return
-            val sb = StringBuilder("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:").append(target + 1).append('\n')
-            sb.append("#EXT-X-MEDIA-SEQUENCE:").append(removed).append('\n')
-            if (discSeq > 0) sb.append("#EXT-X-DISCONTINUITY-SEQUENCE:").append(discSeq).append('\n')
-            sb.append("#EXT-X-PLAYLIST-TYPE:EVENT\n")
-            mapLine?.let { sb.append(it).append('\n') }
-            // A break mark stays on the oldest piece too (it's counted in the sequence above once dropped).
-            saved.forEach { s ->
-                if (s.disc) sb.append("#EXT-X-DISCONTINUITY\n")
-                sb.append("#EXTINF:").append(String.format(Locale.US, "%.3f", s.dur)).append(",\n").append(s.name).append('\n')
+            LivePlaylistWriter.write(file) { writer ->
+                writer.append("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:").append((target + 1).toString()).append('\n')
+                writer.append("#EXT-X-MEDIA-SEQUENCE:").append(removed.toString()).append('\n')
+                if (discSeq > 0) writer.append("#EXT-X-DISCONTINUITY-SEQUENCE:").append(discSeq.toString()).append('\n')
+                writer.append("#EXT-X-PLAYLIST-TYPE:EVENT\n")
+                mapLine?.let { writer.append(it).append('\n') }
+                saved.forEach { writer.write(it.playlistEntry) }
+                if (ended) writer.append("#EXT-X-ENDLIST\n")
             }
-            if (ended) sb.append("#EXT-X-ENDLIST\n")
-            writeAtomically(file, sb.toString())
         }
 
         /**

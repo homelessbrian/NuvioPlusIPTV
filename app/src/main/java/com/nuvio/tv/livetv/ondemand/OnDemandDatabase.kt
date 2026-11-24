@@ -119,6 +119,20 @@ data class VodCategory(
 class OnDemandDatabase @Inject constructor(@ApplicationContext private val appContext: Context) :
     SQLiteOpenHelper(appContext, "livetv_on_demand.db", null, 12) {
 
+    private val browseCache = VodBrowseCache()
+
+    /** Keep only the mutation/version bookkeeping under the cache monitor, never SQLite I/O. */
+    private inline fun <T> mutateBrowseCache(affectedClause: String? = null, block: () -> T): T {
+        browseCache.beginMutation()
+        return try { block() } finally { browseCache.endMutation(affectedClause) }
+    }
+
+    private inline fun browseTransaction(db: SQLiteDatabase, affectedClause: String? = null, block: () -> Unit) =
+        mutateBrowseCache(affectedClause) {
+            db.beginTransaction()
+            try { block(); db.setTransactionSuccessful() } finally { db.endTransaction() }
+        }
+
     init {
         // Browsing On Demand doesn't wait while an import or genre lookup is writing.
         setWriteAheadLoggingEnabled(true)
@@ -276,8 +290,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         val db = writableDatabase
         val now = System.currentTimeMillis()
         var marked = 0
-        db.beginTransaction()
-        try {
+        browseTransaction(db, " AND fl IS NULL") {
             val put = db.compileStatement("INSERT OR REPLACE INTO langs (k, lang, checked) VALUES (?,?,?)")
             // Another language: marked for sure (a guess becomes certain). English: a guess is undone.
             val markTmdb = db.compileStatement("UPDATE items SET fl = $FL_SURE WHERE (fl IS NULL OR fl = $FL_GUESS) AND kind = ? AND tmdb = ?")
@@ -301,9 +314,6 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                     marked += stmt.executeUpdateDelete()
                 }
             }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
         return marked
     }
@@ -315,8 +325,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
      */
     fun markForeign(playlistId: String) {
         val db = writableDatabase
-        db.beginTransaction()
-        try {
+        browseTransaction(db, " AND fl IS NULL") {
             db.execSQL(
                 "UPDATE items SET fl = $FL_SURE WHERE pl = ? AND (fl IS NULL OR fl = $FL_GUESS) AND items.kind || $DUP_KEY IN (SELECT k FROM langs WHERE lang != '' AND lang != 'en')",
                 arrayOf(playlistId)
@@ -348,9 +357,6 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 "UPDATE items SET fl = NULL WHERE pl = ? AND fl = $FL_GUESS AND items.kind || $DUP_KEY IN (SELECT k FROM langs WHERE lang = 'en')",
                 arrayOf(playlistId)
             )
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
     }
 
@@ -379,8 +385,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             }
         }
         if (fixes.isEmpty()) return
-        db.beginTransaction()
-        try {
+        browseTransaction(db) {
             val stmt = db.compileStatement("UPDATE items SET year = ? WHERE rowid = ?")
             fixes.forEach { (rowid, y) ->
                 stmt.clearBindings()
@@ -388,9 +393,6 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 stmt.bindLong(2, rowid)
                 stmt.executeUpdateDelete()
             }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
     }
 
@@ -400,7 +402,10 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
      * an empty one, so Newest and Oldest Release had nothing to sort by. Returns how many.
      */
     /** Gives back space left empty by removed titles (see SqliteCompact). */
-    fun compact(): Long = com.nuvio.tv.livetv.data.SqliteCompact.compactIfWasteful(writableDatabase, "On Demand")
+    fun compact(): Long = mutateBrowseCache {
+        // VACUUM can renumber rowids: this table's primary key is text, not INTEGER.
+        com.nuvio.tv.livetv.data.SqliteCompact.compactIfWasteful(writableDatabase, "On Demand")
+    }
 
     /**
      * Release years for titles imported before years were read from their names (imports read
@@ -426,15 +431,11 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             }
         }
         if (found.isEmpty()) return 0
-        db.beginTransaction()
-        try {
+        browseTransaction(db) {
             val stmt = db.compileStatement("UPDATE items SET year = ? WHERE rowid = ?")
             found.forEach { (rowid, y) ->
                 stmt.clearBindings(); stmt.bindLong(1, y.toLong()); stmt.bindLong(2, rowid); stmt.executeUpdateDelete()
             }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
         return found.size
     }
@@ -533,6 +534,17 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    fun cachedPosters(uids: Collection<String>): Map<String, String> {
+        val out = HashMap<String, String>()
+        uids.distinct().chunked(400).forEach { part ->
+            readableDatabase.rawQuery(
+                "SELECT uid, poster FROM posters WHERE uid IN (${part.joinToString(",") { "?" }}) AND poster != ''",
+                part.toTypedArray()
+            ).use { c -> while (c.moveToNext()) out[c.getString(0)] = c.getString(1) }
+        }
+        return out
+    }
+
     /** The proper name from your addons' match ("A View to a Kill"), if one was found. */
     fun cachedTitle(uid: String): String? =
         readableDatabase.rawQuery("SELECT title FROM posters WHERE uid = ?", arrayOf(uid)).use { c ->
@@ -564,6 +576,8 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         return if (h == 0L) 1L else h
     }
 
+    private class ImportedItem(var fingerprint: Long, var seen: Boolean = false)
+
     /**
      * Brings one provider's catalog of [kind] up to date in a single transaction. Only titles that
      * are new or changed are written, and titles the provider no longer lists are removed: every
@@ -573,16 +587,16 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
      */
     fun replace(playlistId: String, kind: VodKind, categories: List<Pair<String, String>>, items: Sequence<VodItem>): Int {
         val db = writableDatabase
-        val existing = HashMap<String, Long>()
+        val existing = HashMap<String, ImportedItem>()
         db.rawQuery("SELECT id, h FROM items WHERE pl = ? AND kind = ?", arrayOf(playlistId, kind.key)).use { c ->
-            while (c.moveToNext()) existing[c.getString(0)] = if (c.isNull(1)) 0L else c.getLong(1)
+            while (c.moveToNext()) existing[c.getString(0)] = ImportedItem(if (c.isNull(1)) 0L else c.getLong(1))
         }
         val bulk = existing.isEmpty()
+        var unseen = existing.size
         var count = 0
         var written = 0
         var removed = 0
-        db.beginTransaction()
-        try {
+        browseTransaction(db) {
             if (bulk) {
                 db.execSQL("DROP INDEX IF EXISTS items_cat")
                 db.execSQL("DROP INDEX IF EXISTS items_norm")
@@ -598,12 +612,15 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             val stmt = db.compileStatement(
                 "INSERT OR REPLACE INTO items (pl, kind, id, name, norm, icon, cat, ext, tmdb, year, rating, added, genre, h, stalker_ref, stalker_variant, provider_plot, provider_duration) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             )
-            val seen = HashSet<String>(maxOf(16, existing.size))
             items.forEach { it ->
                 count++
-                seen.add(it.id)
+                val previous = existing[it.id]
+                if (previous != null && !previous.seen) {
+                    previous.seen = true
+                    unseen--
+                }
                 val h = fingerprint(it)
-                if (existing[it.id] == h) return@forEach // unchanged
+                if (previous?.fingerprint == h) return@forEach // unchanged
                 stmt.clearBindings()
                 stmt.bindString(1, playlistId)
                 stmt.bindString(2, kind.key)
@@ -624,15 +641,19 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 it.providerPlot?.let { v -> stmt.bindString(17, v) } ?: stmt.bindNull(17)
                 it.providerDurationSeconds?.let { v -> stmt.bindLong(18, v) } ?: stmt.bindNull(18)
                 stmt.executeInsert()
-                existing[it.id] = h // a title listed twice is written once
+                if (previous == null) existing[it.id] = ImportedItem(h, seen = true)
+                else previous.fingerprint = h // identical duplicates are written once; changed ones keep the last value
                 written++
             }
             // Titles the provider no longer lists.
-            if (existing.size > seen.size) {
-                val del = db.compileStatement("DELETE FROM items WHERE pl = ? AND kind = ? AND id = ?")
-                existing.keys.filter { it !in seen }.forEach { id ->
-                    del.clearBindings(); del.bindString(1, playlistId); del.bindString(2, kind.key); del.bindString(3, id)
-                    removed += del.executeUpdateDelete()
+            if (unseen > 0) {
+                db.compileStatement("DELETE FROM items WHERE pl = ? AND kind = ? AND id = ?").use { del ->
+                    existing.forEach { (id, state) ->
+                        if (!state.seen) {
+                            del.clearBindings(); del.bindString(1, playlistId); del.bindString(2, kind.key); del.bindString(3, id)
+                            removed += del.executeUpdateDelete()
+                        }
+                    }
                 }
             }
             if (bulk) {
@@ -641,9 +662,6 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
                 db.execSQL("CREATE INDEX IF NOT EXISTS items_tmdb ON items(kind, tmdb)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS items_added ON items(kind, added)")
             }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
         lastChanges = written to removed
         return count
@@ -660,10 +678,12 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             while (c.moveToNext()) existing += c.getString(0)
         }
         val dropped = existing - keepPlaylistIds
-        dropped.forEach { pl ->
-            db.delete("items", "pl = ?", arrayOf(pl))
-            db.delete("categories", "pl = ?", arrayOf(pl))
-            db.delete("m3u_episodes", "pl = ?", arrayOf(pl))
+        if (dropped.isNotEmpty()) mutateBrowseCache {
+            dropped.forEach { pl ->
+                db.delete("items", "pl = ?", arrayOf(pl))
+                db.delete("categories", "pl = ?", arrayOf(pl))
+                db.delete("m3u_episodes", "pl = ?", arrayOf(pl))
+            }
         }
         return dropped
     }
@@ -680,7 +700,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         }
 
     /** Marks a title as looked up even when no genres were found (so it isn't retried). */
-    fun setGenre(item: VodItem, genres: String) {
+    fun setGenre(item: VodItem, genres: String) = mutateBrowseCache(" AND genre LIKE ?") {
         writableDatabase.execSQL(
             "UPDATE items SET genre = ? WHERE pl = ? AND kind = ? AND id = ? AND genre IS NULL",
             arrayOf(genres, item.playlistId, item.kind.key, item.id)
@@ -688,7 +708,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
     }
 
     /** Fills in genres from your addons' match, when the provider didn't send any. */
-    fun fillGenre(item: VodItem, genres: String) {
+    fun fillGenre(item: VodItem, genres: String) = mutateBrowseCache(" AND genre LIKE ?") {
         writableDatabase.execSQL(
             "UPDATE items SET genre = ? WHERE pl = ? AND kind = ? AND id = ? AND (genre IS NULL OR genre = '')",
             arrayOf(genres, item.playlistId, item.kind.key, item.id)
@@ -805,7 +825,8 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         genre: String? = null,
         merge: Boolean = true,
         seed: Long = 0,
-        hideForeign: Boolean = false
+        hideForeign: Boolean = false,
+        signal: android.os.CancellationSignal? = null
     ): List<VodItem> {
         val where = StringBuilder("kind = ?")
         val args = arrayListOf(kind.key)
@@ -818,7 +839,7 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
             where.append(" AND pl = ? AND cat = ?")
             args += category.playlistId; args += category.id
         }
-        excludeCategories.forEach { uid ->
+        excludeCategories.sorted().forEach { uid ->
             val parts = uid.split(':', limit = 3)
             if (parts.size == 3 && parts[0] == kind.key) {
                 where.append(" AND NOT (pl = ? AND cat = ?)")
@@ -832,7 +853,54 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
         // come back in the same order on every page, or a title shows on two pages and another
         // on none (that's how sorting seemed to undo "Merge Duplicates").
         val tieBreak = if (merge) "MIN(rowid)" else "rowid"
-        return query("SELECT *$copies FROM items WHERE $where$group ORDER BY $order, $tieBreak LIMIT $limit OFFSET $offset", args)
+        val sql = "SELECT *$copies FROM items WHERE $where$group ORDER BY $order, $tieBreak LIMIT $limit OFFSET $offset"
+        if (!merge) return query(sql, args, signal)
+
+        // All/genre/category lists repeatedly grouped their matches for every page.
+        // Cache exact ordered prefixes: 75k rows per query, 100k total (1.2 MB of arrays).
+        // A large All query leaves room for categories instead of evicting it on every visit.
+        // MIN(rowid) also selects the representative used by the original grouped query.
+        val grouped = "SELECT MIN(rowid), COUNT(*) FROM items WHERE $where$group ORDER BY $order, MIN(rowid)"
+        val key = grouped + args.joinToString(separator = "", prefix = "|") { "${it.length}:$it" }
+        val revision = browseCache.revision()
+        if (!browseCache.readable(revision)) return query(sql, args, signal)
+        val cached = browseCache.get(key)
+        // Preserve cold first paint: materializing the bounded id list is only worthwhile
+        // once the user starts paging, then it also serves revisits to the first page.
+        if (cached == null && offset == 0) return query(sql, args, signal)
+        val rows = cached ?: readableDatabase.rawQuery(
+            "$grouped LIMIT ${VodBrowseCache.MAX_ENTRY_ROWS + 1}", args.toTypedArray(), signal
+        ).use { cursor ->
+            run {
+                val size = minOf(cursor.count, VodBrowseCache.MAX_ENTRY_ROWS)
+                val ids = LongArray(size)
+                val counts = IntArray(size)
+                var i = 0
+                while (i < size && cursor.moveToNext()) {
+                    signal?.throwIfCanceled()
+                    ids[i] = cursor.getLong(0)
+                    counts[i++] = cursor.getInt(1)
+                }
+                VodBrowseCache.Rows(ids, counts, cursor.count > size).also { browseCache.put(key, it, revision) }
+            }
+        }
+        if (!browseCache.readable(revision) || (rows.hasMore && offset.toLong() + limit > rows.ids.size)) return query(sql, args, signal)
+        val start = offset.coerceAtLeast(0).coerceAtMost(rows.ids.size)
+        val end = (start.toLong() + limit.coerceAtLeast(0)).coerceAtMost(rows.ids.size.toLong()).toInt()
+        if (start == end) return emptyList()
+        val ids = (start until end).map { rows.ids[it] }
+        // Materialize in cache order; IN itself does not preserve that order. Read row ids
+        // alongside the rows rather than relying on a provider id being numeric or unique.
+        val page = ArrayList<VodItem>(end - start)
+        val byRow = HashMap<Long, VodItem>()
+        readableDatabase.rawQuery("SELECT rowid AS browse_id, * FROM items WHERE rowid IN (${ids.joinToString(",")})", null, signal).use { cursor ->
+            while (cursor.moveToNext()) {
+                signal?.throwIfCanceled()
+                byRow[cursor.getLong(0)] = cursor.toItem()
+            }
+        }
+        for (i in start until end) byRow[rows.ids[i]]?.let { page += it.copy(copies = rows.copies[i]) }
+        return if (browseCache.readable(revision)) page else query(sql, args, signal)
     }
 
     /**
@@ -913,7 +981,10 @@ class OnDemandDatabase @Inject constructor(@ApplicationContext private val appCo
 
     private fun query(sql: String, args: List<String>, signal: android.os.CancellationSignal? = null): List<VodItem> {
         val out = ArrayList<VodItem>()
-        readableDatabase.rawQuery(sql, args.toTypedArray(), signal).use { c -> while (c.moveToNext()) out += c.toItem() }
+        readableDatabase.rawQuery(sql, args.toTypedArray(), signal).use { c -> while (c.moveToNext()) {
+            signal?.throwIfCanceled()
+            out += c.toItem()
+        } }
         return out
     }
 

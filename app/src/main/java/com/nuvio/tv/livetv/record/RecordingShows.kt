@@ -1,7 +1,8 @@
-@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 
 package com.nuvio.tv.livetv.record
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -33,6 +34,7 @@ import com.nuvio.tv.livetv.ui.okTapOrHold
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -69,7 +71,12 @@ internal data class RecordedShow(
     val episodes: List<LiveTvRecording>
 ) : RecordedEntry
 
-private val EPISODE_NUMBERS = Regex("""(?i)s\s*0*(\d{1,3})\s*[.\- ]?\s*e\s*0*(\d{1,4})""")
+internal val RECORDING_EPISODE_NUMBERS = Regex("""(?i)s\s*0*(\d{1,3})\s*[.\- ]?\s*e\s*0*(\d{1,4})""")
+private val EPISODE_NUMBERS = RECORDING_EPISODE_NUMBERS
+
+/** What a recording is about: the guide's description, else the one found for it (TMDB / your addons). */
+internal fun recordingAbout(rec: LiveTvRecording, found: Map<String, String>): String? =
+    rec.description?.trim()?.takeIf { it.isNotBlank() } ?: found[rec.id]
 
 private fun episodeNumbers(episode: String?): Pair<Int, Int>? =
     episode?.let { EPISODE_NUMBERS.find(it) }?.let { it.groupValues[1].toInt() to it.groupValues[2].toInt() }
@@ -193,6 +200,7 @@ internal fun RecordedFolderCard(
 internal fun RecordedShowPage(
     show: RecordedShow,
     art: Map<String, RecordingArt>,
+    about: Map<String, String> = emptyMap(),
     resumeTick: Int,
     resumeOf: (LiveTvRecording) -> Long?,
     isWatched: (LiveTvRecording) -> Boolean,
@@ -202,7 +210,9 @@ internal fun RecordedShowPage(
     onMoveAll: (() -> Unit)?,
     onDeleteAll: () -> Unit,
     onClose: () -> Unit,
-    backdrop: String
+    backdrop: String,
+    /** Hands the page the highlight again (on its Play button) when it has wandered off. */
+    pageFocus: FocusRequester? = null
 ) {
     androidx.activity.compose.BackHandler(onBack = onClose)
     val colors = NuvioTheme.colors
@@ -237,7 +247,16 @@ internal fun RecordedShowPage(
     val totalBytes = show.episodes.sumOf { it.sizeBytes }
     val totalSec = show.episodes.sumOf { it.durationSec }
 
-    Box(Modifier.fillMaxSize().guideBackdrop(backdrop)) {
+    Box(
+        Modifier.fillMaxSize().guideBackdrop(backdrop)
+            // The highlight stays on this page (the Recordings page underneath is hidden), and
+            // coming into it lands on Play.
+            .focusProperties {
+                enter = { first }
+                exit = { FocusRequester.Cancel }
+            }
+            .focusGroup()
+    ) {
         com.nuvio.tv.livetv.ui.ThemeGlow(Modifier.fillMaxWidth().height(260.dp))
         Row(
             Modifier.fillMaxSize().padding(start = 56.dp, end = 48.dp, top = 32.dp),
@@ -268,7 +287,8 @@ internal fun RecordedShowPage(
                 PillButton(
                     (if (nextResume != null) "Resume " else "Play ") + episodeLabel(next),
                     primary = true,
-                    modifier = Modifier.fillMaxWidth().focusRequester(first).focusRequester(buttons[0]),
+                    modifier = Modifier.fillMaxWidth().focusRequester(first).focusRequester(buttons[0])
+                        .then(if (pageFocus != null) Modifier.focusRequester(pageFocus) else Modifier),
                     onFocus = { if (it) lastButton = 0 }, onClick = { onPlay(next) }, onMenu = { onMenu(next) }
                 )
                 if (watchedCount < show.episodes.size) {
@@ -297,6 +317,7 @@ internal fun RecordedShowPage(
                         EpisodeRow(
                             rec = rec,
                             art = art[rec.id],
+                            about = recordingAbout(rec, about),
                             state = states[rec.id] ?: EpisodeState(false, null),
                             modifier = Modifier.focusRequester(episodeFocus.getValue(rec.id))
                                 .onFocusChanged { if (it.isFocused) lastEpisodeId = rec.id },
@@ -314,6 +335,7 @@ internal fun RecordedShowPage(
 private fun EpisodeRow(
     rec: LiveTvRecording,
     art: RecordingArt?,
+    about: String?,
     state: EpisodeState,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -380,6 +402,10 @@ private fun EpisodeRow(
                 size = 13.sp,
                 color = if (failed) colors.Error else colors.TextSecondary
             )
+            // What the episode is about: only on the highlighted one, so the list stays short.
+            if (focused && !failed && about != null) {
+                LiveText(about, size = 13.sp, color = colors.TextPrimary, maxLines = 3, modifier = Modifier.padding(top = 2.dp))
+            }
         }
         Spacer(Modifier.width(12.dp))
         when {

@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.verticalScroll
@@ -89,8 +90,12 @@ internal fun aspectModeOf(name: String): com.nuvio.tv.ui.screens.player.AspectMo
 fun LiveTvPlayerScreen(
     onBack: () -> Unit,
     onFindInNuvio: () -> Unit = {},
+    /** Find & stream: the show's movie or series page in Nuvio (one clear match). */
+    onOpenNuvioTitle: (NuvioTitle) -> Unit = { onFindInNuvio() },
     /** Overlay mode off: Left goes back to the guide with the group list open. */
     onBackToGroups: () -> Unit = onBack,
+    /** The Channel Row's TV Guide tile: always the guide, even when Back would go to Sports. */
+    onOpenGuide: () -> Unit = onBack,
     /**
      * Shown inside the guide (the guide draws the video, the same view as its preview, so the
      * picture never has to move to another view). This screen then only draws the controls.
@@ -549,8 +554,16 @@ fun LiveTvPlayerScreen(
         }
     }
     val anyBackups = backups.isNotEmpty() || gameBackups != null
-    val poster by androidx.compose.runtime.produceState<String?>(initialValue = null, watchingTitle, current?.key) {
+    // Playlist names in the app's order: the Backups lists' headings and their order.
+    val playlistNamesForBackups by viewModel.playlistNames.collectAsStateWithLifecycle()
+    val poster by androidx.compose.runtime.produceState<String?>(initialValue = null, watchingTitle, current?.key, catchupSession?.recordingId) {
         value = null
+        // A recording: the poster Recordings showed (or found the same way), never a 24/7 or
+        // no-guide channel's.
+        catchupSession?.takeIf { it.recordingId != null }?.let { s ->
+            value = runCatching { viewModel.recordingPosterFor(s) }.getOrNull()
+            return@produceState
+        }
         // In archive playback the guide entry isn't the live one, so no movie/series hint.
         val hintProgram = if (playback.catchupTitle == null) nowProgram else null
         value = watchingTitle?.let { viewModel.posterFor(it, hintProgram, current) }
@@ -645,7 +658,7 @@ fun LiveTvPlayerScreen(
                         if (isOk && guideOnOkUp) {
                             guideOnOkUp = false
                             closeFull()
-                            onBack()
+                            onOpenGuide()
                             return@onPreviewKeyEvent true
                         }
                         return@onPreviewKeyEvent isOk || e.key == Key.Back
@@ -838,7 +851,7 @@ fun LiveTvPlayerScreen(
                         } else if (heldMs >= LONG_PRESS_MS) {
                             openGear()
                         } else when {
-                            playback.error != null && playback.reconnectAttempt > 8 -> viewModel.playback.retry()
+                            playback.error != null && (playback.reconnectAttempt > 8 || playingRecording) -> viewModel.playback.retry()
                             // OK: the full panel (timeline, buttons, options), on Play/Pause.
                             current != null -> { panelFull = true; controlFocus = PanelControl.PLAY; showBanner() }
                             else -> showBanner()
@@ -971,7 +984,8 @@ fun LiveTvPlayerScreen(
         // A problem: what's happening, and why underneath (wrapped, so it isn't cut off).
         playback.error?.let { reason ->
             PlayerStatusMessage(
-                title = if (playback.reconnectAttempt > 8) "Stream unavailable · press OK to retry"
+                title = if (playingRecording) "Couldn't play this recording · press OK to try again"
+                    else if (playback.reconnectAttempt > 8) "Stream unavailable · press OK to retry"
                     else "Reconnecting… (attempt ${playback.reconnectAttempt})",
                 detail = reason,
                 modifier = Modifier.align(Alignment.Center)
@@ -1344,10 +1358,12 @@ fun LiveTvPlayerScreen(
             LiveTvOverlayMode(
                 viewModel = viewModel,
                 onClose = { listVisible = false },
-                onFindInNuvio = { title ->
+                onFindInNuvio = { p, c ->
                     listVisible = false
-                    LiveTvSearchBridge.request(title)
-                    onFindInNuvio()
+                    viewModel.findInNuvio(p, c, onTitle = onOpenNuvioTitle) { title ->
+                        LiveTvSearchBridge.request(title)
+                        onFindInNuvio()
+                    }
                 }
             )
         }
@@ -1400,6 +1416,8 @@ fun LiveTvPlayerScreen(
                 game = pick,
                 now = now,
                 use24h = settings.use24HourClock,
+                settings = settings,
+                playlistNames = playlistNamesForBackups,
                 onNow = { key -> viewModel.currentProgram(key) },
                 onWatch = { m ->
                     gamePick = null
@@ -1529,6 +1547,8 @@ fun LiveTvPlayerScreen(
                 quickSettings = settings,
                 quickGroups = { viewModel.rowGroupOptions() },
                 onQuickUpdate = { t -> viewModel.updateSettings(t) },
+                backupPlaylists = playlistNamesForBackups,
+                backupAddons = { sports.liveStreamAddonNames() },
                 onBackground = {
                     viewModel.updateSettings {
                         it.copy(panelBackground = when (it.panelBackground) { "standard" -> "darker"; "darker" -> "solid"; else -> "standard" })
@@ -1542,10 +1562,10 @@ fun LiveTvPlayerScreen(
                 onReset = { viewModel.updateSettings { it.copy(barHidden = "") } },
                 onRecord = if (archive) null else {
                     {
-                        toast = viewModel.toggleRecording(ch)
+                        viewModel.toggleRecording(ch) { toast = it }
                     }
                 },
-                onStartRecording = { stopAt -> toast = viewModel.startRecording(ch, stopAt) },
+                onStartRecording = { stopAt -> viewModel.startRecording(ch, stopAt) { toast = it } },
                 showEndStopMs = if (archive) null else viewModel.showEndStopMs(ch),
                 onFavorite = { viewModel.toggleFavorite(ch) },
                 onTimeAction = {
@@ -1563,12 +1583,13 @@ fun LiveTvPlayerScreen(
                 },
                 bell = liveBell?.let { b -> Triple(if (b.isMovie) "Calendar" else "Bell", if (b.isMovie) (if (b.on) "On it" else "Add") else b.value, b.toggle) },
                 onSearch = viewModel.currentProgram(ch.key)
-                    ?.let { com.nuvio.tv.livetv.data.LiveTvPosterResolver.searchTitleFor(it, ch) }
-                    ?.let { title ->
+                    ?.let { p ->
                         {
                             dialog = PlayerDialog.NONE
-                            LiveTvSearchBridge.request(title)
-                            onFindInNuvio()
+                            viewModel.findInNuvio(p, ch, onTitle = onOpenNuvioTitle) { title ->
+                                LiveTvSearchBridge.request(title)
+                                onFindInNuvio()
+                            }
                         }
                     },
                 onReload = { dialog = PlayerDialog.NONE; viewModel.playback.retry() },
@@ -1632,6 +1653,8 @@ fun LiveTvPlayerScreen(
             playingKey = playback.channelKey,
             startKey = backupMenuLastKey,
             onLongPress = { ch -> if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) { backupMenuFor = ch; backupMenuLastKey = ch.key } },
+            settings = settings,
+            playlistNames = playlistNamesForBackups,
             nowTitle = { key -> viewModel.currentProgram(key)?.title },
             onPick = { ch ->
                 dialog = PlayerDialog.NONE
@@ -1779,33 +1802,43 @@ private fun BackupChannelsDialog(
     anchor: androidx.compose.ui.geometry.Rect? = null,
     onLongPress: (LiveChannel) -> Unit = {},
     startKey: String? = null,
-    showGroup: Boolean = true
+    showGroup: Boolean = true,
+    settings: com.nuvio.tv.livetv.model.LiveTvSettings,
+    playlistNames: Map<String, String>
 ) {
     val first = remember { FocusRequester() }
     val colors = NuvioTheme.colors
-    // Watching a game: the other channels showing it first, then this channel's own copies, each
-    // under a heading. Otherwise just the copies.
+    // A game's other channels and this channel's copies together, under the headings chosen in
+    // Backups & Game Channels (playlist / add-on, quality or none).
     val copies = channels
-    val all = gameChannels + copies
-    val headed = gameChannels.isNotEmpty()
+    val sections = rememberBackupSections(copies, gameChannels, settings, playlistNames)
+    val all = remember(sections) { sections.flatMap { it.channels } }
+    val headed = sections.any { it.title.isNotBlank() }
+    val gameKeys = remember(gameChannels) { gameChannels.mapTo(HashSet()) { it.key } }
+    val sameKeys = remember(copies, gameChannels, playingKey) { sameChannelKeys(copies, gameChannels, playingKey) }
+    val firstOfSection = remember(sections) {
+        var i = 0
+        sections.associate { sec -> (i to sec).also { i += sec.channels.size } }
+    }
     val focusKey = startKey?.takeIf { k -> all.any { it.key == k } }
         ?: all.firstOrNull { it.key != playingKey }?.key ?: all.first().key
     // A small flyout above the button (a centered panel if the button's spot isn't known yet).
     LiveDialog(onDismiss = onDismiss, width = 260.dp, anchor = anchor, minWidth = 240.dp, corner = 12.dp, pad = 10.dp) {
         LiveText("Backups", size = 13.sp, weight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+        if (gameTitle.isNotBlank() && gameChannels.isNotEmpty()) LiveText(
+            androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle),
+            size = 10.sp, color = colors.TextSecondary, maxLines = 1, modifier = Modifier.padding(horizontal = 4.dp)
+        )
         Spacer(Modifier.height(6.dp))
         androidx.compose.foundation.lazy.LazyColumn(
             Modifier.fillMaxWidth().heightIn(max = 190.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            if (headed) item(key = "head:game") {
-                BackupsHeading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_also_showing, gameTitle))
-            }
-            items(all.size, key = { (if (it < gameChannels.size) "game:" else "") + all[it].key }) { i ->
+            items(all.size, key = { all[it].key }) { i ->
                 Column(Modifier.fillMaxWidth()) {
-                    if (headed && copies.isNotEmpty() && i == gameChannels.size) BackupsHeading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_other_copies, copies.firstOrNull { it.key == playingKey }?.name ?: copies.first().name))
+                    if (headed) firstOfSection[i]?.let { sec -> BackupsHeading(sec.title, sec.addon, sec.channels.size) }
                     val ch = all[i]
-                    val guide = if (i < gameChannels.size) gameGuide(ch) else null
+                    val guide = if (ch.key in gameKeys) gameGuide(ch) else null
                     val playing = ch.key == playingKey
                     LiveFocusRow(
                         modifier = Modifier.fillMaxWidth().then(if (ch.key == focusKey) Modifier.focusRequester(first) else Modifier),
@@ -1825,6 +1858,10 @@ private fun BackupChannelsDialog(
                                 if (playing) {
                                     Spacer(Modifier.width(6.dp))
                                     LiveText("Watching", size = 9.sp, color = focusedTextColor(f))
+                                }
+                                if (ch.key in sameKeys) {
+                                    Spacer(Modifier.width(6.dp))
+                                    LiveText(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_same_channel), size = 9.sp, color = focusedTextColor(f))
                                 }
                             }
                             // A game channel: what its guide says about the game, coloured.
@@ -1847,13 +1884,22 @@ private fun BackupChannelsDialog(
     LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
 }
 
-/** A heading in the bar's backups list. */
+/** A heading in the bar's backups list: a playlist, an add-on ([addon]) or a quality, and how many. */
 @Composable
-private fun BackupsHeading(text: String) {
-    LiveText(
-        text, size = 10.sp, weight = FontWeight.SemiBold, color = NuvioTheme.colors.TextSecondary, maxLines = 1,
-        modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 2.dp)
-    )
+private fun BackupsHeading(text: String, addon: Boolean, count: Int) {
+    val dim = NuvioTheme.colors.TextSecondary
+    Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        LiveText(text.uppercase(), size = 10.sp, weight = FontWeight.SemiBold, color = dim, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+        if (addon) {
+            Spacer(Modifier.width(5.dp))
+            LiveText(
+                androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_addon_tag), size = 8.sp, weight = FontWeight.Bold, color = dim,
+                modifier = Modifier.border(1.dp, dim.copy(alpha = 0.4f), androidx.compose.foundation.shape.RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        LiveText("$count", size = 10.sp, color = dim)
+    }
 }
 
 /** Picture size, with the same choices as Nuvio's movie player (Fit, Crop, Stretch, Cinema Zoom, …). */

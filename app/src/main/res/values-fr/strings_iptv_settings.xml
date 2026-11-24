@@ -163,7 +163,7 @@
     <string name="iptv_settings_your_order">"Votre ordre"</string>
     <string name="iptv_settings_channels_in_a_group">"Chaînes d’un groupe"</string>
     <string name="iptv_settings_channel_order">"Ordre des chaînes"</string>
-    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Comment les chaînes sont triées dans chaque groupe, favoris compris. L’ordre de la playlist garde votre propre ordre dans les favoris et vos groupes."</string>
+    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Comment les chaînes sont triées dans chaque groupe, favoris compris. Seul l’ordre de la playlist garde votre propre ordre (chaînes réorganisées, favoris et vos groupes)."</string>
     <string name="iptv_settings_channel_number">"Numéro de chaîne"</string>
     <string name="iptv_settings_name">"Nom"</string>
     <string name="iptv_settings_number_channels_1_2_3_in_each_group">"Numéroter les chaînes 1, 2, 3… dans chaque groupe"</string>

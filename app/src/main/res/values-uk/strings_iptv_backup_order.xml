@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Той самий канал"</string>
+    <string name="livetv_backups_addon_tag">"Доповнення"</string>
+    <string name="livetv_backups_playlist_tag">"Плейлист"</string>
+    <string name="livetv_backups_quality_other">"Інша якість"</string>
+    <string name="iptv_backup_order_title">"Резервні та канали матчу"</string>
+    <string name="iptv_backup_order_row_subtitle">"Як групуються й сортуються резервний список і канали матчу у швидких каналах"</string>
+    <string name="iptv_backup_order_gear_hint">"Заголовки та їх порядок"</string>
+    <string name="iptv_backup_order_group_by">"Групувати за"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK змінює. У кожному заголовку канали йдуть за іншим порядком нижче"</string>
+    <string name="iptv_backup_order_by_source">"Плейлист / доповнення"</string>
+    <string name="iptv_backup_order_by_quality">"Якість"</string>
+    <string name="iptv_backup_order_no_headings">"Без заголовків"</string>
+    <string name="iptv_backup_order_sources">"Порядок плейлистів і доповнень"</string>
+    <string name="iptv_backup_order_sources_hint">"стрілки переміщують пункт; нові йдуть у кінець"</string>
+    <string name="iptv_backup_order_qualities">"Порядок якості"</string>
+    <string name="iptv_backup_order_qualities_hint">"поставте FHD вище 4K, якщо 4K гальмує на цьому ТВ"</string>
+    <string name="iptv_backup_order_quality_unknown">"Якість не вказана в назві"</string>
+    <string name="iptv_backup_order_reset">"Повернути типовий порядок"</string>
+    <string name="iptv_backup_order_no_sources">"Ще немає плейлистів чи доповнень"</string>
+</resources>

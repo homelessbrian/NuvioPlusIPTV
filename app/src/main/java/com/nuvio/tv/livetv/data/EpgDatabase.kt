@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.nuvio.tv.livetv.model.EpgAssignment
@@ -9,6 +10,8 @@ import com.nuvio.tv.livetv.model.EpgProgram
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * The TV guide on the device, TiviMate style: every listing is stored here after a guide
@@ -33,8 +36,13 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
      * Goes up whenever listings are written or removed: things worked out from the guide (Sports'
      * channel search) can tell they still hold without reading it again.
      */
+    private val _writeEvents = MutableStateFlow(1L)
+    internal val writeEvents = _writeEvents.asStateFlow()
     @Volatile var changes: Long = 1L
-        private set
+        private set(value) { synchronized(_writeEvents) {
+            field = maxOf(field + 1, value)
+            _writeEvents.value = field
+        } }
 
     init {
         // Readers don't wait for writers: the guide stays readable (scrolling, catch-up) while a
@@ -186,6 +194,10 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         return built
     }
 
+    fun mappedChannels(): Set<String> = buildSet {
+        allGroups().forEach { group -> group.byGid.values.forEach { addAll(it) } }
+    }
+
     @Volatile private var allGroupsCache: Pair<Long, java.lang.ref.SoftReference<List<Group>>>? = null
 
     /**
@@ -214,6 +226,113 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         return rangeOnce(fromMs, toMs, onlyChannel, light, channels, checkpoint)
     }
 
+    /** At most two rows per guide identity/shift, shared by every alias. */
+    fun nowNext(
+        atMs: Long,
+        channels: Collection<String>? = null,
+        reusableChannels: Collection<String> = emptyList(),
+        reuse: Map<String, List<EpgProgram>> = emptyMap(),
+        reuseRevision: Long = -1,
+        checkpoint: (() -> Unit)? = null
+    ): Map<String, List<EpgProgram>> {
+        repeat(3) { attempt ->
+            val revision = changes
+            val known = if (revision == reuseRevision) reusableChannels.toHashSet() else emptySet()
+            val out = HashMap<String, List<EpgProgram>>()
+            val identities = ProgrammeIdentityPool()
+            val wanted = if (channels == null) allGroups() else groups(links(channels))
+            wanted.forEach { group ->
+                val unread = ArrayList<Long>()
+                group.byGid.forEach { (gid, aliases) ->
+                    val reused = aliases.firstOrNull { it in known }
+                    if (reused == null) unread += gid
+                    else reuse[reused]?.takeIf { it.isNotEmpty() }?.let { rows -> aliases.forEach { out[it] = rows } }
+                }
+                val from = atMs - group.shiftMs
+                // Bounded compound queries avoid one JNI/CursorWindow round-trip per identity.
+                // Nested ordered LIMIT works on API24 SQLite; no window functions are needed.
+                for (part in unread.chunked(60)) {
+                    checkpoint?.invoke()
+                    val query = part.joinToString(" UNION ALL ") {
+                        "SELECT * FROM (SELECT $LIGHT_COLUMNS FROM listings WHERE gid = ? AND start >= ? AND stop > ? ORDER BY start LIMIT 2)"
+                    }
+                    val args = part.flatMap { listOf(it.toString(), (from - MAX_SHOW_MS - 3 * HOUR_MS).toString(), from.toString()) }.toTypedArray()
+                    val lists = HashMap<Long, ArrayList<EpgProgram>>()
+                    readableDatabase.rawQuery(query, args).use { c ->
+                        while (c.moveToNext()) lists.getOrPut(c.getLong(0)) { ArrayList(2) } += lightProgram(c, group.shiftMs, identities)
+                    }
+                    for (gid in part) {
+                        val first = lists[gid].orEmpty()
+                        // Preserve Home's next = first start >= current.stop rule even for a
+                        // provider archive containing overlapping rows.
+                        val rows = if (first.size == 2 && first[1].startMs < first[0].stopMs) {
+                            val next = readableDatabase.rawQuery(
+                                "SELECT $LIGHT_COLUMNS FROM listings WHERE gid = ? AND start >= ? AND stop > ? ORDER BY start LIMIT 1",
+                                arrayOf(gid.toString(), (first[0].stopMs - group.shiftMs).toString(), from.toString())
+                            ).use { c -> if (c.moveToFirst()) lightProgram(c, group.shiftMs, identities) else null }
+                            listOfNotNull(first[0], next)
+                        } else first
+                        if (rows.isNotEmpty()) group.byGid.getValue(gid).forEach { out[it] = rows }
+                    }
+                }
+            }
+            if (changes == revision || attempt == 2) return out
+        }
+        error("Unreachable")
+    }
+
+    /**
+     * Search keeps its complete six-hour semantics without retaining that window globally.
+     * Check titles before constructing programme models; SQLite NOCASE would lose Unicode
+     * matches compared with the UI's existing String.contains(ignoreCase = true).
+     */
+    fun titleMatches(
+        fromMs: Long,
+        toMs: Long,
+        query: String,
+        channels: Collection<String>,
+        checkpoint: (() -> Unit)? = null
+    ): Map<String, EpgProgram> {
+        repeat(3) { attempt ->
+            val revision = changes
+            val out = HashMap<String, EpgProgram>()
+            val identities = ProgrammeIdentityPool()
+            for (group in groups(links(channels))) {
+                val found = HashSet<Long>()
+                val from = fromMs - group.shiftMs
+                for (part in group.byGid.keys.chunked(GID_CHUNK)) {
+                    checkpoint?.invoke()
+                    readableDatabase.rawQuery(
+                        "SELECT $LIGHT_COLUMNS FROM listings WHERE gid IN (${part.joinToString(",")}) AND start >= ? AND start < ? AND stop > ? ORDER BY gid, start",
+                        arrayOf((from - MAX_SHOW_MS - 3 * HOUR_MS).toString(), (toMs - group.shiftMs).toString(), from.toString())
+                    ).use { c ->
+                        var read = 0
+                        while (c.moveToNext()) {
+                            if (read++ % 256 == 0) checkpoint?.invoke()
+                            val gid = c.getLong(0)
+                            if (gid in found || !c.getString(3).contains(query, ignoreCase = true)) continue
+                            found += gid
+                            val p = lightProgram(c, group.shiftMs, identities)
+                            group.byGid[gid]?.forEach { out[it] = p }
+                        }
+                    }
+                }
+            }
+            if (changes == revision || attempt == 2) return out
+        }
+        error("Unreachable")
+    }
+
+    private fun lightProgram(c: Cursor, shift: Long, identities: ProgrammeIdentityPool) = EpgProgram(
+        startMs = c.getLong(1) + shift,
+        stopMs = c.getLong(2) + shift,
+        title = c.getString(3),
+        episode = if (c.isNull(4)) null else XmltvParser.cleanEpisode(c.getString(4)),
+        icon = if (c.isNull(5)) null else c.getString(5),
+        providerProgramId = if (c.isNull(6)) null else c.getString(6),
+        providerSourceIdentity = if (c.isNull(7)) null else identities.share(c.getString(7))
+    )
+
     private fun rangeOnce(
         fromMs: Long,
         toMs: Long,
@@ -225,7 +344,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         checkpoint?.invoke()
         val out = HashMap<String, List<EpgProgram>>()
         val providerIdentities = ProgrammeIdentityPool()
-        val columns = if (light) "gid, start, stop, title, ep, icon, provider_id, provider_source" else "gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source"
+        val columns = if (light) LIGHT_COLUMNS else "gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source"
         val wanted = when {
             onlyChannel != null -> groups(links(listOf(onlyChannel)))
             channels != null -> groups(links(channels))
@@ -245,15 +364,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                     var rows = 0
                     while (c.moveToNext()) {
                         if (rows++ % 256 == 0) checkpoint?.invoke()
-                        val p = if (light) EpgProgram(
-                            startMs = c.getLong(1) + sh,
-                            stopMs = c.getLong(2) + sh,
-                            title = c.getString(3),
-                            episode = if (c.isNull(4)) null else XmltvParser.cleanEpisode(c.getString(4)),
-                            icon = if (c.isNull(5)) null else c.getString(5),
-                            providerProgramId = if (c.isNull(6)) null else c.getString(6),
-                            providerSourceIdentity = if (c.isNull(7)) null else providerIdentities.share(c.getString(7))
-                        ) else EpgProgram(
+                        val p = if (light) lightProgram(c, sh, providerIdentities) else EpgProgram(
                             startMs = c.getLong(1) + sh,
                             stopMs = c.getLong(2) + sh,
                             title = c.getString(3),
@@ -402,6 +513,11 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     fun channelRange(ch: String, fromMs: Long, toMs: Long): List<EpgProgram> =
         range(fromMs, toMs, ch)[ch].orEmpty()
 
+    /** Archive extensions compare against the complete stored guide, not a UI cache window. */
+    fun channelEnd(ch: String): Long? = readableDatabase.rawQuery(
+        "SELECT MAX(l.stop + c.sh) FROM chan c JOIN listings l ON l.gid = c.gid WHERE c.ch = ?", arrayOf(ch)
+    ).use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
+
     fun autoMatches(): Map<String, EpgAssignment> {
         val out = HashMap<String, EpgAssignment>()
         readableDatabase.rawQuery("SELECT ch, source, xmltv FROM auto", null).use { c ->
@@ -435,7 +551,9 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     /** One guide file being read in: [add] each guide channel's shows, then [finish] (or [abort]). */
     inner class SourceWriter internal constructor(private val src: String) {
         private val db = writableDatabase
-        private val stmt: android.database.sqlite.SQLiteStatement
+        private var fullStatement: android.database.sqlite.SQLiteStatement? = null
+        private var tailStatement: android.database.sqlite.SQLiteStatement? = null
+        private var tailSize = 0
         private var rows = 0
         private val gids = HashMap<String, Long>()
         private val meta = HashMap<String, LongArray>() // count, lastStop, placeholders
@@ -449,9 +567,26 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             markUnfinishedDead(db, src)
             purgeDead()
             db.beginTransaction()
-            stmt = db.compileStatement(
-                "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+        }
+
+        private fun statement(size: Int): android.database.sqlite.SQLiteStatement {
+            check(open) { "Source writer is closed" }
+            fun compile() = db.compileStatement(
+                "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) VALUES " +
+                    List(size) { "(?,?,?,?,?,?,?,?,?,?,?,?)" }.joinToString(",")
             )
+            if (size == SOURCE_INSERT_ROWS) return fullStatement ?: compile().also { fullStatement = it }
+            if (tailSize != size) {
+                tailStatement?.close()
+                tailStatement = null
+                tailSize = size
+            }
+            return tailStatement ?: compile().also { tailStatement = it }
+        }
+
+        private fun closeStatements() {
+            runCatching { fullStatement?.close() }; fullStatement = null
+            runCatching { tailStatement?.close() }; tailStatement = null
         }
 
         private fun gidFor(xid: String): Long = gids.getOrPut(xid) {
@@ -480,14 +615,24 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             val gid = gidFor(xid)
             val m = meta.getOrPut(xid) { LongArray(3) }
             if (!keepRows) countedOnly += xid
-            programs.forEach { p ->
+            var first = 0
+            while (first < programs.size) {
+                val count = minOf(SOURCE_INSERT_ROWS, programs.size - first)
                 if (keepRows) {
-                    bindListing(stmt, gid, p, 0L)
+                    val stmt = statement(count)
+                    stmt.clearBindings()
+                    for (i in 0 until count) bindListingValues(stmt, i * LISTING_COLUMNS, gid, programs[first + i], 0L)
                     stmt.executeInsert()
+                    // No references to the last batch's text need to survive until finish.
+                    stmt.clearBindings()
                 }
-                m[0]++
-                if (p.stopMs > m[1]) m[1] = p.stopMs
-                if (isPlaceholder(p.title)) m[2]++
+                for (i in first until first + count) {
+                    val p = programs[i]
+                    m[0]++
+                    if (p.stopMs > m[1]) m[1] = p.stopMs
+                    if (isPlaceholder(p.title)) m[2]++
+                }
+                first += count
             }
             if (!keepRows) return
             rows += programs.size
@@ -511,7 +656,10 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             channels: List<Triple<String, List<String>, String?>>,
             kept: Collection<String>,
             listed: Int = channels.size,
-            extraIds: Collection<String> = emptyList()
+            extraIds: Collection<String> = emptyList(),
+            /** Start of the hours kept ("Past Shows Kept"): shows from before still in it are carried over. 0: none. */
+            keepFrom: Long = 0L,
+            isPlaceholder: (String) -> Boolean = { false }
         ): Map<String, StagedMeta> {
             kept.forEach { gidFor(it) }
             val upd = db.compileStatement("UPDATE guide_ch SET cnt = ?, last_stop = ?, placeholders = ? WHERE gid = ?")
@@ -530,6 +678,11 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                 db.rawQuery("SELECT gid, xid FROM guide_ch WHERE src = ? AND state IN ($LIVE, $EMPTIED)", arrayOf(src)).use { c ->
                     while (c.moveToNext()) old += c.getLong(0) to c.getString(1)
                 }
+                // Shows that already aired and the new file no longer has (many guides start at
+                // "now", or put "No information" over yesterday): kept, so the guide and catch-up
+                // still show them for as long as Past Shows Kept says.
+                if (keepFrom > 0L) runCatching { carryPastShows(old, keepFrom, System.currentTimeMillis(), isPlaceholder) }
+                    .onFailure { if (it is android.database.sqlite.SQLiteFullException) throw it }
                 val move = db.compileStatement("UPDATE chan SET gid = ? WHERE gid = ?")
                 val drop = db.compileStatement("DELETE FROM chan WHERE gid = ?")
                 old.forEach { (oldGid, xid) ->
@@ -566,17 +719,75 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                 ok = true
             } finally {
                 open = false
-                changes++
-                db.endTransaction()
+                try { db.endTransaction() } finally { changes++ }
             }
             // Only once the save really went through (it can still fail here when storage is full).
             stored = ok
-            runCatching { stmt.close() }
+            closeStatements()
             // The listings this file had before, a batch at a time.
             runCatching { purgeDead() }
             return gids.keys.associateWith { xid ->
                 val m = meta[xid]
                 StagedMeta(m?.get(0)?.toInt() ?: 0, m?.get(1) ?: 0L, m?.get(2)?.toInt() ?: 0, hasRows = xid !in countedOnly)
+            }
+        }
+
+        /**
+         * For each guide channel the file had before and still has: the shows from before that
+         * ended between [from] and [until] go to the new listings wherever the new file has no
+         * real show at that time (a placeholder there gives way, unless it runs on past [until]).
+         * Inside the read's transaction, a few hundred guide channels at a time.
+         */
+        private fun carryPastShows(old: List<Pair<Long, String>>, from: Long, until: Long, isPlaceholder: (String) -> Boolean) {
+            val pairs = old.mapNotNull { (oldGid, xid) ->
+                val now = gids[xid]
+                if (now == null || xid in countedOnly) null else oldGid to now
+            }
+            if (pairs.isEmpty()) return
+            val copy = db.compileStatement(
+                "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) " +
+                    "SELECT ?, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source FROM listings WHERE rowid = ?"
+            )
+            val drop = db.compileStatement("DELETE FROM listings WHERE rowid = ?")
+            try {
+                for (part in pairs.chunked(200)) {
+                    val newOf = HashMap<Long, Long>(part.size * 2)
+                    part.forEach { (o, n) -> newOf[o] = n }
+                    // The new file's shows in those hours: rowid, start, stop, 1 = placeholder.
+                    val fresh = HashMap<Long, ArrayList<LongArray>>()
+                    db.rawQuery(
+                        "SELECT gid, rowid, start, stop, title FROM listings WHERE gid IN (${part.joinToString(",") { it.second.toString() }}) AND start < ? AND stop > ?",
+                        arrayOf(until.toString(), from.toString())
+                    ).use { c ->
+                        while (c.moveToNext()) {
+                            fresh.getOrPut(c.getLong(0)) { ArrayList() } +=
+                                longArrayOf(c.getLong(1), c.getLong(2), c.getLong(3), if (isPlaceholder(c.getString(4))) 1L else 0L)
+                        }
+                    }
+                    db.rawQuery(
+                        "SELECT gid, rowid, start, stop, title FROM listings WHERE gid IN (${part.joinToString(",") { it.first.toString() }}) AND stop > ? AND stop <= ? ORDER BY gid, start",
+                        arrayOf(from.toString(), until.toString())
+                    ).use { c ->
+                        while (c.moveToNext()) {
+                            if (isPlaceholder(c.getString(4))) continue
+                            val newGid = newOf[c.getLong(0)] ?: continue
+                            val start = c.getLong(2); val stop = c.getLong(3)
+                            val rows = fresh.getOrPut(newGid) { ArrayList() }
+                            // A real show then, or a placeholder still running after now: the new file wins.
+                            if (rows.any { it[1] < stop && it[2] > start && (it[3] == 0L || it[2] > until) }) continue
+                            rows.removeAll { r ->
+                                val gone = r[3] == 1L && r[1] < stop && r[2] > start
+                                if (gone && r[0] > 0L) { drop.clearBindings(); drop.bindLong(1, r[0]); drop.executeUpdateDelete() }
+                                gone
+                            }
+                            copy.clearBindings(); copy.bindLong(1, newGid); copy.bindLong(2, c.getLong(1))
+                            copy.executeInsert()
+                            rows += longArrayOf(0L, start, stop, 0L)
+                        }
+                    }
+                }
+            } finally {
+                runCatching { copy.close() }; runCatching { drop.close() }
             }
         }
 
@@ -588,7 +799,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             val wasOpen = open
             open = false
             if (wasOpen) runCatching { db.endTransaction() }
-            runCatching { stmt.close() }
+            closeStatements()
             runCatching { markUnfinishedDead(db, src); purgeDead() }
         }
     }
@@ -851,8 +1062,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     }
 
     /**
-     * Adds a channel's listings for a time span (Xtream catch-up archive), replacing anything
-     * stored for it in that span. They go to the guide channel it points at (so channels sharing
+     * Adds a channel's listings for a time span (Xtream catch-up archive), replacing what's
+     * stored for it at the times they cover. They go to the guide channel it points at (so channels sharing
      * that guide channel get them too); a channel with no guide gets a guide channel of its own.
      */
     fun putChannelRange(ch: String, fromMs: Long, toMs: Long, programs: List<EpgProgram>) {
@@ -878,7 +1089,15 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                         SQLiteDatabase.CONFLICT_REPLACE)
                     made
                 }
-                db.delete("listings", "gid = ? AND start >= ? AND start < ?", arrayOf(id.toString(), (fromMs - sh).toString(), (toMs - sh).toString()))
+                // Only what these shows cover is replaced: a catch-up list with gaps (some
+                // providers leave hours out) keeps the shows already stored in between.
+                db.compileStatement("DELETE FROM listings WHERE gid = ? AND start < ? AND stop > ?").use { remove ->
+                    programs.forEach { p ->
+                        remove.clearBindings()
+                        remove.bindLong(1, id); remove.bindLong(2, p.stopMs - sh); remove.bindLong(3, p.startMs - sh)
+                        remove.executeUpdateDelete()
+                    }
+                }
                 val stmt = db.compileStatement(
                     "INSERT INTO listings (gid, start, stop, title, descr, cat, ep, icon, year, people, provider_id, provider_source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
                 )
@@ -971,27 +1190,34 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
 
     private fun bindListing(stmt: android.database.sqlite.SQLiteStatement, gid: Long, p: EpgProgram, shiftMs: Long) {
         stmt.clearBindings()
-        stmt.bindLong(1, gid)
-        stmt.bindLong(2, p.startMs - shiftMs); stmt.bindLong(3, p.stopMs - shiftMs); stmt.bindString(4, p.title)
-        p.description?.let { stmt.bindString(5, it) } ?: stmt.bindNull(5)
-        p.category?.let { stmt.bindString(6, it) } ?: stmt.bindNull(6)
-        p.episode?.let { stmt.bindString(7, it) } ?: stmt.bindNull(7)
-        p.icon?.let { stmt.bindString(8, it) } ?: stmt.bindNull(8)
-        p.year?.let { stmt.bindLong(9, it.toLong()) } ?: stmt.bindNull(9)
-        if (p.people.isEmpty()) stmt.bindNull(10) else stmt.bindString(10, p.people.joinToString("\u001F"))
-        p.providerProgramId?.let { stmt.bindString(11, it) } ?: stmt.bindNull(11)
-        p.providerSourceIdentity?.let { stmt.bindString(12, it) } ?: stmt.bindNull(12)
+        bindListingValues(stmt, 0, gid, p, shiftMs)
+    }
+
+    private fun bindListingValues(stmt: android.database.sqlite.SQLiteStatement, offset: Int, gid: Long, p: EpgProgram, shiftMs: Long) {
+        stmt.bindLong(offset + 1, gid)
+        stmt.bindLong(offset + 2, p.startMs - shiftMs); stmt.bindLong(offset + 3, p.stopMs - shiftMs); stmt.bindString(offset + 4, p.title)
+        p.description?.let { stmt.bindString(offset + 5, it) } ?: stmt.bindNull(offset + 5)
+        p.category?.let { stmt.bindString(offset + 6, it) } ?: stmt.bindNull(offset + 6)
+        p.episode?.let { stmt.bindString(offset + 7, it) } ?: stmt.bindNull(offset + 7)
+        p.icon?.let { stmt.bindString(offset + 8, it) } ?: stmt.bindNull(offset + 8)
+        p.year?.let { stmt.bindLong(offset + 9, it.toLong()) } ?: stmt.bindNull(offset + 9)
+        if (p.people.isEmpty()) stmt.bindNull(offset + 10) else stmt.bindString(offset + 10, p.people.joinToString("\u001F"))
+        p.providerProgramId?.let { stmt.bindString(offset + 11, it) } ?: stmt.bindNull(offset + 11)
+        p.providerSourceIdentity?.let { stmt.bindString(offset + 12, it) } ?: stmt.bindNull(offset + 12)
     }
 
     // ------------------------------------------------------------ sports shows
     //
-    // Test builds: the guide's shows that name a sport, a competition or a team (with their text
+    // The guide's shows that name a sport, a competition or a team (with their text
     // already cleaned up for matching), so Sports' channel search reads a few thousand rows instead
     // of the whole guide. Built by SportsMatcher from one read of the guide, and only good for the
     // guide [revision] it was built from. Its tables are made the first time they're used.
 
     /** What the sports-shows table holds: the guide it came from, the time span read, how many shows. */
-    class SportsRowsInfo(val stamp: String, val rev: Long, val fromMs: Long, val toMs: Long, val rows: Int)
+    class SportsRowsInfo(
+        val stamp: String, val rev: Long, val fromMs: Long, val toMs: Long, val rows: Int,
+        val formatVersion: Int, val textBytes: Long, val wordCount: Int, val wordTextBytes: Long
+    )
 
     private fun ensureSportsTables(db: SQLiteDatabase) {
         db.execSQL(
@@ -1009,7 +1235,9 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             if (!c.moveToFirst()) return@use null
             val stamp = c.getString(0) ?: return@use null
             val f = stamp.split('|')
-            if (f.size < 4) null else SportsRowsInfo(stamp, f[0].toLong(), f[1].toLong(), f[2].toLong(), f[3].toInt())
+            if (f.size < 4) null else SportsRowsInfo(stamp, f[0].toLong(), f[1].toLong(), f[2].toLong(), f[3].toInt(),
+                f.getOrNull(5)?.toIntOrNull() ?: 0, f.getOrNull(6)?.toLongOrNull() ?: Long.MAX_VALUE,
+                f.getOrNull(7)?.toIntOrNull() ?: Int.MAX_VALUE, f.getOrNull(8)?.toLongOrNull() ?: Long.MAX_VALUE)
         }
     }.getOrNull()
 
@@ -1028,6 +1256,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         private val db = writableDatabase
         private val startedAt = changes
         private val buffer = ArrayList<Array<Any?>>(BATCH)
+        private var bufferedTextBytes = 0L
+        private var totalTextBytes = 0L
         private var open = true
         var rows = 0
             private set
@@ -1048,8 +1278,14 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
 
         fun add(ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) {
             buffer += arrayOf(ch, start, stop, title, descr, cat, nt, nd)
+            val textBytes = (ch.length.toLong() + title.length + (descr?.length ?: 0) +
+                (cat?.length ?: 0) + nt.length + nd.length) * 2
+            bufferedTextBytes += textBytes
+            totalTextBytes += textBytes
             rows++
-            if (buffer.size >= BATCH) { db.beginTransaction(); try { flush(); db.setTransactionSuccessful() } finally { db.endTransaction() } }
+            if (buffer.size >= BATCH || bufferedTextBytes >= 2L * 1024 * 1024) {
+                db.beginTransaction(); try { flush(); db.setTransactionSuccessful() } finally { db.endTransaction() }
+            }
         }
 
         /** Writes what's waiting, inside the caller's transaction. */
@@ -1067,6 +1303,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
             }
             stmt.close()
             buffer.clear()
+            bufferedTextBytes = 0L
         }
 
         /** Marks the table finished for guide [rev] — unless the guide changed while it was read (then it's left unfinished, never used). */
@@ -1082,7 +1319,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
                     words.forEach { w.clearBindings(); w.bindString(1, it); w.executeInsert() }
                     w.close()
                     db.insertWithOnConflict("meta", null, ContentValues().apply {
-                        put("k", "sports_rows"); put("v", "$rev|$fromMs|$toMs|$rows|${System.currentTimeMillis()}")
+                        put("k", "sports_rows")
+                        put("v", "$rev|$fromMs|$toMs|$rows|${System.currentTimeMillis()}|$SPORTS_ROWS_FORMAT|$totalTextBytes|${words.size}|${words.sumOf { it.length.toLong() * 2 }}")
                     }, SQLiteDatabase.CONFLICT_REPLACE)
                 }
                 db.setTransactionSuccessful()
@@ -1096,6 +1334,7 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         fun abort() {
             open = false
             buffer.clear()
+            bufferedTextBytes = 0L
         }
     }
 
@@ -1108,7 +1347,9 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
         minStopMs: Long,
         onRow: (ch: String, start: Long, stop: Long, title: String, descr: String?, cat: String?, nt: String, nd: String) -> Unit
     ) {
-        val sql = "SELECT ch, start, stop, title, descr, cat, nt, nd FROM sports_rows WHERE start >= ? AND start < ? AND stop > ?"
+        // Keep the original guide traversal order (the insertion order), including aliases and
+        // ties, so which duplicate listing names an event stays the same as the full scan.
+        val sql = "SELECT ch, start, stop, title, descr, cat, nt, nd FROM sports_rows INDEXED BY sports_rows_start WHERE start >= ? AND start < ? AND stop > ? ORDER BY rowid"
         readableDatabase.rawQuery(sql, arrayOf(fromMs.toString(), toMs.toString(), minStopMs.toString())).use { c ->
             while (c.moveToNext()) {
                 onRow(
@@ -1146,6 +1387,8 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     }
 
     companion object {
+        /** Published sports index includes measured capacity metadata; legacy tables rebuild lazily. */
+        internal const val SPORTS_ROWS_FORMAT = 1
         /** A guide channel made for one playlist channel's own listings (Xtream archive, no guide file). */
         const val OWN_SOURCE = "__own__"
 
@@ -1162,10 +1405,16 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
 }
 
 /** Longest single listing assumed when reading a time window (longer ones are very rare). */
-private const val MAX_SHOW_MS = 6L * 60 * 60 * 1000
+private const val HOUR_MS = 60L * 60 * 1000
+private const val MAX_SHOW_MS = 6 * HOUR_MS
+private const val LIGHT_COLUMNS = "gid, start, stop, title, ep, icon, provider_id, provider_source"
 
 /** Sports shows written to their table at a time (see [EpgDatabase.SportsRowsWriter]). */
 private const val BATCH = 2_000
+
+private const val LISTING_COLUMNS = 12
+/** 960 bound values stay below the 999-variable limit on older Android SQLite builds. */
+private const val SOURCE_INSERT_ROWS = 80
 
 /** Guide channels asked for in one query. */
 private const val GID_CHUNK = 400

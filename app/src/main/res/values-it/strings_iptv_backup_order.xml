@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"Stesso canale"</string>
+    <string name="livetv_backups_addon_tag">"Componente aggiuntivo"</string>
+    <string name="livetv_backups_playlist_tag">"Playlist"</string>
+    <string name="livetv_backups_quality_other">"Altra qualità"</string>
+    <string name="iptv_backup_order_title">"Riserve e canali della partita"</string>
+    <string name="iptv_backup_order_row_subtitle">"Come la lista di riserva e i canali di una partita nei Canali rapidi vengono raggruppati e ordinati"</string>
+    <string name="iptv_backup_order_gear_hint">"Intestazioni e il loro ordine"</string>
+    <string name="iptv_backup_order_group_by">"Raggruppa per"</string>
+    <string name="iptv_backup_order_group_by_hint">"OK lo cambia. In ogni intestazione i canali seguono l'altro ordine qui sotto"</string>
+    <string name="iptv_backup_order_by_source">"Playlist / componente"</string>
+    <string name="iptv_backup_order_by_quality">"Qualità"</string>
+    <string name="iptv_backup_order_no_headings">"Nessuna intestazione"</string>
+    <string name="iptv_backup_order_sources">"Ordine di playlist e componenti"</string>
+    <string name="iptv_backup_order_sources_hint">"le frecce ne spostano uno; i nuovi vanno in fondo"</string>
+    <string name="iptv_backup_order_qualities">"Ordine di qualità"</string>
+    <string name="iptv_backup_order_qualities_hint">"metti FHD sopra 4K se il 4K fatica su questa TV"</string>
+    <string name="iptv_backup_order_quality_unknown">"Qualità non nel nome"</string>
+    <string name="iptv_backup_order_reset">"Torna all'ordine predefinito"</string>
+    <string name="iptv_backup_order_no_sources">"Ancora nessuna playlist o componente"</string>
+</resources>

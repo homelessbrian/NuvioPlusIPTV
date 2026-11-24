@@ -248,14 +248,34 @@ internal fun GameChannelsDialog(
     onNow: (String) -> EpgProgram?,
     onWatch: (ChannelMatch) -> Unit,
     onMultiview: (ChannelMatch) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** Headings and their order (Backups & Game Channels); null: one list as before. */
+    settings: com.nuvio.tv.livetv.model.LiveTvSettings? = null,
+    playlistNames: Map<String, String> = emptyMap()
 ) {
     val ev = game.event
     val league = SportsCatalog.league(ev.leagueId)
     val sides = ev.ordered(league?.sport ?: Sport.OTHER)
     val first = remember { FocusRequester() }
     // One row per channel: its other copies (HD, SD) folded in, as on the game page.
-    val rows = remember(game) { SportsMatcher.groupCopies(game.channels.filter { it.channel.sourceId != SportsVideos.SOURCE_ID }, null) }
+    val grouped = remember(game) { SportsMatcher.groupCopies(game.channels.filter { it.channel.sourceId != SportsVideos.SOURCE_ID }, null) }
+    // Under the headings chosen in Backups & Game Channels (playlist / add-on, quality or none).
+    val other = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_quality_other)
+    val sections = remember(grouped, settings?.backupGroupBy, settings?.backupSourceOrder, settings?.backupQualityOrder, playlistNames, other) {
+        if (settings == null) emptyList()
+        else {
+            val byKey = grouped.associateBy { it[0].channel.key }
+            com.nuvio.tv.livetv.model.BackupOrder.organize(grouped.map { it[0].channel }, settings, playlistNames) { q ->
+                com.nuvio.tv.ui.screens.settings.livetvQualityHeading(q, other)
+            }.map { sec -> sec to sec.channels.mapNotNull { byKey[it.key] } }
+        }
+    }
+    val headed = sections.size > 1 && sections.all { it.first.title.isNotBlank() }
+    val rows = remember(grouped, sections) { if (sections.isEmpty()) grouped else sections.flatMap { it.second } }
+    val headingAt = remember(sections) {
+        var i = 0
+        sections.associate { (sec, list) -> (i to sec).also { i += list.size } }
+    }
     SportsDialog(onDismiss = onDismiss, width = 600.dp) {
         LiveText(
             if (sides.size == 2) sides.joinToString(" v ") { it.team.name } else ev.title,
@@ -276,6 +296,21 @@ internal fun GameChannelsDialog(
         ) {
             itemsIndexed(rows, key = { _, g -> g[0].channel.key }) { i, g ->
                 val m = g[0]
+                androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth()) {
+                if (headed) headingAt[i]?.let { sec ->
+                    Row(Modifier.fillMaxWidth().padding(start = 2.dp, top = if (i == 0) 0.dp else 6.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        LiveText(sec.title.uppercase(), color = SportsLook.Dim, size = 10.sp, weight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                        if (sec.addon) {
+                            Spacer(Modifier.width(6.dp))
+                            LiveText(
+                                androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_addon_tag), color = SportsLook.Dim, size = 8.sp, weight = FontWeight.Bold,
+                                modifier = Modifier.border(1.dp, SportsLook.Border, RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        LiveText("${sec.channels.size}", color = SportsLook.Dim, size = 10.sp)
+                    }
+                }
                 val guide = if (m.channel.sourceId == SportsAddonSource.SOURCE_ID) null else guideLine(ev, m, onNow(m.channel.key), now, use24h)
                 Row(
                     Modifier.fillMaxWidth().sportsFrame(false, accent = NuvioTheme.colors.Secondary, radius = 12.dp)
@@ -298,6 +333,7 @@ internal fun GameChannelsDialog(
                     SportsAction("▶  Watch", modifier = if (i == 0) Modifier.focusRequester(first) else Modifier) { onWatch(m) }
                     Spacer(Modifier.width(6.dp))
                     SportsAction("▦  Multiview") { onMultiview(m) }
+                }
                 }
             }
         }

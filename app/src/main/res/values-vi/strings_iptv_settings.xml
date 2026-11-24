@@ -163,7 +163,7 @@
     <string name="iptv_settings_your_order">"Thứ tự của bạn"</string>
     <string name="iptv_settings_channels_in_a_group">"Kênh trong nhóm"</string>
     <string name="iptv_settings_channel_order">"Thứ tự kênh"</string>
-    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Cách sắp xếp kênh trong mọi nhóm, kể cả Yêu thích. Thứ tự danh sách phát giữ nguyên thứ tự riêng của bạn trong Yêu thích và nhóm của bạn."</string>
+    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Cách sắp xếp kênh trong mọi nhóm, kể cả Yêu thích. Chỉ thứ tự danh sách phát giữ thứ tự riêng của bạn (kênh bạn đã sắp xếp lại, Yêu thích và nhóm của bạn)."</string>
     <string name="iptv_settings_channel_number">"Số kênh"</string>
     <string name="iptv_settings_name">"Tên"</string>
     <string name="iptv_settings_number_channels_1_2_3_in_each_group">"Đánh số kênh 1, 2, 3… trong mỗi nhóm"</string>

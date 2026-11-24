@@ -63,20 +63,31 @@ class ChannelSortingReuseTest {
     }
 
     @Test
-    fun `full and partial manual All order do not change the globally sorted pool`() {
+    fun `Playlist order keeps a full or partial manual All order without changing the sorted pool`() {
         val input = listOf(channel("d", "Delta", 4), channel("b", "Beta", 2),
             channel("a", "Alpha", 1), channel("c", "Charlie", 3))
+        for ((order, expected) in listOf(
+            listOf("c", "a") to listOf("d", "b", "c", "a"),
+            listOf("d", "c", "b", "a") to listOf("d", "c", "b", "a")
+        )) {
+            val user = LiveUserState(channelOrder = mapOf(ChannelGroup.ALL to order))
+            val ui = buildUi(input, user, LiveTvSettings(channelSort = ChannelSort.PLAYLIST), ChannelGroup.ALL, "", true)
+            assertEquals(expected, keys(ui.channels))
+            assertEquals(listOf("d", "b", "a", "c"), keys(ui.allVisibleChannels))
+        }
+    }
+
+    @Test
+    fun `Name and Number sort a group even when it was reordered by hand`() {
+        val input = listOf(channel("d", "Delta", 4, "g"), channel("b", "Beta", 2, "g"),
+            channel("a", "Alpha", 1, "g"), channel("c", "Charlie", 3, "g"))
+        val user = LiveUserState(channelOrder = mapOf("g" to listOf("d", "c", "b", "a"), ChannelGroup.ALL to listOf("c", "a")))
         for (sort in listOf(ChannelSort.NAME, ChannelSort.NUMBER)) {
-            for ((order, expected) in listOf(
-                listOf("c", "a") to listOf("c", "d", "a", "b"),
-                listOf("d", "c", "b", "a") to listOf("d", "c", "b", "a")
-            )) {
-                val user = LiveUserState(channelOrder = mapOf(ChannelGroup.ALL to order))
-                val ui = buildUi(input, user, LiveTvSettings(channelSort = sort), ChannelGroup.ALL, "", true)
-                assertEquals(expected, keys(ui.channels))
-                assertEquals(listOf("a", "b", "c", "d"), keys(ui.allVisibleChannels))
-                assertNotSame(ui.channels, ui.allVisibleChannels)
-            }
+            val s = LiveTvSettings(channelSort = sort)
+            assertEquals(listOf("a", "b", "c", "d"), keys(buildUi(input, user, s, "g", "", true).channels))
+            val all = buildUi(input, user, s, ChannelGroup.ALL, "", true)
+            assertEquals(listOf("a", "b", "c", "d"), keys(all.channels))
+            assertSame(all.channels, all.allVisibleChannels)
         }
     }
 

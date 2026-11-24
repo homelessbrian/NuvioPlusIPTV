@@ -14,7 +14,9 @@ data class VodHomeState(
     val rows: List<CatalogRow> = emptyList(),
     /** Every group, for Manage VOD Groups (including hidden ones). */
     val groups: List<VodGroupEntry> = emptyList(),
-    val loading: Boolean = true
+    val loading: Boolean = true,
+    /** A tab with no row yet is still being read; do not temporarily switch to the other tab. */
+    val pendingKinds: Set<VodKind> = emptySet()
 )
 
 /** One group as Manage VOD Groups shows it. */
@@ -81,6 +83,11 @@ object VodHomeIds {
     /** For Home's details look-ups in your addons: the matched title's id (not a TMDB-only match). */
     fun addonId(cardId: String): String? =
         uidOf(cardId)?.let { realIds[it] }?.match?.takeIf { !it.startsWith("tmdb:") }
+
+    /** Lightweight card anchors retain this identity when optional full details are evicted. */
+    internal fun matchId(cardId: String): String? = uidOf(cardId)?.let { realIds[it] }?.match
+
+    internal fun forgetMatch(item: VodItem) { realIds.remove(item.uid); rememberReal(item, null) }
 
     /** The real id a title's custom poster is made from: its match's id, else the provider's TMDB id. */
     fun posterId(item: VodItem, matched: MetaPreview?): String? =

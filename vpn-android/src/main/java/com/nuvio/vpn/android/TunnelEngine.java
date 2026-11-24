@@ -14,11 +14,12 @@ final class TunnelTraffic {
     final long received, sent, handshakeMillis;
     final boolean authenticated;
     final long session;
-    TunnelTraffic(long received, long sent, long handshakeMillis) {
+    /** WireGuard: usable unless something was sent after the keys ran out and no new handshake came (HandshakeHealth). */
+    TunnelTraffic(long received, long sent, long handshakeMillis, HandshakeHealth health) {
         this.received = received;
         this.sent = sent;
         this.handshakeMillis = handshakeMillis;
-        authenticated = handshakeMillis > 0 && System.currentTimeMillis() - handshakeMillis <= 180000;
+        authenticated = health.usable(sent, handshakeMillis);
         session = 0;
     }
     TunnelTraffic(long received, long sent, boolean authenticated, long session) {

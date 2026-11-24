@@ -107,6 +107,7 @@ import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
 import com.nuvio.tv.ui.components.LightweightCard
 import com.nuvio.tv.ui.components.MonochromePosterPlaceholder
 import com.nuvio.tv.ui.components.NuvioDialog
+import com.nuvio.tv.ui.components.RewatchMarker
 import com.nuvio.tv.ui.components.WatchedMarker
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.domain.model.CardDepthSurface
@@ -492,6 +493,7 @@ fun EpisodesRow(
     episodeProgressMap: Map<Pair<Int, Int>, com.nuvio.tv.domain.model.WatchProgress> = emptyMap(),
     episodeRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
     watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
+    rewatchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
     episodeWatchedPendingKeys: Set<String> = emptySet(),
     blurUnwatchedEpisodes: Boolean = false,
     episodeOptionsOverlayStyle: EpisodeOptionsOverlayStyle = EpisodeOptionsOverlayStyle.ARTWORK,
@@ -501,6 +503,8 @@ fun EpisodesRow(
     onEpisodeManualPlayClick: (Video) -> Unit = onEpisodeClick,
     onEpisodeStartFromBeginningClick: (Video) -> Unit = onEpisodeClick,
     onToggleEpisodeWatched: (Video) -> Unit,
+    onMarkEpisodeRewatched: (Video) -> Unit = {},
+    onUnmarkEpisodeRewatched: (Video) -> Unit = {},
     showManualPlayOption: Boolean = false,
     onMarkSeasonWatched: (Int) -> Unit = {},
     onMarkSeasonUnwatched: (Int) -> Unit = {},
@@ -649,6 +653,7 @@ fun EpisodesRow(
             val progress = remember(seasonEp, episodeProgressMap) { seasonEp?.let { episodeProgressMap[it] } }
             val imdbRating = remember(seasonEp, episodeRatings) { seasonEp?.let { episodeRatings[it] } }
             val isMarkedWatched = remember(seasonEp, watchedEpisodes) { seasonEp?.let { watchedEpisodes.contains(it) } ?: false }
+            val isMarkedRewatched = remember(seasonEp, rewatchedEpisodes) { seasonEp?.let { rewatchedEpisodes.contains(it) } ?: false }
             val episodeFocusRequester = remember(episode.id) { episodeFocusRequesters.getOrPut(episode.id) { FocusRequester() } }
             val episodeOnClick = remember(episode, onEpisodeClick) { { onEpisodeClick(episode) } }
             val episodeOnLongPress = remember(episode.id) { { optionsEpisode = episode } }
@@ -662,6 +667,7 @@ fun EpisodesRow(
                 watchProgress = progress,
                 imdbRating = imdbRating,
                 isMarkedWatched = isMarkedWatched,
+                isMarkedRewatched = isMarkedRewatched,
                 blurUnwatched = blurUnwatchedEpisodes,
                 suppressMarquee = isOverlayOpen,
                 cardMetrics = cardMetrics,
@@ -696,6 +702,10 @@ fun EpisodesRow(
                 selectedEpisode.episode?.let { episode -> episodeRatings[season to episode] }
             },
             isWatched = selectedWatched,
+            isRewatched = selectedEpisode.season?.let { season ->
+                selectedEpisode.episode?.let { episode -> rewatchedEpisodes.contains(season to episode) }
+            } ?: false,
+            hasActiveRewatch = rewatchedEpisodes.isNotEmpty(),
             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
             style = episodeOptionsOverlayStyle,
             isPending = isPending,
@@ -736,6 +746,14 @@ fun EpisodesRow(
                 onToggleEpisodeWatched(selectedEpisode)
                 optionsEpisode = null
             },
+            onMarkRewatched = {
+                onMarkEpisodeRewatched(selectedEpisode)
+                optionsEpisode = null
+            },
+            onUnmarkRewatched = {
+                onUnmarkEpisodeRewatched(selectedEpisode)
+                optionsEpisode = null
+            },
             onMarkSeasonWatched = {
                 onMarkSeasonWatched(selectedSeason)
                 optionsEpisode = null
@@ -760,6 +778,7 @@ private fun EpisodeCard(
     watchProgress: com.nuvio.tv.domain.model.WatchProgress? = null,
     imdbRating: Double? = null,
     isMarkedWatched: Boolean = false,
+    isMarkedRewatched: Boolean = false,
     blurUnwatched: Boolean = false,
     suppressMarquee: Boolean = false,
     cardMetrics: EpisodeCardMetrics,
@@ -790,6 +809,9 @@ private fun EpisodeCard(
     val progressPercent = remember(watchProgress) { watchProgress?.progressPercentage ?: 0f }
     val showProgress = remember(watchProgress) { watchProgress?.isInProgress() == true }
     val showCompletedBadge = isWatched
+    // The check marks any watched episode. The R beside it is the rewatch marker and only appears
+    // when the running session has covered this exact episode.
+    val showRewatchBadge = showCompletedBadge && isMarkedRewatched
     val showNotStartedBadge = !showCompletedBadge && !showProgress
     val isUnavailable = remember(episode.available) { episode.available == false }
     val cardBgColor = NuvioTheme.colors.BackgroundCard
@@ -1190,16 +1212,27 @@ private fun EpisodeCard(
             }
 
             if (showCompletedBadge) {
-                WatchedMarker(
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(
                             end = cardMetrics.statusBadgeInset,
                             top = cardMetrics.statusBadgeInset
                         ),
-                    size = cardMetrics.statusBadgeSize,
-                    iconSize = cardMetrics.statusIconSize
-                )
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (showRewatchBadge) {
+                        RewatchMarker(
+                            size = cardMetrics.statusBadgeSize,
+                            iconSize = cardMetrics.statusRewatchIconSize
+                        )
+                    }
+                    WatchedMarker(
+                        size = cardMetrics.statusBadgeSize,
+                        iconSize = cardMetrics.statusIconSize
+                    )
+                }
             }
 
             if (isUnavailable) {
@@ -1322,6 +1355,7 @@ private data class EpisodeCardMetrics(
     val progressBarHeight: Dp,
     val statusBadgeSize: Dp,
     val statusIconSize: Dp,
+    val statusRewatchIconSize: Dp,
     val statusBadgeInset: Dp
 )
 
@@ -1352,7 +1386,8 @@ private fun rememberEpisodeCardMetrics(posterCardCornerRadiusDp: Int = 12): Epis
                 imdbLogoHeight = 14.dp,
                 progressBarHeight = NuvioTheme.spacing.xs,
                 statusBadgeSize = NuvioTheme.spacing.xxl,
-                statusIconSize = 20.dp,
+                statusIconSize = 23.dp,
+                statusRewatchIconSize = 26.dp,
                 statusBadgeInset = NuvioTheme.spacing.lg
             )
 
@@ -1377,7 +1412,8 @@ private fun rememberEpisodeCardMetrics(posterCardCornerRadiusDp: Int = 12): Epis
                 imdbLogoHeight = 13.dp,
                 progressBarHeight = NuvioTheme.spacing.xs,
                 statusBadgeSize = 28.dp,
-                statusIconSize = 18.dp,
+                statusIconSize = 20.dp,
+                statusRewatchIconSize = 23.dp,
                 statusBadgeInset = 14.dp
             )
 
@@ -1402,7 +1438,8 @@ private fun rememberEpisodeCardMetrics(posterCardCornerRadiusDp: Int = 12): Epis
                 imdbLogoHeight = NuvioTheme.spacing.md,
                 progressBarHeight = NuvioTheme.spacing.xs,
                 statusBadgeSize = NuvioTheme.spacing.xl,
-                statusIconSize = NuvioTheme.spacing.lg,
+                statusIconSize = 17.dp,
+                statusRewatchIconSize = 19.dp,
                 statusBadgeInset = NuvioTheme.spacing.md
             )
 
@@ -1427,7 +1464,8 @@ private fun rememberEpisodeCardMetrics(posterCardCornerRadiusDp: Int = 12): Epis
                 imdbLogoHeight = 11.dp,
                 progressBarHeight = NuvioTheme.spacing.xs,
                 statusBadgeSize = 22.dp,
-                statusIconSize = 14.dp,
+                statusIconSize = 16.dp,
+                statusRewatchIconSize = 18.dp,
                 statusBadgeInset = 10.dp
             )
         }

@@ -163,7 +163,7 @@
     <string name="iptv_settings_your_order">"Jouw volgorde"</string>
     <string name="iptv_settings_channels_in_a_group">"Zenders in een groep"</string>
     <string name="iptv_settings_channel_order">"Zendervolgorde"</string>
-    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Hoe zenders in elke groep zijn gesorteerd, Favorieten inbegrepen. Playlistvolgorde houdt je eigen volgorde in Favorieten en je groepen."</string>
+    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Hoe zenders in elke groep zijn gesorteerd, Favorieten inbegrepen. Alleen Playlistvolgorde houdt je eigen volgorde (verplaatste zenders, Favorieten en je groepen)."</string>
     <string name="iptv_settings_channel_number">"Zendernummer"</string>
     <string name="iptv_settings_name">"Naam"</string>
     <string name="iptv_settings_number_channels_1_2_3_in_each_group">"Zenders 1, 2, 3… nummeren in elke groep"</string>

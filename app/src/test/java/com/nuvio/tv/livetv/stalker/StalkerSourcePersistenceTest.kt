@@ -3,6 +3,7 @@ package com.nuvio.tv.livetv.stalker
 import android.content.Context
 import com.nuvio.stalker.StalkerConfig
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.domain.model.UserProfile
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.model.PlaylistSource
 import com.nuvio.vpn.android.VpnBackup
@@ -32,8 +33,11 @@ class StalkerSourcePersistenceTest {
             every { applicationContext } returns this
             every { filesDir } returns directory
         }
-        val profiles = mockk<ProfileManager> { every { activeProfileId } returns MutableStateFlow(1) }
-        preferences = LiveTvPreferences(context, profiles)
+        val profileManager = mockk<ProfileManager> {
+            every { activeProfileId } returns MutableStateFlow(1)
+            every { profiles } returns MutableStateFlow(listOf(UserProfile(1, "Primary", "#1E88E5")))
+        }
+        preferences = LiveTvPreferences(context, profileManager)
         mockkStatic(VpnBackup::class)
         every { VpnBackup.prepareExport(any<Context>(), null) } returns "{\"version\":1,\"profiles\":[]}"
         every { VpnBackup.restoreSetup(any<Context>(), any<String>()) } just Runs

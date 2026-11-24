@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="livetv_backups_same_channel">"同一頻道"</string>
+    <string name="livetv_backups_addon_tag">"外掛"</string>
+    <string name="livetv_backups_playlist_tag">"播放清單"</string>
+    <string name="livetv_backups_quality_other">"其他畫質"</string>
+    <string name="iptv_backup_order_title">"備用與比賽頻道"</string>
+    <string name="iptv_backup_order_row_subtitle">"備用清單和快速頻道中比賽頻道的分組與排序方式"</string>
+    <string name="iptv_backup_order_gear_hint">"標題及其順序"</string>
+    <string name="iptv_backup_order_group_by">"分組方式"</string>
+    <string name="iptv_backup_order_group_by_hint">"按 OK 切換。每個標題下，頻道依下方另一種順序排列"</string>
+    <string name="iptv_backup_order_by_source">"播放清單 / 外掛"</string>
+    <string name="iptv_backup_order_by_quality">"畫質"</string>
+    <string name="iptv_backup_order_no_headings">"無標題"</string>
+    <string name="iptv_backup_order_sources">"播放清單和外掛順序"</string>
+    <string name="iptv_backup_order_sources_hint">"箭頭移動一項；新的放在最後"</string>
+    <string name="iptv_backup_order_qualities">"畫質順序"</string>
+    <string name="iptv_backup_order_qualities_hint">"如果這台電視播放 4K 卡頓，把 FHD 放到 4K 上面"</string>
+    <string name="iptv_backup_order_quality_unknown">"名稱中沒有畫質"</string>
+    <string name="iptv_backup_order_reset">"恢復預設順序"</string>
+    <string name="iptv_backup_order_no_sources">"還沒有播放清單或外掛"</string>
+</resources>

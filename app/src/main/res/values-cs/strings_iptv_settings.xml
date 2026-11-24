@@ -163,7 +163,7 @@
     <string name="iptv_settings_your_order">"Vaše pořadí"</string>
     <string name="iptv_settings_channels_in_a_group">"Kanály ve skupině"</string>
     <string name="iptv_settings_channel_order">"Pořadí kanálů"</string>
-    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Jak jsou kanály řazeny ve všech skupinách včetně Oblíbených. Pořadí playlistu zachová vaše vlastní pořadí v Oblíbených a vašich skupinách."</string>
+    <string name="iptv_settings_how_channels_are_sorted_in_every_group_favorites">"Jak jsou kanály řazeny ve všech skupinách včetně Oblíbených. Jen pořadí playlistu zachová vaše vlastní pořadí (přeřazené kanály, Oblíbené a vaše skupiny)."</string>
     <string name="iptv_settings_channel_number">"Číslo kanálu"</string>
     <string name="iptv_settings_name">"Název"</string>
     <string name="iptv_settings_number_channels_1_2_3_in_each_group">"Číslovat kanály 1, 2, 3… v každé skupině"</string>

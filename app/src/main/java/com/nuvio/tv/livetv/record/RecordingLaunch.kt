@@ -5,13 +5,14 @@ package com.nuvio.tv.livetv.record
  * in its own player; Back goes back to the screen it was picked on.
  */
 object RecordingLaunch {
-    data class Request(val recordingId: String, val fromStart: Boolean)
+    /** [poster]: the one Recordings showed for it, so the play bar shows the same. */
+    data class Request(val recordingId: String, val fromStart: Boolean, val poster: String? = null)
 
     @Volatile private var request: Request? = null
     @Volatile private var returnTo: String? = null
 
-    fun open(recordingId: String, fromStart: Boolean, returnRoute: String) {
-        request = Request(recordingId, fromStart)
+    fun open(recordingId: String, fromStart: Boolean, returnRoute: String, poster: String? = null) {
+        request = Request(recordingId, fromStart, poster)
         returnTo = returnRoute
     }
 
