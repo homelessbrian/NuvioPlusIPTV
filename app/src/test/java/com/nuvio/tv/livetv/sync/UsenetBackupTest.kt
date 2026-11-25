@@ -192,6 +192,17 @@ class UsenetBackupTest {
         verify(exactly = 1) { sources.update(any(), any()) }
     }
 
+    @Test fun `unreadable native owner preserves the recoverable legacy copy`() {
+        configurations[1] = configuration(1)
+        configurations[2] = configuration(2)
+        val legacy = JSONObject().also(backup::exportInto)
+        configurations.remove(2)
+        every { sources.read(1) } throws IllegalStateException("Local key unavailable")
+        assertThrows(IllegalStateException::class.java) { backup.migrateLegacy(legacy) }
+        verify(exactly = 0) { sources.update(any(), any()) }
+        assertTrue(legacy.has("usenet_sources_v1_p1"))
+    }
+
     @Test fun `malformed legacy values fail before adopting a missing owner profile`() {
         configurations[2] = configuration(2)
         val legacy = JSONObject().also(backup::exportInto)

@@ -42,6 +42,10 @@ class UsenetBackup @Inject constructor(
     /** Adopt values forwarded into generic settings by an older client, without replacing native edits. */
     fun migrateLegacy(data: JSONObject) {
         val restored = parse(data)
+        // Do not discard a recoverable forwarded copy while the native owner is unreadable.
+        restored.configurations.keys.filter(sources::hasSavedConfiguration).forEach { profile ->
+            check(runCatching { sources.read(profile) }.isSuccess) { "Saved Usenet sources could not be opened" }
+        }
         restored.configurations.forEach { (profile, configuration) ->
             if (!sources.hasSavedConfiguration(profile)) sources.update(configuration, profile)
         }
