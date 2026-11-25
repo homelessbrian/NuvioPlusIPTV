@@ -11,6 +11,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 - Fixed the app closing every few minutes for some people with very big playlists (thousands of channels) while the guide was updating
 - Guide display (the guide's ⚙) keeps the highlight: Left from the left column no longer slips out and opens the menu
 - Live channels connect to the provider once instead of three times (full screen and Multiview), which may stop streams cutting out when Multiview or another device starts
+- Sources that failed while the VPN (Full app) or network was still connecting are searched again once it's ready, so a missing add-on shows up without leaving and coming back
 
 ## Rewind Anytime
 
@@ -25,3 +26,4 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 ## Other
 - Live TV sync and backups now carry Usenet providers and indexers (per profile); a Backup now / backup file also keeps this TV's playback choices (passthrough, frame rate, buffer, picture size), which automatic sync still leaves per TV
 - A TV that can't open its saved Usenet logins keeps syncing everything else, and gets its Usenet logins back from the cloud copy
+- The copied Live TV report now shows VPN speed and how each Multiview screen is playing (buffering, dropped frames), to help work out slow Multiview with the VPN on
