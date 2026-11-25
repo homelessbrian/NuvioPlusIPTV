@@ -298,9 +298,8 @@ class LiveTvDriveSync @Inject constructor(
             remoteCopy(token)?.let { remote ->
                 val remoteData = remote.optJSONObject("data")
                 if (!force && remoteData != null) DeviceSettingsBackup.keepSaved(data, remoteData)
-                // A deliberate backup can rebuild a damaged comparison cache. Automatic
-                // reconciliation stops on unreadable data instead of guessing what changed.
-                val base = try { readBase() } catch (invalid: Exception) { if (!force) throw invalid else null }
+                // An unreadable comparison cache uses the same merge as a first sync.
+                val base = readBase()
                 if (remoteData != null && remoteData.toString() != base?.toString()) {
                     val merged = merge(base, local = data, remote = remoteData, localWinsWithoutBase = true, removedHere = removedHere)
                     // Back up now means this TV's device choices, even when another TV saved
@@ -505,10 +504,9 @@ class LiveTvDriveSync @Inject constructor(
             for (k in SOURCE_LISTS) {
                 val a = first.optJSONObject(k)
                 val b = second.optJSONObject(k)
-                if (b == null) continue
-                if (a == null) { out.put(k, JSONObject(b.toString())); continue }
-                runCatching { unionSources(a.optString("v"), b.optString("v"), removedHere) }.getOrNull()
-                    ?.let { out.put(k, JSONObject(a.toString()).put("v", it)) }
+                val shell = a ?: b ?: continue
+                runCatching { unionSources(a?.optString("v") ?: "[]", b?.optString("v") ?: "[]", removedHere, local.optJSONObject(k)?.optString("v")) }.getOrNull()
+                    ?.let { out.put(k, JSONObject(shell.toString()).put("v", it)) }
             }
             return out
         }
@@ -705,24 +703,39 @@ class LiveTvDriveSync @Inject constructor(
      * Two source lists combined with nothing synced to compare against: every source in [firstRaw]
      * (its versions win), then those only in [secondRaw], except ones removed on this TV.
      */
-    private fun unionSources(firstRaw: String, secondRaw: String, removedHere: Set<String>): String {
+    private fun unionSources(firstRaw: String, secondRaw: String, removedHere: Set<String>, localRaw: String?): String {
         val first = readSources(firstRaw)
+        val presentHere = readSources(localRaw).keys
         val result = org.json.JSONArray()
-        first.values.forEach { result.put(it) }
+        // A missing baseline must not resurrect an explicit removal when the remote side
+        // wins settings. A source already re-added locally still wins its stale tombstone.
+        first.forEach { (id, o) -> if (id !in removedHere || id in presentHere) result.put(o) }
         for ((id, o) in readSources(secondRaw)) {
-            if (id !in first && id !in removedHere) result.put(o)
+            if (id !in first && (id !in removedHere || id in presentHere)) result.put(o)
         }
         return result.toString()
     }
 
     private fun baseFile() = java.io.File(context.filesDir, "livetv_drive_base.json")
 
-    private fun readBase(): JSONObject? = baseFile().takeIf { it.exists() }?.let {
-        JSONObject(com.nuvio.vpn.android.VpnBackup.openCache(it.readText()))
+    private fun readBase(): JSONObject? {
+        if (!store.getBoolean(KEY_BASE_VALID, true)) return null
+        return runCatching {
+            baseFile().takeIf { it.exists() }?.let {
+                JSONObject(com.nuvio.vpn.android.VpnBackup.openCache(it.readText()))
+            }
+        }.getOrNull()
     }
 
     private fun writeBase(data: JSONObject) {
-        baseFile().writeText(com.nuvio.vpn.android.VpnBackup.sealCache(data.toString()))
+        // A failed seal/write must not leave an older cache eligible for the next merge,
+        // even if storage also refuses its deletion. Existing caches remain valid by default.
+        store.edit().putBoolean(KEY_BASE_VALID, false).apply()
+        val written = runCatching {
+            baseFile().writeText(com.nuvio.vpn.android.VpnBackup.sealCache(data.toString()))
+        }.isSuccess
+        store.edit().putBoolean(KEY_BASE_VALID, written).apply()
+        if (!written) runCatching { baseFile().delete() }
     }
 
     // ------------------------------------------------------------------ Google plumbing
@@ -849,6 +862,7 @@ class LiveTvDriveSync @Inject constructor(
         const val KEY_AUTO = "auto_sync"
         const val KEY_FILE_ID = "file_id"
         const val KEY_LAST_HASH = "last_hash"
+        private const val KEY_BASE_VALID = "base_valid"
         const val KEY_LAST_SYNC = "last_sync"
         const val KEY_APPLIED_AT = "applied_at"
         const val KEY_LOCAL_CHANGED_AT = "local_changed_at"

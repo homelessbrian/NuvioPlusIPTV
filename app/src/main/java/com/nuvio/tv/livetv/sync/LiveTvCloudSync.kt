@@ -540,9 +540,15 @@ class LiveTvCloudSync @Inject constructor(
 
     /** Remembers what both sides now agree on: the starting point for the next combine. */
     private suspend fun saved(uid: String, data: JSONObject, removedHere: Set<String>) {
-        baseFile().writeText(com.nuvio.vpn.android.VpnBackup.sealCache(parts.strip(data).toString()))
+        // Invalidate the old account/cache before writing: failed encryption can leave its
+        // file untouched. Cache persistence is optional after a successful reconciliation.
+        store.edit().remove(KEY_BASE_USER).apply()
+        val written = runCatching {
+            baseFile().writeText(com.nuvio.vpn.android.VpnBackup.sealCache(parts.strip(data).toString()))
+        }.isSuccess
+        if (!written) runCatching { baseFile().delete() }
         store.edit()
-            .putString(KEY_BASE_USER, uid)
+            .also { if (written) it.putString(KEY_BASE_USER, uid) }
             .putLong(KEY_LAST_SYNC, System.currentTimeMillis())
             .putString(KEY_LOCAL_HASH, sha(localView().toString()))
             .apply()
@@ -555,9 +561,11 @@ class LiveTvCloudSync @Inject constructor(
     /** What both sides last agreed on, but only if it was for this account. */
     private fun readBase(uid: String): JSONObject? {
         if (store.getString(KEY_BASE_USER, null) != uid) return null
-        return baseFile().takeIf { it.exists() }?.let {
-            JSONObject(com.nuvio.vpn.android.VpnBackup.openCache(it.readText()))
-        }
+        return runCatching {
+            baseFile().takeIf { it.exists() }?.let {
+                JSONObject(com.nuvio.vpn.android.VpnBackup.openCache(it.readText()))
+            }
+        }.getOrNull()
     }
 
     // ------------------------------------------------------------------ the service
