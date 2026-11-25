@@ -173,6 +173,7 @@ class LiveTvPreferences @Inject constructor(
         val onDemandPlayDirect = booleanPreferencesKey("on_demand_play_direct")
         val searchOrder = stringPreferencesKey("search_order")
         val searchPreview = booleanPreferencesKey("search_preview")
+        val searchResultsView = stringPreferencesKey("search_results_view")
         val onDemandAddonPosters = booleanPreferencesKey("on_demand_addon_posters")
         val groupPlaylistHeadings = booleanPreferencesKey("group_playlist_headings")
         /** This TV has had Group by Playlist turned on once (per TV, never synced). */
@@ -675,6 +676,7 @@ class LiveTvPreferences @Inject constructor(
             onDemandPlayDirect = p[Keys.onDemandPlayDirect] ?: d.onDemandPlayDirect,
             searchOrder = p[Keys.searchOrder] ?: d.searchOrder,
             searchPreview = p[Keys.searchPreview] ?: d.searchPreview,
+            searchResultsView = p[Keys.searchResultsView] ?: d.searchResultsView,
             onDemandAddonPosters = p[Keys.onDemandAddonPosters] ?: d.onDemandAddonPosters,
             groupPlaylistHeadings = p[Keys.groupPlaylistHeadings] ?: d.groupPlaylistHeadings,
             nameRemovals = p[Keys.nameRemovals] ?: d.nameRemovals,
@@ -1031,6 +1033,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.onDemandPlayDirect] = s.onDemandPlayDirect
         p[Keys.searchOrder] = s.searchOrder
         p[Keys.searchPreview] = s.searchPreview
+        p[Keys.searchResultsView] = s.searchResultsView
         p[Keys.onDemandAddonPosters] = s.onDemandAddonPosters
         p[Keys.groupPlaylistHeadings] = s.groupPlaylistHeadings
         p[Keys.nameRemovals] = s.nameRemovals
@@ -1754,6 +1757,14 @@ class LiveTvPreferences @Inject constructor(
         store.edit {
             it[my(Keys.recent)] = encodeStringList(emptyList())
             it[my(Keys.recentGroups)] = encodeStringMap(emptyMap())
+        }
+    }
+
+    /** Takes one channel out of Recently Watched (and forgets the group it was opened from). */
+    suspend fun removeRecent(key: String) {
+        store.edit { p ->
+            p[my(Keys.recent)] = encodeStringList(decodeStringList(p[my(Keys.recent)]).filter { it != key })
+            p[my(Keys.recentGroups)] = encodeStringMap(decodeStringMap(p[my(Keys.recentGroups)]).filterKeys { it != key })
         }
     }
 

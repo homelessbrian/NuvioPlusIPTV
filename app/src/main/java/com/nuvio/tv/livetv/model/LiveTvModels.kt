@@ -599,6 +599,8 @@ data class LiveTvSettings(
     val searchOrder: String = "live,ondemand,catalog",
     /** OK on a channel in search plays it behind the results first (OK again: full screen). */
     val searchPreview: Boolean = true,
+    /** How Live TV results look in search: "posters" (the original row), "cards" (wide cards in a grid) or "list". */
+    val searchResultsView: String = "cards",
     /** On Demand posters from your own addons (off = the provider's images only). */
     val onDemandAddonPosters: Boolean = true,
     /** Several playlists: list each playlist's groups under a foldable heading. */
@@ -1051,6 +1053,8 @@ object LiveTvLoadReport {
     fun add(text: String) {
         val t = (System.currentTimeMillis() - startedAt) / 100 / 10.0
         lines.value = (lines.value + "+${t}s  $text").takeLast(160)
+        // Also in the system log, so the timings can be read off the box (adb logcat -s LiveTvReport).
+        runCatching { android.util.Log.i("LiveTvReport", "+${t}s  $text") }
     }
 
     /** The device, for the top of the short report. */

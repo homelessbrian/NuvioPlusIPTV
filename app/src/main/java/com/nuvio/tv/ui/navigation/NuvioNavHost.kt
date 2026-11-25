@@ -1538,6 +1538,13 @@ private fun PlaybackNavHost(
 
         forkPageComposable(Screen.LiveTv.route) {
             com.nuvio.tv.livetv.ui.LiveTvGuideScreen(
+                // Only these sit on top of the guide and come back to it; anywhere else counts as leaving Live TV.
+                leftLiveTv = {
+                    navController.currentDestination?.route !in setOf(
+                        Screen.LiveTvPlayer.route, Screen.LiveTvSettings.route, Screen.Recordings.route,
+                        Screen.LiveTvMultiview.route, Screen.SportsMultiview.route, Screen.Search.route
+                    )
+                },
                 onOpenFullscreen = {
                     navController.navigate(Screen.LiveTvPlayer.route) { launchSingleTop = true }
                 },

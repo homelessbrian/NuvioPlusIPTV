@@ -19,6 +19,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -269,26 +271,127 @@ fun LiveTvSearchRow(
     menuFor?.let { hit ->
         results.viewModel?.let { vm -> ChannelQuickMenu(hit.channel, vm, program = hit.program, onDismiss = { menuFor = null }) }
     }
-    val previewOn = results.viewModel?.settings?.collectAsStateWithLifecycle()?.value?.searchPreview ?: false
-    SearchResultsRow(title = "Live TV", modifier = modifier) {
-        itemsIndexed(results.hits, key = { _, h -> h.channel.key }) { index, hit ->
-            LiveSearchCard(
-                hit = hit,
-                playlistName = results.playlistNames[hit.channel.sourceId],
-                posterFor = results.posterFor,
-                posterCardStyle = posterCardStyle,
-                playing = hit.channel.key == results.previewKey,
-                modifier = Modifier
-                    .then(if (index == 0 && entryFocusRequester != null) Modifier.focusRequester(entryFocusRequester) else Modifier)
-                    .focusProperties { if (upFocusRequester != null) up = upFocusRequester },
-                onClick = {
-                    if (previewOn && hit.channel.key != results.previewKey) results.preview(hit) else results.open(hit)
-                },
-                onLongClick = { menuFor = hit }
+    val settingsNow = results.viewModel?.settings?.collectAsStateWithLifecycle()?.value
+    val previewOn = settingsNow?.searchPreview ?: false
+    val view = settingsNow?.searchResultsView?.takeIf { it == "posters" || it == "list" } ?: "cards"
+    // Channel names are long, so there are three ways to see the results (the button next to the
+    // heading changes it, and it's remembered): the original poster row, wide cards in a grid, or a list.
+    // The cards and the list start with a dozen results, then "Show more".
+    var shown by remember(results.hits) { mutableStateOf(WIDE_FIRST) }
+    val count = minOf(shown, results.hits.size)
+    val chipFocus = remember { FocusRequester() }
+    val nextView = when (view) { "posters" -> "cards"; "cards" -> "list"; else -> "posters" }
+    val viewName = when (view) { "posters" -> "Posters"; "list" -> "List"; else -> "Cards" }
+    fun cardFor(index: Int, style: String, upToChip: Boolean, modifier: Modifier = Modifier): @Composable () -> Unit = {
+        val hit = results.hits[index]
+        LiveSearchCard(
+            hit = hit,
+            playlistName = results.playlistNames[hit.channel.sourceId],
+            posterFor = results.posterFor,
+            posterCardStyle = posterCardStyle,
+            playing = hit.channel.key == results.previewKey,
+            style = style,
+            modifier = modifier
+                .then(if (index == 0 && entryFocusRequester != null) Modifier.focusRequester(entryFocusRequester) else Modifier)
+                .focusProperties { if (upToChip) up = chipFocus },
+            onClick = {
+                if (previewOn && hit.channel.key != results.previewKey) results.preview(hit) else results.open(hit)
+            },
+            onLongClick = { menuFor = hit }
+        )
+    }
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xxxl, bottom = NuvioTheme.spacing.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.tv.material3.Text(
+                text = "Live TV",
+                style = androidx.tv.material3.MaterialTheme.typography.headlineMedium,
+                color = NuvioTheme.colors.TextPrimary,
+                maxLines = 1
             )
+            Spacer(Modifier.width(18.dp))
+            ViewChip(
+                label = "View: $viewName",
+                modifier = Modifier
+                    .focusRequester(chipFocus)
+                    .focusProperties { if (upFocusRequester != null) up = upFocusRequester },
+                onClick = { results.viewModel?.updateSettings { it.copy(searchResultsView = nextView) } }
+            )
+        }
+        if (view == "posters") {
+            LazyRow(
+                contentPadding = PaddingValues(start = NuvioTheme.spacing.xxxl, end = 200.dp),
+                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg)
+            ) {
+                itemsIndexed(results.hits, key = { _, h -> h.channel.key }) { index, _ -> cardFor(index, "posters", index < 1)() }
+            }
+        } else {
+            val cols = if (view == "list") 1 else WIDE_COLUMNS
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(start = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xxxl),
+                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
+            ) {
+                (0 until count).chunked(cols).forEach { rowIdx ->
+                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)) {
+                        rowIdx.forEach { index ->
+                            Box(Modifier.weight(1f).fillMaxHeight()) { cardFor(index, view, index < cols)() }
+                        }
+                        repeat(cols - rowIdx.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                if (count < results.hits.size) {
+                    val more = minOf(WIDE_MORE, results.hits.size - count)
+                    Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)) {
+                        Box(Modifier.weight(1f)) {
+                            SearchResultWideCard(
+                                title = "Show $more more",
+                                lines = listOf("${results.hits.size - count} more channels match"),
+                                poster = null, logo = null, thumbText = "+$more",
+                                posterCardStyle = posterCardStyle,
+                                onClick = { shown = count + more }
+                            )
+                        }
+                        repeat(cols - 1) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
         }
     }
 }
+
+/** The small button by the heading that changes how the results look (OK: the next view). */
+@Composable
+private fun ViewChip(label: String, modifier: Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(50)
+    LiveText(
+        label,
+        modifier = modifier
+            .clip(shape)
+            .background(if (focused) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.06f))
+            .border(
+                if (focused) NuvioTheme.focusRing.border(2.dp) else androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                shape
+            )
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        color = Color.White,
+        size = 12.sp,
+        weight = FontWeight.Bold
+    )
+}
+
+private const val WIDE_COLUMNS = 3
+private const val WIDE_FIRST = 12
+private const val WIDE_MORE = 24
+
+private fun channelInitials(name: String): String =
+    name.substringAfterLast(':').substringAfterLast('|').trim()
+        .split(' ', '-', '_').filter { it.firstOrNull()?.isLetterOrDigit() == true }
+        .take(2).joinToString("") { it.first().uppercase() }
 
 /**
  * The channel picked in search, playing full size behind the results under a dark veil so the
@@ -339,6 +442,7 @@ private fun LiveSearchCard(
     posterFor: suspend (LiveSearchHit) -> String?,
     posterCardStyle: com.nuvio.tv.ui.components.PosterCardStyle,
     playing: Boolean,
+    style: String,
     modifier: Modifier,
     onClick: () -> Unit,
     onLongClick: () -> Unit
@@ -355,41 +459,70 @@ private fun LiveSearchCard(
         posterFor(hit)?.let { value = it }
     }
     val title = p?.title?.takeIf { !LiveTvRepository.isPlaceholderTitle(it) }?.let { titleMarks(it).title } ?: hit.channel.name
-    SearchResultCard(
-        title = title,
-        lines = listOfNotNull("CH: ${hit.channel.name}", playlistName),
-        poster = poster,
-        logo = hit.channel.logo,
-        posterCardStyle = posterCardStyle,
-        modifier = modifier,
-        onClick = onClick,
-        onLongClick = onLongClick,
-        badge = {
-            val tag = when {
-                playing -> "PLAYING"
-                live -> "LIVE"
-                upcoming -> "UPCOMING"
-                else -> null
-            }
-            tag?.let {
-                LiveText(
-                    it,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (live || playing) NuvioTheme.colors.Error else Color.Black.copy(alpha = 0.75f))
-                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                    color = Color.White,
-                    size = 10.sp,
-                    weight = FontWeight.Bold
-                )
-            }
-            if (live) {
-                ProgressBar(p!!.progress(now), Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp))
-            }
+    val channelLine = if (title != hit.channel.name) "CH: ${hit.channel.name}" else null
+    val tagBadge: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {
+        val tag = when {
+            playing -> "PLAYING"
+            live -> "LIVE"
+            upcoming -> "UPCOMING"
+            else -> null
         }
-    )
+        tag?.let {
+            LiveText(
+                it,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (live || playing) NuvioTheme.colors.Error else Color.Black.copy(alpha = 0.75f))
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+                color = Color.White,
+                size = 10.sp,
+                weight = FontWeight.Bold
+            )
+        }
+        if (live) {
+            ProgressBar(p!!.progress(now), Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp))
+        }
+    }
+    when (style) {
+        "posters" -> SearchResultCard(
+            title = title,
+            lines = listOfNotNull("CH: ${hit.channel.name}", playlistName),
+            poster = poster,
+            logo = hit.channel.logo,
+            posterCardStyle = posterCardStyle,
+            modifier = modifier,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            badge = tagBadge
+        )
+        "list" -> SearchResultListRow(
+            title = title,
+            channel = channelLine,
+            playlist = playlistName,
+            poster = poster,
+            logo = hit.channel.logo,
+            thumbText = channelInitials(hit.channel.name),
+            posterCardStyle = posterCardStyle,
+            modifier = modifier,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            badge = tagBadge
+        )
+        else -> SearchResultWideCard(
+            title = title,
+            lines = listOfNotNull(channelLine, playlistName),
+            poster = poster,
+            logo = hit.channel.logo,
+            thumbText = channelInitials(hit.channel.name),
+            posterCardStyle = posterCardStyle,
+            modifier = modifier,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            badge = tagBadge
+        )
+    }
 }
 
 private fun startsInLabel(ms: Long): String {
