@@ -125,6 +125,9 @@ class TsSegmenter(
         }
         if (pcr >= 0 && (pcrPid < 0 || pid == pcrPid)) {
             if (pcrPid < 0) pcrPid = pid
+            // Tables can open the first piece before its clock arrives. Start measuring it
+            // from that first PCR too, rather than timing a buffered download by wall clock.
+            if (out != null && pieceStartPcr < 0) pieceStartPcr = pcr
             lastPcr = pcr
         }
 
