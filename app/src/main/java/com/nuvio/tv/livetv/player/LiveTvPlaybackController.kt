@@ -2541,6 +2541,12 @@ class LiveTvPlaybackController @Inject constructor(
             forcedMime = forcedMime,
             bufferSize = bufferSize,
             stalkerPolicy = stalkerMediaPolicy,
+            continuousTs = isLive && !replayLocal && savedRecordingId == null && savedRecordingPlaylist == null &&
+                _recordingPlayback.value == null && _shiftStartedAt.value == null && timeshift.session == null &&
+                currentChannel?.let { channel ->
+                    channel.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
+                        channel.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID
+                } == true,
         ).build(url, headers, isLive)
     }
 
