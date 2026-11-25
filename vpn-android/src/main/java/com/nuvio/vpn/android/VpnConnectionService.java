@@ -313,6 +313,8 @@ public final class VpnConnectionService extends android.net.VpnService {
     private void poll() {
         if (destroyed || engine == null) return;
         long token = generation.get();
+        long previousSession = verifiedSession;
+        boolean previouslyConnected = current.phase == Phase.CONNECTED;
         try {
             if (!matchesSettings()) { end(); return; }
             if (engine instanceof HttpStreamTunnel && !((HttpStreamTunnel) engine).isConfigured()) {
@@ -403,6 +405,10 @@ public final class VpnConnectionService extends android.net.VpnService {
                 VpnPlaybackProtection.connectionRecovered();
             }
             current = new Snapshot(phase, stats.received, stats.sent, verified ? egress : null);
+            if (verified && scope == ProtectionMode.APP_WIDE
+                    && (!previouslyConnected || previousSession != verifiedSession)) {
+                VpnPlaybackProtection.networkRecovered();
+            }
             if (verified && egress == null && egressLookup == null
                     && (lastEgressProbe == 0 || now - lastEgressProbe >= 60000)) {
                 lastEgressProbe = now;

@@ -71,9 +71,15 @@ class StreamRepositoryImpl @Inject constructor(
     private val localDebridAvailabilityService: LocalDebridAvailabilityService,
     private val usenetSourceSettings: UsenetSourceSettings,
     private val builtInUsenetService: BuiltInUsenetService,
-    private val serverStreams: ServerStreams
+    private val serverStreams: ServerStreams,
+    private val networkRecovery: com.nuvio.tv.core.network.SourceNetworkRecovery
 ) : StreamRepository {
-    private val streamSearchSessions = StreamSearchSessionCache()
+    private val streamSearchSessions = StreamSearchSessionCache(networkGeneration = { networkRecovery.generation.value })
+    override val sourceNetworkRecovery: Flow<Long> get() = networkRecovery.generation
+
+    override suspend fun needsSourceRecovery(type: String, videoId: String, season: Int?, episode: Int?, priorityBingeGroup: String?): Boolean =
+        streamSearchSessions.needsRecovery(buildStreamSearchRequestKey(captureSourceConfiguration(), type, videoId, season, episode,
+            priorityBingeGroup = priorityBingeGroup))
     private val localPluginSearchPaused = MutableStateFlow(false)
 
     override fun setLocalPluginSearchPaused(paused: Boolean) {
@@ -130,7 +136,7 @@ class StreamRepositoryImpl @Inject constructor(
             streamSearchSessions.observe(
                 key = requestKey,
                 forceRefresh = forceRefresh
-            ) {
+            ) { attempt ->
                 fetchStreamsFromAllSources(
                     type = type,
                     videoId = videoId,
@@ -150,7 +156,8 @@ class StreamRepositoryImpl @Inject constructor(
                     priorityBingeGroup = priorityBingeGroup,
                     preferredPluginOnly = preferredPluginOnly,
                     continuePluginOnly = continuePluginOnly,
-                    contentId = contentId
+                    contentId = contentId,
+                    attempt = attempt
                 )
             }.map { result ->
                 // Cached results predate releases tried since: label and arrange them on every delivery.
@@ -255,7 +262,8 @@ class StreamRepositoryImpl @Inject constructor(
         priorityBingeGroup: String?,
         preferredPluginOnly: Boolean,
         continuePluginOnly: Boolean,
-        contentId: String? = null
+        contentId: String? = null,
+        attempt: StreamSearchAttempt
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
         emit(NetworkResult.Loading)
 
@@ -265,12 +273,13 @@ class StreamRepositoryImpl @Inject constructor(
             val streamAddons = if (continuePluginOnly) {
                 emptyList()
             } else {
-                addons.filter { addon ->
-                    addon.supportsStreamResource(type, videoId)
+                addons.withIndex().filter { (index, addon) ->
+                    attempt.includes("addon:$index") && addon.supportsStreamResource(type, videoId)
                 }
             }
+            val retryServers = serverSources.withIndex().filter { attempt.includes("server:${it.index}") }
 
-            val attemptedAddonNames = streamAddons.map { it.displayName } + serverSources.map { it.name } +
+            val attemptedAddonNames = streamAddons.map { it.value.displayName } + retryServers.map { it.value.name } +
                 if (usenetSources.ready) listOf(BuiltInUsenetService.GROUP_NAME) else emptyList()
             val attemptedFailures = java.util.Collections.synchronizedList(
                 mutableListOf<StreamAttemptFailure>()
@@ -284,15 +293,16 @@ class StreamRepositoryImpl @Inject constructor(
                 val resultChannel = Channel<AddonStreams>(Channel.UNLIMITED)
                 
                 // Track number of pending jobs
-                val totalJobs = streamAddons.size + 2 + serverSources.size
+                val totalJobs = streamAddons.size + 2 + retryServers.size
                 val completedJobs = java.util.concurrent.atomic.AtomicInteger(0)
 
                 launch {
                     try {
-                        if (!usenetSources.ready) return@launch
+                        if (!usenetSources.ready || !attempt.includes("usenet")) return@launch
                         builtInUsenetService.search(usenetSources, type, videoId, season, episode, contentId).collect { result ->
                             result.group?.let { resultChannel.send(it) }
                             result.failure?.let {
+                                attempt("usenet")
                                 attemptedFailures += StreamAttemptFailure(BuiltInUsenetService.GROUP_NAME,
                                     StreamFailureKind.REQUEST_FAILED, it)
                             }
@@ -301,6 +311,7 @@ class StreamRepositoryImpl @Inject constructor(
                         // Like addon jobs: a failure here must not cancel the sibling searches.
                         if (e is CancellationException) throw e
                         Log.e(TAG, "Built-in Usenet search failed: ${e.javaClass.simpleName}")
+                        attempt("usenet")
                         attemptedFailures += StreamAttemptFailure(BuiltInUsenetService.GROUP_NAME,
                             StreamFailureKind.REQUEST_FAILED,
                             context.getString(com.nuvio.tv.R.string.stream_error_detail_addon_request_failed))
@@ -310,7 +321,7 @@ class StreamRepositoryImpl @Inject constructor(
                 }
 
                 // Launch addon jobs
-                streamAddons.forEach { addon ->
+                streamAddons.forEach { (sourceIndex, addon) ->
                     launch {
                         try {
                             val streamsResult = getStreamsFromAddon(addon, type, videoId)
@@ -347,13 +358,16 @@ class StreamRepositoryImpl @Inject constructor(
                                     }
                                 }
                                 is NetworkResult.Error -> {
-                                    attemptedFailures += buildAddonFailure(addon, streamsResult)
+                                    val failure = buildAddonFailure(addon, streamsResult)
+                                    attemptedFailures += failure
+                                    if (failure.kind == StreamFailureKind.REQUEST_FAILED) attempt("addon:$sourceIndex")
                                 }
                                 NetworkResult.Loading -> Unit
                             }
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
                             Log.e(TAG, "Addon ${addon.name} failed: ${e.message}")
+                            attempt("addon:$sourceIndex")
                             attemptedFailures += StreamAttemptFailure(
                                 addonName = addon.displayName,
                                 kind = StreamFailureKind.REQUEST_FAILED,
@@ -367,7 +381,7 @@ class StreamRepositoryImpl @Inject constructor(
                     }
                 }
 
-                serverSources.forEach { source ->
+                retryServers.forEach { (sourceIndex, source) ->
                     launch {
                         try {
                             val streams = source.load()
@@ -382,6 +396,7 @@ class StreamRepositoryImpl @Inject constructor(
                             }
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
+                            attempt("server:$sourceIndex")
                             attemptedFailures += StreamAttemptFailure(
                                 addonName = source.name,
                                 kind = StreamFailureKind.REQUEST_FAILED,
@@ -397,7 +412,7 @@ class StreamRepositoryImpl @Inject constructor(
 
                 launch {
                     try {
-                        if (!hasCompatiblePlugins) return@launch
+                        if (!hasCompatiblePlugins || !attempt.includes("plugins")) return@launch
 
                         val tmdbId = tmdbService.ensureTmdbId(videoId, type)
                         Log.d(TAG, "Video ID: $videoId -> TMDB ID: $tmdbId (type: $type)")
@@ -417,7 +432,8 @@ class StreamRepositoryImpl @Inject constructor(
                                 episode = pluginEpisode,
                                 priorityBingeGroup = priorityBingeGroup,
                                 preferredPluginOnly = preferredPluginOnly,
-                                resultChannel = resultChannel
+                                resultChannel = resultChannel,
+                                onRequestFailure = { attempt("plugins") }
                             )
                         }
                         if (continuePluginOnly) {
@@ -437,6 +453,7 @@ class StreamRepositoryImpl @Inject constructor(
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
                         Log.e(TAG, "Plugin execution failed: ${e.message}")
+                        attempt("plugins")
                     } finally {
                         if (completedJobs.incrementAndGet() >= totalJobs) {
                             resultChannel.close()
@@ -471,6 +488,7 @@ class StreamRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.e(TAG, "Failed to fetch streams: ${e.message}", e)
+            attempt()
             emit(NetworkResult.Error(e.message ?: context.getString(com.nuvio.tv.R.string.stream_error_fetch_failed)))
         }
     }
@@ -609,7 +627,8 @@ class StreamRepositoryImpl @Inject constructor(
         episode: Int?,
         priorityBingeGroup: String?,
         preferredPluginOnly: Boolean,
-        resultChannel: Channel<AddonStreams>
+        resultChannel: Channel<AddonStreams>,
+        onRequestFailure: () -> Unit
     ) {
         // Check if plugins are enabled
         if (!pluginManager.pluginsEnabled.first()) {
@@ -650,6 +669,7 @@ class StreamRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.e(TAG, "Failed to stream plugins: ${e.message}", e)
+            onRequestFailure()
         }
     }
 

@@ -56,6 +56,7 @@ import com.nuvio.tv.ui.util.localizedGenreLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -119,8 +120,12 @@ class StreamScreenViewModel @Inject constructor(
     private var autoPlayInstalledAddonNames: Set<String> = emptySet()
     private var isTorrentStreamStarted = false
     private var streamLoadJob: Job? = null
+    private var sourceCollectionCompleted: CompletableDeferred<Unit>? = null
     private var streamLoadScope: kotlinx.coroutines.CoroutineScope? = null
     private var streamLoadCompleted = false
+    private var streamLoadRequestId = 0L
+    private var sourceRecoveryJob: Job? = null
+    private var currentSearchPriorityBingeGroup: String? = null
     private val usenetPrefetchOwner = Any()
     private var usenetSelectionStarted = false
     private var sourceChipErrorDismissJob: Job? = null
@@ -163,6 +168,7 @@ class StreamScreenViewModel @Inject constructor(
     private val contentLanguage: String? = savedStateHandle.getOptionalString("contentLanguage")
     private val playbackProfileId: Int = savedStateHandle.get<String>("profileId")?.toIntOrNull()
         ?: profileManager.activeProfileId.value
+    private val currentProfileId = profileManager.activeProfileId
     private val manualSelection: Boolean = savedStateHandle.get<String>("manualSelection")
         ?.toBooleanStrictOrNull()
         ?: false
@@ -340,6 +346,9 @@ class StreamScreenViewModel @Inject constructor(
         }
         loadMissingMetaDetailsIfNeeded()
         loadStreams()
+        viewModelScope.launch {
+            streamRepository.sourceNetworkRecovery.collect { recoverSourcesAfterNetwork() }
+        }
     }
 
     private fun SavedStateHandle.getOptionalString(key: String): String? {
@@ -400,6 +409,7 @@ class StreamScreenViewModel @Inject constructor(
                 if (!streamLoadCompleted && streamLoadJob == null) {
                     loadStreams()
                 }
+                recoverSourcesAfterNetwork()
             }
         }
     }
@@ -421,7 +431,38 @@ class StreamScreenViewModel @Inject constructor(
         return streamAutoPlayMode != StreamAutoPlayMode.MANUAL
     }
 
-    private fun loadStreams(forceRefresh: Boolean = false) {
+    private fun recoverSourcesAfterNetwork() {
+        sourceRecoveryJob?.cancel()
+        val request = streamLoadRequestId
+        val completed = sourceCollectionCompleted
+        sourceRecoveryJob = viewModelScope.launch {
+            // The outer load may still be waiting for its autoplay watchdog after sources end.
+            completed?.await()
+            fun mayRecover(): Boolean = request == streamLoadRequestId && hostInForeground.value &&
+                currentProfileId.value == playbackProfileId && !externalPlaybackTracker.isTracking &&
+                !usenetSelectionStarted && _uiState.value.autoPlayStream == null &&
+                _uiState.value.autoPlayPlaybackInfo == null
+            if (!mayRecover()) return@launch
+            val needed = try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    streamRepository.needsSourceRecovery(contentType, videoId, season, episode, currentSearchPriorityBingeGroup)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { false }
+            ensureActive()
+            if (needed && mayRecover()) loadStreams(recovering = true)
+        }
+    }
+
+    private fun loadStreams(forceRefresh: Boolean = false, recovering: Boolean = false) {
+        if (!recovering) sourceRecoveryJob?.cancel()
+        streamLoadRequestId += 1
+        if (recovering) {
+            // Refresh the visible picker; network recovery must never select or start playback.
+            autoPlayHandledForSession = true
+            directAutoPlayModeInitializedForSession = true
+            directAutoPlayFlowEnabledForSession = false
+        }
         usenetSelectionStarted = false
         if (forceRefresh) com.nuvio.tv.core.usenet.UsenetSidecar.peek()?.cancelPrefetch(usenetPrefetchOwner)
         streamRepository.setLocalPluginSearchPaused(false)
@@ -436,6 +477,8 @@ class StreamScreenViewModel @Inject constructor(
         sourceChipErrorDismissJob?.cancel()
         val newScope = kotlinx.coroutines.CoroutineScope(viewModelScope.coroutineContext + kotlinx.coroutines.SupervisorJob())
         streamLoadScope = newScope
+        val collectionCompleted = CompletableDeferred<Unit>()
+        sourceCollectionCompleted = collectionCompleted
         streamLoadJob = newScope.launch {
             streamLoadCompleted = false
             val playerSettings = playerSettingsDataStore.playerSettings.first()
@@ -601,6 +644,7 @@ class StreamScreenViewModel @Inject constructor(
                 playerSettings.streamAutoPlayReuseBingeGroup) {
                 contentId?.let { bingeGroupCacheDataStore.get(it) }
             } else null
+            currentSearchPriorityBingeGroup = persistedBingeGroup
             val persistedFilename = if (persistedBingeGroup != null) {
                 contentId?.let { bingeGroupCacheDataStore.getFilename(it) }
             } else null
@@ -609,8 +653,11 @@ class StreamScreenViewModel @Inject constructor(
             } else null
 
             fun applySuccess(addonStreamGroups: List<AddonStreams>, isAllLoaded: Boolean) {
+                val visibleGroups = if (recovering) {
+                    (_uiState.value.addonStreams + addonStreamGroups).associateBy { it.addonName }.values.toList()
+                } else addonStreamGroups
                 val orderedAddonStreams = StreamAutoPlaySelector.orderAddonStreams(
-                    addonStreamGroups,
+                    visibleGroups,
                     sourceOrder,
                     preferredServerNames
                 )
@@ -1000,6 +1047,8 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
 
+            streamLoadInner.invokeOnCompletion { collectionCompleted.complete(Unit) }
+
             // Timeout semantics:
             // - 0 (instant): timeoutElapsed immediately, first addon response
             //   triggers auto-select; if no match -> dismiss overlay at once.
@@ -1111,6 +1160,11 @@ class StreamScreenViewModel @Inject constructor(
             // would block resumption on return.
             ensureActive()
             streamLoadCompleted = true
+            // A recovery can precede a slow request's failure. Recheck when that old run ends.
+            recoverSourcesAfterNetwork()
+        }.also { outer ->
+            // Also release waiters for embedded sources, failed setup, or a cancelled load.
+            outer.invokeOnCompletion { collectionCompleted.complete(Unit) }
         }
     }
 

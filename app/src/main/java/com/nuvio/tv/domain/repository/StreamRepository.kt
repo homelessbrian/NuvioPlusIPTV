@@ -7,6 +7,11 @@ import com.nuvio.tv.domain.model.Stream
 import kotlinx.coroutines.flow.Flow
 
 interface StreamRepository {
+    /** Actual network/VPN recovery; settings edits and traffic polls do not imply readiness. */
+    val sourceNetworkRecovery: Flow<Long> get() = kotlinx.coroutines.flow.emptyFlow()
+
+    suspend fun needsSourceRecovery(type: String, videoId: String, season: Int?, episode: Int?, priorityBingeGroup: String?): Boolean = false
+
     /** Suspends local plugin work while playback owns the device, then resumes the same search. */
     fun setLocalPluginSearchPaused(paused: Boolean)
 
