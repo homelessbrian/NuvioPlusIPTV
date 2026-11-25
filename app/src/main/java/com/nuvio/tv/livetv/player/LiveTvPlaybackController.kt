@@ -198,9 +198,14 @@ class LiveTvPlaybackController @Inject constructor(
         shiftJob = scope.launch {
             var waited = 0
             val f = java.io.File(session.playUri.path ?: "")
-            while (waited < 15_000 && !(f.exists() && f.length() > 0)) { delay(200); waited += 200 }
+            // TS publishes a short first piece before the next six-second piece is ready.
+            // Start with the intended live offset already saved, rather than play that short
+            // piece and run out. HLS already saves its own lead-in before publishing a playlist.
+            fun ready() = f.exists() && f.length() > 0 &&
+                (session.kind != LiveTvTimeshift.Kind.TS || timeshift.savedMs >= LOCAL_LIVE_OFFSET_MS)
+            while (waited < 15_000 && !ready()) { delay(200); waited += 200 }
             if (timeshift.session != session) return@launch
-            if (!f.exists()) { bufferFailed(); return@launch }
+            if (!ready()) { bufferFailed(); return@launch }
             p.setMediaSource(localRecordingSource(session.playUri))
             p.prepare()
             p.playWhenReady = true
@@ -710,7 +715,7 @@ class LiveTvPlaybackController @Inject constructor(
      * growing "live" playlist the player would otherwise speed up a little to catch up with the
      * end of it, creeping towards live.
      */
-    internal fun localRecordingSource(uri: android.net.Uri, offsetMs: Long = 8_000): androidx.media3.exoplayer.source.MediaSource {
+    internal fun localRecordingSource(uri: android.net.Uri, offsetMs: Long = LOCAL_LIVE_OFFSET_MS): androidx.media3.exoplayer.source.MediaSource {
         adaptiveBuffer.sourceChanged()
         val playUri = com.nuvio.tv.livetv.record.NetworkFolderStore.playUriFor(uri) ?: uri
         val generatedTs = uri.scheme == "file" && playUri == uri &&
@@ -2627,6 +2632,8 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     companion object {
+        /** Rewind Anytime starts with this much published TS media, matching its live offset. */
+        private const val LOCAL_LIVE_OFFSET_MS = 8_000L
         /** A sports addon stream needs at least this much timeline to pause and skip in it by itself. */
         private const val OWN_MIN_MS = 60_000L
         /** A live sports addon stream with at least this much rewind window is paused and skipped in by itself. */
