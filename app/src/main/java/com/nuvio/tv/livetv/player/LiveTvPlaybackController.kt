@@ -1904,6 +1904,9 @@ class LiveTvPlaybackController @Inject constructor(
             .setTargetBufferBytes(targetBufferBytes)
             .build()
         return ExoPlayer.Builder(context, renderers)
+            // Full-screen MatchFrameRate owns display switching. Previews and the Off setting
+            // must not leave Media3's automatic Surface frame-rate hints active.
+            .setVideoChangeFrameRateStrategy(androidx.media3.common.C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
             .setLoadControl(adaptiveBuffer.wrapLoadControl(loadControl, targetBufferBytes))
             // Take part in Android's audio focus like other media apps: when something else starts
             // playing sound (another app, a launcher's video wallpaper with sound…), Live TV pauses.
