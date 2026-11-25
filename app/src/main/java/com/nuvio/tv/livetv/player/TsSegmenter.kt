@@ -100,6 +100,15 @@ class TsSegmenter(
         writePlaylist(ended)
     }
 
+    /** Releases an abandoned writer without publishing its unfinished piece or ending its playlist. */
+    fun discard() {
+        val stream = out
+        val file = outFile
+        out = null
+        outFile = null
+        try { stream?.close() } finally { file?.delete() }
+    }
+
     private fun packet(p: ByteArray) {
         val pid = ((p[1].toInt() and 0x1F) shl 8) or (p[2].toInt() and 0xFF)
         val pusi = (p[1].toInt() and 0x40) != 0
