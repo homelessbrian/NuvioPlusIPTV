@@ -8,6 +8,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 -->
 
 ## Live TV
+- Guide display menu (the guide's gear): Up, Down, Left and Right move the highlight again, and Left at the edge still doesn't open Nuvio's menu
 
 ## Rewind Anytime
 

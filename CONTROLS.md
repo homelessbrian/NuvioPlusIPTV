@@ -19,6 +19,8 @@ How to get around Nuvio + IPTV with your TV remote. [Back to the README](README.
 
 In a show's info (hold OK), **▲ / ▼** read the whole description and **Back** returns to the menu.
 
+In the guide's **Gear** (Guide display), the arrows move between the switches and stay inside it (**◀** at the edge doesn't open the side menu); **Back** closes it.
+
 ### Full screen
 | Button | Action |
 |---|---|

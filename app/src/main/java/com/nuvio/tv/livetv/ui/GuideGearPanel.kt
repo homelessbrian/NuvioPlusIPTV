@@ -12,6 +12,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.Key
@@ -63,6 +65,7 @@ internal fun GuideGearPanel(
     onDismiss: () -> Unit
 ) {
     val first = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     BackHandler { onDismiss() }
     LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
 
@@ -88,8 +91,16 @@ internal fun GuideGearPanel(
                 .focusProperties { onExit = { cancelFocusChange() } }
                 .focusGroup()
                 .onKeyEvent { e ->
-                    e.key == Key.DirectionLeft || e.key == Key.DirectionRight ||
-                        e.key == Key.DirectionUp || e.key == Key.DirectionDown
+                    val dir = when (e.key) {
+                        Key.DirectionLeft -> FocusDirection.Left
+                        Key.DirectionRight -> FocusDirection.Right
+                        Key.DirectionUp -> FocusDirection.Up
+                        Key.DirectionDown -> FocusDirection.Down
+                        else -> return@onKeyEvent false
+                    }
+                    // Move the highlight ourselves, then keep the arrow either way.
+                    if (e.type == KeyEventType.KeyDown) focusManager.moveFocus(dir)
+                    true
                 }
                 .glass(glassColor("darker"), RoundedCornerShape(20.dp))
                 .padding(12.dp)
