@@ -29,7 +29,18 @@ class SportsViewModel @Inject constructor(
     liveRepo: LiveTvRepository,
     private val recordings: com.nuvio.tv.livetv.record.LiveTvRecordingScheduler,
     private val watchSelection: SportsWatchSelection,
+    private val profiles: com.nuvio.tv.core.profile.ProfileManager,
 ) : ViewModel() {
+    internal val previewReturn = SportsPreviewReturn()
+    internal val hasPlaybackSelection: Boolean get() = playback.playingChannel != null
+
+    /** Save only a live preview's selection before Multiview releases its shared player. */
+    internal fun prepareMultiview(): String? {
+        val channelKey = playback.state.value.takeIf { it.catchupTitle == null }?.channelKey
+        previewReturn.prepare(profiles.activeProfileId.value, channelKey, SportsLaunch.pickedGame(channelKey))
+        return channelKey
+    }
+
     val settings = repo.settings
     val follows = repo.follows
     val events = repo.events
@@ -95,6 +106,7 @@ class SportsViewModel @Inject constructor(
 
     /** Tunes Live TV to the channel (the screen then opens it full screen). */
     fun watch(m: ChannelMatch) {
+        previewReturn.cancel()
         playback.play(m.channel)
     }
 
@@ -105,6 +117,7 @@ class SportsViewModel @Inject constructor(
      * Live TV). NHL's and YouTube's videos are worked out first (a moment).
      */
     fun playReplay(m: ChannelMatch, onReady: () -> Unit) {
+        previewReturn.cancel()
         videoJob?.cancel()
         if (!SportsVideos.needsResolving(m.channel)) {
             watch(m)
@@ -155,6 +168,7 @@ class SportsViewModel @Inject constructor(
 
     /** Plays the channel in the Sports page's window (no full screen), remembered as last watched. */
     fun playHere(m: ChannelMatch) {
+        previewReturn.cancel()
         if (playback.playingChannel?.key == m.channel.key && playingKey.value != null) return
         playback.play(m.channel)
         viewModelScope.launch { runCatching { livePrefs.recordWatched(m.channel.key) } }
@@ -166,6 +180,7 @@ class SportsViewModel @Inject constructor(
      */
     fun watchFromStart(ev: SportsEvent, m: ChannelMatch): Boolean {
         if (!m.catchup) return false
+        previewReturn.cancel()
         val league = SportsCatalog.league(ev.leagueId)
         val program = m.program?.takeIf { it.startMs <= ev.startMs + 30 * 60_000L }
             ?: EpgProgram(
