@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.DrmInfo
 import com.nuvio.tv.livetv.player.LiveCaptions
+import com.nuvio.tv.livetv.player.ContinuousTsDataSourceFactory
 import com.nuvio.tv.livetv.player.LenientHlsPlaylistParserFactory
 import com.nuvio.tv.livetv.stalker.StalkerMediaPolicy
 
@@ -28,6 +29,8 @@ internal class LiveTvMediaSourceBuilder(
     private val strictDrm: Boolean = false,
     private val requireHttpSources: Boolean = false,
     private val stalkerPolicy: StalkerMediaPolicy? = null,
+    /** Explicit channel intent: the shared Live TV player also opens finite Sports replays. */
+    private val continuousTs: Boolean = false,
 ) {
     private fun captionExtractor(factory: DefaultHlsExtractorFactory): HlsExtractorFactory =
         if (observeCaptions) LiveCaptions.Hls(factory) else factory
@@ -75,7 +78,10 @@ internal class LiveTvMediaSourceBuilder(
             )
             // CC1–CC4 and the digital (708) captions; the menu only offers those with text.
             .setTsSubtitleFormats(LiveCaptions.formats)
-        return DefaultMediaSourceFactory(http, if (observeCaptions) LiveCaptions.Extractors(extractors) else extractors).createMediaSource(item)
+        val continuousTransport = continuousTs && isLive && item.localConfiguration?.mimeType == MimeTypes.VIDEO_MP2T &&
+            item.localConfiguration?.uri?.scheme?.lowercase() in setOf("http", "https")
+        val progressiveHttp = if (continuousTransport) ContinuousTsDataSourceFactory(http) else http
+        return DefaultMediaSourceFactory(progressiveHttp, if (observeCaptions) LiveCaptions.Extractors(extractors) else extractors).createMediaSource(item)
     }
 
     /**

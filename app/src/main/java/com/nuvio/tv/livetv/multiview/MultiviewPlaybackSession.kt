@@ -645,6 +645,8 @@ private class AndroidMultiviewPanePlayer(
                 requireHttpSources = true,
                 forcedMime = mimeType,
                 stalkerPolicy = policy,
+                continuousTs = channel.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
+                    channel.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID,
             ).build(channel.url, channel.headers, isLive = true),
         )
         player.prepare()
