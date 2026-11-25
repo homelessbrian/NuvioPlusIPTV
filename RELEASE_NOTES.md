@@ -1,45 +1,36 @@
-# Nuvio + IPTV 1.2.0-beta.4.1
+# Nuvio + IPTV 1.2.0-beta.4.2
 
 ## What's new
 
-### Live TV
-- **Backups with headings:** the Backups list and a game's channels in Quick Channels are grouped by playlist, add-on or quality, in the order you pick (Settings → Live TV → Playback → Backups & Game Channels, or the play bar's gear)
-- **Adaptive Live TV Buffer:** a new switch in Settings → Live TV → Playback that slowly builds a 20-second cushion by playing live TV a touch slower, so channels stall less (thanks to bArKEr)
-- **Shows that already aired stay in the guide** when a guide update stops listing them (up to your Past Shows Kept setting), and catch-up keeps the shows in between
-- **Find & stream** opens the movie or series page straight away when there's one clear match
-
 ### Recordings
-- **Episode descriptions** under the highlighted episode in a show's folder and in Information. When the guide had none, the description comes from TMDB
-- The play bar shows the **recording's poster** instead of the channel logo
+- **Extra time per series:** hold OK on a series in Recordings › Series to give it its own Start Recording Early and Keep Recording After times. Default keeps using your Recordings setting, and episodes already scheduled move to the new times
+- A show's folder now shows its episode count, watched/new, length and size on the Episodes line
 
-### Sports
-- **What you follow loads first** when the app opens, and followed leagues' rows (UFC, F1, golf) are saved between launches, with last week's results
-- **Left** stops at the start of a row. **Back** takes you to the top
+### Sync and backups
+- Live TV sync and backups now carry your **Usenet** providers and indexers (per profile) and your subtitle AutoSync and audio sync choices (thanks to bArKEr)
+- **Back up now** and backup files also keep this TV's playback choices (passthrough, frame rate, buffer, picture size and more), so a new TV can be set up the same way. Automatic sync still keeps these separate on each TV (thanks to bArKEr)
 
 ### Faster and lighter
-- The guide, On Demand and Sports use less memory, On Demand rows appear as they load, and the app opens faster with your saved channels (thanks to bArKEr)
-- The guide keeps only what's needed in memory while the full guide stays saved, so big guides no longer weigh the app down, and days ahead are still all there (thanks to bArKEr)
-- Big M3U playlists reload without holding a second copy, and pausing live TV, rewinding and recording are lighter on the box (thanks to bArKEr)
-- Copying recordings to a network folder is much lighter on the box
-
-### Nuvio 1.2.0-beta.4
-- Built on Nuvio 1.2.0-beta.4: built-in Usenet, Blu-ray disc titles, Simkl rewatches, a separate style for ASS/SSA subtitles, much faster audio sync, and the remote's audio button for picking audio tracks
+- Live channels connect to your provider once instead of three times, in full screen and Multiview. This may stop streams cutting out when Multiview or another device starts (thanks to bArKEr)
+- Sports finds game channels in the guide with less work, so the TV stays calmer (thanks to bArKEr)
+- A guide you've added twice in different forms (like a playlist's Xtream guide link and the one in its playlist file) is downloaded and read only once
+- Guide clean-up runs quietly in the background instead of holding up the guide
 
 ## Fixed
-- **Recordings** pick up from the same spot after a freeze or error instead of stopping, with a clear message and OK to try again
-- Recordings from another TV no longer stay stuck as "recording"
-- A scheduled recording whose folder can't be made no longer closes the app
-- Each TV keeps its own network folder address instead of taking another TV's
-- **VPN:** a quiet WireGuard connection no longer counts as broken, and pressing play checks the connection straight away (thanks to bArKEr)
-- **Name (A–Z)** sorts every group, reordered ones included, and skips tags like "US:" (2 comes before 10)
-- The full-screen **TV Guide** tile always opens the guide, even for a channel started from Sports or Recordings
-- A slow DNS lookup can no longer hold up a playlist or channel
-- Seek thumbnails on recordings no longer slow down playback
-- A new poster from Fix Match shows on the Home card too
-- Trailers play on detail pages opened from More like this
-- A channel that hits a video error after the app comes back from the background tries again, and moves to the box's other video decoder if its own keeps failing (thanks to bArKEr)
-- On boxes with 2 GB of memory or less (like many Fire TVs), a big Live TV buffer no longer uses more memory than the box can spare (thanks to bArKEr)
-- Posters that failed to load try again later instead of staying blank, and posters already found still show while an add-on is slow (thanks to bArKEr)
+- The app no longer closes every few minutes for some people with very big playlists while the guide updates
+- Catch-up recordings to a network folder no longer freeze the app or make the box laggy
+- **Pause and Rewind Anytime:** channels no longer play, show Loading, then play again when they start, and switching channels quickly no longer mixes up the rewind buffer. Some channels may take a few seconds longer to start (thanks to bArKEr)
+- Recordings opens right away when its drive is asleep, and a show's folder no longer jumps when you open it
+- Match Frame Rate Off is really off now, guide and Sports previews included, and audio passthrough Off now turns Dolby/DTS into normal sound on every HDMI output (thanks to bArKEr)
+- Stalker portals that hand the login over to another server keep playing (thanks to bArKEr)
+- My Sports cards that showed no channels now get the channels you saved for their league (thanks to bArKEr)
+- Leaving Multiview opened from Sports brings back the channel in the Sports video window (thanks to bArKEr)
+- Sources that failed while the VPN or network was still connecting are searched again once it's ready, so a missing add-on shows up by itself (thanks to bArKEr)
+- Leaving Live TV for a movie stops the catch-up download in the background (thanks to bArKEr)
+- Removing an add-on no longer crashes the add-on list (thanks to bArKEr)
+- Automatic sync keeps working when the copy it compares against on the TV can't be read (thanks to bArKEr)
+- In the guide's display menu (⚙), Left no longer slips out and opens Nuvio's menu
+- With only one profile, a playlist hidden on that profile can be shown again, and the playlist now says it's hidden
 
 ## Special thanks
-- [@ghbarker](https://github.com/ghbarker) (bArKEr) for the Adaptive Live TV Buffer, the VPN and playback fixes, and a big round of speed and memory work
+- [@ghbarker](https://github.com/ghbarker) (bArKEr) for Usenet and playback settings in sync and backups, the Rewind Anytime, live channel, VPN and Stalker fixes, and lighter Sports channel finding
