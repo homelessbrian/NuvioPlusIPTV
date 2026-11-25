@@ -22,6 +22,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 
 ## Sports
 - Leaving Multiview opened from Sports brings back the channel that was playing in the Sports video window
+- Sports looks through the TV guide for game channels with less work, so the TV stays calmer while Sports finds channels
 
 ## Other
 - Live TV sync and backups now carry Usenet providers and indexers (per profile); a Backup now / backup file also keeps this TV's playback choices (passthrough, frame rate, buffer, picture size), which automatic sync still leaves per TV
