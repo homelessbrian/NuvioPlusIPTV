@@ -26,6 +26,8 @@ class StalkerPortalHandoffTest {
         assertTrue(headers["Cookie"].orEmpty().contains("mac=02%3A00%3A00%3A00%3A00%3A01"))
         assertTrue(headers["User-Agent"].orEmpty().contains("MAG250"))
         assertEquals("Model: MAG250; Link: Ethernet", headers["X-User-Agent"])
+        assertTrue(authorization.headersFor("https://portal.example.test/tenant/streams/fixture.ts").isEmpty(),
+            "The old configured origin is not the authenticated playback origin after a hand-off")
         assertTrue(authorization.headersFor("https://cdn.example.test/fixture.ts").isEmpty(),
             "An unrelated media origin must not inherit the portal token or identity")
         assertTrue(authorization.headersFor("https://lb2.example.test:8443/fixture.ts").isEmpty(),
