@@ -37,6 +37,9 @@ final class HttpStreamTunnel implements TunnelEngine {
     private volatile boolean configured;
     private final HandshakeHealth health = new HandshakeHealth();
     boolean isConfigured() { return configured; }
+    String diagnosticEngine() {
+        return openVpn == null ? "wireguard" : openVpn instanceof OpenVpn2Session ? "openvpn2" : "openvpn3";
+    }
     void configure(Config config) throws IOException {
         if (handle == 0 || !configureNative(handle, input(config))) throw new IOException("HTTP-only WireGuard could not start.");
         configured = true;

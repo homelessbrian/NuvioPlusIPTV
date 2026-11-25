@@ -197,6 +197,8 @@ public final class VpnPlaybackProtection {
         if (value == null) throw new IOException("VPN settings are not ready.");
         return value;
     }
+    // Observability must never make a main-thread settings-file read or start a VPN request.
+    static VpnPreferences cachedSettingsForDiagnostics() { return cachedSettings; }
     public static long settingsRevision() { return settingsRevision.get(); }
     /**
      * Whether VPN protection is switched on (any mode), for callers that must leave address

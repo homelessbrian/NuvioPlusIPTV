@@ -144,7 +144,7 @@ public final class VpnConnectionService extends android.net.VpnService {
     private String bypassKey = "";
     private ProtectionMode scope = ProtectionMode.OFF;
     private volatile boolean destroyed;
-    private long started, lastProbe, lastStatsLog, lastEgressProbe;
+    private long started, lastProbe, lastEgressProbe;
     private boolean probeVerified;
     /** When the connection last stopped being verified (0 while verified). */
     private long unverifiedSince;
@@ -252,7 +252,8 @@ public final class VpnConnectionService extends android.net.VpnService {
             scope = mode;
             bypassKey = VpnHomeBypass.key(this);
             started = SystemClock.elapsedRealtime();
-            lastProbe = lastStatsLog = lastEgressProbe = 0;
+            VpnPlaybackDiagnostics.INSTANCE.resetConnection();
+            lastProbe = lastEgressProbe = 0;
             probeVerified = false;
             unverifiedSince = started;
             lastReceived = receivedGrewAt = lastStallCheck = 0;
@@ -414,10 +415,7 @@ public final class VpnConnectionService extends android.net.VpnService {
                 lastEgressProbe = now;
                 loadEgress(token, engine, verifiedSession);
             }
-            if (verified && now - lastStatsLog >= 10000) {
-                lastStatsLog = now;
-                event("vpn_traffic: received=" + stats.received + "; sent=" + stats.sent);
-            }
+            reportTraffic(stats, phase, now);
             updateNotification();
         } catch (Exception | LinkageError failure) {
             if (destroyed) return;
@@ -425,6 +423,16 @@ public final class VpnConnectionService extends android.net.VpnService {
             current = new Snapshot(Phase.ERROR, 0, 0);
             updateNotification();
         }
+    }
+    private void reportTraffic(TunnelTraffic stats, Phase phase, long now) {
+        try {
+            String type = engine instanceof HttpStreamTunnel ? ((HttpStreamTunnel) engine).diagnosticEngine()
+                    : engine instanceof OpenVpn2Session ? "openvpn2" : engine instanceof OpenVpnEngine ? "openvpn3"
+                    : engine instanceof AppWideWireGuardEngine ? "wireguard" : "unknown";
+            String line = VpnPlaybackDiagnostics.INSTANCE.sample(stats.received, stats.sent, stats.session,
+                    scope.name(), type, phase.name(), now - started);
+            if (line != null) event(line);
+        } catch (RuntimeException | LinkageError ignored) { /* A diagnostic failure never changes protection. */ }
     }
     private void loadEgress(long token, TunnelEngine connection, long session) {
         long lookupId = ++egressLookupId;
