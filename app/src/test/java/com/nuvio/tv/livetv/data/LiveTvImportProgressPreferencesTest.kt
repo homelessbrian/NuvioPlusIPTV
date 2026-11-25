@@ -37,7 +37,7 @@ class LiveTvImportProgressPreferencesTest {
             every { activeProfileId } returns MutableStateFlow(1)
             every { profiles } returns MutableStateFlow(listOf(UserProfile(1, "Primary", "#1E88E5")))
         }
-        preferences = LiveTvPreferences(context, profileManager)
+        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), mockk(relaxed = true))
         mockkStatic(VpnBackup::class)
         every { VpnBackup.prepareExport(any<Context>(), null) } returns "{\"version\":1,\"profiles\":[]}"
         every { VpnBackup.restoreSetup(any<Context>(), any<String>()) } just Runs
@@ -88,5 +88,16 @@ class LiveTvImportProgressPreferencesTest {
         preferences.importFromSync(backup)
 
         assertTrue(preferences.currentSettings().showImportProgress)
+    }
+
+    @Test fun `stream backup grouping and ordering survive serialization and restore`() = runTest {
+        preferences.updateSettings { it.copy(backupGroupBy = "QUALITY", backupSourceOrder = "source-b,source-a", backupQualityOrder = "1080p,720p") }
+        val backup = JSONObject(preferences.exportForSync().toString())
+        preferences.updateSettings { it.copy(backupGroupBy = "SOURCE", backupSourceOrder = "", backupQualityOrder = "") }
+        preferences.importFromSync(backup)
+        val restored = preferences.currentSettings()
+        assertEquals("QUALITY", restored.backupGroupBy)
+        assertEquals("source-b,source-a", restored.backupSourceOrder)
+        assertEquals("1080p,720p", restored.backupQualityOrder)
     }
 }

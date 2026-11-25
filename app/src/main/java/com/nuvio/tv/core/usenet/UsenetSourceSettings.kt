@@ -9,6 +9,7 @@ import com.nuvio.tv.core.profile.ProfileScopedCredentialStore
 import dagger.Lazy
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.KeyStore
+import java.util.concurrent.CopyOnWriteArrayList
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -22,20 +23,46 @@ import kotlinx.serialization.json.Json
 
 /** Profile-local credentials. Keystore ciphertext is never part of profile/cloud sync. */
 @Singleton
-class UsenetSourceSettings @Inject constructor(
-    @ApplicationContext context: Context,
-    private val profiles: Lazy<ProfileManager>
+class UsenetSourceSettings internal constructor(
+    context: Context,
+    private val profiles: Lazy<ProfileManager>,
+    private val keyAlias: String
 ) : ProfileScopedCredentialStore {
+    @Inject constructor(
+        @ApplicationContext context: Context,
+        profiles: Lazy<ProfileManager>
+    ) : this(context, profiles, KEY_ALIAS)
+
     private val preferences = context.getSharedPreferences("usenet_sources", Context.MODE_PRIVATE)
     /** Told every provider list read or saved, so a provider's statistics follow it through edits. */
     private val stats = UsenetSourceStats.get(context)
     private val revision = MutableStateFlow(0)
+    private val backupListeners = CopyOnWriteArrayList<() -> Unit>()
     private val json = Json { ignoreUnknownKeys = true }
     val snapshots get() = combine(profiles.get().activeProfileId, revision) { id, _ -> id to runCatching { read(id) } }
 
     // Decrypting takes a keystore round trip, and screens read the sources on the main thread:
     // each profile is decrypted once, and every later read is this copy. Guarded by this.
     private val decrypted = HashMap<Int, UsenetSourceConfiguration>()
+
+    @Synchronized
+    fun hasSavedConfiguration(profileId: Int): Boolean = preferences.contains("profile_$profileId")
+
+    /** Only explicitly saved profiles travel in a portable backup; an unreadable entry fails it. */
+    @Synchronized
+    fun savedConfigurations(): Map<Int, UsenetSourceConfiguration> = preferences.all.keys
+        .mapNotNull { PROFILE_KEY.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
+        .filter { it in 1..ProfileManager.MAX_PROFILES }
+        .sorted()
+        .associateWith { read(it).also(UsenetSourceConfiguration::validate) }
+
+    /** Source edits only, after the encrypted store and its in-memory copy agree. */
+    fun observeChanges(onChange: () -> Unit): AutoCloseable {
+        backupListeners += onChange
+        return AutoCloseable { backupListeners -= onChange }
+    }
+
+    private fun backupChanged() { backupListeners.forEach { runCatching { it() } } }
 
     @Synchronized
     fun read(profileId: Int = profiles.get().activeProfileId.value): UsenetSourceConfiguration {
@@ -67,6 +94,7 @@ class UsenetSourceSettings @Inject constructor(
         decrypted[profileId] = value
         stats.knowProviders(value.providers)
         revision.value += 1
+        backupChanged()
     }
 
     @Synchronized
@@ -75,6 +103,7 @@ class UsenetSourceSettings @Inject constructor(
         decrypted.remove(profileId)
         check(preferences.edit().remove("profile_$profileId").commit())
         revision.value += 1
+        backupChanged()
     }
 
     @Synchronized
@@ -82,17 +111,21 @@ class UsenetSourceSettings @Inject constructor(
         decrypted.clear()
         check(preferences.edit().clear().commit())
         revision.value += 1
+        backupChanged()
     }
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (store.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        (store.getKey(keyAlias, null) as? SecretKey)?.let { return it }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            init(KeyGenParameterSpec.Builder(keyAlias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
         }.generateKey()
     }
 
-    private companion object { const val KEY_ALIAS = "nuvio_usenet_sources_v1" }
+    private companion object {
+        const val KEY_ALIAS = "nuvio_usenet_sources_v1"
+        val PROFILE_KEY = Regex("""profile_([1-9]\d*)""")
+    }
 }

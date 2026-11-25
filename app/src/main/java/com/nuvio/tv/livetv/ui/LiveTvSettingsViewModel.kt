@@ -48,7 +48,7 @@ class LiveTvSettingsViewModel @Inject constructor(
 
     /** This TV's Live TV setup as a backup file: its name and contents. */
     suspend fun backupFile(): Pair<String, ByteArray> {
-        val data = prefs.exportForSync()
+        val data = prefs.exportForBackup()
         return com.nuvio.tv.livetv.sync.LiveTvBackupFile.fileName() to com.nuvio.tv.livetv.sync.LiveTvBackupFile.encode(data)
     }
 
@@ -74,8 +74,8 @@ class LiveTvSettingsViewModel @Inject constructor(
      */
     fun restoreBackup(backup: com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup, onDone: (Boolean) -> Unit) = viewModelScope.launch {
         val ok = runCatching {
-            if (!prefs.syncHasSources(backup.data)) error("empty backup")
-            val changed = prefs.importFromSync(backup.data)
+            if (!prefs.canRestoreBackup(backup.data)) error("empty backup")
+            val changed = prefs.importFromBackup(backup.data)
             com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Backup file: restored a backup from ${backup.device.ifBlank { "another device" }}")
             repository.reloadAfterSync(changed)
         }.onFailure { com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Backup file: couldn't restore (${it.message})") }.isSuccess

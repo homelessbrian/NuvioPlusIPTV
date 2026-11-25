@@ -125,7 +125,7 @@ internal class SyncParts(private val store: SharedPreferences) {
         private const val HOME_ROWS_SEEN = "sync_part_home_rows_seen"
         private val PROFILE_SUFFIX = Regex("""_p\d+$""")
 
-        private val LOGIN_KEYS = setOf("playlists", "epg_sources", "playlist_accounts", "epg_overrides", "network_folder")
+        private val LOGIN_KEYS = setOf("playlists", "epg_sources", "playlist_accounts", "epg_overrides", "network_folder", "usenet_sources_v1")
         private val FAVORITE_KEYS = setOf(
             "favorites", "hidden_channels", "hidden_groups", "hidden_playlists", "channel_names", "channel_logos", "channel_numbers",
             "group_names", "group_order", "custom_groups", "channel_order", "channel_copies", "channel_audio",
@@ -151,7 +151,9 @@ internal class SyncParts(private val store: SharedPreferences) {
             "vod_search_catalog", "vod_search_live", "vod_search_ondemand", "search_order", "logo_sources_off",
             "clean_group_names", "browse_by_channel_name",
             "on_demand_enabled", "on_demand_auto_play", "on_demand_addon_posters", "on_demand_streams_position",
-            "on_demand_in_streams", "on_demand_play_direct"
+            "on_demand_in_streams", "on_demand_play_direct",
+            "subtitle_sync_enabled", "subtitle_sync_aggressive_mode", "subtitle_sync_tolerance_ms",
+            "subtitle_sync_audio_fallback_enabled", "subtitle_sync_audio_sampling_mode"
         )
 
         /** Always synced, whatever is switched off: the parental lock and the profile set-up marker. */
