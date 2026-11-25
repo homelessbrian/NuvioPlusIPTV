@@ -8,6 +8,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 -->
 
 ## Live TV
+- Guide display (the guide's ⚙) keeps the highlight: Left from the left column no longer slips out and opens the menu
 
 ## Rewind Anytime
 
