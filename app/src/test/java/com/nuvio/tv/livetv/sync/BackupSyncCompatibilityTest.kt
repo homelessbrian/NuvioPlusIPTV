@@ -15,6 +15,16 @@ import org.robolectric.annotation.Config
 class BackupSyncCompatibilityTest {
     private fun entry(value: String) = JSONObject().put("t", "str").put("v", value)
 
+    @Test fun `TV reads existing Mobile backup envelopes without accepting unknown native file versions`() {
+        val data = JSONObject().put("backup_source_order", entry("provider-b,provider-a"))
+        val mobile = JSONObject().put("format", 1).put("savedAt", 42L).put("device", "Phone").put("data", data)
+        val restored = LiveTvBackupFile.decode(mobile.toString().toByteArray())!!
+        assertEquals(42L, restored.createdAt)
+        assertEquals("provider-b,provider-a", restored.data.getJSONObject("backup_source_order").getString("v"))
+        val future = JSONObject().put("format", "nuvio-plus-iptv-backup").put("version", 2).put("data", data)
+        assertNull(LiveTvBackupFile.decode(future.toString().toByteArray()))
+    }
+
     @Test fun `older clients cannot erase external settings during first or later reconciliation`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val drive = LiveTvDriveSync(context, mockk(), mockk())

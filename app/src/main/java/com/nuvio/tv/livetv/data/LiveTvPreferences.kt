@@ -24,6 +24,8 @@ import com.nuvio.tv.livetv.sync.SetupSyncProjection
 import com.nuvio.tv.livetv.sync.UsenetBackup
 import com.nuvio.tv.livetv.sync.DeviceSettingsBackup
 import com.nuvio.tv.livetv.sync.PlaybackSettingsBackup
+import com.nuvio.tv.livetv.sync.SyncPart
+import com.nuvio.tv.livetv.sync.SyncParts
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1900,19 +1902,40 @@ class LiveTvPreferences @Inject constructor(
     suspend fun exportForBackup(): JSONObject {
         val data = exportForSync()
         val local = JSONObject()
-        store.data.first().asMap().forEach { (key, value) ->
+        val stored = store.data.first()
+        val effective = buildSettings(stored)
+        fun boolean(name: String, value: Boolean) { local.put(name, JSONObject().put("t", "b").put("v", value)) }
+        fun string(name: String, value: String) { local.put(name, JSONObject().put("t", "str").put("v", value)) }
+        boolean("audio_passthrough", effective.audioPassthrough)
+        boolean("adaptive_live_buffer", effective.adaptiveLiveBufferEnabled)
+        boolean("match_frame_rate", effective.matchFrameRate)
+        string("buffer_size", effective.bufferSize)
+        string("frame_rate_mode", effective.frameRateMode)
+        string("aspect_mode", effective.aspectMode)
+        stored.asMap().forEach { (key, value) ->
             if (DeviceSettingsBackup.includes(key.name)) {
-                local.put(key.name, JSONObject().put("t", if (value is Boolean) "b" else "str").put("v", value))
+                if (!local.has(key.name)) local.put(key.name, JSONObject().put("t", if (value is Boolean) "b" else "str").put("v", value))
             }
         }
         return data.put(DeviceSettingsBackup.KEY, DeviceSettingsBackup.encode(local, playbackBackup.exportDeviceSettings()))
     }
 
+    /** Explicit settings-only backups are valid too; automatic sync retains its empty-source guard. */
+    fun canRestoreBackup(data: JSONObject): Boolean = syncHasSources(data) || DeviceSettingsBackup.decode(data) != null
+
     /** Explicit file/Drive restore; old backups without device choices leave them untouched. */
     suspend fun importFromBackup(data: JSONObject): Set<String> {
         val device = DeviceSettingsBackup.decode(data)
         device?.let { playbackBackup.validateDeviceSettings(it.getJSONObject("playback")) }
-        val changed = importFromSync(data)
+        usenetBackup.validate(data)
+        playbackBackup.validate(data)
+        // A settings-only backup must not empty the target's existing providers or VPN profiles.
+        val setup = if (device != null && !syncHasSources(data)) exportForSync().also { current ->
+            data.keys().forEach { name ->
+                if (SyncParts.partOf(name) !in setOf(SyncPart.LOGINS, SyncPart.VPN)) current.put(name, data.get(name))
+            }
+        } else data
+        val changed = importFromSync(setup)
         device?.let {
             val local = it.getJSONObject("liveTv")
             store.edit { p ->

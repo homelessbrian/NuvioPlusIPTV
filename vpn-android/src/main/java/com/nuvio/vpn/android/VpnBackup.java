@@ -136,7 +136,8 @@ public final class VpnBackup {
 
     /** Protect portable secret entries only at rest, never in the payload sent to another device. */
     public static String sealCache(String json) throws Exception {
-        return sealCache(json, null);
+        try { return sealCache(json, null); }
+        catch (Exception invalid) { throw new IOException("Local backup settings could not be protected."); }
     }
     static String sealCache(String json, SecretKey testKey) throws Exception {
         JSONObject data = new JSONObject(json);
@@ -157,7 +158,8 @@ public final class VpnBackup {
         return changed ? data.toString() : json;
     }
     public static String openCache(String json) throws Exception {
-        return openCache(json, null);
+        try { return openCache(json, null); }
+        catch (Exception invalid) { throw new IOException("Local backup settings could not be opened."); }
     }
     static String openCache(String json, SecretKey testKey) throws Exception {
         JSONObject data = new JSONObject(json);

@@ -23,10 +23,16 @@ import kotlinx.serialization.json.Json
 
 /** Profile-local credentials. Keystore ciphertext is never part of profile/cloud sync. */
 @Singleton
-class UsenetSourceSettings @Inject constructor(
-    @ApplicationContext context: Context,
-    private val profiles: Lazy<ProfileManager>
+class UsenetSourceSettings internal constructor(
+    context: Context,
+    private val profiles: Lazy<ProfileManager>,
+    private val keyAlias: String
 ) : ProfileScopedCredentialStore {
+    @Inject constructor(
+        @ApplicationContext context: Context,
+        profiles: Lazy<ProfileManager>
+    ) : this(context, profiles, KEY_ALIAS)
+
     private val preferences = context.getSharedPreferences("usenet_sources", Context.MODE_PRIVATE)
     /** Told every provider list read or saved, so a provider's statistics follow it through edits. */
     private val stats = UsenetSourceStats.get(context)
@@ -110,9 +116,9 @@ class UsenetSourceSettings @Inject constructor(
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (store.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        (store.getKey(keyAlias, null) as? SecretKey)?.let { return it }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            init(KeyGenParameterSpec.Builder(keyAlias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
         }.generateKey()

@@ -57,4 +57,13 @@ public final class VpnBackupCacheTest {
                 .put("usenet_sources_v2_p2", entry("future-family")).toString();
         assertEquals(unrelated, VpnBackup.sealCache(unrelated, key));
     }
+
+    @Test public void publicErrorsNeverExposeMalformedPlaintextOrItsCause() {
+        Exception opening = assertThrows(Exception.class, () -> VpnBackup.openCache("synthetic-provider-secret not json"));
+        Exception sealing = assertThrows(Exception.class, () -> VpnBackup.sealCache("synthetic-indexer-secret not json"));
+        assertEquals("Local backup settings could not be opened.", opening.getMessage());
+        assertEquals("Local backup settings could not be protected.", sealing.getMessage());
+        assertNull(opening.getCause());
+        assertNull(sealing.getCause());
+    }
 }

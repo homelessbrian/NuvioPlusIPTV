@@ -74,7 +74,7 @@ class LiveTvSettingsViewModel @Inject constructor(
      */
     fun restoreBackup(backup: com.nuvio.tv.livetv.sync.LiveTvBackupFile.Backup, onDone: (Boolean) -> Unit) = viewModelScope.launch {
         val ok = runCatching {
-            if (!prefs.syncHasSources(backup.data)) error("empty backup")
+            if (!prefs.canRestoreBackup(backup.data)) error("empty backup")
             val changed = prefs.importFromBackup(backup.data)
             com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Backup file: restored a backup from ${backup.device.ifBlank { "another device" }}")
             repository.reloadAfterSync(changed)

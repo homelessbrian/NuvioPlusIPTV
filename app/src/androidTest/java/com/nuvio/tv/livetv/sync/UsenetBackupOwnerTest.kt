@@ -12,6 +12,8 @@ import com.nuvio.tv.core.usenet.UsenetProvider
 import com.nuvio.tv.core.usenet.UsenetSourceConfiguration
 import com.nuvio.tv.core.usenet.UsenetSourceSettings
 import dagger.Lazy
+import java.security.KeyStore
+import java.util.UUID
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -22,42 +24,56 @@ import org.junit.runner.RunWith
 class UsenetBackupOwnerTest {
     @Test fun restoreReencryptsAndRefreshesTheSourceOwnersCachedProfile() {
         val target = InstrumentationRegistry.getInstrumentation().targetContext
-        val context = object : ContextWrapper(target) {
+        val testId = UUID.randomUUID().toString()
+        fun isolatedContext(device: String) = object : ContextWrapper(target) {
             override fun getSharedPreferences(name: String, mode: Int): SharedPreferences =
-                target.getSharedPreferences("${name}_portable_backup_instrumentation", mode)
+                target.getSharedPreferences("${name}_portable_backup_${testId}_$device", mode)
         }
-        val sources = UsenetSourceSettings(context, Lazy { error("Explicit profile IDs only") })
-        sources.clearAllProfiles()
-        val preferences = context.getSharedPreferences("usenet_sources", Context.MODE_PRIVATE)
-        val stats = context.getSharedPreferences("usenet_source_stats", Context.MODE_PRIVATE)
-        stats.edit().clear().commit()
+        val exportingContext = isolatedContext("exporter")
+        val destinationContext = isolatedContext("destination")
+        val exportingAlias = "nuvio_usenet_backup_test_${testId}_exporter"
+        val destinationAlias = "nuvio_usenet_backup_test_${testId}_destination"
+        val exportingSources = UsenetSourceSettings(exportingContext, Lazy { error("Explicit profile IDs only") }, exportingAlias)
+        val destinationSources = UsenetSourceSettings(destinationContext, Lazy { error("Explicit profile IDs only") }, destinationAlias)
+        val preferences = destinationContext.getSharedPreferences("usenet_sources", Context.MODE_PRIVATE)
+        val keys = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         try {
             val original = UsenetSourceConfiguration(enabled = true, firstUseAccepted = true,
                 providers = listOf(UsenetProvider(id = "provider", name = "Fixture", host = "news.fixture.invalid", password = "fixture-secret")),
                 indexers = listOf(UsenetIndexer(id = "indexer", name = "Fixture", apiUrl = "https://index.fixture.invalid/api", apiKey = "fixture-key")),
                 ranking = StreamRankingSettings(StreamRankingPreset.BEST_QUALITY), availableFirst = true)
-            sources.update(original, 2)
-            val initialCiphertext = preferences.getString("profile_2", null)
-            val adapter = UsenetBackup(context, sources)
-            val encoded = JSONObject().also(adapter::exportInto)
+            exportingSources.update(original, 2)
+            val initialCiphertext = exportingContext.getSharedPreferences("usenet_sources", Context.MODE_PRIVATE).getString("profile_2", null)
+            val encoded = JSONObject().also(UsenetBackup(exportingContext, exportingSources)::exportInto)
+            val adapter = UsenetBackup(destinationContext, destinationSources)
             var notifications = 0
             val observer = adapter.observeChanges { notifications += 1 }
             try {
-                sources.update(original.copy(enabled = false, ranking = StreamRankingSettings()), 2)
-                assertFalse(sources.read(2).enabled) // Populate the old cached state before restore.
+                destinationSources.update(original.copy(enabled = false, ranking = StreamRankingSettings()), 2)
+                assertFalse(destinationSources.read(2).enabled) // Populate the old cached state before restore.
                 adapter.restoreFrom(JSONObject(encoded.toString()))
-                assertEquals(original, sources.read(2))
-                assertEquals(original, UsenetSourceSettings(context, Lazy { error("Explicit profile IDs only") }).read(2))
+                assertEquals(original, destinationSources.read(2))
+                assertTrue(keys.containsAlias(exportingAlias))
+                assertTrue(keys.containsAlias(destinationAlias))
+                // Only this test's synthetic exporter key is removed. The destination must be
+                // independently readable, using its own synthetic Keystore key and no cached copy.
+                keys.deleteEntry(exportingAlias)
+                assertEquals(original, UsenetSourceSettings(destinationContext,
+                    Lazy { error("Explicit profile IDs only") }, destinationAlias).read(2))
                 assertNotEquals(initialCiphertext, preferences.getString("profile_2", null))
                 assertFalse(preferences.getString("profile_2", "")!!.contains("fixture-secret"))
-                assertEquals(setOf(2), sources.savedConfigurations().keys)
+                assertEquals(setOf(2), destinationSources.savedConfigurations().keys)
                 assertEquals(2, notifications)
-                sources.removeProfile(2)
+                destinationSources.removeProfile(2)
                 assertEquals(3, notifications)
             } finally { observer.close() }
         } finally {
-            sources.clearAllProfiles()
-            stats.edit().clear().commit()
+            exportingSources.clearAllProfiles()
+            destinationSources.clearAllProfiles()
+            exportingContext.getSharedPreferences("usenet_source_stats", Context.MODE_PRIVATE).edit().clear().commit()
+            destinationContext.getSharedPreferences("usenet_source_stats", Context.MODE_PRIVATE).edit().clear().commit()
+            keys.deleteEntry(exportingAlias)
+            keys.deleteEntry(destinationAlias)
         }
     }
 }

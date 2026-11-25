@@ -298,16 +298,21 @@ class LiveTvDriveSync @Inject constructor(
             remoteCopy(token)?.let { remote ->
                 val remoteData = remote.optJSONObject("data")
                 if (!force && remoteData != null) DeviceSettingsBackup.keepSaved(data, remoteData)
-                val base = readBase()
+                // A deliberate backup can rebuild a damaged comparison cache. Automatic
+                // reconciliation stops on unreadable data instead of guessing what changed.
+                val base = try { readBase() } catch (invalid: Exception) { if (!force) throw invalid else null }
                 if (remoteData != null && remoteData.toString() != base?.toString()) {
                     val merged = merge(base, local = data, remote = remoteData, localWinsWithoutBase = true, removedHere = removedHere)
+                    // Back up now means this TV's device choices, even when another TV saved
+                    // different choices since our last agreed copy.
+                    if (force) DeviceSettingsBackup.keepSaved(merged, data)
                     if (merged.toString() != data.toString()) applyLocally(merged)
                     data = merged
                 }
             }
             // No playlists and no guides here (signed out, a fresh install, everything removed):
             // never write that over the backup. Automatic sync just skips it; Back up now says why.
-            if (!prefs.syncHasSources(data)) {
+            if (!(if (force) prefs.canRestoreBackup(data) else prefs.syncHasSources(data))) {
                 if (force) emptyRefused = true
                 return@runCatching false
             }
@@ -385,11 +390,12 @@ class LiveTvDriveSync @Inject constructor(
             val remoteData = json.optJSONObject("data") ?: return@runCatching false
             // Nothing new: saved by this TV, or the same as what this TV last synced. (Not judged
             // by the time it was saved: TVs' clocks differ, and a newer copy was skipped.)
-            val base = readBase()
+            // An explicit restore replaces the setup and does not depend on an old local cache.
+            val base = if (force) null else readBase()
             if (!force && (fromThisTv || remoteData.toString() == base?.toString())) return@runCatching false
             // A saved copy with no playlists or guides (made by an older version after signing
             // out): never let it empty this TV. Treated as no backup at all.
-            if (!prefs.syncHasSources(remoteData)) return@runCatching null
+            if (!(if (force && !onlyIfExists) prefs.canRestoreBackup(remoteData) else prefs.syncHasSources(remoteData))) return@runCatching null
             // "Restore" replaces this TV's setup; automatic sync keeps changes made on this TV
             // since the last sync and takes everything else from the other TV.
             val data = if (force) remoteData

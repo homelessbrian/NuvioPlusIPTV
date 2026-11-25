@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -80,5 +81,16 @@ class AdaptiveLiveBufferPreferencesTest {
         assertTrue(preferences.currentSettings().adaptiveLiveBufferEnabled)
         preferences.importFromBackup(JSONObject())
         assertTrue(preferences.currentSettings().adaptiveLiveBufferEnabled)
+    }
+
+    @Test fun `explicit backup captures untouched defaults and settings-only restore preserves sources`() = runTest {
+        val backup = JSONObject(preferences.exportForBackup().toString())
+        assertTrue(preferences.canRestoreBackup(backup))
+        assertFalse(preferences.syncHasSources(backup))
+        preferences.updatePlaylists { listOf(com.nuvio.tv.livetv.model.PlaylistSource("target", "Target", "https://fixture.invalid/list.m3u")) }
+        preferences.updateSettings { it.copy(adaptiveLiveBufferEnabled = true) }
+        preferences.importFromBackup(backup)
+        assertFalse(preferences.currentSettings().adaptiveLiveBufferEnabled)
+        assertEquals("target", preferences.currentPlaylists().single().id)
     }
 }

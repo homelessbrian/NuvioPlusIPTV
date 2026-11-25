@@ -49,10 +49,15 @@ object LiveTvBackupFile {
     fun decode(bytes: ByteArray): Backup? = runCatching {
         if (bytes.size > MAX_BYTES) return null
         val root = JSONObject(String(bytes, Charsets.UTF_8).trim().removePrefix("﻿"))
-        if (root.optString("format") != FORMAT) return null
-        if (root.optInt("version", 0) !in 1..VERSION) return null
+        val nativeFile = root.opt("format") == FORMAT
+        if (nativeFile) {
+            if (root.optInt("version", 0) !in 1..VERSION) return null
+        } else {
+            // Mobile's existing file format is the same typed setup in a Drive envelope.
+            if (root.opt("format") != 1) return null
+        }
         val data = root.optJSONObject("data") ?: return null
-        Backup(data, root.optLong("createdAt"), root.optString("device"))
+        Backup(data, root.optLong(if (nativeFile) "createdAt" else "savedAt"), root.optString("device"))
     }.getOrNull()
 
     // ------------------------------------------------------------------ on this TV
