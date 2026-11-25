@@ -1,6 +1,7 @@
 package com.nuvio.stalker
 
 import io.ktor.http.Url
+import io.ktor.http.URLBuilder
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -523,22 +524,27 @@ class StalkerClient(
     }
 
     private suspend fun authenticateEndpoint(endpoint: String, epoch: Long): Session {
-        val handshake = protocolGet(endpoint, mapOf("type" to "stb", "action" to "handshake", "token" to ""), null, epoch) as? JsonObject
+        // The configured portal may hand authentication to another installation. Keep that
+        // endpoint local until its profile is accepted, then use it for requests and playback.
+        var effectiveEndpoint = endpoint
+        val rememberEndpoint: (String) -> Unit = { effectiveEndpoint = it }
+        val handshake = protocolGet(effectiveEndpoint, mapOf("type" to "stb", "action" to "handshake", "token" to ""),
+            null, epoch, rememberEndpoint) as? JsonObject
             ?: throw StalkerException(StalkerError.INVALID_RESPONSE)
         if (!handshake.containsKey("token")) throw StalkerException(StalkerError.INVALID_RESPONSE)
         val token = handshake.text("token")
         if (token != null && (token.length > 16 * 1024 || token.any { it !in '\u0021'..'\u007e' })) {
             throw StalkerException(StalkerError.INVALID_RESPONSE)
         }
-        var profile = profile(endpoint, token, epoch, false, handshake)
+        var profile = profile(effectiveEndpoint, token, epoch, false, handshake, rememberEndpoint)
         when (profile.integer("status")) {
             1L -> throw StalkerException(StalkerError.ACCOUNT_BLOCKED)
             2L -> {
                 if (config.username.isBlank() || config.password.isBlank()) throw StalkerException(StalkerError.AUTHENTICATION_REQUIRED)
-                val auth = protocolGet(endpoint, mapOf("type" to "stb", "action" to "do_auth",
-                    "login" to config.username, "password" to config.password) + deviceParameters(), token, epoch)
+                val auth = protocolGet(effectiveEndpoint, mapOf("type" to "stb", "action" to "do_auth",
+                    "login" to config.username, "password" to config.password) + deviceParameters(), token, epoch, rememberEndpoint)
                 if ((auth as? JsonPrimitive)?.contentOrNull !in setOf("true", "1")) throw StalkerException(StalkerError.AUTHENTICATION_FAILED)
-                profile = profile(endpoint, token, epoch, true, handshake)
+                profile = profile(effectiveEndpoint, token, epoch, true, handshake, rememberEndpoint)
                 when (profile.integer("status")) {
                     1L -> throw StalkerException(StalkerError.ACCOUNT_BLOCKED)
                     2L -> throw StalkerException(StalkerError.AUTHENTICATION_FAILED)
@@ -551,10 +557,11 @@ class StalkerClient(
         if (status == null && profile.keys.none { it in setOf("id", "name", "stb_type", "account_page_url", "watchdog_timeout", "login") }) {
             throw StalkerException(StalkerError.INVALID_RESPONSE)
         }
-        return Session(endpoint, token, epoch)
+        return Session(effectiveEndpoint, token, epoch)
     }
 
-    private suspend fun profile(endpoint: String, token: String?, epoch: Long, second: Boolean, handshake: JsonObject): JsonObject {
+    private suspend fun profile(endpoint: String, token: String?, epoch: Long, second: Boolean,
+                                handshake: JsonObject, rememberEndpoint: (String) -> Unit): JsonObject {
         val metrics = buildJsonObject {
             put("mac", config.mac.replace('-', ':').uppercase()); put("model", "MAG250"); put("type", "STB")
             if (config.serialNumber.isNotBlank()) put("sn", config.serialNumber)
@@ -565,7 +572,8 @@ class StalkerClient(
             "auth_second_step" to if (second) "1" else "0", "metrics" to metrics.toString())
         params.putAll(deviceParameters())
         handshake.text("not_valid")?.let { params["not_valid_token"] = it }
-        val value = protocolGet(endpoint, params, token, epoch) as? JsonObject ?: throw StalkerException(StalkerError.INVALID_RESPONSE)
+        val value = protocolGet(endpoint, params, token, epoch, rememberEndpoint) as? JsonObject
+            ?: throw StalkerException(StalkerError.INVALID_RESPONSE)
         val message = value.text("error", "msg", "block_msg")?.lowercase().orEmpty()
         if (value.integer("status") !in setOf(0L, 1L, 2L) && listOf("device", "serial", "signature").any { it in message }) {
             throw StalkerException(StalkerError.DEVICE_AUTH_REQUIRED)
@@ -594,7 +602,8 @@ class StalkerClient(
         throw StalkerException(StalkerError.AUTHENTICATION_FAILED)
     }
 
-    private suspend fun protocolGet(endpoint: String, parameters: Map<String, String>, token: String?, epoch: Long): JsonElement {
+    private suspend fun protocolGet(endpoint: String, parameters: Map<String, String>, token: String?, epoch: Long,
+                                    rememberEndpoint: ((String) -> Unit)? = null): JsonElement {
         checkGeneration(epoch)
         val response = try { transport.get(StalkerWire.requestUrl(endpoint, parameters), requestHeaders(token, endpoint)) }
         catch (e: CancellationException) { throw e }
@@ -623,6 +632,14 @@ class StalkerClient(
                 throw StalkerException(StalkerError.INVALID_RESPONSE)
             }
         }
+        rememberEndpoint?.invoke(response.finalUrl?.let { finalUrl ->
+            // Retain routing selectors, not the completed operation's credentials or profile fields.
+            val requestNames = parameters.keys
+            URLBuilder(StalkerWire.requestUrl(finalUrl, emptyMap())).apply {
+                requestNames.forEach { this.parameters.remove(it) }
+                this.parameters.remove("JsHttpRequest")
+            }.buildString()
+        } ?: endpoint)
         return js
     }
 
