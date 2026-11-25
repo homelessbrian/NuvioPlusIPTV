@@ -231,6 +231,8 @@ fun <T> TvReorderList(
     val itemIndexByKey = remember(itemKeys) {
         items.mapIndexed { index, item -> key(item) to index }.toMap()
     }
+    // Membership ignores order, so moving rows does not invalidate their cached content.
+    val liveItemKeys by rememberUpdatedState(itemIndexByKey.keys)
 
     SideEffect {
         val movingChanged = runtime.previousMovingKey != movingKey
@@ -621,16 +623,19 @@ fun <T> TvReorderList(
                                             }
                                             .zIndex(if (isMoving) 1f else 0f),
                                     ) {
-                                        itemContent(
-                                            item,
-                                            isMoving,
-                                            {
-                                                if (!suppressStartMove && canMove(item)) {
-                                                    onStartMove(itemKey)
-                                                }
-                                            },
-                                            { confirmFromUi(fromOkKey = false) },
-                                        )
+                                        // A retained slot can recompose before removed rows are purged.
+                                        if (itemKey in liveItemKeys) {
+                                            itemContent(
+                                                item,
+                                                isMoving,
+                                                {
+                                                    if (!suppressStartMove && canMove(item)) {
+                                                        onStartMove(itemKey)
+                                                    }
+                                                },
+                                                { confirmFromUi(fromOkKey = false) },
+                                            )
+                                        }
                                     }
                                 }
                             }
