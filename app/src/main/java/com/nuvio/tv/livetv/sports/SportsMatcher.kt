@@ -30,6 +30,13 @@ internal class SportsMatcher(
     /** Periodic cooperative checks, outside the innermost text/term comparisons. */
     private val checkpoint: () -> Unit = {}
 ) {
+    private var nativeTextEnabled = true
+
+    /** A reference run uses the identical pipeline with the managed text path. */
+    internal constructor(db: EpgDatabase, dir: File?, sportsTable: Boolean, checkpoint: () -> Unit,
+        nativeTextEnabled: Boolean) : this(db = db, dir = dir, sportsTable = sportsTable, checkpoint = checkpoint) {
+        this.nativeTextEnabled = nativeTextEnabled
+    }
 
     class Input(
         val events: List<SportsEvent>,
@@ -157,9 +164,6 @@ internal class SportsMatcher(
             else if (cur.program == null && program != null) cur.program = program
         }
 
-        // Events that run for days (a golf tournament, an F1 weekend from practice to the race) have
-        // no single start time: while they're on, treat them as starting now.
-        fun multiDay(ev: SportsEvent) = !ev.hasTime && ev.endMs != null
         // Race weekends now carry each session's own time, but are still named only by the
         // competition ("Formula 1", "Grand Prix"), so they're matched the same careful way.
         fun raceWeekend(ev: SportsEvent) = ev.source == EventSource.ESPN &&
@@ -168,27 +172,14 @@ internal class SportsMatcher(
         // "Grand Prix"…) counts, not one that merely shares a word or two with the title ("United States").
         val noStart = HashSet<String>()
         val events = input.events.mapNotNull { ev ->
-            when {
-                ev.hasTime -> ev
-                !multiDay(ev) -> null
-                // The feed's end date is the start of the last day (Sunday 00:00): the event runs through that day.
-                ev.endMs!! + 24 * HOUR < input.now -> null
-                ev.startMs >= input.now -> ev
-                else -> ev.copy(startMs = input.now)
-            }?.also { if (!ev.hasTime || raceWeekend(ev)) noStart.add(ev.id) }
+            val start = SportsMatchingEvents.startMs(ev, input.now) ?: return@mapNotNull null
+            (if (start == ev.startMs) ev else ev.copy(startMs = start))
+                .also { if (!ev.hasTime || raceWeekend(ev)) noStart.add(ev.id) }
         }
-        val wanted = events.filter { ev ->
-            ev.state != GameState.OFF &&
-                ev.startMs in (input.now - 8 * HOUR)..(input.now + AHEAD_MS)
-        }
+        val wanted = events.filter { SportsMatchingEvents.inWindow(it, input.now) }
         // A channel you picked yourself shows straight away, however far off the game is (the
         // search above only looks a couple of days ahead).
-        val picked = events.filter { ev ->
-            ev.state != GameState.OFF && ev.startMs >= input.now - 8 * HOUR &&
-                (ev.id in input.settings.eventChannels || ev.leagueId in input.settings.leagueChannels ||
-                    (input.settings.teamChannels.isNotEmpty() && ev.sides.any { teamChannelKey(ev.leagueId, it.team.id) in input.settings.teamChannels }))
-        }
-        val byId = (wanted + picked).associateBy { it.id }
+        val byId = events.filter { SportsMatchingEvents.eligible(it, input.settings, input.now) }.associateBy { it.id }
         var byGuide = 0; var byName = 0; var byNetwork = 0
 
         // Shows found in the guide already know their channels.
@@ -652,11 +643,8 @@ internal class SportsMatcher(
                         }
                     }
                     if (src == From.GUIDE) {
-                        val pace = Pacer(false)
-                        db.scanListingsGrouped(from, to, from) { channels, start, stop, title, descr, cat ->
-                            pace.tick()
-                            consider(channels, start, stop, title, descr, cat, norm(title), if (wantDesc && !descr.isNullOrEmpty()) norm(descr) else "")
-                        }
+                        scanGuideText(from, to, from, wantDesc, gentle = false,
+                            words = titleWords + followed, onRow = ::consider)
                     } else {
                         readRows(src, from, to, from, wantDesc, gentle = false) { ch, start, stop, title, descr, cat, nt, nd ->
                             consider(listOf(ch), start, stop, title, descr, cat, nt, nd)
@@ -923,11 +911,7 @@ internal class SportsMatcher(
             }
         }
         if (src == From.GUIDE) {
-            val pace = Pacer(gentle)
-            db.scanListingsGrouped(from, to, minStop) { channels, start, stop, title, descr, cat ->
-                pace.tick()
-                consider(channels, start, stop, title, descr, cat, norm(title), if (descr.isNullOrEmpty()) "" else norm(descr))
-            }
+            scanGuideText(from, to, minStop, wantDesc = true, gentle = gentle, words = words, onRow = ::consider)
         } else {
             readRows(src, from, to, minStop, wantDesc = true, gentle = gentle) { ch, start, stop, title, descr, cat, nt, nd ->
                 consider(listOf(ch), start, stop, title, descr, cat, nt, nd)
@@ -946,6 +930,20 @@ internal class SportsMatcher(
     // ------------------------------------------------------------------ where the guide is read from
 
     private enum class From { GUIDE, TABLE }
+
+    private fun scanGuideText(
+        from: Long, to: Long, minStop: Long, wantDesc: Boolean, gentle: Boolean, words: Collection<String>,
+        onRow: (List<String>, Long, Long, String, String?, String?, String, String) -> Unit,
+    ) {
+        val pace = Pacer(gentle)
+        SportsGuideText(words, wantDesc, checkpoint, onRow, nativeEnabled = nativeTextEnabled).use { text ->
+            db.scanListingsGrouped(from, to, minStop) { channels, start, stop, title, descr, cat ->
+                pace.tick()
+                text.add(channels, start, stop, title, descr, cat)
+            }
+            text.finish()
+        }
+    }
 
     /**
      * Guide shows starting in [from, to) and still on after [minStop], with their title and

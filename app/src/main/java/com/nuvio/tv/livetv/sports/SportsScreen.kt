@@ -68,6 +68,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.record.LiveTvNotice
 import com.nuvio.tv.livetv.ui.ChannelLogo
@@ -83,6 +87,8 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -271,9 +277,65 @@ fun SportsScreen(
     // ---- the video window: the shared player, shown where the page puts its slot
     val videoOn = settings.videoWindow && hasChannels
     var playerRef by remember { mutableStateOf<androidx.media3.common.Player?>(null) }
-    DisposableEffect(videoOn) {
-        if (videoOn) playerRef = viewModel.attachPlayer()
-        onDispose { if (videoOn) { viewModel.detachPlayer(); playerRef = null } }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(videoOn, lifecycleOwner) {
+        var attachedPlayer = if (videoOn) viewModel.attachPlayer() else null
+        fun bind() {
+            if (!videoOn) return
+            if (attachedPlayer !== viewModel.player) {
+                viewModel.detachPlayer()
+                attachedPlayer = viewModel.attachPlayer()
+            }
+            playerRef = attachedPlayer
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> bind()
+                Lifecycle.Event.ON_PAUSE -> playerRef = null
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) bind()
+        // Preserve the existing lease across app backgrounding; only rebind a released player.
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            if (videoOn) viewModel.detachPlayer()
+            playerRef = null
+        }
+    }
+    val previewReturn by viewModel.previewReturn.pending.collectAsStateWithLifecycle()
+    // Reuse Sports' current source/parental rules, only when a preview needs to return.
+    val returnSource = if (previewReturn != null) hiltViewModel<SportsWatchViewModel>() else null
+    val latestReturnSource = androidx.compose.runtime.rememberUpdatedState(returnSource)
+    val latestVideoOn = androidx.compose.runtime.rememberUpdatedState(videoOn)
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // The request is prepared by the click after this block has run. Read it again only
+            // on the page's next resume, never while Multiview is opening or on a game's page.
+            val request = viewModel.previewReturn.pending.value ?: return@repeatOnLifecycle
+            // A retained page's lifecycle can resume before its state collector recomposes it.
+            val source = withTimeoutOrNull(5_000L) {
+                snapshotFlow { latestReturnSource.value }.first { it != null }
+            } ?: return@repeatOnLifecycle
+            val channel = if (latestVideoOn.value && source.currentProfile.value == request.profileId) {
+                withTimeoutOrNull(5_000L) {
+                    source.allowedChannels.first { channels ->
+                        channels.any { it.key == request.channelKey && source.mayPlay(it) }
+                    }
+                        .firstOrNull { it.key == request.channelKey }
+                }
+            } else null
+            if (viewModel.previewReturn.pending.value != request) return@repeatOnLifecycle
+            val allowed = channel?.takeIf {
+                !viewModel.hasPlaybackSelection && latestVideoOn.value && source.mayPlay(it)
+            }
+            if (viewModel.previewReturn.finish(request, source.currentProfile.value) && allowed != null) {
+                viewModel.playChannelHere(allowed)
+                SportsLaunch.pickGame(request.eventId, allowed.key)
+                playerRef = viewModel.player
+            }
+        }
     }
     // A game playing in the window: keep the TV awake (no screen saver), as Live TV does.
     val playingNow by viewModel.playingNow.collectAsStateWithLifecycle()
@@ -523,14 +585,14 @@ fun SportsScreen(
                 onOpen = { ev -> fromRoute = null; fromLabel = null; openId = ev.id },
                 onQuickWatch = ::quickWatch,
                 onPick = { picker = true },
-                onOpenMultiview = { onOpenMultiview(playingKey) },
+                onOpenMultiview = { onOpenMultiview(viewModel.prepareMultiview()) },
                 onWatchChannel = { ch -> SportsLaunch.openedFromSports(); viewModel.watchChannel(ch); onOpenLive() }
             ) }
         }
         // The picture, on top of the page where its slot is (one view for every page, so it
         // never restarts), then the rounded corners and the "nothing playing" note over it.
         if (videoOn) VideoLayer(
-            slot, root, playerRef ?: viewModel.player, playing = playingKey != null, backdrop = backdrop,
+            slot, root, playerRef, playing = playingKey != null, backdrop = backdrop,
             onAttached = { viewModel.onSurfaceAttached() },
             onHidden = { viewModel.setPictureHidden(it) }
         )

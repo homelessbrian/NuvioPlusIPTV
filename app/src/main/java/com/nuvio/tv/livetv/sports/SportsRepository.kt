@@ -1943,7 +1943,9 @@ class SportsRepository @Inject constructor(
             // a list of ~1000 strings each time the feed updates: which games there are, and their
             // details (start times, how many networks listed). The details move often while games
             // are on (a network added, a time nudged), so on their own they only get a quick match.
-            events.map { list ->
+            combine(events, known, settings) { current, all, s ->
+                SportsMatchingEvents.select(current, all, s, System.currentTimeMillis())
+            }.map { list ->
                 var games = 17L
                 var details = 17L
                 var n = 0
@@ -2283,6 +2285,9 @@ class SportsRepository @Inject constructor(
             val saved = settings.value
             // Your picks on channels the provider has since renamed: on the renamed channel.
             val s = SportsPickedChannels.resolve(saved, channelStore.displayChannels.value)
+            // My Sports also shows saved cards that plainEvents replaced with a guide card.
+            // They need the same channel search and saved choices, within the existing horizon.
+            val matchingEvents = SportsMatchingEvents.select(events.value, known.value, s, now)
             val f = follows.value
             // Sports ESPN doesn't cover, from the guide: yesterday to tomorrow, every one of
             // them, not just your region's (this is a local guide search, not an API call, so
@@ -2295,11 +2300,11 @@ class SportsRepository @Inject constructor(
             // that's quick and such channels rarely have guide listings; networks only for games
             // on now or starting within 3 hours (that step reads the guide a little). Added to
             // what's already shown; the full round's results replace them when it finishes.
-            if (events.value.isNotEmpty()) {
+            if (matchingEvents.isNotEmpty()) {
                 val quickAt = System.currentTimeMillis()
                 sportsCatching {
                     matcher.match(SportsMatcher.Input(
-                        events = events.value, channels = channels, quality = user.channelQuality,
+                        events = matchingEvents, channels = channels, quality = user.channelQuality,
                         shiftMs = shift, settings = s, now = now, readGuide = false,
                         networksUntil = now + 3 * HOUR
                     ))
@@ -2319,7 +2324,7 @@ class SportsRepository @Inject constructor(
                 withTimeoutOrNull(10_000) { _loading.first { !it } }
                 delay(500)
             }
-            matcher.configureTable(events.value, guideLeagues, f.words, now, gentle = !pageOnly())
+            matcher.configureTable(matchingEvents, guideLeagues, f.words, now, gentle = !pageOnly())
             // All three days from one read of the guide (none at all when it hasn't changed).
             val days = sportsCatching {
                 matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, f.words, keys, shift, now)
@@ -2329,7 +2334,7 @@ class SportsRepository @Inject constructor(
             if (days != guideData.value) guideData.value = days
             val result = matcher.match(
                 SportsMatcher.Input(
-                    events = events.value,
+                    events = SportsMatchingEvents.select(events.value, known.value, s, now),
                     channels = channels,
                     quality = user.channelQuality,
                     shiftMs = shift,

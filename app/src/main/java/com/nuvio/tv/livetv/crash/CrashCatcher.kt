@@ -151,7 +151,15 @@ object CrashCatcher {
 
     fun lastReport(context: Context): String? {
         val crash = runCatching { File(context.filesDir, FILE_NAME).takeIf { it.exists() }?.readText() }.getOrNull()
-        val busy = runCatching { File(context.filesDir, BUSY_FILE).takeIf { it.exists() }?.readText() }.getOrNull()
+        val busy = runCatching {
+            val file = File(context.filesDir, BUSY_FILE).takeIf { it.exists() } ?: return@runCatching null
+            val report = file.readText().trimEnd().ifBlank { return@runCatching null }
+            // Older snapshots have no date inside them. Keep them, but don't imply that a saved
+            // CPU sample came from the same run as the crash or freeze displayed above it.
+            val savedAt = file.lastModified().takeIf { it > 0L }?.let { reportTime(it) } ?: "unknown"
+            "SAVED CPU SNAPSHOT (file last saved: $savedAt)\n" +
+                "This snapshot may be from a different app run than any crash or freeze report.\n\n$report"
+        }.getOrNull()
         return listOfNotNull(crash?.trimEnd()?.ifBlank { null }, busy?.trimEnd()?.ifBlank { null })
             .joinToString("\n\n────────\n\n").ifBlank { null }
     }
@@ -249,6 +257,7 @@ object CrashCatcher {
             appendLine("Nuvio + IPTV ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · kit ${com.nuvio.tv.livetv.model.LiveTvLoadReport.KIT_STAMP}")
             appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine(situation(app))
+            appendLine("When: ${reportTime(System.currentTimeMillis())}")
             appendLine()
             appendLine("APP KEPT THE PROCESSOR BUSY (${pct.toInt()}% of one core over the last 30 s, while on screen)")
             appendLine("Busiest threads (% of one core over 5 s):")
@@ -292,7 +301,7 @@ object CrashCatcher {
             ApplicationExitInfo.REASON_SIGNALED ->
                 // Our own crash handler ends the app this way; that crash was already shown.
                 if (kotlin.math.abs(last.timestamp - selfKillAt) < 15_000) return null
-                else "KILLED (signal ${last.status}; on TV boxes this is usually the memory cleaner)"
+                else "KILLED (signal ${last.status})"
             else -> return null
         }
         return buildString {
@@ -300,13 +309,14 @@ object CrashCatcher {
             appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine()
             appendLine("APP $reason")
-            appendLine("When: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(last.timestamp))}")
+            appendLine("When: ${reportTime(last.timestamp)}")
             last.description?.takeIf { it.isNotBlank() }?.let { appendLine("Android says: $it") }
             appendLine("Was ${if (last.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) "on screen" else "in the background"}")
-            appendLine("App memory: ${last.pss / 1024} MB used, ${last.rss / 1024} MB total")
+            appendLine("Last sampled process memory: PSS ${last.pss / 1024} MiB, RSS ${last.rss / 1024} MiB")
+            appendLine("Historical samples, not Java heap usage/limit or exact memory at exit.")
             runCatching {
                 val mi = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
-                appendLine("Device memory: ${mi.totalMem / (1024 * 1024)} MB, app limit ${am.memoryClass} MB / large ${am.largeMemoryClass} MB")
+                appendLine("Device total RAM: ${mi.totalMem / (1024 * 1024)} MiB, Java heap class ${am.memoryClass} MiB / large ${am.largeMemoryClass} MiB")
             }
             if (last.reason == ApplicationExitInfo.REASON_CRASH_NATIVE) {
                 runCatching { previousProcessLog() }.getOrNull()?.let { (_, lines) ->
@@ -463,6 +473,9 @@ object CrashCatcher {
 
     @Volatile private var appContext: Context? = null
 
+    private fun reportTime(timestamp: Long): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(timestamp))
+
     /**
      * One line on when it happened: how long after the app started, how long the box had been on
      * (problems that a restart of the box clears), when the app was last updated, and memory.
@@ -481,7 +494,7 @@ object CrashCatcher {
                 if (ago < 120) "${ago}m ago" else "${ago / 60}h ago"
             }.getOrNull()
         } ?: "?"
-        "App open ${sinceStart}s · box on ${boxOn / 1440}d ${boxOn / 60 % 24}h ${boxOn % 60}m · app updated $updated · memory ${usedMb}/${maxMb} MB"
+        "App open ${sinceStart}s · box on ${boxOn / 1440}d ${boxOn / 60 % 24}h ${boxOn % 60}m · app updated $updated · Java heap ${usedMb}/${maxMb} MiB used/max"
     }.getOrDefault("")
 
     private fun buildReport(thread: Thread, error: Throwable): String {

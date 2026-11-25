@@ -160,20 +160,27 @@ data class SeriesRule(
      */
     val seen: List<String> = emptyList(),
     /** Only airings the guide marks as new ("NEW", "(New)", or the guide's own new tag). */
-    val newOnly: Boolean = false
+    val newOnly: Boolean = false,
+    /** This series' own extra time before / after each episode, in minutes (-1 = the Recordings setting). */
+    val preMin: Int = -1,
+    val postMin: Int = -1
 ) {
     val norm: String get() = LiveTvRepository.normalize(title)
+    val hasOwnTimes: Boolean get() = preMin >= 0 || postMin >= 0
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id); put("channel", channel.toJson()); put("title", title); put("keepLast", keepLast)
         put("seen", org.json.JSONArray(seen)); put("newOnly", newOnly)
+        put("preMin", preMin); put("postMin", postMin)
     }
 
     companion object {
         fun fromJson(o: JSONObject) = SeriesRule(
             o.optString("id"), ChannelSnapshot.fromJson(o.getJSONObject("channel")), o.optString("title"), o.optInt("keepLast"),
             o.optJSONArray("seen")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
-            o.optBoolean("newOnly", false)
+            o.optBoolean("newOnly", false),
+            o.optInt("preMin", -1),
+            o.optInt("postMin", -1)
         )
     }
 }
@@ -285,6 +292,14 @@ class LiveTvRecordingScheduler @Inject constructor(
     /** Extra time before and after recordings (Settings → Live TV → Recordings), in ms. */
     fun padding(): Pair<Long, Long> = padPreMs to padPostMs
 
+    /** Extra time for an episode of series [seriesId]: its own times, else the Recordings setting. */
+    private fun paddingFor(seriesId: String?): Pair<Long, Long> {
+        val rule = seriesId?.let { id -> _series.value.firstOrNull { it.id == id } }
+        val pre = rule?.preMin?.takeIf { it >= 0 }?.let { it * 60_000L } ?: padPreMs
+        val post = rule?.postMin?.takeIf { it >= 0 }?.let { it * 60_000L } ?: padPostMs
+        return pre to post
+    }
+
     /** True if [program] on [channelKey] is set to record. */
     fun isScheduled(channelKey: String, program: EpgProgram): Boolean =
         _schedules.value.any { it.channel.key == channelKey && it.startMs == program.startMs }
@@ -365,13 +380,14 @@ class LiveTvRecordingScheduler @Inject constructor(
             (channel.stalkerRef == null || (!program.providerProgramId.isNullOrBlank() &&
                 program.providerSourceIdentity == channel.stalkerRef.sourceIdentity))
         val title = cleanTitle(program.title)
+        val (padPre, padPost) = paddingFor(seriesId)
         if (!useCatchup && now >= program.startMs && now < program.stopMs) {
             // On now, no catch-up: record from now.
             if (recorder.activeFor(channel.key) == null) {
                 scope.launch {
                     runCatching {
                         recorder.start(channel, channel.url, title, program.episode, program.description,
-                            program.startMs, program.stopMs, program.stopMs + padPostMs,
+                            program.startMs, program.stopMs, program.stopMs + padPost,
                             onFinished = { seriesId?.let { keepOnlyNewest(it) } }, seriesId = seriesId)
                     }.onFailure { LiveTvNotice.show("Couldn't start recording \"$title\": ${it.message ?: "storage unavailable"}") }
                 }
@@ -389,8 +405,8 @@ class LiveTvRecordingScheduler @Inject constructor(
             stopMs = program.stopMs,
             useCatchup = useCatchup,
             seriesId = seriesId,
-            preMs = padPreMs,
-            postMs = padPostMs,
+            preMs = padPre,
+            postMs = padPost,
             providerProgramId = program.providerProgramId,
             providerSourceIdentity = program.providerSourceIdentity,
             isNew = isNew(program),
@@ -507,6 +523,27 @@ class LiveTvRecordingScheduler @Inject constructor(
                 save()
             }
             if (!newOnly) expandSeries()
+        }
+    }
+
+    /**
+     * A series' own extra time before / after each episode, in minutes (-1 = the Recordings
+     * setting). Episodes it has already set that haven't started yet move to the new times.
+     */
+    fun setPadding(seriesId: String, preMin: Int, postMin: Int) {
+        scope.launch {
+            mutex.withLock {
+                _series.value = _series.value.map { if (it.id == seriesId) it.copy(preMin = preMin, postMin = postMin) else it }
+                val (pre, post) = paddingFor(seriesId)
+                val changed = _schedules.value.filter { it.seriesId == seriesId && (it.preMs != pre || it.postMs != post) }
+                if (changed.isNotEmpty()) {
+                    changed.forEach { disarm(it) }
+                    val updated = changed.associate { it.id to it.copy(preMs = pre, postMs = post) }
+                    _schedules.value = _schedules.value.map { updated[it.id] ?: it }
+                    updated.values.forEach { arm(it) }
+                }
+                save()
+            }
         }
     }
 

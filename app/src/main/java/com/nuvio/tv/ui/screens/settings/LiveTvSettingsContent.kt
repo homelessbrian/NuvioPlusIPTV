@@ -2162,8 +2162,10 @@ internal fun LiveTvSettingsContent(
                 (context.getString(R.string.iptv_settings_catchup_shift_value, offsetLabel(context, d.source.catchupShiftMinutes))).takeIf { d.source.liveEnabled && !d.source.isStalker }?.let {
                     it to { dialog = LiveDialog.PlaylistCatchupShift(d.source) }
                 },
-                // Which Nuvio profiles see this playlist (only with more than one profile).
-                if (profiles.size > 1) {
+                // Which Nuvio profiles see this playlist (with more than one profile, or when it's
+                // still hidden on a profile, e.g. set when there were more or from sync, so it can
+                // be shown again).
+                if (profiles.size > 1 || profiles.any { d.source.id in hiddenPlaylistsByProfile[it.id].orEmpty() }) {
                     val shownOn = profiles.count { d.source.id !in hiddenPlaylistsByProfile[it.id].orEmpty() }
                     context.getString(
                         R.string.iptv_settings_show_on_profiles_value,

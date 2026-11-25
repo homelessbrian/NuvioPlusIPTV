@@ -421,7 +421,12 @@ fun MultiviewScreen(
                 if (barFocused) paneFocus[state.focusedPane].requestFocus()
                 overlaysDismissed = true
             }
-            MultiviewBack.LEAVE -> if (startOnSports && returnToSingle) single() else onBack()
+            MultiviewBack.LEAVE -> if (startOnSports && returnToSingle) single() else {
+                // Release pane connections before the returning Sports page resumes its preview.
+                profileExitRequested[0] = true
+                session.release()
+                onBack()
+            }
         }
     }
 

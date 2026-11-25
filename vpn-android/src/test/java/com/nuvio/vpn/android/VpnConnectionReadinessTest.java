@@ -14,7 +14,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
@@ -27,6 +29,7 @@ import org.robolectric.annotation.LooperMode;
 @Config(sdk = 35)
 @LooperMode(LooperMode.Mode.PAUSED)
 public final class VpnConnectionReadinessTest {
+    @Rule public final TestName testName = new TestName();
     private static final String ID = "bb6c6284-1068-444a-a239-70090a64771b";
     private ServiceController<VpnConnectionService> controller;
     private VpnConnectionService service;
@@ -38,15 +41,19 @@ public final class VpnConnectionReadinessTest {
         service = controller.get();
         ((ScheduledFuture<?>) field("monitor").get(service)).cancel(false);
         worker = (ExecutorService) field("worker").get(null);
-        new AndroidVpnSettings(service).save(new VpnPreferences(ProtectionMode.HTTP_HTTPS, ID));
+        // Write the fixture once: modern AtomicFile replacement uses POSIX rename semantics,
+        // which Robolectric's Windows filesystem cannot reproduce for an existing file.
+        ProtectionMode mode = testName.getMethodName().equals("fullAppRecoveryPublishesOnlyAfterVerificationAndOncePerSession")
+                ? ProtectionMode.APP_WIDE : ProtectionMode.HTTP_HTTPS;
+        new AndroidVpnSettings(service).save(new VpnPreferences(mode, ID));
         engine = new FakeEngine();
         worker.submit(() -> {
             try {
                 field("engine").set(service, engine);
                 field("profile").set(service, ID);
-                field("scope").set(service, ProtectionMode.HTTP_HTTPS);
+                field("scope").set(service, mode);
                 field("requestedProfile").set(null, ID);
-                field("requestedMode").set(null, ProtectionMode.HTTP_HTTPS);
+                field("requestedMode").set(null, mode);
                 field("started").setLong(service, SystemClock.elapsedRealtime());
                 field("current").set(null, new VpnConnectionService.Snapshot(VpnConnectionService.Phase.CONNECTING, 0, 0));
             } catch (Exception error) { throw new AssertionError(error); }
@@ -102,6 +109,39 @@ public final class VpnConnectionReadinessTest {
         assertEquals(1L, engine.lookupStarted.getCount());
     }
 
+    @Test public void fullAppRecoveryPublishesOnlyAfterVerificationAndOncePerSession() throws Exception {
+        long before = VpnPlaybackProtection.networkRecoveryRevision();
+        java.util.concurrent.atomic.AtomicInteger notifications = new java.util.concurrent.atomic.AtomicInteger();
+        try (AutoCloseable subscription = VpnPlaybackProtection.observeNetworkRecovery(() -> {
+            assertEquals(VpnConnectionService.Phase.CONNECTED, VpnConnectionService.snapshot().phase);
+            notifications.incrementAndGet();
+        })) {
+            engine.healthy = false;
+            callOnWorker("poll");
+            assertEquals(before, VpnPlaybackProtection.networkRecoveryRevision());
+            engine.healthy = true;
+            VpnConnectionService.checkSoon();
+            callOnWorker("poll");
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(before + 1, VpnPlaybackProtection.networkRecoveryRevision());
+            assertEquals(1, notifications.get());
+            callOnWorker("poll");
+            assertEquals(before + 1, VpnPlaybackProtection.networkRecoveryRevision());
+            engine.session++;
+            callOnWorker("poll");
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            assertEquals(before + 2, VpnPlaybackProtection.networkRecoveryRevision());
+            assertEquals(2, notifications.get());
+        }
+    }
+
+    @Test public void streamOnlyReadinessDoesNotInvalidateMetadataSearches() throws Exception {
+        long before = VpnPlaybackProtection.networkRecoveryRevision();
+        callOnWorker("poll");
+        assertTrue(VpnConnectionService.verifiedFor(ID, ProtectionMode.HTTP_HTTPS));
+        assertEquals(before, VpnPlaybackProtection.networkRecoveryRevision());
+    }
+
     private void displayFinished() throws Exception {
         ((ExecutorService) field("displayWorker").get(null)).submit(() -> {}).get(2, TimeUnit.SECONDS);
         if (worker != null) worker.submit(() -> {}).get(2, TimeUnit.SECONDS);
@@ -123,8 +163,9 @@ public final class VpnConnectionReadinessTest {
         final CountDownLatch lookupStarted = new CountDownLatch(1);
         final CountDownLatch release = new CountDownLatch(1);
         volatile boolean healthy = true, closed;
+        volatile long session = 17;
         @Override public boolean isUp() { return !closed; }
-        @Override public TunnelTraffic statistics() { return new TunnelTraffic(1024, 512, true, 17); }
+        @Override public TunnelTraffic statistics() { return new TunnelTraffic(1024, 512, true, session); }
         @Override public boolean probe() { return healthy; }
         @Override public String egress() {
             lookupStarted.countDown();

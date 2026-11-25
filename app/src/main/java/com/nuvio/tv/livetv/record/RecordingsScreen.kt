@@ -62,6 +62,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import coil3.compose.AsyncImage
 import com.nuvio.tv.livetv.ui.LIVE_RED
@@ -99,6 +101,52 @@ class RecordingsViewModel @Inject constructor(
 
     // Other TVs' recordings on the network folder show up as soon as the page opens.
     init { recorder.refreshLibrary() }
+
+    /**
+     * The drives and folders recordings can be on, looked up in the background: a sleeping hard
+     * drive can take several seconds to answer, and the page shouldn't wait for it to open.
+     * Looked up again when recordings come or go (a drive plugged in, a move finished) or
+     * Save Recordings To changes.
+     */
+    class Storage(
+        val choices: List<RecordingStorage.Choice> = emptyList(),
+        val places: List<RecordingStorage.Place> = emptyList(),
+        /** Where new recordings go now (Save Recordings To). */
+        val currentId: String = "",
+        /** Room left there (Long.MAX_VALUE: not known yet, or a network folder that hasn't said). */
+        val freeBytes: Long = Long.MAX_VALUE
+    ) {
+        /** The place id a recording is on ("" for this device), or null if its drive isn't plugged in. */
+        fun idOf(rec: LiveTvRecording): String? = choiceOf(rec.dir)?.id
+        fun choiceOf(dir: String): RecordingStorage.Choice? =
+            choices.filter { dir.startsWith(it.dir.absolutePath + java.io.File.separator) }
+                .maxByOrNull { it.dir.absolutePath.length }
+    }
+    private val _storage = MutableStateFlow(Storage())
+    val storage: StateFlow<Storage> = _storage.asStateFlow()
+
+    init {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            kotlinx.coroutines.flow.combine(
+                recorder.recordings.map { list -> list.map { it.dir } }.distinctUntilChanged(),
+                recorder.move.map { it == null }.distinctUntilChanged(),
+                livePrefs.settings.map { it.recordingStorage }.distinctUntilChanged()
+            ) { _, _, wanted -> wanted }.collectLatest { wanted ->
+                runCatching {
+                    val context = recorder.appContext
+                    val all = RecordingStorage.choices(context)
+                    val current = all.firstOrNull { it.id == wanted } ?: all.firstOrNull { it.isDevice }
+                    val free = when {
+                        current == null -> Long.MAX_VALUE
+                        current.id == NetworkFolderStore.STORAGE_ID -> NetworkFolderStore.cachedSpace(context)?.first ?: Long.MAX_VALUE
+                        else -> current.freeBytes
+                    }
+                    val id = current?.id.orEmpty()
+                    _storage.value = Storage(all, RecordingStorage.places(context, id, all), id, free)
+                }
+            }
+        }
+    }
 
     /** New Recording's channel list: favorites, then channels watched recently. */
     val pickerChannels: kotlinx.coroutines.flow.StateFlow<List<com.nuvio.tv.livetv.model.LiveChannel>> =
@@ -381,16 +429,12 @@ class RecordingsViewModel @Inject constructor(
         runCatching { artPrefs.edit().remove(rec.id).apply() }
         runCatching { aboutPrefs.edit().remove(rec.id).apply() }
     }
-    fun freeBytes(): Long = recorder.freeBytes()
     fun setKeepForever(rec: LiveTvRecording, keep: Boolean) = recorder.setKeepForever(rec.id, keep)
     fun isWatched(rec: LiveTvRecording): Boolean = RecordingResume.isWatched(recorder.appContext, rec.id)
     fun markWatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.markWatched(recorder.appContext, it.id) }
     fun markUnwatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.clear(recorder.appContext, it.id) }
     fun moveTo(recs: List<LiveTvRecording>, target: RecordingStorage.Choice) = recorder.moveTo(recs.map { it.id }, target)
     fun stopMove() = recorder.stopMove()
-    fun storageIdOf(rec: LiveTvRecording): String? = recorder.storageIdOf(rec)
-    /** Where new recordings go now (Save Recordings To). */
-    fun currentStorageId(): String = recorder.currentStorage().id
 }
 
 /**
@@ -430,6 +474,14 @@ fun RecordingsScreen(
     }
     var seriesMenu by remember { mutableStateOf<SeriesRule?>(null) }
     var seriesKeepMenu by remember { mutableStateOf<SeriesRule?>(null) }
+    // A series' own extra time: which one is being picked ("pre" / "post").
+    var seriesPadMenu by remember { mutableStateOf<Pair<SeriesRule, String>?>(null) }
+    val liveSettings by viewModel.look.collectAsStateWithLifecycle()
+    fun minLabel(m: Int): String = if (m <= 0) "Off" else "$m min"
+    fun padLine(r: SeriesRule): String? = if (!r.hasOwnTimes) null else listOfNotNull(
+        r.preMin.takeIf { it >= 0 }?.let { if (it == 0) "No early start" else "+$it min before" },
+        r.postMin.takeIf { it >= 0 }?.let { if (it == 0) "No extra after" else "+$it min after" }
+    ).joinToString(" · ")
     var repeatMenu by remember { mutableStateOf<RepeatRule?>(null) }
     // Which playlist each recording uses: shown on the cards when there's more than one (handy
     // with a one-connection login: don't watch that playlist while it records).
@@ -453,6 +505,7 @@ fun RecordingsScreen(
     val first = remember { FocusRequester() }
     val colors = NuvioTheme.colors
     val look by viewModel.look.collectAsStateWithLifecycle()
+    val storage by viewModel.storage.collectAsStateWithLifecycle()
 
     val now = recordings.filter { it.isRecording }
     val done = recordings.filter { !it.isRecording }
@@ -542,7 +595,7 @@ fun RecordingsScreen(
                 RecordingsGearButton(onClick = onOpenSettings)
                 Spacer(Modifier.width(14.dp))
                 LiveText("Recordings", size = 30.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                val free = viewModel.freeBytes()
+                val free = storage.freeBytes
                 if (free != Long.MAX_VALUE) LiveText(
                     "${sizeLabel(free)} free",
                     size = 15.sp,
@@ -682,7 +735,8 @@ fun RecordingsScreen(
                                     poster = titlePosters[posterKey(r.title)],
                                     channelLogo = r.channel.logo,
                                     line = (if (r.newOnly) "New episodes" else "All episodes") + " · " +
-                                        (if (r.keepLast > 0) "Keep last ${r.keepLast}" else "Keep all"),
+                                        (if (r.keepLast > 0) "Keep last ${r.keepLast}" else "Keep all") +
+                                        (padLine(r)?.let { " · $it" } ?: ""),
                                     channel = withPlaylist(r.channel.name, r.channel.sourceId),
                                     modifier = if (r.id == seriesRules.first().id) Modifier.focusRequester(first) else Modifier,
                                     onClick = { seriesMenu = r }
@@ -717,7 +771,7 @@ fun RecordingsScreen(
                 onPlay = { playNow(it) },
                 onMenu = { menuFor = it },
                 onMarkAllWatched = { viewModel.markWatched(show.episodes); resumeTick++ },
-                onMoveAll = if (RecordingStorage.choices(recContext).size > 1) ({ movePick = show.episodes }) else null,
+                onMoveAll = if (storage.choices.size > 1) ({ movePick = show.episodes }) else null,
                 onDeleteAll = { confirmDeleteShow = show },
                 onClose = { openShowKey = null },
                 backdrop = look.guideBackdrop,
@@ -794,6 +848,12 @@ fun RecordingsScreen(
                     seriesMenu = null; viewModel.scheduler.setNewOnly(r.id, !r.newOnly)
                 },
                 ("Episodes to Keep: " + (if (r.keepLast == 0) "All" else "Last ${r.keepLast}")) to { seriesMenu = null; seriesKeepMenu = r },
+                ("Start Recording Early: " + (if (r.preMin < 0) "Default (${minLabel(liveSettings.recordPreMinutes)})" else minLabel(r.preMin))) to {
+                    seriesMenu = null; seriesPadMenu = r to "pre"
+                },
+                ("Keep Recording After: " + (if (r.postMin < 0) "Default (${minLabel(liveSettings.recordPostMinutes)})" else minLabel(r.postMin))) to {
+                    seriesMenu = null; seriesPadMenu = r to "post"
+                },
                 "Fix Match" to { seriesMenu = null; fixMatchFor = r.title to true },
                 "Close" to { seriesMenu = null }
             ),
@@ -811,6 +871,25 @@ fun RecordingsScreen(
                 "Close" to { repeatMenu = null }
             ),
             onDismiss = { repeatMenu = null }
+        )
+    }
+    seriesPadMenu?.let { (r, which) ->
+        val pre = which == "pre"
+        val current = if (pre) r.preMin else r.postMin
+        val default = if (pre) liveSettings.recordPreMinutes else liveSettings.recordPostMinutes
+        val choices = if (pre) listOf(0, 1, 2, 5, 10, 15, 30) else listOf(0, 2, 5, 10, 15, 20, 30, 45, 60)
+        RecordingActionDialog(
+            title = if (pre) "Start Recording Early" else "Keep Recording After",
+            detail = r.title + ": " + (if (pre) "starts this long before each episode." else "keeps going this long after each episode, for shows that often run over.") +
+                " Episodes already set change too. Default follows Settings › Live TV › Recordings.",
+            actions = (listOf(-1) + choices).map { m ->
+                val label = (if (m < 0) "Default (${minLabel(default)})" else minLabel(m)) + if (current == m) "  ✓" else ""
+                label to {
+                    seriesPadMenu = null
+                    if (pre) viewModel.scheduler.setPadding(r.id, m, r.postMin) else viewModel.scheduler.setPadding(r.id, r.preMin, m)
+                }
+            },
+            onDismiss = { seriesPadMenu = null }
         )
     }
     seriesKeepMenu?.let { r ->
@@ -837,7 +916,7 @@ fun RecordingsScreen(
             if (!rec.isRecording && rec.status != RecordingStatus.FAILED) {
                 if (viewModel.isWatched(rec)) add("Mark as Unwatched" to { menuFor = null; viewModel.markUnwatched(listOf(rec)); resumeTick++ })
                 else add("Mark as Watched" to { menuFor = null; viewModel.markWatched(listOf(rec)); resumeTick++ })
-                if (RecordingStorage.choices(recContext).size > 1) add("Move To…" to { menuFor = null; movePick = listOf(rec) })
+                if (storage.choices.size > 1) add("Move To…" to { menuFor = null; movePick = listOf(rec) })
                 // Never removed by "Delete recordings after" (Settings › Live TV › Recordings).
                 if (!rec.fromOtherTv) add((if (rec.keepForever) "Keep Forever  ✓" else "Keep Forever") to {
                     menuFor = null; viewModel.setKeepForever(rec, !rec.keepForever)
@@ -881,16 +960,16 @@ fun RecordingsScreen(
             onDismiss = { movePick = null }
         )
     } else movePick?.let { recs ->
-        val here = recs.mapNotNull { viewModel.storageIdOf(it) }.distinct()
-        val current = remember(recs) { viewModel.currentStorageId() }
+        val here = recs.mapNotNull { storage.idOf(it) }.distinct()
+        val current = storage.currentId
         // Each drive once: a drive moves recordings into the folder chosen for it (Save Recordings To).
-        val allPlaces = remember(recs) { RecordingStorage.places(recContext, current) }
+        val allPlaces = storage.places
         fun placeName(p: RecordingStorage.Place, c: RecordingStorage.Choice): String =
             RecordingStorage.folderName(c)?.let { p.label + " › " + it } ?: p.label
         val nowOn = here.singleOrNull()?.let { id ->
             allPlaces.firstNotNullOfOrNull { p -> p.all.firstOrNull { it.id == id }?.let { placeName(p, it) } }
         }
-        val places = allPlaces.filter { p -> val c = p.choice; c != null && recs.any { viewModel.storageIdOf(it) != c.id } }
+        val places = allPlaces.filter { p -> val c = p.choice; c != null && recs.any { storage.idOf(it) != c.id } }
         RecordingActionDialog(
             title = if (recs.size == 1) "Move \"${recs.first().title}\"" else "Move ${recs.size} recordings",
             detail = listOfNotNull(
@@ -938,8 +1017,7 @@ fun RecordingsScreen(
     infoFor?.let { picked ->
         // Live: a recording still going keeps its size and length up to date.
         val rec = recordings.firstOrNull { it.id == picked.id } ?: picked
-        val context = androidx.compose.ui.platform.LocalContext.current
-        RecordingInfoDialog(rec, savedOnLabel(context, rec.dir), playlistOf(rec.channelKey.substringBefore('|')), about = recordingAbout(rec, about), onDismiss = { infoFor = null })
+        RecordingInfoDialog(rec, savedOnLabel(storage, rec.dir), playlistOf(rec.channelKey.substringBefore('|')), about = recordingAbout(rec, about), onDismiss = { infoFor = null })
     }
     confirmDelete?.let { rec ->
         RecordingActionDialog(
@@ -1679,10 +1757,8 @@ private fun RecordingInfoDialog(rec: LiveTvRecording, savedOn: String, playlist:
 }
 
 /** "This Device" or the drive's name, for the folder a recording is in. */
-private fun savedOnLabel(context: android.content.Context, dir: String): String {
-    val choice = runCatching { RecordingStorage.choices(context) }.getOrDefault(emptyList())
-        .filter { dir.startsWith(it.dir.absolutePath) }
-        .maxByOrNull { it.dir.absolutePath.length }
+private fun savedOnLabel(storage: RecordingsViewModel.Storage, dir: String): String {
+    val choice = storage.choiceOf(dir)
     return choice?.label ?: if (dir.startsWith("/storage/emulated") || dir.startsWith("/data/")) "This Device" else "A drive that isn't plugged in"
 }
 

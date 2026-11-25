@@ -101,6 +101,8 @@ public final class VpnPlaybackProtection {
     private static volatile VpnPreferences cachedSettings;
     private static volatile boolean profilesRestoring;
     private static final java.util.concurrent.atomic.AtomicLong settingsRevision = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong networkRecoveryRevision = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.CopyOnWriteArrayList<Runnable> networkRecoveryListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static final java.util.concurrent.CopyOnWriteArrayList<Runnable> settingsListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static final java.util.concurrent.CopyOnWriteArrayList<Runnable> backupListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static final java.util.Map<String, Integer> nativeLeases = new java.util.HashMap<>();
@@ -195,6 +197,8 @@ public final class VpnPlaybackProtection {
         if (value == null) throw new IOException("VPN settings are not ready.");
         return value;
     }
+    // Observability must never make a main-thread settings-file read or start a VPN request.
+    static VpnPreferences cachedSettingsForDiagnostics() { return cachedSettings; }
     public static long settingsRevision() { return settingsRevision.get(); }
     /**
      * Whether VPN protection is switched on (any mode), for callers that must leave address
@@ -225,6 +229,21 @@ public final class VpnPlaybackProtection {
     public static AutoCloseable observeSettings(Runnable listener) {
         settingsListeners.add(listener);
         return () -> settingsListeners.remove(listener);
+    }
+    /** Metadata searches can retry failed sources after a Full app tunnel becomes usable.
+     * This is separate from settings changes: it never invalidates players or tunnel clients. */
+    public static long networkRecoveryRevision() { return networkRecoveryRevision.get(); }
+    public static AutoCloseable observeNetworkRecovery(Runnable listener) {
+        networkRecoveryListeners.add(listener);
+        return () -> networkRecoveryListeners.remove(listener);
+    }
+    static void networkRecovered() {
+        networkRecoveryRevision.incrementAndGet();
+        for (Runnable listener : networkRecoveryListeners) main.post(() -> {
+            if (networkRecoveryListeners.contains(listener)) {
+                try { listener.run(); } catch (RuntimeException ignored) { }
+            }
+        });
     }
     private static final java.util.concurrent.CopyOnWriteArrayList<Runnable> recoveryListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     /**

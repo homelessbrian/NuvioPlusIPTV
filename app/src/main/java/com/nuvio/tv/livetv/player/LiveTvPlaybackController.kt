@@ -198,9 +198,14 @@ class LiveTvPlaybackController @Inject constructor(
         shiftJob = scope.launch {
             var waited = 0
             val f = java.io.File(session.playUri.path ?: "")
-            while (waited < 15_000 && !(f.exists() && f.length() > 0)) { delay(200); waited += 200 }
+            // TS publishes a short first piece before the next six-second piece is ready.
+            // Start with the intended live offset already saved, rather than play that short
+            // piece and run out. HLS already saves its own lead-in before publishing a playlist.
+            fun ready() = f.exists() && f.length() > 0 &&
+                (session.kind != LiveTvTimeshift.Kind.TS || timeshift.savedMs >= LOCAL_LIVE_OFFSET_MS)
+            while (waited < 15_000 && !ready()) { delay(200); waited += 200 }
             if (timeshift.session != session) return@launch
-            if (!f.exists()) { bufferFailed(); return@launch }
+            if (!ready()) { bufferFailed(); return@launch }
             p.setMediaSource(localRecordingSource(session.playUri))
             p.prepare()
             p.playWhenReady = true
@@ -710,12 +715,17 @@ class LiveTvPlaybackController @Inject constructor(
      * growing "live" playlist the player would otherwise speed up a little to catch up with the
      * end of it, creeping towards live.
      */
-    internal fun localRecordingSource(uri: android.net.Uri, offsetMs: Long = 8_000): androidx.media3.exoplayer.source.MediaSource {
+    internal fun localRecordingSource(uri: android.net.Uri, offsetMs: Long = LOCAL_LIVE_OFFSET_MS): androidx.media3.exoplayer.source.MediaSource {
         adaptiveBuffer.sourceChanged()
+        val playUri = com.nuvio.tv.livetv.record.NetworkFolderStore.playUriFor(uri) ?: uri
+        val generatedTs = uri.scheme == "file" && playUri == uri &&
+            listOfNotNull(timeshift.session, replayCache.session).any {
+                it.kind == LiveTvTimeshift.Kind.TS && it.playUri == uri
+            }
         val item = MediaItem.Builder()
             // A network folder recording's pieces leave this box once copied: played through the
             // recordings server, which fetches those from the network folder.
-            .setUri(com.nuvio.tv.livetv.record.NetworkFolderStore.playUriFor(uri) ?: uri)
+            .setUri(playUri)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setLiveConfiguration(
                 // "Live" here means a few seconds behind the newest piece (not 3 target lengths).
@@ -726,6 +736,7 @@ class LiveTvPlaybackController @Inject constructor(
         // Closed captions are inside the recorded video too: look for them as for the live stream
         // (without this, full screen with Rewind Anytime lost the captions).
         return androidx.media3.exoplayer.hls.HlsMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(context))
+            .apply { if (generatedTs) setPlaylistTrackerFactory(LocalTsPlaylistTracker.FACTORY) }
             .setExtractorFactory(
                 LiveCaptions.Hls(
                     androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory(
@@ -1856,10 +1867,11 @@ class LiveTvPlaybackController @Inject constructor(
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
             ): androidx.media3.exoplayer.audio.AudioSink? {
-                // Pretend the output only takes plain PCM: Dolby / DTS gets decoded here.
+                // Without a Context, the sink keeps these PCM-only capabilities. Builder(context)
+                // replaces them with the device's HDMI capabilities, allowing passthrough again.
                 @Suppress("DEPRECATION")
                 val sink = if (passthrough) super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
-                else androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                else androidx.media3.exoplayer.audio.DefaultAudioSink.Builder()
                     .setAudioCapabilities(androidx.media3.exoplayer.audio.AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
@@ -1904,6 +1916,9 @@ class LiveTvPlaybackController @Inject constructor(
             .setTargetBufferBytes(targetBufferBytes)
             .build()
         return ExoPlayer.Builder(context, renderers)
+            // Full-screen MatchFrameRate owns display switching. Previews and the Off setting
+            // must not leave Media3's automatic Surface frame-rate hints active.
+            .setVideoChangeFrameRateStrategy(androidx.media3.common.C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
             .setLoadControl(adaptiveBuffer.wrapLoadControl(loadControl, targetBufferBytes))
             // Take part in Android's audio focus like other media apps: when something else starts
             // playing sound (another app, a launcher's video wallpaper with sound…), Live TV pauses.
@@ -2526,6 +2541,12 @@ class LiveTvPlaybackController @Inject constructor(
             forcedMime = forcedMime,
             bufferSize = bufferSize,
             stalkerPolicy = stalkerMediaPolicy,
+            continuousTs = isLive && !replayLocal && savedRecordingId == null && savedRecordingPlaylist == null &&
+                _recordingPlayback.value == null && _shiftStartedAt.value == null && timeshift.session == null &&
+                currentChannel?.let { channel ->
+                    channel.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
+                        channel.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID
+                } == true,
         ).build(url, headers, isLive)
     }
 
@@ -2571,6 +2592,7 @@ class LiveTvPlaybackController @Inject constructor(
         backgroundJob = null
         resumeAfterBackground = null
         clearStarting()
+        stopReplayCache()
         stopShift()
         reconnectJob?.cancel()
         stallJob?.cancel()
@@ -2616,6 +2638,8 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     companion object {
+        /** Rewind Anytime starts with this much published TS media, matching its live offset. */
+        private const val LOCAL_LIVE_OFFSET_MS = 8_000L
         /** A sports addon stream needs at least this much timeline to pause and skip in it by itself. */
         private const val OWN_MIN_MS = 60_000L
         /** A live sports addon stream with at least this much rewind window is paused and skipped in by itself. */

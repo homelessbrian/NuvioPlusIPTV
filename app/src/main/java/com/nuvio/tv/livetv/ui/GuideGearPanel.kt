@@ -11,6 +11,11 @@ import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -60,6 +65,7 @@ internal fun GuideGearPanel(
     onDismiss: () -> Unit
 ) {
     val first = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     BackHandler { onDismiss() }
     LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
 
@@ -80,6 +86,22 @@ internal fun GuideGearPanel(
                 .align(Alignment.TopEnd)
                 .padding(end = 36.dp, top = 24.dp)
                 .width(470.dp)
+                // The highlight never leaves the panel: an arrow with nowhere to go inside it
+                // stays put, and isn't passed on (Left used to fall through and open Nuvio's menu).
+                .focusProperties { onExit = { cancelFocusChange() } }
+                .focusGroup()
+                .onKeyEvent { e ->
+                    val dir = when (e.key) {
+                        Key.DirectionLeft -> FocusDirection.Left
+                        Key.DirectionRight -> FocusDirection.Right
+                        Key.DirectionUp -> FocusDirection.Up
+                        Key.DirectionDown -> FocusDirection.Down
+                        else -> return@onKeyEvent false
+                    }
+                    // Move the highlight ourselves, then keep the arrow either way.
+                    if (e.type == KeyEventType.KeyDown) focusManager.moveFocus(dir)
+                    true
+                }
                 .glass(glassColor("darker"), RoundedCornerShape(20.dp))
                 .padding(12.dp)
         ) {

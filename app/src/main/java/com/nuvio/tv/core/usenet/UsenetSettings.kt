@@ -7,6 +7,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.Serializable
 
 /**
  * How Nuvio names itself to indexers and NZB servers, like the app's other HTTP requests.
@@ -19,6 +20,7 @@ internal const val USER_AGENT = "User-Agent"
 /** An HTTP header value: printable ASCII on one line. */
 internal fun isValidUserAgent(value: String) = value.length <= 256 && value.all { it in ' '..'~' }
 
+@Serializable
 data class UsenetConfiguration(
     val profile: String = "balanced",
     val readAhead: Int = 0,
@@ -43,6 +45,20 @@ data class UsenetConfiguration(
     val searchAgent: String get() = searchUserAgent.trim().ifEmpty { NUVIO_USER_AGENT }
     /** Sent by NZB downloads, unless an addon supplies its own User-Agent. */
     val downloadAgent: String get() = downloadUserAgent.trim().ifEmpty { NUVIO_USER_AGENT }
+
+    /** The same checks apply to a settings edit and a backup before either writes anything. */
+    fun normalizedAndValidated(): UsenetConfiguration {
+        fun customAgent(agent: String) = agent.trim().takeUnless { it == NUVIO_USER_AGENT }.orEmpty()
+        val value = copy(searchUserAgent = customAgent(searchUserAgent), downloadUserAgent = customAgent(downloadUserAgent))
+        require(isValidUserAgent(value.searchUserAgent))
+        require(isValidUserAgent(value.downloadUserAgent))
+        require(value.profile in listOf("low-memory", "balanced", "throughput"))
+        require(value.readAhead in 0..512 && value.maxConnections in 0..4096)
+        require(value.fallbackMaxAttempts in 1..50)
+        require(value.maxMissingArticles in 1..50)
+        require(value.maxConsecutiveMissing in 1..10 && value.maxConsecutiveMissing <= value.maxMissingArticles)
+        return value
+    }
 }
 
 /** Device-local tuning; never contains provider credentials or NZB URLs. */
@@ -53,19 +69,7 @@ class UsenetSettings @Inject constructor(@ApplicationContext private val context
     val settings = state.asStateFlow()
 
     fun update(configuration: UsenetConfiguration) {
-        // Saving Nuvio's own User-Agent keeps the automatic one, which follows app updates.
-        fun customAgent(agent: String) = agent.trim().takeUnless { it == NUVIO_USER_AGENT }.orEmpty()
-        val value = configuration.copy(
-            searchUserAgent = customAgent(configuration.searchUserAgent),
-            downloadUserAgent = customAgent(configuration.downloadUserAgent)
-        )
-        require(isValidUserAgent(value.searchUserAgent))
-        require(isValidUserAgent(value.downloadUserAgent))
-        require(value.profile in listOf("low-memory", "balanced", "throughput"))
-        require(value.readAhead in 0..512 && value.maxConnections in 0..4096)
-        require(value.fallbackMaxAttempts in 1..50)
-        require(value.maxMissingArticles in 1..50)
-        require(value.maxConsecutiveMissing in 1..10 && value.maxConsecutiveMissing <= value.maxMissingArticles)
+        val value = configuration.normalizedAndValidated()
         preferences.edit().putString("profile", value.profile)
             .putInt("readAhead", value.readAhead).putInt("maxConnections", value.maxConnections)
             .putBoolean("prewarmOnLaunch", value.prewarmOnLaunch)

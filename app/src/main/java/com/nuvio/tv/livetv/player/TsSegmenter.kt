@@ -100,6 +100,15 @@ class TsSegmenter(
         writePlaylist(ended)
     }
 
+    /** Releases an abandoned writer without publishing its unfinished piece or ending its playlist. */
+    fun discard() {
+        val stream = out
+        val file = outFile
+        out = null
+        outFile = null
+        try { stream?.close() } finally { file?.delete() }
+    }
+
     private fun packet(p: ByteArray) {
         val pid = ((p[1].toInt() and 0x1F) shl 8) or (p[2].toInt() and 0xFF)
         val pusi = (p[1].toInt() and 0x40) != 0
@@ -125,6 +134,9 @@ class TsSegmenter(
         }
         if (pcr >= 0 && (pcrPid < 0 || pid == pcrPid)) {
             if (pcrPid < 0) pcrPid = pid
+            // Tables can open the first piece before its clock arrives. Start measuring it
+            // from that first PCR too, rather than timing a buffered download by wall clock.
+            if (out != null && pieceStartPcr < 0) pieceStartPcr = pcr
             lastPcr = pcr
         }
 

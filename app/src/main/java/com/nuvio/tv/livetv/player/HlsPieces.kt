@@ -213,6 +213,8 @@ internal object HlsPieces {
         var stopNow: () -> Boolean = { false }
         /** When [stopNow] cuts a piece: true keeps what came in (stopped by hand), false drops it. */
         var keepCut: () -> Boolean = { false }
+        /** Called before each piece is downloaded (may wait, e.g. for a recording's copy to catch up). */
+        var beforePiece: () -> Unit = {}
 
         fun fetch(): Media {
             // Use the owned connector for manifests as well as pieces (VPN/session policy).
@@ -272,6 +274,8 @@ internal object HlsPieces {
                 if (stopNow()) break
                 val p = m.pieces[i]
                 if (p.seq <= lastSeq) continue
+                beforePiece()
+                if (stopNow()) break
                 val name = "${prefix}seg$named.${if (mapLine != null) "m4s" else "ts"}"
                 // 1.0 = the whole piece; less = cut part way by a stop (its share of the length).
                 var got: Double? = null

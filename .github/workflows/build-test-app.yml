@@ -6,12 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       notes:
-        description: "What changed (shown in the test app's update prompt; blank = the last commit's title)"
+        description: "What changed (shown in the test app's update prompt; blank = TEST_NOTES.md, or the last commit's title if that's empty)"
         required: false
         type: string
 
+# Write lets the build take the lines it used out of TEST_NOTES.md on dev.
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: test-build

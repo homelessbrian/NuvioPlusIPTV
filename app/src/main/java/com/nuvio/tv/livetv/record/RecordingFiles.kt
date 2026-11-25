@@ -394,6 +394,30 @@ internal class RecordingFiles(
         return "Stopped early: the network folder couldn't take it ($why). What was recorded is kept"
     }
 
+    /**
+     * A catch-up download to the network folder should wait for the copy to catch up. Catch-up
+     * comes in far faster than it can go across, and everything not sent yet sits on this device:
+     * left alone it piled up gigabytes, and writing that much that fast slowed the whole box down.
+     */
+    fun shouldHold(dir: File): Boolean {
+        if (!NetworkFolderStore.isNetworkDir(dir)) return false
+        val waiting = waitingBytes(dir)
+        if (waiting > minOf(NetworkFolderStore.bufferBytes(context), MAX_AHEAD_BYTES)) return true
+        // Low on room here: keep what's waiting small whatever the setting says.
+        if (waiting <= LOW_ROOM_MIN_WAITING) return false
+        val total = runCatching { dir.totalSpace }.getOrDefault(0L)
+        val free = if (total > 0) runCatching { dir.usableSpace }.getOrDefault(Long.MAX_VALUE) else Long.MAX_VALUE
+        return free < LOW_ROOM
+    }
+
+    /** Held downloads: why to stop, when the network folder hasn't taken anything for a minute. */
+    fun heldStopReason(): String? {
+        val lastOk = NetworkFolderStore.folder(context)?.lastOkAtMs ?: 0L
+        if (System.currentTimeMillis() - maxOf(lastOk, startedAtMs) <= 60_000L) return null
+        val why = problem ?: "copying to it couldn't keep up"
+        return "Stopped early: the network folder couldn't take it ($why). What was recorded is kept"
+    }
+
     /** Bytes of a network recording still on this device waiting to go across. */
     fun waitingBytes(dir: File): Long = runCatching {
         dir.listFiles()?.filter { it.isFile && !isMeta(it) }?.sumOf { it.length() } ?: 0L
@@ -663,6 +687,12 @@ internal class RecordingFiles(
 
         /** The largest file a FAT32 drive can hold. */
         private const val FOUR_GB = 0xFFFFFFFFL
+
+        /** Most a catch-up download gets ahead of the network folder copy. */
+        private const val MAX_AHEAD_BYTES = 192L * 1024 * 1024
+        /** Below this much free here, a catch-up download waits for anything over [LOW_ROOM_MIN_WAITING]. */
+        private const val LOW_ROOM = 400L * 1024 * 1024
+        private const val LOW_ROOM_MIN_WAITING = 16L * 1024 * 1024
 
         /** Another TV's recording whose details haven't changed this long is taken as given up on. */
         const val MIRROR_STALL_MS = 10L * 60_000

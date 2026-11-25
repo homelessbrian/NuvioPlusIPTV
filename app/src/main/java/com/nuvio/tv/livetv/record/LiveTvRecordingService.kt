@@ -27,7 +27,15 @@ class LiveTvRecordingService : Service() {
         private const val CHANNEL_ID = "livetv_recording"
         private const val NOTIFICATION_ID = 7341
 
+        /**
+         * Already running in the foreground. Each start makes Android wait, on the app's main
+         * thread, for every settings save still going to storage; with storage busy (a fast
+         * catch-up download) that froze the app, so a running service isn't started again.
+         */
+        @Volatile private var running = false
+
         fun start(context: Context) {
+            if (running) return
             val intent = Intent(context, LiveTvRecordingService::class.java)
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
@@ -36,6 +44,7 @@ class LiveTvRecordingService : Service() {
         }
 
         fun stop(context: Context) {
+            running = false
             runCatching { context.stopService(Intent(context, LiveTvRecordingService::class.java)) }
         }
     }
@@ -69,6 +78,7 @@ class LiveTvRecordingService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            running = true
         } catch (e: Exception) {
             // Not allowed right now (Android 12+ from the background): recording still runs while
             // the app is open.
@@ -93,6 +103,7 @@ class LiveTvRecordingService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
         runCatching { wakeLock?.takeIf { it.isHeld }?.release() }
         runCatching { wifiLock?.takeIf { it.isHeld }?.release() }
         wakeLock = null
