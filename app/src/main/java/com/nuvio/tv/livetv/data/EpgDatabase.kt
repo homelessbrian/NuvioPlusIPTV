@@ -153,17 +153,55 @@ class EpgDatabase @Inject constructor(@ApplicationContext context: Context) :
     /** A playlist channel and the guide channel it points at. */
     private class Link(val ch: String, val gid: Long, val sh: Long)
 
-    /** Which guide channel each of these playlist channels points at ([keys] null: every channel). */
+    /**
+     * Which guide channel each of these playlist channels points at ([keys] null: every channel).
+     *
+     * Read in pages small enough to come back in one go: a big playlist's channel list read in one
+     * query is fetched in several pieces, and a guide update rewriting the list between pieces made
+     * the next piece fail ("Couldn't read row … from CursorWindow"), closing the app. If the list
+     * changed while it was being read (or a read still failed), it's read again.
+     */
     private fun links(keys: Collection<String>?): List<Link> {
-        val out = ArrayList<Link>()
-        fun read(where: String, args: Array<String>?) {
-            readableDatabase.rawQuery("SELECT ch, gid, sh FROM chan$where", args).use { c ->
-                while (c.moveToNext()) out += Link(c.getString(0), c.getLong(1), c.getLong(2))
+        repeat(LINK_READ_TRIES) { attempt ->
+            val at = changes
+            val got = try {
+                readLinks(keys)
+            } catch (e: IllegalStateException) {
+                null
+            } catch (e: android.database.sqlite.SQLiteException) {
+                null
             }
+            if (got != null && changes == at) return got
+            if (attempt < LINK_READ_TRIES - 1) Thread.sleep(LINK_READ_RETRY_MS)
         }
-        if (keys == null) read("", null)
-        else keys.distinct().chunked(400).forEach { part ->
-            read(" WHERE ch IN (" + part.joinToString(",") { "?" } + ")", part.toTypedArray())
+        // Still changing: the last complete read (or nothing this time) rather than closing the app.
+        return runCatching { readLinks(keys) }.getOrDefault(emptyList())
+    }
+
+    private fun readLinks(keys: Collection<String>?): List<Link> {
+        val db = readableDatabase
+        val out = ArrayList<Link>()
+        if (keys == null) {
+            var after = 0L
+            while (true) {
+                var read = 0
+                db.rawQuery(
+                    "SELECT rowid, ch, gid, sh FROM chan WHERE rowid > $after ORDER BY rowid LIMIT $LINK_PAGE", null
+                ).use { c ->
+                    while (c.moveToNext()) {
+                        after = c.getLong(0)
+                        out += Link(c.getString(1), c.getLong(2), c.getLong(3))
+                        read++
+                    }
+                }
+                if (read < LINK_PAGE) break
+            }
+        } else {
+            keys.distinct().chunked(400).forEach { part ->
+                db.rawQuery("SELECT ch, gid, sh FROM chan WHERE ch IN (" + part.joinToString(",") { "?" } + ")", part.toTypedArray()).use { c ->
+                    while (c.moveToNext()) out += Link(c.getString(0), c.getLong(1), c.getLong(2))
+                }
+            }
         }
         return out
     }
@@ -1488,6 +1526,10 @@ private const val GID_CHUNK = 400
 
 /** Guide channels whose listings are deleted in one step. */
 private const val PURGE_BATCH = 40
+/** Channel links read per query: well inside one read's worth, however long the channel names. */
+private const val LINK_PAGE = 1000
+private const val LINK_READ_TRIES = 3
+private const val LINK_READ_RETRY_MS = 150L
 /** Break between clear-up steps, so the screen and guide reads get the processor and the database. */
 private const val PURGE_PAUSE_MS = 30L
 /** How long a background clear-up waits first, so it doesn't land while the app is opening. */

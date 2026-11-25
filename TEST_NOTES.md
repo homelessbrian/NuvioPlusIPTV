@@ -8,6 +8,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 -->
 
 ## Live TV
+- Fixed the app closing every few minutes for some people with very big playlists (thousands of channels) while the guide was updating
 - Guide display (the guide's ⚙) keeps the highlight: Left from the left column no longer slips out and opens the menu
 - Live channels connect to the provider once instead of three times (full screen and Multiview), which may stop streams cutting out when Multiview or another device starts
 
