@@ -54,6 +54,69 @@ import org.junit.Test
 import retrofit2.Response
 
 class StreamRepositoryPluginIsolationTest {
+    @Test fun `network recovery retries only the failed addon preserving healthy and empty responses`() = runTest {
+        val generation = MutableStateFlow(0L)
+        val flaky = compatibleAddon().copy(id = "flaky", name = "Flaky", displayName = "Flaky", baseUrl = "https://flaky.example")
+        val empty = compatibleAddon().copy(id = "empty", name = "No matches", displayName = "No matches", baseUrl = "https://empty.example")
+        val harness = newHarness(emptyList(), addons = listOf(compatibleAddon(), flaky, empty), networkGeneration = generation)
+        val flakyUrl = "https://flaky.example/stream/movie/tt1341338.json"
+        val emptyUrl = "https://empty.example/stream/movie/tt1341338.json"
+        coEvery { harness.api.getStreams(flakyUrl) } throws java.io.IOException("Temporary network failure")
+        coEvery { harness.api.getStreams(emptyUrl) } returns Response.success(StreamResponseDto(streams = emptyList()))
+        suspend fun search() = harness.repository.getStreamsFromAllAddons("movie", "tt1341338").toList()
+        val first = search().last() as NetworkResult.Success
+        assertEquals(listOf("Fast Addon"), first.data.map { it.addonName })
+        generation.value++
+        assertTrue(harness.repository.needsSourceRecovery("movie", "tt1341338", null, null, null))
+        coEvery { harness.api.getStreams(flakyUrl) } returns Response.success(StreamResponseDto(
+            streams = listOf(StreamDto(name = "Recovered", url = "https://flaky.example/movie.mp4"))))
+        val recovered = search().last() as NetworkResult.Success
+        assertEquals(setOf("Fast Addon", "Flaky"), recovered.data.map { it.addonName }.toSet())
+        coVerify(exactly = 1) { harness.api.getStreams("https://addon.example/stream/movie/tt1341338.json") }
+        coVerify(exactly = 1) { harness.api.getStreams(emptyUrl) }
+        coVerify(exactly = 2) { harness.api.getStreams(flakyUrl) }
+        search()
+        coVerify(exactly = 2) { harness.api.getStreams(flakyUrl) }
+    }
+
+    @Test fun `network recovery retries failed addons while external On Demand remains available`() = runTest {
+        val generation = MutableStateFlow(0L)
+        val harness = newHarness(emptyList(), networkGeneration = generation)
+        coEvery { harness.api.getStreams(any()) } throws java.io.IOException("Temporary network failure")
+        val context = mockk<Context>(relaxed = true)
+        val entry = mockk<com.nuvio.tv.livetv.ondemand.OnDemandEntryPoint>()
+        val provider = mockk<com.nuvio.tv.livetv.ondemand.OnDemandRepository>(relaxed = true)
+        val preferences = mockk<com.nuvio.tv.livetv.data.LiveTvPreferences>()
+        every { preferences.settings } returns flowOf(com.nuvio.tv.livetv.model.LiveTvSettings(
+            onDemandEnabled = true, onDemandInStreams = true))
+        every { entry.liveTvPreferences() } returns preferences
+        every { entry.onDemandRepository() } returns provider
+        every { entry.tmdbService() } returns harness.tmdbService
+        coEvery { harness.tmdbService.imdbToTmdb("tt1341338", "movie") } returns 123
+        coEvery { provider.contentReady() } returns true
+        coEvery { provider.sourcesFor(any(), any(), any(), any(), any(), any()) } returns listOf(
+            com.nuvio.tv.livetv.ondemand.OnDemandRepository.OnDemandSource(
+                "IPTV copy", "https://provider.example/movie.mp4", emptyMap(), title = "Example"))
+        io.mockk.mockkStatic(dagger.hilt.android.EntryPointAccessors::class)
+        try {
+            every { dagger.hilt.android.EntryPointAccessors.fromApplication(any<Context>(),
+                com.nuvio.tv.livetv.ondemand.OnDemandEntryPoint::class.java) } returns entry
+            suspend fun search() = com.nuvio.tv.livetv.ondemand.OnDemandStreams.withOnDemand(
+                context, harness.repository.getStreamsFromAllAddons("movie", "tt1341338"),
+                "movie", "tt1341338", null, null, "Example", null).toList()
+            val first = search().last() as NetworkResult.Success
+            assertEquals(listOf(com.nuvio.tv.livetv.ondemand.OnDemandStreams.GROUP_NAME), first.data.map { it.addonName })
+            generation.value++
+            assertTrue(harness.repository.needsSourceRecovery("movie", "tt1341338", null, null, null))
+            coEvery { harness.api.getStreams(any()) } returns Response.success(StreamResponseDto(
+                streams = listOf(StreamDto(name = "Recovered", url = "https://addon.example/movie.mp4"))))
+            val recovered = search().last() as NetworkResult.Success
+            assertEquals(setOf("Fast Addon", com.nuvio.tv.livetv.ondemand.OnDemandStreams.GROUP_NAME),
+                recovered.data.map { it.addonName }.toSet())
+            coVerify(exactly = 2) { harness.api.getStreams(any()) }
+        } finally { io.mockk.unmockkStatic(dagger.hilt.android.EntryPointAccessors::class) }
+    }
+
     @Test
     fun `addon results arrive while plugin TMDB lookup is pending`() = runBlocking {
         val harness = newHarness(listOf(compatibleScraper()))
@@ -376,7 +439,8 @@ class StreamRepositoryPluginIsolationTest {
         sources: MutableStateFlow<UsenetSourceConfiguration> = MutableStateFlow(UsenetSourceConfiguration()),
         usenetResults: Flow<BuiltInUsenetResult> = emptyFlow(),
         addons: List<Addon> = listOf(compatibleAddon()),
-        serverSources: List<ServerStreamSource> = emptyList()
+        serverSources: List<ServerStreamSource> = emptyList(),
+        networkGeneration: MutableStateFlow<Long> = MutableStateFlow(0L)
     ): Harness {
         val addon = compatibleAddon()
         val api = mockk<AddonApi>()
@@ -440,6 +504,9 @@ class StreamRepositoryPluginIsolationTest {
                     every { isNativeRequest(any()) } returns false
                     every { revision } returns 0
                     every { sources(any(), any(), any(), any(), any()) } returns serverSources
+                },
+                networkRecovery = mockk {
+                    every { generation } returns networkGeneration
                 }
             ),
             api = api,

@@ -2,6 +2,7 @@ package com.nuvio.tv.data.repository
 
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.domain.model.AddonStreams
+import com.nuvio.tv.domain.model.Stream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -31,6 +32,15 @@ internal data class StreamSearchRequestKey(
     val priorityBingeGroup: String = ""
 )
 
+/** Retry only failed source tasks; identities are request-local positions, never provider URLs. */
+internal class StreamSearchAttempt(
+    private val retryTargets: Set<String>?,
+    private val failed: (String?) -> Unit
+) {
+    fun includes(target: String): Boolean = retryTargets == null || target in retryTargets
+    operator fun invoke(target: String? = null) = failed(target)
+}
+
 /**
  * Keeps a small set of source searches alive independently of UI collectors.
  * Completed results are memory-only and short-lived because addon URLs may expire.
@@ -39,7 +49,8 @@ internal class StreamSearchSessionCache(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val completedTtlMs: Long = DEFAULT_COMPLETED_TTL_MS,
-    private val maxEntries: Int = DEFAULT_MAX_ENTRIES
+    private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
+    private val networkGeneration: () -> Long = { 0L }
 ) {
     private data class Snapshot(
         val result: NetworkResult<List<AddonStreams>>,
@@ -48,12 +59,17 @@ internal class StreamSearchSessionCache(
     )
 
     private class Session(
-        val state: MutableStateFlow<Snapshot>
+        val state: MutableStateFlow<Snapshot>,
+        val networkGeneration: Long,
+        val retainedCompletedAtMs: Long?
     ) {
         lateinit var job: Job
         @Volatile var invalidated: Boolean = false
         var completedAtMs: Long? = null
         var lastSuccessfulResult: NetworkResult.Success<List<AddonStreams>>? = null
+        @Volatile var requestFailed: Boolean = false
+        val failedTargets: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        @Volatile var retryAll: Boolean = false
     }
 
     private val mutex = Mutex()
@@ -62,7 +78,7 @@ internal class StreamSearchSessionCache(
     fun observe(
         key: StreamSearchRequestKey,
         forceRefresh: Boolean,
-        producer: () -> Flow<NetworkResult<List<AddonStreams>>>
+        producer: (StreamSearchAttempt) -> Flow<NetworkResult<List<AddonStreams>>>
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
         val session = acquireSession(key, forceRefresh, producer)
         var emittedVersion = -1L
@@ -103,23 +119,68 @@ internal class StreamSearchSessionCache(
             ?: ordered.firstNotNullOfOrNull { snapshotData(it.value) }
     }
 
+    suspend fun needsRecovery(key: StreamSearchRequestKey): Boolean = mutex.withLock {
+        // An active failed picker may outlive the cache TTL. Let its next recovery start a fresh
+        // search, then discard expired URLs/failure markers just as for a closed picker.
+        val needed = sessions[key]?.needsRecovery() == true
+        removeExpiredLocked()
+        needed
+    }
+
+    private fun Session.needsRecovery(): Boolean = state.value.isComplete && requestFailed &&
+        networkGeneration < this@StreamSearchSessionCache.networkGeneration()
+
+    private fun mergeRetained(previous: List<AddonStreams>, current: List<AddonStreams>): List<AddonStreams> =
+        LinkedHashMap<String, AddonStreams>().apply {
+            previous.forEach { put(it.addonName, it) }
+            current.forEach { incoming ->
+                val existing = get(incoming.addonName)
+                put(incoming.addonName, if (existing == null) incoming else existing.copy(
+                    streams = LinkedHashMap<String, Stream>().apply {
+                        existing.streams.forEach { put(it.sourceDedupKey(), it) }
+                        incoming.streams.forEach { put(it.sourceDedupKey(), it) }
+                    }.values.toList()
+                ))
+            }
+        }.values.toList()
+
+    /** Matches the aggregate producer's stream identity when configured sources share a name. */
+    private fun Stream.sourceDedupKey(): String {
+        val base = infoHash?.lowercase()?.let { hash -> "$hash:${fileIdx ?: ""}" }
+            ?: clientResolve?.infoHash?.lowercase()?.let { hash -> "$hash:${clientResolve.fileIdx}" }
+            ?: url ?: externalUrl ?: ytId ?: serverTarget?.key() ?: "${addonName}:${name}:${title}"
+        val nameSuffix = if (base == url) name?.takeIf { it.isNotBlank() }?.let { "|$it" }.orEmpty() else ""
+        return "$base$nameSuffix"
+    }
+
     private suspend fun acquireSession(
         key: StreamSearchRequestKey,
         forceRefresh: Boolean,
-        producer: () -> Flow<NetworkResult<List<AddonStreams>>>
+        producer: (StreamSearchAttempt) -> Flow<NetworkResult<List<AddonStreams>>>
     ): Session {
         var created: Session? = null
         val selected = mutex.withLock {
             removeExpiredLocked()
             removeObsoleteSessionsLocked(key)
 
+            var retained: NetworkResult.Success<List<AddonStreams>>? = null
+            var retryTargets: Set<String>? = null
+            var retainedCompletedAtMs: Long? = null
             if (forceRefresh) {
                 sessions.remove(key)?.cancelAndComplete()
             } else {
-                sessions[key]?.let { return@withLock it }
+                sessions[key]?.let { existing ->
+                    val failedWithoutResults = existing.state.value.isComplete && existing.requestFailed &&
+                        existing.lastSuccessfulResult == null
+                    if (!failedWithoutResults && !existing.needsRecovery()) return@withLock existing
+                    retained = existing.lastSuccessfulResult
+                    if (retained != null) retainedCompletedAtMs = existing.completedAtMs
+                    if (!existing.retryAll) retryTargets = existing.failedTargets.toSet()
+                    sessions.remove(key)?.cancelAndComplete()
+                }
             }
 
-            createSession(key, producer).also { session ->
+            createSession(key, producer, retained, retryTargets, retainedCompletedAtMs).also { session ->
                 sessions[key] = session
                 trimToSizeLocked()
                 created = session
@@ -133,20 +194,33 @@ internal class StreamSearchSessionCache(
 
     private fun createSession(
         key: StreamSearchRequestKey,
-        producer: () -> Flow<NetworkResult<List<AddonStreams>>>
+        producer: (StreamSearchAttempt) -> Flow<NetworkResult<List<AddonStreams>>>,
+        retained: NetworkResult.Success<List<AddonStreams>>?,
+        retryTargets: Set<String>?,
+        retainedCompletedAtMs: Long?
     ): Session {
         val session = Session(
             MutableStateFlow(
                 Snapshot(
-                    result = NetworkResult.Loading,
+                    result = retained ?: NetworkResult.Loading,
                     version = 0L,
                     isComplete = false
                 )
-            )
+            ),
+            networkGeneration = networkGeneration(),
+            retainedCompletedAtMs = retainedCompletedAtMs
         )
+        session.lastSuccessfulResult = retained
         session.job = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                producer().collect { result ->
+                val attempt = StreamSearchAttempt(retryTargets) { target ->
+                    session.requestFailed = true
+                    if (target == null) session.retryAll = true else session.failedTargets.add(target)
+                }
+                producer(attempt).collect { incoming ->
+                    val result = if (retained != null && incoming is NetworkResult.Success) {
+                        NetworkResult.Success(mergeRetained(retained.data, incoming.data))
+                    } else incoming
                     if (result is NetworkResult.Success && result.data.isNotEmpty()) {
                         session.lastSuccessfulResult = result
                     }
@@ -191,8 +265,9 @@ internal class StreamSearchSessionCache(
         }
         mutex.withLock {
             if (sessions[key] !== session) return@withLock
-            if (session.lastSuccessfulResult != null) {
-                session.completedAtMs = nowMs()
+            if (session.lastSuccessfulResult != null || session.requestFailed) {
+                // Retrying a sibling source must not extend the lifetime of retained provider URLs.
+                session.completedAtMs = session.retainedCompletedAtMs ?: nowMs()
             } else {
                 sessions.remove(key)
             }
