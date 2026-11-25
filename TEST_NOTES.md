@@ -9,6 +9,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 
 ## Live TV
 - Guide display (the guide's ⚙) keeps the highlight: Left from the left column no longer slips out and opens the menu
+- Live channels connect to the provider once instead of three times (full screen and Multiview), which may stop streams cutting out when Multiview or another device starts
 
 ## Rewind Anytime
 
@@ -18,5 +19,6 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 - Recordings opens straight away when the drive it saves to is asleep (the free space shows once the drive wakes); a recording's menu and Information no longer wait for drives either
 
 ## Sports
+- Leaving Multiview opened from Sports brings back the channel that was playing in the Sports video window
 
 ## Other
