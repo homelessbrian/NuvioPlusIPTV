@@ -15,6 +15,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 ## Recordings
 - A series can have its own Start early and Keep recording after times (hold OK on it in Recordings › Series); Default keeps using the Recordings setting, and episodes already set change too
 - Opening a series folder no longer jumps; its episode count, watched/new, length and size now sit on the Episodes line
+- Recordings opens straight away when the drive it saves to is asleep (the free space shows once the drive wakes); a recording's menu and Information no longer wait for drives either
 
 ## Sports
 
