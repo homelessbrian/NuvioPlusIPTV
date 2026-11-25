@@ -11,8 +11,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.RandomAccessFile
@@ -82,7 +83,7 @@ class LiveTvTimeshift(private val context: Context) {
      * Starts recording [url] (with [headers]). Returns the session to play, or null if this
      * stream can't be recorded (encrypted HLS, a link that won't open…).
      */
-    fun start(
+    @Synchronized fun start(
         url: String,
         headers: Map<String, String>,
         /** Older parts dropped past this (null: keep it all, for a catch-up replay). */
@@ -122,7 +123,7 @@ class LiveTvTimeshift(private val context: Context) {
     }
 
     /** Stops recording and deletes it. */
-    fun stop() {
+    @Synchronized fun stop() {
         recording = false
         job?.cancel()
         job = null
@@ -155,6 +156,21 @@ class LiveTvTimeshift(private val context: Context) {
 
     private fun open(url: String, headers: Map<String, String>): HttpURLConnection = LiveHttp.open(url, headers, 20_000)
 
+    private fun ownsWriter(writer: Job, dir: File): Boolean = synchronized(this) {
+        job === writer && session?.dir == dir
+    }
+
+    /** Counter updates share start/stop's monitor, without holding it during reads or segment writes. */
+    private inline fun withWriter(writer: Job, dir: File, update: () -> Unit) = synchronized(this) {
+        writer.ensureActive()
+        if (!recording || job !== writer || session?.dir != dir) {
+            throw kotlinx.coroutines.CancellationException("Recording was replaced")
+        }
+        update()
+    }
+
+    private fun checkWriter(writer: Job, dir: File) = withWriter(writer, dir) { }
+
     // ------------------------------------------------------------------ TS
 
     private suspend fun recordTs(
@@ -167,6 +183,7 @@ class LiveTvTimeshift(private val context: Context) {
         refreshStream: (suspend () -> StalkerPlayback)? = null,
         initialPolicy: StalkerMediaPolicy? = null,
     ) {
+        val writer = checkNotNull(currentCoroutineContext()[Job])
         // Pieces past the time limit are dropped as new ones come in (it records on, behind you).
         val segmenter = TsSegmenter(dir, keepSec = keepMinutes?.let { it * 60.0 }) { _ -> }
         val report = com.nuvio.tv.livetv.model.LiveTvLoadReport
@@ -180,7 +197,8 @@ class LiveTvTimeshift(private val context: Context) {
             // Keeps going until you go live or change channel: a dropped connection is opened
             // again, with the gap marked, instead of ending the buffer (which sent you back to
             // live after half a minute or so).
-            while (scope.isActive && recording) {
+            while (writer.isActive && recording && ownsWriter(writer, dir)) {
+                checkWriter(writer, dir)
                 if (attempt > 0) {
                     segmenter.reconnected()
                     delay((attempt * 2_000L).coerceAtMost(8_000L))
@@ -190,31 +208,40 @@ class LiveTvTimeshift(private val context: Context) {
                 var bytes = 0L
                 val why = try {
                     val fresh = if (attempt > 1) refreshStream?.invoke() else null
+                    checkWriter(writer, dir)
                     if (fresh?.mimeType == StalkerMimeProbe.DASH || fresh?.mimeType == StalkerMimeProbe.HLS) {
-                        recording = false
+                        withWriter(writer, dir) { recording = false }
                         throw java.io.IOException("The Stalker stream changed its buffer format. Retry playback.")
                     }
                     if (fresh != null) { if (policy !== fresh.policy) policy?.retire(); policy = fresh.policy }
                     val c = LiveHttp.open(fresh?.url ?: url, fresh?.headers ?: headers, 20_000, policy)
-                    val code = c.responseCode
-                    if (code !in 200..299) { c.disconnect(); "HTTP $code" }
-                    else c.inputStream.use { input ->
-                        val buf = ByteArray(64 * 1024)
-                        var end = "the provider ended the stream"
-                        while (scope.isActive && recording) {
-                            val n = input.read(buf)
-                            if (n < 0) break
-                            bytes += n
-                            segmenter.write(buf, 0, n)
-                            trimmedMs = (segmenter.trimmedSec * 1000).toLong()
-                            savedMs = (segmenter.totalSec * 1000).toLong()
+                    try {
+                        val code = c.responseCode
+                        checkWriter(writer, dir)
+                        if (code !in 200..299) "HTTP $code"
+                        else c.inputStream.use { input ->
+                            val buf = ByteArray(64 * 1024)
+                            var end = "the provider ended the stream"
+                            while (writer.isActive && recording && ownsWriter(writer, dir)) {
+                                val n = input.read(buf)
+                                // cancel() does not interrupt every provider's blocking read.
+                                checkWriter(writer, dir)
+                                if (n < 0) break
+                                bytes += n
+                                segmenter.write(buf, 0, n)
+                                withWriter(writer, dir) {
+                                    trimmedMs = (segmenter.trimmedSec * 1000).toLong()
+                                    savedMs = (segmenter.totalSec * 1000).toLong()
+                                }
+                            }
+                            if (!recording) end = "stopped"
+                            end
                         }
-                        if (!recording) end = "stopped"
-                        end
-                    }
+                    } finally { c.disconnect() }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    writer.ensureActive()
                     if (refreshStream != null) "Stalker stream unavailable" else e.message ?: e.javaClass.simpleName
                 }
                 if (!recording) break
@@ -231,9 +258,14 @@ class LiveTvTimeshift(private val context: Context) {
             }
         } finally {
             report.add("$label finished after ${(System.currentTimeMillis() - began) / 1000}s (${segmenter.totalSec.toInt()}s recorded)")
-            runCatching { segmenter.finish(ended = true) }
-            if (session?.dir == dir) savedMs = (segmenter.totalSec * 1000).toLong()
-            recording = false
+            val complete = writer.isActive && ownsWriter(writer, dir)
+            runCatching { if (complete) segmenter.finish(ended = true) else segmenter.discard() }
+            synchronized(this) {
+                if (job === writer && session?.dir == dir) {
+                    if (complete) savedMs = (segmenter.totalSec * 1000).toLong()
+                    recording = false
+                }
+            }
         }
     }
 
@@ -253,27 +285,36 @@ class LiveTvTimeshift(private val context: Context) {
         refreshStream: (suspend () -> StalkerPlayback)? = null,
         initialPolicy: StalkerMediaPolicy? = null,
     ) {
+        val writer = checkNotNull(currentCoroutineContext()[Job])
         val report = com.nuvio.tv.livetv.model.LiveTvLoadReport
         var policy = initialPolicy
-        val connect: (String, Map<String, String>) -> HttpURLConnection = { address, requestHeaders -> LiveHttp.open(address, requestHeaders, 20_000, policy) }
+        val connect: (String, Map<String, String>) -> HttpURLConnection = { address, requestHeaders ->
+            checkWriter(writer, dir)
+            LiveHttp.open(address, requestHeaders, 20_000, policy)
+        }
+        val stopped = { !writer.isActive || !recording || !ownsWriter(writer, dir) }
         try {
+            checkWriter(writer, dir)
             val (firstText, firstUrl) = LiveHttp.fetch(url, headers, policy)
+            checkWriter(writer, dir)
             val choice = if (HlsPieces.isMaster(firstText)) {
                 HlsPieces.pick(firstUrl, firstText, audioLanguage) ?: return
             } else null
             val videoUrl = choice?.videoUrl ?: firstUrl
             val audioUrl = choice?.audioUrl
-            val video = HlsPieces.Track(videoUrl, dir, if (audioUrl != null) "v" else "", headers, connect)
-            val audio = audioUrl?.let { HlsPieces.Track(it, dir, "a", headers, connect) }
+            val video = HlsPieces.Track(videoUrl, dir, if (audioUrl != null) "v" else "", headers, connect).apply { stopNow = stopped }
+            val audio = audioUrl?.let { HlsPieces.Track(it, dir, "a", headers, connect).apply { stopNow = stopped } }
             val videoFile = if (audio != null) File(dir, "video.m3u8") else local
             val audioFile = File(dir, "audio.m3u8")
             var vm = if (choice == null) HlsPieces.parseMedia(firstText) else video.fetch()
+            checkWriter(writer, dir)
             var am = audio?.fetch()
+            checkWriter(writer, dir)
             // Encrypted streams aren't recorded (the keys would have to be saved too).
             if (vm.encrypted || am?.encrypted == true) {
                 Log.w(TAG, "Encrypted HLS: not recorded")
                 report.add("$label: encrypted stream, can't be saved")
-                recording = false
+                withWriter(writer, dir) { recording = false }
                 return
             }
             if (audio != null) report.add("$label: saving picture and sound separately (sound: ${choice?.audioLanguage ?: "default"})")
@@ -282,10 +323,12 @@ class LiveTvTimeshift(private val context: Context) {
             var lastSavedName: String? = null
             suspend fun refreshPortal() {
                 val fresh = refreshStream?.invoke() ?: return
+                checkWriter(writer, dir)
                 if (fresh.mimeType == StalkerMimeProbe.DASH) throw java.io.IOException(StalkerMimeProbe.DASH_RECORDING_UNAVAILABLE)
                 if (policy !== fresh.policy) policy?.retire()
                 policy = fresh.policy
                 val (text, servedAt) = LiveHttp.fetch(fresh.url, fresh.headers, policy)
+                checkWriter(writer, dir)
                 val refreshed = if (HlsPieces.isMaster(text)) HlsPieces.pick(servedAt, text, audioLanguage) else null
                 if ((refreshed?.audioUrl != null) != (audio != null)) throw IllegalStateException("The portal changed its audio format.")
                 video.url = refreshed?.videoUrl ?: servedAt
@@ -295,24 +338,32 @@ class LiveTvTimeshift(private val context: Context) {
                 if (vm.encrypted || am?.encrypted == true) throw IllegalStateException("Encrypted portal streams cannot be buffered.")
                 lastProgressAt = System.currentTimeMillis()
             }
-            while (scope.isActive && recording) {
+            while (writer.isActive && recording && ownsWriter(writer, dir)) {
+                checkWriter(writer, dir)
                 // Live: from about where you are (players play a few pieces behind the newest).
                 val lead = if (live) (leadMs ?: (vm.target * 3_000L)) else null
                 video.saveNew(vm) { m -> if (lead == null) 0 else HlsPieces.startIndex(m.pieces, lead) }
                 if (audio != null && am != null) {
                     audio.saveNew(am!!) { a -> if (lead == null) 0 else HlsPieces.matchingStart(a.pieces, video) }
                 }
+                checkWriter(writer, dir)
                 // Keep only the time limit's worth.
                 val keepSec = keepMinutes * 60.0
-                trimmedMs += (video.trim(keepSec) * 1000).toLong()
+                val trimmed = (video.trim(keepSec) * 1000).toLong()
                 audio?.trim(keepSec)
-                if (firstBatchMs == 0L && video.saved.isNotEmpty()) firstBatchMs = (video.totalSec * 1000).toLong()
+                withWriter(writer, dir) {
+                    trimmedMs += trimmed
+                    if (firstBatchMs == 0L && video.saved.isNotEmpty()) firstBatchMs = (video.totalSec * 1000).toLong()
+                }
+                checkWriter(writer, dir)
                 if (audio == null) {
                     video.write(local, ended = false)
                 } else if (video.saved.isNotEmpty() && audio.saved.isNotEmpty()) {
                     audio.write(audioFile, ended = false)
+                    checkWriter(writer, dir)
                     video.write(videoFile, ended = false)
                     if (!masterWritten) {
+                        checkWriter(writer, dir)
                         HlsPieces.writeMaster(local, choice!!, videoFile.name, audioFile.name)
                         masterWritten = true
                     }
@@ -322,6 +373,7 @@ class LiveTvTimeshift(private val context: Context) {
                 delay((vm.target * 1000L / 2).coerceIn(1_000L, 6_000L))
                 try {
                     vm = video.fetch()
+                    checkWriter(writer, dir)
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -338,7 +390,7 @@ class LiveTvTimeshift(private val context: Context) {
             Log.w(TAG, "HLS recording stopped: $problem")
             report.add("$label: HLS saving stopped ($problem)")
         } finally {
-            recording = false
+            synchronized(this) { if (job === writer && session?.dir == dir) recording = false }
         }
     }
 
