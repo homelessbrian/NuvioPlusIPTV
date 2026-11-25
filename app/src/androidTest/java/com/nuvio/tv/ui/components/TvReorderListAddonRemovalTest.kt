@@ -84,6 +84,11 @@ class TvReorderListAddonRemovalTest {
         composeRule.onNodeWithTag(rowTag("fixture-79")).assertDoesNotExist()
 
         listOf(18, 68, 8, 48, 28, 73, 12, 58, 35, 65, 5, 45).forEachIndexed { pass, index ->
+            // Do not recycle the previously focused survivor while jumping test viewports.
+            // Hand focus to the permanent header first, as on the initial working pass.
+            composeRule.onNodeWithTag(HEADER_TAG).performSemanticsAction(SemanticsActions.RequestFocus)
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag(HEADER_TAG).assertIsDisplayed().assertIsFocused()
             lateinit var key: String
             composeRule.runOnIdle {
                 fixture.deferred = pass % 2 != 0
@@ -144,6 +149,8 @@ class TvReorderListAddonRemovalTest {
         }
         composeRule.onNodeWithTag(rowTag(key)).assertDoesNotExist()
         composeRule.runOnIdle { assertTrue(fixture.rows.none { it.key == key }) }
+        val survivingTarget = fixture.restoreKey?.let(::rowTag) ?: HEADER_TAG
+        composeRule.onNodeWithTag(survivingTarget).assertIsDisplayed().assertIsFocused()
     }
 }
 
