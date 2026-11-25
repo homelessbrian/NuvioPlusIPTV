@@ -33,6 +33,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import com.nuvio.tv.ui.screens.settings.MemoryBudget
 import com.nuvio.vpn.android.VpnPlaybackProtection
+import com.nuvio.vpn.android.VpnPlaybackDiagnostics
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -102,13 +103,14 @@ class MultiviewPlaybackSession(
 
     /** Channel key -> the channels already tried before switching to it (a run of backups). */
     private val backupTried = HashMap<String, Set<String>>()
+    private val playbackDiagnostics = MultiviewPlaybackDiagnostics(LiveTvLoadReport::add)
 
     private val core = MultiviewSessionCore(
         initialLayout = initialLayout,
         totalBufferBytes = MultiviewBufferBudget.totalBytes(MemoryBudget.heapMb),
         audioFocus = AndroidMultiviewAudioFocus(appContext),
         createPlayer = { _, bufferBytes, changed ->
-            AndroidMultiviewPanePlayer(appContext, bufferBytes, changed, autoReconnect, ::switchToBackup)
+            AndroidMultiviewPanePlayer(appContext, bufferBytes, changed, autoReconnect, ::switchToBackup, playbackDiagnostics)
         },
         onChanged = ::publishState,
         mayPlayChannel = mayPlayChannel,
@@ -250,6 +252,7 @@ private class AndroidMultiviewPanePlayer(
     private val onChanged: () -> Unit,
     private val autoReconnect: () -> Boolean,
     private val switchToBackup: (MultiviewPanePlayer, LiveChannel) -> Boolean,
+    private val diagnostics: MultiviewPlaybackDiagnostics,
 ) : MultiviewPanePlayer {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -271,9 +274,14 @@ private class AndroidMultiviewPanePlayer(
     private var streamUrl: String? = null
     private var streamMime: String? = null
     private var formatGuess = 0
+    private var diagnosticUrl: String? = null
+    private var diagnosticReader: MultiviewPlaybackDiagnostics.Reader? = null
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
-            if (!released) onChanged()
+            if (!released) {
+                diagnosticReader?.stateChanged(player.playbackState, player.playWhenReady, player.isPlaying)
+                onChanged()
+            }
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -286,6 +294,7 @@ private class AndroidMultiviewPanePlayer(
 
         override fun onPlayerError(error: PlaybackException) {
             if (released) return
+            diagnosticReader?.failed(error.errorCode)
             val message = MultiviewPlaybackErrors.describe(error)
             // A failed pane must not retain an adaptive manifest refresh or provider connection.
             player.stop()
@@ -560,6 +569,7 @@ private class AndroidMultiviewPanePlayer(
             while (true) {
                 delay(SMOOTHNESS_SAMPLE_MS)
                 sampleSmoothness()
+                diagnostics.sample()
             }
         }
     }
@@ -574,6 +584,9 @@ private class AndroidMultiviewPanePlayer(
 
     override fun prepare(channel: LiveChannel) {
         this.channel = channel
+        diagnosticReader?.close()
+        diagnosticReader = diagnostics.register(::diagnosticSnapshot)
+        diagnosticUrl = if (channel.stalkerRef == null) channel.url else null
         reconnectJob?.cancel()
         reconnectJob = null
         reconnectAttempt = 0
@@ -636,6 +649,7 @@ private class AndroidMultiviewPanePlayer(
     }
 
     private fun prepareResolved(channel: LiveChannel, policy: com.nuvio.tv.livetv.stalker.StalkerMediaPolicy? = null, mimeType: String? = null) {
+        diagnosticUrl = channel.url
         player.setMediaSource(
             LiveTvMediaSourceBuilder(
                 drm = channel.drm,
@@ -676,6 +690,8 @@ private class AndroidMultiviewPanePlayer(
     override fun release() {
         if (released) return
         released = true
+        diagnosticReader?.close()
+        diagnosticReader = null
         player.removeAnalyticsListener(decoderReport)
         MultiviewDecoderReport.openPlayers -= player
         generation++
@@ -689,6 +705,16 @@ private class AndroidMultiviewPanePlayer(
         player.stop()
         player.clearMediaItems()
         player.release()
+    }
+
+    private fun diagnosticSnapshot(): MultiviewPlaybackDiagnostics.Snapshot {
+        val counters = player.videoDecoderCounters
+        counters?.ensureUpdated()
+        return MultiviewPlaybackDiagnostics.Snapshot(
+            player.playbackState, player.playWhenReady, player.isPlaying, player.totalBufferedDuration,
+            counters, counters?.renderedOutputBufferCount, counters?.droppedBufferCount,
+            VpnPlaybackDiagnostics.playbackSample(diagnosticUrl.orEmpty()),
+        )
     }
 }
 

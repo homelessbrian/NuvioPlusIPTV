@@ -37,7 +37,7 @@ dependencies {
     implementation("com.wireguard.android:tunnel:1.0.20260102")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     compileOnly("androidx.media3:media3-datasource:1.8.0")
-    testRuntimeOnly("androidx.media3:media3-datasource:1.8.0")
+    testImplementation("androidx.media3:media3-datasource:1.8.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
 }
