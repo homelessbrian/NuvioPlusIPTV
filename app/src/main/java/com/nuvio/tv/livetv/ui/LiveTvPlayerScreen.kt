@@ -344,14 +344,6 @@ fun LiveTvPlayerScreen(
             val matchingFps = liveFrameRateForSession(active, measured,
                 if (!hasMeasuredFrames && now - startedAt >= 6_000L) f?.frameRate ?: -1f else -1f)
             videoFps = frameRateStabilizer.update(matchingFps, now)
-            // Match Frame Rate switches the display itself: the player's own frame rate hint to
-            // the screen is turned off then, so the two don't pull against each other.
-            runCatching {
-                p?.setVideoChangeFrameRateStrategy(
-                    if (settings.matchFrameRate) androidx.media3.common.C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
-                    else androidx.media3.common.C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS
-                )
-            }
             delay(3_000)
         }
     }
