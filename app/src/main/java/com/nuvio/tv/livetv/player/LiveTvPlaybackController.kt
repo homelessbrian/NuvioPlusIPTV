@@ -2574,6 +2574,7 @@ class LiveTvPlaybackController @Inject constructor(
         backgroundJob = null
         resumeAfterBackground = null
         clearStarting()
+        stopReplayCache()
         stopShift()
         reconnectJob?.cancel()
         stallJob?.cancel()
