@@ -12,6 +12,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 ## Rewind Anytime
 
 ## Recordings
+- A series can have its own Start early and Keep recording after times (hold OK on it in Recordings › Series); Default keeps using the Recordings setting, and episodes already set change too
 
 ## Sports
 

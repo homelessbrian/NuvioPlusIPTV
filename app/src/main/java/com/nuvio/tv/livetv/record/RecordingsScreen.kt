@@ -430,6 +430,14 @@ fun RecordingsScreen(
     }
     var seriesMenu by remember { mutableStateOf<SeriesRule?>(null) }
     var seriesKeepMenu by remember { mutableStateOf<SeriesRule?>(null) }
+    // A series' own extra time: which one is being picked ("pre" / "post").
+    var seriesPadMenu by remember { mutableStateOf<Pair<SeriesRule, String>?>(null) }
+    val liveSettings by viewModel.look.collectAsStateWithLifecycle()
+    fun minLabel(m: Int): String = if (m <= 0) "Off" else "$m min"
+    fun padLine(r: SeriesRule): String? = if (!r.hasOwnTimes) null else listOfNotNull(
+        r.preMin.takeIf { it >= 0 }?.let { if (it == 0) "No early start" else "+$it min before" },
+        r.postMin.takeIf { it >= 0 }?.let { if (it == 0) "No extra after" else "+$it min after" }
+    ).joinToString(" · ")
     var repeatMenu by remember { mutableStateOf<RepeatRule?>(null) }
     // Which playlist each recording uses: shown on the cards when there's more than one (handy
     // with a one-connection login: don't watch that playlist while it records).
@@ -682,7 +690,8 @@ fun RecordingsScreen(
                                     poster = titlePosters[posterKey(r.title)],
                                     channelLogo = r.channel.logo,
                                     line = (if (r.newOnly) "New episodes" else "All episodes") + " · " +
-                                        (if (r.keepLast > 0) "Keep last ${r.keepLast}" else "Keep all"),
+                                        (if (r.keepLast > 0) "Keep last ${r.keepLast}" else "Keep all") +
+                                        (padLine(r)?.let { " · $it" } ?: ""),
                                     channel = withPlaylist(r.channel.name, r.channel.sourceId),
                                     modifier = if (r.id == seriesRules.first().id) Modifier.focusRequester(first) else Modifier,
                                     onClick = { seriesMenu = r }
@@ -794,6 +803,12 @@ fun RecordingsScreen(
                     seriesMenu = null; viewModel.scheduler.setNewOnly(r.id, !r.newOnly)
                 },
                 ("Episodes to Keep: " + (if (r.keepLast == 0) "All" else "Last ${r.keepLast}")) to { seriesMenu = null; seriesKeepMenu = r },
+                ("Start Recording Early: " + (if (r.preMin < 0) "Default (${minLabel(liveSettings.recordPreMinutes)})" else minLabel(r.preMin))) to {
+                    seriesMenu = null; seriesPadMenu = r to "pre"
+                },
+                ("Keep Recording After: " + (if (r.postMin < 0) "Default (${minLabel(liveSettings.recordPostMinutes)})" else minLabel(r.postMin))) to {
+                    seriesMenu = null; seriesPadMenu = r to "post"
+                },
                 "Fix Match" to { seriesMenu = null; fixMatchFor = r.title to true },
                 "Close" to { seriesMenu = null }
             ),
@@ -811,6 +826,25 @@ fun RecordingsScreen(
                 "Close" to { repeatMenu = null }
             ),
             onDismiss = { repeatMenu = null }
+        )
+    }
+    seriesPadMenu?.let { (r, which) ->
+        val pre = which == "pre"
+        val current = if (pre) r.preMin else r.postMin
+        val default = if (pre) liveSettings.recordPreMinutes else liveSettings.recordPostMinutes
+        val choices = if (pre) listOf(0, 1, 2, 5, 10, 15, 30) else listOf(0, 2, 5, 10, 15, 20, 30, 45, 60)
+        RecordingActionDialog(
+            title = if (pre) "Start Recording Early" else "Keep Recording After",
+            detail = r.title + ": " + (if (pre) "starts this long before each episode." else "keeps going this long after each episode, for shows that often run over.") +
+                " Episodes already set change too. Default follows Settings › Live TV › Recordings.",
+            actions = (listOf(-1) + choices).map { m ->
+                val label = (if (m < 0) "Default (${minLabel(default)})" else minLabel(m)) + if (current == m) "  ✓" else ""
+                label to {
+                    seriesPadMenu = null
+                    if (pre) viewModel.scheduler.setPadding(r.id, m, r.postMin) else viewModel.scheduler.setPadding(r.id, r.preMin, m)
+                }
+            },
+            onDismiss = { seriesPadMenu = null }
         )
     }
     seriesKeepMenu?.let { r ->
