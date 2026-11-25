@@ -136,7 +136,9 @@ android {
 
     defaultConfig {
         applicationId = "com.nuvio.tv"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = providers.gradleProperty("nuvioTestInstrumentationRunner")
+            .orElse("androidx.test.runner.AndroidJUnitRunner")
+            .get()
         minSdk = 24
         targetSdk = 36
         versionCode = 1083
