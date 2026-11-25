@@ -712,10 +712,15 @@ class LiveTvPlaybackController @Inject constructor(
      */
     internal fun localRecordingSource(uri: android.net.Uri, offsetMs: Long = 8_000): androidx.media3.exoplayer.source.MediaSource {
         adaptiveBuffer.sourceChanged()
+        val playUri = com.nuvio.tv.livetv.record.NetworkFolderStore.playUriFor(uri) ?: uri
+        val generatedTs = uri.scheme == "file" && playUri == uri &&
+            listOfNotNull(timeshift.session, replayCache.session).any {
+                it.kind == LiveTvTimeshift.Kind.TS && it.playUri == uri
+            }
         val item = MediaItem.Builder()
             // A network folder recording's pieces leave this box once copied: played through the
             // recordings server, which fetches those from the network folder.
-            .setUri(com.nuvio.tv.livetv.record.NetworkFolderStore.playUriFor(uri) ?: uri)
+            .setUri(playUri)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setLiveConfiguration(
                 // "Live" here means a few seconds behind the newest piece (not 3 target lengths).
@@ -726,6 +731,7 @@ class LiveTvPlaybackController @Inject constructor(
         // Closed captions are inside the recorded video too: look for them as for the live stream
         // (without this, full screen with Rewind Anytime lost the captions).
         return androidx.media3.exoplayer.hls.HlsMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(context))
+            .apply { if (generatedTs) setPlaylistTrackerFactory(LocalTsPlaylistTracker.FACTORY) }
             .setExtractorFactory(
                 LiveCaptions.Hls(
                     androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory(
