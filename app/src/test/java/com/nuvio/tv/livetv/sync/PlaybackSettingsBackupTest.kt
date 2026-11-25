@@ -91,7 +91,7 @@ class PlaybackSettingsBackupTest {
         assertEquals(AudioSamplingMode.HIGH, sampling.value)
         verify { AudioSyncFallback.initialize(context) }
         val roundtrip = JSONObject().also(backup::exportInto)
-        assertEquals(saved.toMap(), roundtrip.toMap())
+        assertEquals(saved.toString(), roundtrip.toString())
     }
 
     @Test fun `malformed subtitle family changes none of the valid preceding settings`() {

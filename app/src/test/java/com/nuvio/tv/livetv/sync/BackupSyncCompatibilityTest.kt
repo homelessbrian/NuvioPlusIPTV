@@ -1,13 +1,13 @@
 package com.nuvio.tv.livetv.sync
 
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import io.mockk.mockk
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -26,7 +26,7 @@ class BackupSyncCompatibilityTest {
     }
 
     @Test fun `older clients cannot erase external settings during first or later reconciliation`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context: Context = RuntimeEnvironment.getApplication()
         val drive = LiveTvDriveSync(context, mockk(), mockk())
         val key = "usenet_sources_v1_p2"
         val current = JSONObject().put(key, entry("synthetic-configuration"))
@@ -44,7 +44,7 @@ class BackupSyncCompatibilityTest {
     }
 
     @Test fun `turning logins off retains all Usenet profile settings without overwriting them`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context: Context = RuntimeEnvironment.getApplication()
         val store = context.getSharedPreferences("backup-sync-parts-test", Context.MODE_PRIVATE)
         store.edit().clear().commit()
         val parts = SyncParts(store)
