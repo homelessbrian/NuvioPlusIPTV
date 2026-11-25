@@ -48,13 +48,19 @@ class UsenetSourceSettings internal constructor(
     @Synchronized
     fun hasSavedConfiguration(profileId: Int): Boolean = preferences.contains("profile_$profileId")
 
-    /** Only explicitly saved profiles travel in a portable backup; an unreadable entry fails it. */
+    /**
+     * Only explicitly saved profiles travel in a portable backup. A profile this TV can't open
+     * (its device key was lost) is left out rather than stopping the whole Live TV sync: the
+     * combine step keeps the copy other devices and the cloud have, and that copy then comes
+     * back and repairs this TV.
+     */
     @Synchronized
     fun savedConfigurations(): Map<Int, UsenetSourceConfiguration> = preferences.all.keys
         .mapNotNull { PROFILE_KEY.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
         .filter { it in 1..ProfileManager.MAX_PROFILES }
         .sorted()
-        .associateWith { read(it).also(UsenetSourceConfiguration::validate) }
+        .mapNotNull { id -> runCatching { id to read(id).also(UsenetSourceConfiguration::validate) }.getOrNull() }
+        .toMap()
 
     /** Source edits only, after the encrypted store and its in-memory copy agree. */
     fun observeChanges(onChange: () -> Unit): AutoCloseable {

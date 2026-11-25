@@ -198,8 +198,9 @@ class UsenetBackupTest {
         val legacy = JSONObject().also(backup::exportInto)
         configurations.remove(2)
         every { sources.read(1) } throws IllegalStateException("Local key unavailable")
-        assertThrows(IllegalStateException::class.java) { backup.migrateLegacy(legacy) }
-        verify(exactly = 0) { sources.update(any(), any()) }
+        assertEquals(setOf("usenet_sources_v1_p1"), backup.migrateLegacy(legacy))
+        verify(exactly = 0) { sources.update(any(), 1) }
+        verify(exactly = 1) { sources.update(configuration(2), 2) }
         assertTrue(legacy.has("usenet_sources_v1_p1"))
     }
 

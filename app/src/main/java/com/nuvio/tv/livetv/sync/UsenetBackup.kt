@@ -39,18 +39,23 @@ class UsenetBackup @Inject constructor(
     /** Called before any other backup family is restored, so malformed entries change nothing. */
     fun validate(data: JSONObject) { parse(data) }
 
-    /** Adopt values forwarded into generic settings by an older client, without replacing native edits. */
-    fun migrateLegacy(data: JSONObject) {
+    /**
+     * Adopt values forwarded into generic settings by an older client, without replacing native
+     * edits. Returns the forwarded entries to keep where they are: a profile whose saved copy
+     * can't be opened right now keeps its recoverable forwarded copy, without stopping sync.
+     */
+    fun migrateLegacy(data: JSONObject): Set<String> {
         val restored = parse(data)
-        // Do not discard a recoverable forwarded copy while the native owner is unreadable.
-        restored.configurations.keys.filter(sources::hasSavedConfiguration).forEach { profile ->
-            check(runCatching { sources.read(profile) }.isSuccess) { "Saved Usenet sources could not be opened" }
-        }
+        val keep = HashSet<String>()
         restored.configurations.forEach { (profile, configuration) ->
-            if (!sources.hasSavedConfiguration(profile)) sources.update(configuration, profile)
+            when {
+                !sources.hasSavedConfiguration(profile) -> sources.update(configuration, profile)
+                runCatching { sources.read(profile) }.isFailure -> keep += SOURCE_PREFIX + profile
+            }
         }
         if (!statsPreferences.contains("period")) restored.period?.let(stats::setPeriod)
         if (!statsPreferences.contains("content")) restored.content?.let(stats::setContent)
+        return keep
     }
 
     fun restoreFrom(data: JSONObject) {

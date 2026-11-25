@@ -1850,15 +1850,15 @@ class LiveTvPreferences @Inject constructor(
     private suspend fun migrateLegacyUsenet() {
         val legacy = JSONObject()
         store.data.first().asMap().forEach { (key, value) ->
-            if (UsenetBackup.isKey(key.name)) {
-                require(value is String) { "Invalid saved Usenet backup" }
+            if (UsenetBackup.isKey(key.name) && value is String) {
                 legacy.put(key.name, JSONObject().put("t", "str").put("v", value))
             }
         }
         if (legacy.length() == 0) return
-        usenetBackup.migrateLegacy(legacy)
+        // Never stops sync: entries that can't be adopted yet stay here (they aren't synced from here).
+        val keep = runCatching { usenetBackup.migrateLegacy(legacy) }.getOrElse { return }
         store.edit { p ->
-            p.asMap().keys.filter { UsenetBackup.isKey(it.name) }.forEach {
+            p.asMap().keys.filter { UsenetBackup.isKey(it.name) && it.name !in keep }.forEach {
                 @Suppress("UNCHECKED_CAST")
                 p.remove(it as Preferences.Key<Any>)
             }
