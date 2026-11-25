@@ -1856,10 +1856,11 @@ class LiveTvPlaybackController @Inject constructor(
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
             ): androidx.media3.exoplayer.audio.AudioSink? {
-                // Pretend the output only takes plain PCM: Dolby / DTS gets decoded here.
+                // Without a Context, the sink keeps these PCM-only capabilities. Builder(context)
+                // replaces them with the device's HDMI capabilities, allowing passthrough again.
                 @Suppress("DEPRECATION")
                 val sink = if (passthrough) super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
-                else androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                else androidx.media3.exoplayer.audio.DefaultAudioSink.Builder()
                     .setAudioCapabilities(androidx.media3.exoplayer.audio.AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
