@@ -286,7 +286,7 @@ class LiveTvDriveSync @Inject constructor(
         emptyRefused = false
         _state.value = _state.value.copy(busy = true, message = if (force) text(R.string.iptv_status_backing_up) else null)
         val result = runCatching {
-            var data = prefs.exportForSync()
+            var data = if (force) prefs.exportForBackup() else prefs.exportForSync()
             val removedHere = prefs.removedSourceIds()
             val hash0 = sha(data.toString())
             if (!force && hash0 == store.getString(KEY_LAST_HASH, null)) return@runCatching false
@@ -297,6 +297,7 @@ class LiveTvDriveSync @Inject constructor(
             // without the playlists they had added (which then vanished from every TV).
             remoteCopy(token)?.let { remote ->
                 val remoteData = remote.optJSONObject("data")
+                if (!force && remoteData != null) DeviceSettingsBackup.keepSaved(data, remoteData)
                 val base = readBase()
                 if (remoteData != null && remoteData.toString() != base?.toString()) {
                     val merged = merge(base, local = data, remote = remoteData, localWinsWithoutBase = true, removedHere = removedHere)
@@ -393,7 +394,7 @@ class LiveTvDriveSync @Inject constructor(
             // since the last sync and takes everything else from the other TV.
             val data = if (force) remoteData
             else merge(base, local = prefs.exportForSync(), remote = remoteData, localWinsWithoutBase = false, removedHere = prefs.removedSourceIds())
-            applyLocally(data)
+            applyLocally(data, includeDeviceSettings = force && !onlyIfExists)
             store.edit()
                 .putLong(KEY_APPLIED_AT, savedAt)
                 .putLong(KEY_LAST_SYNC, System.currentTimeMillis())
@@ -421,13 +422,13 @@ class LiveTvDriveSync @Inject constructor(
 
     // ------------------------------------------------------------------ merging
 
-    internal suspend fun applyLocally(data: JSONObject) {
+    internal suspend fun applyLocally(data: JSONObject, includeDeviceSettings: Boolean = false) {
         applying = true
         appliedAtMs = System.currentTimeMillis()
         try {
             val before = prefs.exportForSync()
             val playlistsBefore = prefs.currentPlaylists()
-            val changed = prefs.importFromSync(data)
+            val changed = if (includeDeviceSettings) prefs.importFromBackup(data) else prefs.importFromSync(data)
             val after = prefs.exportForSync()
             com.nuvio.tv.livetv.model.PlaylistServerChanges.lines(playlistsBefore, prefs.currentPlaylists())
                 .forEach { com.nuvio.tv.livetv.model.LiveTvLoadReport.add(it) }
@@ -488,6 +489,13 @@ class LiveTvDriveSync @Inject constructor(
             // playlists only the other TVs had.
             val (first, second) = if (localWinsWithoutBase) local to remote else remote to local
             val out = JSONObject(first.toString())
+            // Older backups and devices can lack newer external settings. An absent family
+            // must not erase the copy held by the other device on the first reconciliation.
+            second.keys().forEach { key ->
+                if (!out.has(key) && (UsenetBackup.isKey(key) || PlaybackSettingsBackup.isKey(key) || key == DeviceSettingsBackup.KEY)) {
+                    out.put(key, second.get(key))
+                }
+            }
             for (k in SOURCE_LISTS) {
                 val a = first.optJSONObject(k)
                 val b = second.optJSONObject(k)
@@ -504,6 +512,12 @@ class LiveTvDriveSync @Inject constructor(
             base.keys().forEach { add(it) }
         }
         keys.forEach { k ->
+            if (UsenetBackup.isKey(k) || PlaybackSettingsBackup.isKey(k) || k == DeviceSettingsBackup.KEY) {
+                // An older app omits settings it cannot store. Explicit empty source
+                // configurations reset them; absence alone is never a credential deletion.
+                if (!local.has(k)) return@forEach
+                if (!remote.has(k)) { out.put(k, local.get(k)); return@forEach }
+            }
             val l = local.opt(k)?.toString()
             val b = base.opt(k)?.toString()
             if (l != b) {
@@ -697,10 +711,12 @@ class LiveTvDriveSync @Inject constructor(
 
     private fun baseFile() = java.io.File(context.filesDir, "livetv_drive_base.json")
 
-    private fun readBase(): JSONObject? = runCatching { JSONObject(com.nuvio.vpn.android.VpnBackup.openCache(baseFile().readText())) }.getOrNull()
+    private fun readBase(): JSONObject? = baseFile().takeIf { it.exists() }?.let {
+        JSONObject(com.nuvio.vpn.android.VpnBackup.openCache(it.readText()))
+    }
 
     private fun writeBase(data: JSONObject) {
-        runCatching { baseFile().writeText(com.nuvio.vpn.android.VpnBackup.sealCache(data.toString())) }
+        baseFile().writeText(com.nuvio.vpn.android.VpnBackup.sealCache(data.toString()))
     }
 
     // ------------------------------------------------------------------ Google plumbing

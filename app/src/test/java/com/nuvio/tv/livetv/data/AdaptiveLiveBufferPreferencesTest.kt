@@ -3,6 +3,7 @@ package com.nuvio.tv.livetv.data
 import android.content.Context
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.domain.model.UserProfile
+import com.nuvio.tv.livetv.sync.PlaybackSettingsBackup
 import com.nuvio.vpn.android.VpnBackup
 import io.mockk.Runs
 import io.mockk.every
@@ -35,7 +36,10 @@ class AdaptiveLiveBufferPreferencesTest {
             every { activeProfileId } returns MutableStateFlow(1)
             every { profiles } returns MutableStateFlow(listOf(UserProfile(1, "Primary", "#1E88E5")))
         }
-        preferences = LiveTvPreferences(context, profileManager)
+        val playbackBackup = mockk<PlaybackSettingsBackup>(relaxed = true) {
+            every { exportDeviceSettings() } answers { JSONObject() }
+        }
+        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), playbackBackup)
         mockkStatic(VpnBackup::class)
         every { VpnBackup.prepareExport(any<Context>(), null) } returns "{\"version\":1,\"profiles\":[]}"
         every { VpnBackup.restoreSetup(any<Context>(), any<String>()) } just Runs
@@ -63,6 +67,18 @@ class AdaptiveLiveBufferPreferencesTest {
         assertTrue(preferences.currentSettings().adaptiveLiveBufferEnabled)
         val remoteChoice = JSONObject().put("adaptive_live_buffer", JSONObject().put("t", "b").put("v", false))
         preferences.importFromSync(remoteChoice)
+        assertTrue(preferences.currentSettings().adaptiveLiveBufferEnabled)
+    }
+
+    @Test fun `explicit backup restores adaptive buffering while automatic restore leaves it local`() = runTest {
+        preferences.updateSettings { it.copy(adaptiveLiveBufferEnabled = true) }
+        val backup = JSONObject(preferences.exportForBackup().toString())
+        preferences.updateSettings { it.copy(adaptiveLiveBufferEnabled = false) }
+        preferences.importFromSync(backup)
+        assertFalse(preferences.currentSettings().adaptiveLiveBufferEnabled)
+        preferences.importFromBackup(backup)
+        assertTrue(preferences.currentSettings().adaptiveLiveBufferEnabled)
+        preferences.importFromBackup(JSONObject())
         assertTrue(preferences.currentSettings().adaptiveLiveBufferEnabled)
     }
 }

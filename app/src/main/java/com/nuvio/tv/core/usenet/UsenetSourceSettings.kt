@@ -9,6 +9,7 @@ import com.nuvio.tv.core.profile.ProfileScopedCredentialStore
 import dagger.Lazy
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.KeyStore
+import java.util.concurrent.CopyOnWriteArrayList
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -30,12 +31,32 @@ class UsenetSourceSettings @Inject constructor(
     /** Told every provider list read or saved, so a provider's statistics follow it through edits. */
     private val stats = UsenetSourceStats.get(context)
     private val revision = MutableStateFlow(0)
+    private val backupListeners = CopyOnWriteArrayList<() -> Unit>()
     private val json = Json { ignoreUnknownKeys = true }
     val snapshots get() = combine(profiles.get().activeProfileId, revision) { id, _ -> id to runCatching { read(id) } }
 
     // Decrypting takes a keystore round trip, and screens read the sources on the main thread:
     // each profile is decrypted once, and every later read is this copy. Guarded by this.
     private val decrypted = HashMap<Int, UsenetSourceConfiguration>()
+
+    @Synchronized
+    fun hasSavedConfiguration(profileId: Int): Boolean = preferences.contains("profile_$profileId")
+
+    /** Only explicitly saved profiles travel in a portable backup; an unreadable entry fails it. */
+    @Synchronized
+    fun savedConfigurations(): Map<Int, UsenetSourceConfiguration> = preferences.all.keys
+        .mapNotNull { PROFILE_KEY.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
+        .filter { it in 1..ProfileManager.MAX_PROFILES }
+        .sorted()
+        .associateWith { read(it).also(UsenetSourceConfiguration::validate) }
+
+    /** Source edits only, after the encrypted store and its in-memory copy agree. */
+    fun observeChanges(onChange: () -> Unit): AutoCloseable {
+        backupListeners += onChange
+        return AutoCloseable { backupListeners -= onChange }
+    }
+
+    private fun backupChanged() { backupListeners.forEach { runCatching { it() } } }
 
     @Synchronized
     fun read(profileId: Int = profiles.get().activeProfileId.value): UsenetSourceConfiguration {
@@ -67,6 +88,7 @@ class UsenetSourceSettings @Inject constructor(
         decrypted[profileId] = value
         stats.knowProviders(value.providers)
         revision.value += 1
+        backupChanged()
     }
 
     @Synchronized
@@ -75,6 +97,7 @@ class UsenetSourceSettings @Inject constructor(
         decrypted.remove(profileId)
         check(preferences.edit().remove("profile_$profileId").commit())
         revision.value += 1
+        backupChanged()
     }
 
     @Synchronized
@@ -82,6 +105,7 @@ class UsenetSourceSettings @Inject constructor(
         decrypted.clear()
         check(preferences.edit().clear().commit())
         revision.value += 1
+        backupChanged()
     }
 
     private fun key(): SecretKey {
@@ -94,5 +118,8 @@ class UsenetSourceSettings @Inject constructor(
         }.generateKey()
     }
 
-    private companion object { const val KEY_ALIAS = "nuvio_usenet_sources_v1" }
+    private companion object {
+        const val KEY_ALIAS = "nuvio_usenet_sources_v1"
+        val PROFILE_KEY = Regex("""profile_([1-9]\d*)""")
+    }
 }

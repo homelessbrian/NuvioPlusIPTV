@@ -13,6 +13,7 @@ import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Iterator;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -133,30 +134,55 @@ public final class VpnBackup {
         }
     }
 
-    /** Protect only the VPN entry in local sync comparison caches, never the portable remote payload. */
+    /** Protect portable secret entries only at rest, never in the payload sent to another device. */
     public static String sealCache(String json) throws Exception {
+        return sealCache(json, null);
+    }
+    static String sealCache(String json, SecretKey testKey) throws Exception {
         JSONObject data = new JSONObject(json);
-        if (!data.has(KEY)) return json;
-        byte[] plain = data.getJSONObject(KEY).toString().getBytes(StandardCharsets.UTF_8);
-        try {
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, cacheKey());
-            cipher.updateAAD(KEY.getBytes(StandardCharsets.US_ASCII));
-            data.put(KEY, new JSONObject().put("localEncrypted", Base64.encodeToString(cipher.doFinal(plain), Base64.NO_WRAP))
-                    .put("iv", Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP)));
-            return data.toString();
-        } finally { Arrays.fill(plain, (byte) 0); }
+        boolean changed = false;
+        for (Iterator<String> keys = data.keys(); keys.hasNext();) {
+            String name = keys.next();
+            if (!protectedCacheKey(name)) continue;
+            byte[] plain = data.getJSONObject(name).toString().getBytes(StandardCharsets.UTF_8);
+            try {
+                Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+                cipher.init(Cipher.ENCRYPT_MODE, testKey == null ? cacheKey() : testKey);
+                cipher.updateAAD(name.getBytes(StandardCharsets.US_ASCII));
+                data.put(name, new JSONObject().put("localEncrypted", Base64.encodeToString(cipher.doFinal(plain), Base64.NO_WRAP))
+                        .put("iv", Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP)));
+                changed = true;
+            } finally { Arrays.fill(plain, (byte) 0); }
+        }
+        return changed ? data.toString() : json;
     }
     public static String openCache(String json) throws Exception {
+        return openCache(json, null);
+    }
+    static String openCache(String json, SecretKey testKey) throws Exception {
         JSONObject data = new JSONObject(json);
-        JSONObject entry = data.optJSONObject(KEY);
-        if (entry == null || !entry.has("localEncrypted")) return json;
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.DECRYPT_MODE, cacheKey(), new GCMParameterSpec(128, Base64.decode(entry.getString("iv"), Base64.NO_WRAP)));
-        cipher.updateAAD(KEY.getBytes(StandardCharsets.US_ASCII));
-        byte[] plain = cipher.doFinal(Base64.decode(entry.getString("localEncrypted"), Base64.NO_WRAP));
-        try { data.put(KEY, new JSONObject(new String(plain, StandardCharsets.UTF_8))); return data.toString(); }
-        finally { Arrays.fill(plain, (byte) 0); }
+        boolean changed = false;
+        for (Iterator<String> keys = data.keys(); keys.hasNext();) {
+            String name = keys.next();
+            if (!protectedCacheKey(name)) continue;
+            JSONObject entry = data.getJSONObject(name);
+            if (!entry.has("localEncrypted")) {
+                if (!"str".equals(entry.optString("t")) || !(entry.opt("v") instanceof String))
+                    throw new IOException("Invalid protected backup entry.");
+                continue;
+            }
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, testKey == null ? cacheKey() : testKey,
+                    new GCMParameterSpec(128, Base64.decode(entry.getString("iv"), Base64.NO_WRAP)));
+            cipher.updateAAD(name.getBytes(StandardCharsets.US_ASCII));
+            byte[] plain = cipher.doFinal(Base64.decode(entry.getString("localEncrypted"), Base64.NO_WRAP));
+            try { data.put(name, new JSONObject(new String(plain, StandardCharsets.UTF_8))); changed = true; }
+            finally { Arrays.fill(plain, (byte) 0); }
+        }
+        return changed ? data.toString() : json;
+    }
+    private static boolean protectedCacheKey(String name) {
+        return KEY.equals(name) || name.matches("usenet_sources_v1_p[1-9][0-9]*");
     }
     private static synchronized SecretKey cacheKey() throws Exception {
         String alias = "nuvio.vpn.backup-cache.v1";
