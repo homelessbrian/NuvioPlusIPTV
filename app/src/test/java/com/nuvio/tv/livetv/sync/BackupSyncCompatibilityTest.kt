@@ -43,6 +43,31 @@ class BackupSyncCompatibilityTest {
         assertEquals("{}", drive.merge(current, reset, current, false, emptySet()).getJSONObject(key).getString("v"))
     }
 
+    @Test fun `concurrent seek choices merge one field at a time and upgraded devices adopt the saved choice`() {
+        val context: Context = RuntimeEnvironment.getApplication()
+        val drive = LiveTvDriveSync(context, mockk(), mockk())
+        fun copy(enabled: Boolean, mb: Int) = JSONObject()
+            .put("seek_thumbs_enabled", JSONObject().put("t", "b").put("v", enabled))
+            .put("seek_thumbs_storage_mb", JSONObject().put("t", "i").put("v", mb))
+        val base = copy(false, 50)
+        val local = copy(true, 50)
+        val remote = copy(false, 250)
+        val merged = drive.merge(base, local, remote, false, emptySet())
+        assertTrue(merged.getJSONObject("seek_thumbs_enabled").getBoolean("v"))
+        assertEquals(250, merged.getJSONObject("seek_thumbs_storage_mb").getInt("v"))
+        val upgraded = drive.merge(JSONObject(), local, remote, false, emptySet())
+        assertFalse(upgraded.getJSONObject("seek_thumbs_enabled").getBoolean("v"))
+        assertEquals(250, upgraded.getJSONObject("seek_thumbs_storage_mb").getInt("v"))
+    }
+
+    @Test fun `manual legacy playback choices cannot overwrite newer individually synced values`() {
+        val legacy = JSONObject().put("seekThumbnails", JSONObject().put("enabled", false).put("storageMb", 100))
+        val newer = JSONObject().put("seek_thumbs_enabled", JSONObject().put("t", "b").put("v", true))
+        val remaining = TvSharedSettingsSync.legacyPlaybackChoices(legacy, newer).getJSONObject("seekThumbnails")
+        assertFalse(remaining.has("enabled"))
+        assertEquals(100, remaining.getInt("storageMb"))
+    }
+
     @Test fun `turning logins off retains all Usenet profile settings without overwriting them`() {
         val context: Context = RuntimeEnvironment.getApplication()
         val store = context.getSharedPreferences("backup-sync-parts-test", Context.MODE_PRIVATE)

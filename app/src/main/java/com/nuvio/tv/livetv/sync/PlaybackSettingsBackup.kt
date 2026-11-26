@@ -33,13 +33,13 @@ class PlaybackSettingsBackup @Inject constructor(
         AudioSyncFallback.initialize(context)
     }
 
-    fun exportInto(data: JSONObject) {
+    fun exportInto(data: JSONObject, includeDefaults: Boolean = false) {
         initializeSubtitleSettings()
-        data.put(ENABLED, entry("b", AutoSyncPreferences.enabled.value))
-        data.put(AGGRESSIVE, entry("b", AutoSyncPreferences.aggressiveMode.value))
-        data.put(TOLERANCE, entry("i", AutoSyncPreferences.syncToleranceMs.value))
-        data.put(AUDIO_ENABLED, entry("b", AudioSyncSettings.fallbackEnabled.value))
-        data.put(AUDIO_SAMPLING, entry("str", AudioSyncSettings.samplingMode.value.name))
+        if (includeDefaults || autoPreferences.contains("automatic_subtitle_sync_enabled")) data.put(ENABLED, entry("b", AutoSyncPreferences.enabled.value))
+        if (includeDefaults || autoPreferences.contains("automatic_subtitle_sync_aggressive_mode")) data.put(AGGRESSIVE, entry("b", AutoSyncPreferences.aggressiveMode.value))
+        if (includeDefaults || autoPreferences.contains("automatic_subtitle_sync_tolerance_ms")) data.put(TOLERANCE, entry("i", AutoSyncPreferences.syncToleranceMs.value))
+        if (includeDefaults || audioPreferences.contains("audio_sync_fallback_enabled")) data.put(AUDIO_ENABLED, entry("b", AudioSyncSettings.fallbackEnabled.value))
+        if (includeDefaults || audioPreferences.contains("audio_sync_sampling_mode")) data.put(AUDIO_SAMPLING, entry("str", AudioSyncSettings.samplingMode.value.name))
     }
 
     fun validate(data: JSONObject) { parseSubtitleSettings(data) }

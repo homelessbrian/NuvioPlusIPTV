@@ -12,7 +12,7 @@ enum class SyncPart(val label: String, val description: String, val defaultOn: B
     HOME_ROWS("Home rows", "Live TV, Sports and On Demand rows you added to Home. Shared with your phone too.", true),
     SPORTS("Sports", "Followed teams and leagues, and your league list.", true),
     CALENDAR("Calendar", "Followed and hidden shows.", true),
-    BEHAVIOR("Behavior and options", "How often lists and guides refresh, recording and catch-up options, sorting, search sources and Calendar choices. Not the look, so it is shared with your phone too.", true),
+    BEHAVIOR("Behavior and options", "Playback and seek preview settings, guide refresh, recording, sorting, search and Calendar. Compatible options are shared with your phone.", true),
     LOOK("Look and layout", "Themes, menu, card styles and other visual options, kept the same on your TVs. Turn off to keep each TV its own.", true)
 }
 
@@ -57,11 +57,12 @@ internal class SyncParts(private val store: SharedPreferences) {
 
     private fun allOn() = SyncPart.values().all { isOn(it) }
 
-    private fun keyIsOn(key: String): Boolean = partOf(key)?.let { isOn(it) } ?: true
+    private fun keyIsOn(key: String): Boolean =
+        !key.startsWith(TvSharedSettingsSync.OTHER_PLATFORM) && (partOf(key)?.let { isOn(it) } ?: true)
 
     /** [data] without the parts that are off. */
     fun strip(data: JSONObject): JSONObject {
-        if (allOn()) return data
+        if (allOn() && data.keys().asSequence().none { it.startsWith(TvSharedSettingsSync.OTHER_PLATFORM) }) return data
         val out = JSONObject()
         data.keys().forEach { k -> if (keyIsOn(k)) out.put(k, data.get(k)) }
         return out
@@ -69,7 +70,7 @@ internal class SyncParts(private val store: SharedPreferences) {
 
     /** [view] plus the entries of the parts that are off, taken from [from]. */
     fun keep(view: JSONObject, from: JSONObject): JSONObject {
-        if (allOn()) return view
+        if (allOn() && from.keys().asSequence().none { it.startsWith(TvSharedSettingsSync.OTHER_PLATFORM) }) return view
         val out = JSONObject()
         view.keys().forEach { k -> out.put(k, view.get(k)) }
         from.keys().forEach { k -> if (!keyIsOn(k)) out.put(k, from.get(k)) }
@@ -170,6 +171,8 @@ internal class SyncParts(private val store: SharedPreferences) {
                 base in HOME_ROWS_KEYS -> SyncPart.HOME_ROWS
                 base in SPORTS_KEYS -> SyncPart.SPORTS
                 base in CALENDAR_KEYS -> SyncPart.CALENDAR
+                TvSharedSettingsSync.lookSetting(key) -> SyncPart.LOOK
+                TvSharedSettingsSync.isFamily(key) -> SyncPart.BEHAVIOR
                 base in BEHAVIOR_KEYS -> SyncPart.BEHAVIOR
                 else -> SyncPart.LOOK
             }

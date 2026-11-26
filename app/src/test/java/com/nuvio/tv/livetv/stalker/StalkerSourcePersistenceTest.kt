@@ -37,7 +37,8 @@ class StalkerSourcePersistenceTest {
             every { activeProfileId } returns MutableStateFlow(1)
             every { profiles } returns MutableStateFlow(listOf(UserProfile(1, "Primary", "#1E88E5")))
         }
-        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), mockk(relaxed = true))
+        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), mockk(relaxed = true),
+            mockk(relaxed = true), mockk(relaxed = true) { every { changes } returns kotlinx.coroutines.flow.flowOf(Unit) })
         mockkStatic(VpnBackup::class)
         every { VpnBackup.prepareExport(any<Context>(), null) } returns "{\"version\":1,\"profiles\":[]}"
         every { VpnBackup.restoreSetup(any<Context>(), any<String>()) } just Runs

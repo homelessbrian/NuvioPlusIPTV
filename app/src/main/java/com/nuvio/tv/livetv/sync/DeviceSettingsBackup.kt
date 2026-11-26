@@ -9,6 +9,23 @@ internal object DeviceSettingsBackup {
     private val stringKeys = setOf("buffer_size", "frame_rate_mode", "aspect_mode")
     private val profileSuffix = Regex("""_p\d+$""")
 
+    private const val LIVE_PREFIX = "tv_setting_v1_live_"
+    fun wireName(name: String): String? =
+        if (includes(name) || name == "developer_tools") LIVE_PREFIX + name else null
+
+    fun localName(wire: String): String? = wire.removePrefix(LIVE_PREFIX)
+        .takeIf { wire.startsWith(LIVE_PREFIX) && wireName(it) == wire }
+
+    fun validateLiveChoices(data: JSONObject) {
+        data.keys().forEach { wire ->
+            val name = localName(wire) ?: return@forEach
+            val entry = data.getJSONObject(wire)
+            val boolean = name.replace(profileSuffix, "") in booleanKeys || name == "developer_tools"
+            require(entry.getString("t") == if (boolean) "b" else "str")
+            require(if (boolean) entry.get("v") is Boolean else entry.get("v") is String)
+        }
+    }
+
     fun includes(name: String): Boolean = name.replace(profileSuffix, "") in booleanKeys + stringKeys
 
     fun encode(liveTv: JSONObject, playback: JSONObject): JSONObject = JSONObject()

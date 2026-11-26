@@ -59,7 +59,10 @@ object ForkDns {
 
     fun set(context: Context, value: DnsChoice) {
         if (prefs == null) init(context)
-        if (value == choice) return
+        if (value == choice) {
+            if (prefs?.contains(KEY) == false) prefs?.edit()?.putString(KEY, value.name)?.apply()
+            return
+        }
         choice = value
         prefs?.edit()?.putString(KEY, value.name)?.apply()
         cache.clear()
