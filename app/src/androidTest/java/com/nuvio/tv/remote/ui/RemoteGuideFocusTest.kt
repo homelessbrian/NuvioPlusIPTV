@@ -29,7 +29,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
@@ -94,8 +96,14 @@ class RemoteGuideFocusTest {
         }
         assertActionsVisible()
         composeRule.onNodeWithTag("remote_replacement_SHOW_INFO").performScrollTo().assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         assertActionsVisible()
-        composeRule.onNodeWithTag("remote_review_save").performClick()
+        composeRule.onNodeWithTag("remote_replacement_SHOW_INFO").assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("remote_review_cancel").assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("remote_review_save").assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.runOnIdle { assertEquals(1, saves) }
     }
 
