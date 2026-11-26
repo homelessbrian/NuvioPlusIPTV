@@ -863,17 +863,22 @@ class SportsRepository @Inject constructor(
             if (active && !com.nuvio.tv.livetv.data.BackgroundWork.onDemandPlaying.value && extrasJob?.isActive != true) extrasJob = scope.launch {
                 val force = forceExtras.also { forceExtras = false }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
+                awaitVideoIdleIfSmall()
                 // Your own leagues' rows (weeks ahead, the season, recent results) first: the
                 // week for every league can take many minutes on a slow box, and rows like UFC's
                 // or F1's (nothing this week) stayed missing until it was done.
                 sportsCatching { updateAhead(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Sports weeks-ahead update failed", it) }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
+                awaitVideoIdleIfSmall()
                 sportsCatching { updatePast(System.currentTimeMillis()) }.onFailure { Log.w(TAG, "Sports past days update failed", it) }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
+                awaitVideoIdleIfSmall()
                 sportsCatching { updateWeek(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Sports week update failed", it) }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
+                awaitVideoIdleIfSmall()
                 sportsCatching { updateTsdb(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Non-league update failed", it) }
                 com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
+                awaitVideoIdleIfSmall()
                 sportsCatching { updateSchedules(System.currentTimeMillis(), force) }.onFailure { Log.w(TAG, "Team schedules update failed", it) }
                 if (System.currentTimeMillis() - lastTv > 4 * HOUR) {
                     com.nuvio.tv.livetv.data.BackgroundWork.awaitOnDemandIdle()
@@ -921,8 +926,12 @@ class SportsRepository @Inject constructor(
         // through the shared cache in nuvio-data instead, so "every league, not just your
         // region's" costs nothing extra against ESPN itself (see fetchViaSharedCache below).
         fun fastLeague(l: League) = isMine(l, f) || l.id in playingLeagues || SportsCatalog.shown(l, s)
+        // Low-memory TVs while a channel or video plays (and Sports isn't open): only the leagues
+        // that are needed now (yours, the one on screen, score alerts). The rest wait until it stops.
+        val videoHold = smallMemory && !viewing && videoBusy()
         val due = allEspnLeagues().filter { l ->
             if (com.nuvio.tv.livetv.data.BackgroundWork.onDemandPlaying.value && l.id !in required) return@filter false
+            if (videoHold && l.id !in required && l.id !in playingLeagues && !isMine(l, f)) return@filter false
             val d = data[l.id]
             val age = now - lastChecked(l.id, d)
             val live = d?.events?.any { it.state == GameState.LIVE || (it.state == GameState.PRE && it.startMs in (now - 15 * MINUTE)..(now + 10 * MINUTE)) } == true
@@ -986,7 +995,14 @@ class SportsRepository @Inject constructor(
                     }
                     // Leagues nobody is looking at: nuvio-data's ready-made file when it's fresh
                     // (already read, and only downloaded when it changed); otherwise as before.
-                    val compact = if (useDirect) null else sportsCatching {
+                    // Leagues asked directly use it too while none of their games is on, has just
+                    // been on or is about to start: it's far smaller than ESPN's own reply. Games
+                    // that are on are always asked directly, so scores stay right up to date.
+                    val held = data[l.id]?.events
+                    val quietNow = held != null && held.none {
+                        it.state == GameState.LIVE || it.startMs in (now - 6 * HOUR)..(now + 30 * MINUTE)
+                    }
+                    val compact = if (useDirect && !quietNow) null else sportsCatching {
                         fromCompact(l, "d", days, now, leagueData.value[l.id] != null) { i -> if (i == 1) 20 * MINUTE else 90 * MINUTE }
                     }.getOrNull()
                     val r = sportsCatching<List<SportsEvent>?> {
@@ -1192,8 +1208,9 @@ class SportsRepository @Inject constructor(
                     noteSkipped()
                     return@withPermit
                 }
-                // Leagues nobody is looking at: nuvio-data's ready-made week file when it's fresh.
-                val compact = if (useDirect) null else sportsCatching {
+                // nuvio-data's ready-made week file when it's fresh, for every league (it's a
+                // schedule, not live scores); asked directly only when it can't be used.
+                val compact = sportsCatching {
                     fromCompact(l, "w", singleDays, now, weekData.value[l.id] != null) { 6 * HOUR }
                 }.getOrNull()
                 if (compact != null) {
@@ -2162,15 +2179,34 @@ class SportsRepository @Inject constructor(
     private fun watching(): Boolean =
         com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying.value || com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.value
 
-    /** Waits while video plays full screen; the Sports page being open ends the wait. */
-    private suspend fun awaitNotWatching() {
-        if (viewers.value > 0 || !watching()) return
-        val t0 = System.currentTimeMillis()
+    /**
+     * Video is playing: full screen or Nuvio's player, and on low-memory TVs also a Live TV
+     * channel playing or starting anywhere (the guide's preview too).
+     */
+    private fun videoBusy(): Boolean =
+        watching() || (smallMemory && playback.state.value.let { it.channelKey != null && (it.isPlaying || it.isBuffering) })
+
+    /** Waits while [videoBusy]; the Sports page being open ends the wait. */
+    private suspend fun awaitVideoIdle() {
+        if (viewers.value > 0 || !videoBusy()) return
         combine(
             com.nuvio.tv.livetv.data.BackgroundWork.nuvioPlaying,
             com.nuvio.tv.livetv.ui.LiveTvFullscreen.active,
+            playback.state,
             viewers
-        ) { nuvio, live, v -> v > 0 || (!nuvio && !live) }.first { it }
+        ) { _, _, _, v -> v > 0 || !videoBusy() }.first { it }
+    }
+
+    /** Low-memory TVs: the slower Sports work (week ahead, past days, schedules) waits for video to stop. */
+    private suspend fun awaitVideoIdleIfSmall() {
+        if (smallMemory) awaitVideoIdle()
+    }
+
+    /** Waits while video plays full screen; the Sports page being open ends the wait. */
+    private suspend fun awaitNotWatching() {
+        if (viewers.value > 0 || !videoBusy()) return
+        val t0 = System.currentTimeMillis()
+        awaitVideoIdle()
         // Back from the video: a moment for the guide / menu to settle first.
         if (viewers.value == 0) delay(5_000)
         LiveTvLoadReport.add("Sports matching waited ${(System.currentTimeMillis() - t0) / 1000} s while video was playing")

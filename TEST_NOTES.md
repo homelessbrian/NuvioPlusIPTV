@@ -16,5 +16,8 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 ## Recordings
 
 ## Sports
+- Low-memory TVs: Sports does less in the background while a channel plays, so it no longer runs the app out of memory
+- Followed leagues with no game on, and every league's week ahead, now come from the smaller ready-made score files
 
 ## Other
+- Low-memory TVs: a channel downloads less ahead while memory is nearly full, and the freeze checker can no longer be what closes the app (crash while watching Live TV on a 224 MB Xiaomi TV)

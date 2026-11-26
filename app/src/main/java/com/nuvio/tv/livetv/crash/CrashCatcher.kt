@@ -422,6 +422,11 @@ object CrashCatcher {
             var lastWriteAt = 0L
             while (true) {
                 try { Thread.sleep(500) } catch (_: InterruptedException) { return@Thread }
+                // This checker must never be what closes the app. When memory is completely full,
+                // the app freezes while Android tries to free some; writing the freeze note then
+                // needed a little more memory and ended the app (a 224 MB TV in a Discord report).
+                // Anything that goes wrong here is dropped and the checker carries on.
+                try {
                 val now = SystemClock.uptimeMillis()
                 // The whole app was paused (in the background, device asleep): start over.
                 if (now - lastLoop > 3_000) { answeredAt.set(now); askedAt = 0L }
@@ -440,15 +445,18 @@ object CrashCatcher {
                         .filter { it.startsWith("com.nuvio.tv.") && !it.startsWith("com.nuvio.tv.livetv.crash.") }
                         .distinct()
                         .forEach { ownLines[it] = (ownLines[it] ?: 0) + 1 }
-                    // A few full looks, spread out, for reading by hand.
-                    if (looks == 1 || looks == 5 || looks == 10 || looks == 20) {
+                    val tight = memoryNearlyFull()
+                    // A few full looks, spread out, for reading by hand (left out when memory is
+                    // nearly full: they're the biggest part of the note).
+                    if (!tight && (looks == 1 || looks == 5 || looks == 10 || looks == 20)) {
                         samples += buildString {
                             appendLine("Look $looks (${(now - askedAt) / 100 / 10.0}s into the freeze):")
                             stack.take(45).forEach { appendLine("    at $it") }
                         }.trimEnd()
                     }
                     // Written down from 4 s on, then kept up to date every 2 s.
-                    if (now - askedAt > 4_000 && now - lastWriteAt >= 2_000) {
+                    // With memory nearly full the note is written once, short, instead of every 2 s.
+                    if (now - askedAt > 4_000 && now - lastWriteAt >= 2_000 && !(tight && written)) {
                         written = true
                         lastWriteAt = now
                         val report = buildString {
@@ -459,19 +467,32 @@ object CrashCatcher {
                             appendLine("APP FROZE (stopped responding for ${(now - askedAt) / 1000}s and was closed)")
                             appendLine("The app's own code seen in $looks looks (most often first):")
                             if (ownLines.isEmpty()) appendLine("    (none: only Android or library code)")
-                            ownLines.entries.sortedByDescending { it.value }.take(25)
+                            ownLines.entries.sortedByDescending { it.value }.take(if (tight) 10 else 25)
                                 .forEach { (line, n) -> appendLine("    ${n}x  $line") }
+                            if (tight) appendLine("(memory nearly full: full looks left out)")
                             samples.forEach { appendLine(); appendLine(it) }
                         }
                         runCatching { File(app.filesDir, FREEZE_FILE).writeText(report) }
-                        Log.e(TAG, report)
+                        if (!tight) Log.e(TAG, report)
                     }
+                }
+                } catch (_: Throwable) {
+                    // Out of memory (or anything else) while looking: forget what was gathered so
+                    // far, so it can be freed, and keep watching.
+                    ownLines.clear(); samples.clear()
                 }
             }
         }, "FreezeWatchdog").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }.start()
     }
 
     @Volatile private var appContext: Context? = null
+
+    /** More than 90% of the memory the app may use is taken. */
+    private fun memoryNearlyFull(): Boolean {
+        val rt = Runtime.getRuntime()
+        val max = rt.maxMemory().takeIf { it in 1 until Long.MAX_VALUE } ?: return false
+        return rt.totalMemory() - rt.freeMemory() > max * 0.90
+    }
 
     private fun reportTime(timestamp: Long): String =
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(timestamp))
