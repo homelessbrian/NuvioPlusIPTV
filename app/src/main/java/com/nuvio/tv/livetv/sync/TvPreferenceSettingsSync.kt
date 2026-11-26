@@ -171,6 +171,9 @@ internal object TvSettingsFields {
         "layout_settings" to fields(strings = "last_non_off_discover_location").filterKeys {
             shouldExcludePreferenceFromProfileSettingsSync("layout_settings", it)
         },
+        "plugin_settings" to fields(booleans = "plugins_enabled").filterKeys {
+            shouldExcludePreferenceFromProfileSettingsSync("plugin_settings", it)
+        },
         "library_preferences" to fields(strings = "library_sort_option library_last_selected_list library_last_selected_type"),
         "discover_selection" to fields(strings = "selected_catalog_key"),
     )
