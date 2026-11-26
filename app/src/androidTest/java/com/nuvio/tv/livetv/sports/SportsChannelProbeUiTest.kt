@@ -90,7 +90,7 @@ class SportsChannelProbeUiTest {
         compose.onNode(preferred).assertIsDisplayed().assertIsFocused().assertTextContains("Unavailable now", substring = true)
         compose.onNode(alternative).assertTextContains("Working", substring = true)
             .assertTextContains("1920×1080 · 50 fps", substring = true).assertTextContains("Measured")
-        compose.onNode(lowerRate).assertTextContains("1920�1080 � 25 fps", substring = true)
+        compose.onNode(lowerRate).assertTextContains("1920×1080 · 25 fps", substring = true)
         compose.onNode(preferred).assertTextContains("Reported")
         assertTrue(compose.onNode(alternative).fetchSemanticsNode().boundsInRoot.top <
             compose.onNode(lowerRate).fetchSemanticsNode().boundsInRoot.top)
