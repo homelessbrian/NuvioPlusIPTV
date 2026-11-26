@@ -5,6 +5,11 @@
 
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.remote.RemoteAction
+import com.nuvio.tv.remote.RemoteScreen
+import com.nuvio.tv.remote.host.RemoteActionHost
+import com.nuvio.tv.remote.host.RemoteHostDefaults
+
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.layout.boundsInWindow
 import android.graphics.RectF
@@ -427,6 +432,50 @@ fun PlayerScreen(
             viewModel.hideControls()
         } else {
             exitPlayer()
+        }
+    }
+
+    RemoteActionHost(
+        screen = RemoteScreen.MOVIE,
+        enabled = !exitDispatched && !externalHandoffInProgress && !uiState.playbackEnded &&
+            uiState.error == null && !uiState.showControls && !skipButtonActuallyVisible &&
+            !postPlayRecommendationState.isVisible && !postPlayRecommendationState.isLoadingRecommendation &&
+            !shouldConfirmNextEpisodeOnEnd && uiState.postPlayMode == null &&
+            !uiState.showEpisodesPanel && !uiState.showSourcesPanel && !uiState.showPartyPanel &&
+            !uiState.showChaptersPanel && !uiState.showAudioOverlay && !uiState.showSubtitleOverlay &&
+            !uiState.showSubtitleStylePanel && !uiState.showSpeedDialog && !uiState.showDiscTitlesDialog &&
+            !uiState.showSubtitleDelayOverlay && !uiState.showSubtitleTimingDialog &&
+            !uiState.showMoreDialog && !uiState.showStreamInfoOverlay,
+        defaults = { RemoteHostDefaults.movie(hasChapters = uiState.chapters.isNotEmpty(), isLive = uiState.isLive) }
+    ) { action ->
+        fun unavailable() = android.widget.Toast.makeText(
+            context, com.nuvio.tv.R.string.remote_action_unavailable, android.widget.Toast.LENGTH_SHORT).show()
+        when (action) {
+            RemoteAction.PLAY_PAUSE -> { viewModel.onEvent(PlayerEvent.OnPlayPause); true }
+            RemoteAction.PLAY -> { if (!uiState.isPlaying) viewModel.onEvent(PlayerEvent.OnPlayPause); true }
+            RemoteAction.PAUSE -> { if (uiState.isPlaying) viewModel.onEvent(PlayerEvent.OnPlayPause); true }
+            RemoteAction.SEEK_BACK, RemoteAction.SEEK_FORWARD -> {
+                if (uiState.isLive) unavailable()
+                else viewModel.onEvent(PlayerEvent.OnSeekBy(if (action == RemoteAction.SEEK_FORWARD) 10_000L else -10_000L))
+                true
+            }
+            RemoteAction.NEXT_CHAPTER, RemoteAction.PREVIOUS_CHAPTER -> {
+                if (uiState.chapters.isEmpty()) unavailable()
+                else viewModel.onEvent(PlayerEvent.OnSkipChapter(action == RemoteAction.NEXT_CHAPTER))
+                true
+            }
+            RemoteAction.SHOW_CONTROLS -> { viewModel.onEvent(PlayerEvent.OnToggleControls); true }
+            RemoteAction.SHOW_INFO -> {
+                hideControlsAfterStreamInfo = true
+                viewModel.onEvent(PlayerEvent.OnShowStreamInfo)
+                true
+            }
+            RemoteAction.OPTIONS -> { viewModel.onEvent(PlayerEvent.OnShowMoreDialog); true }
+            RemoteAction.AUDIO -> { viewModel.onEvent(PlayerEvent.OnShowAudioOverlay); true }
+            RemoteAction.SUBTITLES -> { viewModel.onEvent(PlayerEvent.OnShowSubtitleOverlay); true }
+            RemoteAction.RETURN -> { exitPlayer(); true }
+            RemoteAction.NONE -> true
+            else -> false
         }
     }
 

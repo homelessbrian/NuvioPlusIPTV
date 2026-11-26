@@ -160,6 +160,8 @@ class SportsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val player: androidx.media3.common.Player? get() = playback.player
+    /** Use the shared controller so preview pause keeps its live rewind and state tracking. */
+    internal fun togglePreviewPause() = playback.togglePause()
     fun attachPlayer(): androidx.media3.common.Player = playback.attach()
     fun detachPlayer() { playback.detach() }
     fun onSurfaceAttached() = playback.onSurfaceAttached()

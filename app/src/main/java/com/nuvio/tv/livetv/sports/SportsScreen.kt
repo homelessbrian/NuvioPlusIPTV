@@ -2,6 +2,10 @@
 
 package com.nuvio.tv.livetv.sports
 
+import com.nuvio.tv.remote.RemoteAction
+import com.nuvio.tv.remote.RemoteScreen
+import com.nuvio.tv.remote.host.RemoteActionHost
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -416,6 +420,35 @@ fun SportsScreen(
         val key = playingKey ?: return
         SportsLaunch.openedFromSports(playingEventId(key, events, matches, System.currentTimeMillis()))
         onOpenLive()
+    }
+    val remoteContext = androidx.compose.ui.platform.LocalContext.current
+    RemoteActionHost(
+        screen = RemoteScreen.SPORTS,
+        enabled = !picker && fixFor == null && tableReq == null && openId == null && !topBarFocused
+    ) { action ->
+        fun unavailable() = LiveTvNotice.show(remoteContext.getString(com.nuvio.tv.R.string.remote_action_unavailable))
+        val focusedGame = (hubFocus.value ?: rowFocus[0])?.let { id -> known.firstOrNull { it.id == id } }
+        when (action) {
+            RemoteAction.RETURN_FULLSCREEN -> {
+                if (videoOn && playingKey != null && playingNow) backToFullscreen() else unavailable()
+                true
+            }
+            RemoteAction.PLAY_PAUSE -> {
+                if (videoOn && playingKey != null) viewModel.togglePreviewPause() else unavailable()
+                true
+            }
+            RemoteAction.SHOW_INFO -> {
+                if (focusedGame == null) unavailable()
+                else { fromRoute = null; fromLabel = null; openId = focusedGame.id }
+                true
+            }
+            RemoteAction.ACTIVATE -> {
+                if (focusedGame == null) unavailable() else quickWatch(focusedGame)
+                true
+            }
+            RemoteAction.NONE -> true
+            else -> false
+        }
     }
     com.nuvio.tv.livetv.ui.FrameMeter("Sports")
     // A finished game's replays are looked for as soon as its card is highlighted.

@@ -1,5 +1,9 @@
 package com.nuvio.tv.livetv.ui
 
+import com.nuvio.tv.remote.RemoteAction
+import com.nuvio.tv.remote.RemoteScreen
+import com.nuvio.tv.remote.host.RemoteActionHost
+
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -1040,7 +1044,8 @@ private fun LiveTvGuideScreenBody(
     }
 
     CompositionLocalProvider(LocalLiveSolidHighlight provides settings.solidHighlight, LocalGuideDarkness provides settings.guideInfoBackground) {
-    val hostActivity = androidx.compose.ui.platform.LocalContext.current as? com.nuvio.tv.MainActivity
+    val remoteContext = androidx.compose.ui.platform.LocalContext.current
+    val hostActivity = remoteContext as? com.nuvio.tv.MainActivity
     // Where the preview window is (the video view sits there when not full screen).
     var rootBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var previewBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
@@ -1071,6 +1076,56 @@ private fun LiveTvGuideScreenBody(
         }
         goFullscreen()
     }
+    fun returnToPlaying() {
+        savedSpot = ui.selectedGroupId to focusedChannel?.key
+        scope.launch {
+            viewModel.channelByKey(playback.channelKey)?.let { playing ->
+                viewModel.groupToShow(playing)?.let { viewModel.selectGroup(it) }
+            }
+            goFullscreen()
+        }
+    }
+    RemoteActionHost(
+        screen = RemoteScreen.TV_GUIDE,
+        enabled = !fullscreen && !fullscreenComing && gridFocused && !groupsOpen &&
+            !visibilityMode && !reorderActive && !groupReorderMode && !favoritesMode && !copyPickMode &&
+            !copyTargetPicker && copyPickerFor == null && pinGroup == null && menuTarget == null &&
+            !guideGearOpen && manualRecordingFor == null && infoTarget == null && !searchOpen &&
+            textPrompt == null && groupMenu == null && !epgListsOpen
+    ) { action ->
+        lastKeyAt = System.currentTimeMillis()
+        fun unavailable() = com.nuvio.tv.livetv.record.LiveTvNotice.show(
+            remoteContext.getString(com.nuvio.tv.R.string.remote_action_unavailable))
+        when (action) {
+            RemoteAction.ACTIVATE -> { activate(); true }
+            RemoteAction.CHANNEL_MENU -> {
+                val channel = focusedChannel
+                if (channel == null) unavailable()
+                else { menuOnInfo = false; menuTarget = MenuTarget(channel, focusedBlock) }
+                true
+            }
+            RemoteAction.RETURN_FULLSCREEN -> {
+                if (playback.channelKey != null) returnToPlaying() else unavailable()
+                true
+            }
+            RemoteAction.SEARCH -> {
+                LiveTvSearchBridge.origin.value = LiveTvSearchBridge.GUIDE
+                onOpenNuvioSearch()
+                true
+            }
+            RemoteAction.PAGE_UP -> { moveRow(-8); true }
+            RemoteAction.PAGE_DOWN -> { moveRow(8); true }
+            RemoteAction.LAST_CHANNEL -> {
+                val channel = viewModel.previousChannel()
+                if (channel == null) com.nuvio.tv.livetv.record.LiveTvNotice.show(
+                    remoteContext.getString(com.nuvio.tv.R.string.remote_no_previous_channel))
+                else playChannel(channel)
+                true
+            }
+            RemoteAction.NONE -> true
+            else -> false
+        }
+    }
     FrameMeter("Guide")
     androidx.compose.runtime.CompositionLocalProvider(
         LocalShowDetails provides { key, p -> viewModel.details(key, p) },
@@ -1090,18 +1145,6 @@ private fun LiveTvGuideScreenBody(
                 // Full screen handles its own keys.
                 if (fullscreen) return@onPreviewKeyEvent false
                 val playingNow = playback.channelKey != null
-                fun returnToPlaying() {
-                    // Remember where you were browsing, to come back to it afterwards.
-                    savedSpot = ui.selectedGroupId to focusedChannel?.key
-                    // Back to the group the playing channel was watched in (not the group you were
-                    // browsing), so Up/Down and overlay mode work from the channel you're on.
-                    scope.launch {
-                        viewModel.channelByKey(playback.channelKey)?.let { playing ->
-                            viewModel.groupToShow(playing)?.let { viewModel.selectGroup(it) }
-                        }
-                        goFullscreen()
-                    }
-                }
                 // Play/Pause on the remote: straight to full screen on what's playing. Works on
                 // every remote, including ones that can't report a held Back button.
                 if (e.type == KeyEventType.KeyDown && playingNow && e.nativeKeyEvent.repeatCount == 0 &&
