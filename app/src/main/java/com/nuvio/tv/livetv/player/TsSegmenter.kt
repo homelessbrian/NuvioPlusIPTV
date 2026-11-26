@@ -22,6 +22,8 @@ class TsSegmenter(
     private val dir: File,
     private val targetSec: Double = 6.0,
     private val keepSec: Double? = null,
+    /** The forward live decoder and archive share their first identifiable program. */
+    private val sharedLive: Boolean = false,
     /** A piece was saved (its length in seconds); the playlist is already updated. */
     private val onSegment: (Double) -> Unit = {}
 ) {
@@ -132,7 +134,9 @@ class TsSegmenter(
             pmts[pid] = p.copyOf()
             readPmt(p)
         }
-        if (pcr >= 0 && (pcrPid < 0 || pid == pcrPid)) {
+        // A TS feed can start mid-program, well before the first usable PAT/PMT. Media3 cannot
+        // identify a track there; don't count that discarded lead-in in the shared archive.
+        if (pcr >= 0 && (!sharedLive || (pat != null && pmts.isNotEmpty())) && (pcrPid < 0 || pid == pcrPid)) {
             if (pcrPid < 0) pcrPid = pid
             // Tables can open the first piece before its clock arrives. Start measuring it
             // from that first PCR too, rather than timing a buffered download by wall clock.
@@ -227,7 +231,7 @@ class TsSegmenter(
                 pieces.forEach { writer.write(it.playlistEntry) }
                 if (ended) writer.append("#EXT-X-ENDLIST\n")
             }
-        }
+        }.onFailure { if (sharedLive) throw it }
     }
 
     /** The PMT packet ids listed in the PAT. */
