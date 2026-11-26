@@ -118,6 +118,31 @@ class CrashCatcherContextTest {
         assertTrue(report.endsWith("Legacy CPU sample"))
     }
 
+    @Test fun `slow movie startup is readable without a crash and stays separate from other runs`() {
+        val save = CrashCatcher::class.java.getDeclaredMethod("saveSlowStart", Context::class.java, String::class.java)
+            .apply { isAccessible = true }
+        save.invoke(CrashCatcher, context, "Movie startup attempt 1: prepare returned")
+        val slowOnly = requireNotNull(CrashCatcher.lastReport(context))
+        assertTrue(slowOnly.startsWith(CrashCatcher.SLOW_START_HEADING))
+        assertTrue(slowOnly.contains("Movie startup attempt 1: prepare returned"))
+        assertFalse(File(directory, "last_crash.txt").exists())
+
+        val slowFile = File(directory, "slow_movie_startup.txt")
+        val saved = slowFile.lastModified()
+        val crash = File(directory, "last_crash.txt").apply { writeText("Older freeze report") }
+        assertTrue(crash.setLastModified(saved - 60_000))
+        val both = requireNotNull(CrashCatcher.lastReport(context))
+        assertTrue(both.startsWith(slowOnly))
+        assertTrue(both.contains("PREVIOUS SAVED CRASH OR FREEZE\nOlder freeze report"))
+        assertTrue(shortCrash(both).contains("Movie startup attempt 1"))
+        assertEquals("Older freeze report", crash.readText())
+
+        assertTrue(crash.setLastModified(saved + 60_000))
+        val latestCrash = requireNotNull(CrashCatcher.lastReport(context))
+        assertTrue(latestCrash.startsWith("Older freeze report"))
+        assertTrue(latestCrash.endsWith(slowOnly))
+    }
+
     @Test fun `current memory snapshot explicitly identifies Java heap usage and maximum`() {
         val method = CrashCatcher::class.java.getDeclaredMethod("situation", Context::class.java).apply {
             isAccessible = true

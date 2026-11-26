@@ -994,7 +994,7 @@ private fun loadDetails(load: PlaybackIssuePlaybackLoadInput?): Map<String, Stri
         "durationMs" to load?.durationMs?.toString()
     )
 
-private fun Throwable.findHttpStatus(): Int? {
+internal fun Throwable.findHttpStatus(): Int? {
     var current: Throwable? = this
     while (current != null) {
         if (current is HttpDataSource.InvalidResponseCodeException) {

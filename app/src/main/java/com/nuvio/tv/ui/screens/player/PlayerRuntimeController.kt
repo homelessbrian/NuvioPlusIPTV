@@ -56,6 +56,8 @@ import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.StreamRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import androidx.media3.session.MediaSession
+import com.nuvio.tv.core.player.MovieStartupStep
+import com.nuvio.tv.core.player.MovieStartupTrace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Job
@@ -284,6 +286,7 @@ class PlayerRuntimeController(
     fun getCurrentHeaders(): Map<String, String> = currentHeaders
 
     fun stopAndRelease() {
+        movieStartupAttempt?.mark(MovieStartupStep.STOP)
         vpnSettingsSubscription.close()
         leavePartyPlayback()
         // Cache counters only reach the card on a natural finish, so capture them when the user exits too.
@@ -657,6 +660,7 @@ class PlayerRuntimeController(
     internal val nightModeAudioProcessor = NightModeAudioProcessor()
     internal var loudnessEnhancer: LoudnessEnhancer? = null
     internal var trackSelector: DefaultTrackSelector? = null
+    @Volatile internal var movieStartupAttempt: MovieStartupTrace.Attempt? = null
     internal var currentMediaSession: MediaSession? = null
     internal var mpvMediaSessionPlayer: MpvMediaSessionPlayer? = null
     internal var ffmpegAudioRenderer: FfmpegAudioRenderer? = null
