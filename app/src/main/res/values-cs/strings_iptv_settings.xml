@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"Výběr skupiny přistane na názvech kanálů: Nahoru a Dolů přepínají kanál, OK přehraje, Vpravo ukáže program, Vlevo se vrátí ke skupinám"</string>
     <string name="iptv_settings_overlay_mode">"Režim překrytí"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"Vlevo během sledování ukáže kanály a program přes video. Vypnuto: Vlevo se vrátí do průvodce."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Překrytí: nechat seznam otevřený při změně kanálu"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK na jiném kanálu na něj přepne a seznam zůstane otevřený, takže můžete dál listovat. OK na přehrávaném kanálu nebo Zpět jej zavře."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Nechat seznam otevřený při změně kanálu"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Režim překrytí, Záložní kanály a Multiview: OK na jiném kanálu na něj přepne a seznam zůstane otevřený, takže můžete dál listovat. OK na přehrávaném kanálu nebo Zpět jej zavře."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"Překrytí: zobrazit program a podrobnosti vedle seznamu"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"Nadcházející pořady zvýrazněného kanálu a co právě běží, vedle seznamu kanálů. Vypnuto: jen seznam; Vpravo je stále otevře."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"Kanál nahoru / dolů se pohybuje v rámci"</string>

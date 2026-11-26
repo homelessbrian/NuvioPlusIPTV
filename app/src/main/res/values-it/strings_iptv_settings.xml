@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"Scegliere un gruppo ti porta sui nomi dei canali: Su e Giù cambiano canale, OK riproduce, Destra mostra i programmi, Sinistra torna ai gruppi"</string>
     <string name="iptv_settings_overlay_mode">"Modalità sovrapposta"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"Sinistra durante la visione mostra canali e programmi sopra il video. Disattivato: Sinistra torna alla guida."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Sovrapposta: tieni la lista aperta cambiando canale"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK su un altro canale passa a quel canale e la lista resta aperta, così puoi continuare a scorrere. OK sul canale in riproduzione o Indietro la chiude."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Tieni la lista aperta cambiando canale"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Modalità sovrapposta, Riserve e Multiview: OK su un altro canale passa a quel canale e la lista resta aperta, così puoi continuare a scorrere. OK sul canale in riproduzione o Indietro la chiude."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"Sovrapposta: mostra programmi e dettagli accanto alla lista"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"I prossimi programmi del canale evidenziato e ciò che va in onda ora, accanto alla lista dei canali. Disattivato: solo la lista; Destra li apre comunque."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"Canale +/− si muove in"</string>

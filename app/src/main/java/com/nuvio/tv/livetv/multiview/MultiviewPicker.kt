@@ -179,9 +179,13 @@ internal fun MultiviewChannelPicker(
     onClear: () -> Unit,
     onRetry: () -> Unit,
     onClose: () -> Unit,
+    /** "Keep list open when changing channel": picking something new fills the pane and the panel stays. */
+    keepOpen: Boolean = false,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val selectedPane = state.panes.firstOrNull { it.id == paneId }
+    // The panel closes after a pick unless the list is kept open and it put something new in the pane.
+    fun closeAfterStream(channelKey: String) { if (!keepOpen || channelKey == selectedPane?.channelKey) onClose() }
     val logos by produceState(emptyMap<String, String>(), optionsSource) {
         value = withContext(Dispatchers.Default) {
             buildMap {
@@ -415,9 +419,12 @@ internal fun MultiviewChannelPicker(
         if (game.channels.isEmpty()) {
             com.nuvio.tv.livetv.record.LiveTvNotice.show(
                 "No matched channel for this game. Choose a broadcast on the Sports page first.")
-        } else if (onPlayGame(game)) onClose()
-        else com.nuvio.tv.livetv.record.LiveTvNotice.show(
-            "No available stream for this game right now. Choose another game or check its broadcasts on the Sports page.")
+        } else {
+            val already = game.event.id == selectedEventId
+            if (onPlayGame(game)) { if (!keepOpen || already) onClose() }
+            else com.nuvio.tv.livetv.record.LiveTvNotice.show(
+                "No available stream for this game right now. Choose another game or check its broadcasts on the Sports page.")
+        }
     }
     fun openStreams(game: SportsWatchGame) {
         if (game.channels.isNotEmpty() && onGame(game)) {
@@ -611,7 +618,7 @@ internal fun MultiviewChannelPicker(
                                     event.key == Key.DirectionUp -> { if (streamIndex > 0) streamIndex-- else upFromList() }
                                     event.key == Key.DirectionLeft -> streamOpenGame = null
                                     ok && event.nativeKeyEvent.repeatCount == 0 -> streams.getOrNull(streamIndex)?.let { m ->
-                                        streamsGame?.let { g -> onStream(g, m.channel.key); onClose() }
+                                        streamsGame?.let { g -> val k = m.channel.key; closeAfterStream(k); onStream(g, k) }
                                     }
                                 }
                                 sportsMode -> {
@@ -715,7 +722,7 @@ internal fun MultiviewChannelPicker(
                                         active = hasFocus,
                                         playing = match.channel.key == selectedPane?.channelKey,
                                         best = i == 0,
-                                        onClick = { streamsGame?.let { g -> onStream(g, match.channel.key); onClose() } },
+                                        onClick = { streamsGame?.let { g -> val k = match.channel.key; closeAfterStream(k); onStream(g, k) } },
                                     )
                                 }
                             }

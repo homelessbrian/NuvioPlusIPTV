@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"选择分组后落在频道名称上：上下换台，OK 播放，右键显示节目表，左键返回分组"</string>
     <string name="iptv_settings_overlay_mode">"叠加模式"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"观看时按左键在视频上显示频道和节目表。关闭：左键返回节目指南。"</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"叠加：换台时保持列表打开"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"在其他频道上按 OK 会切换过去并保持列表打开，方便继续浏览。在正在播放的频道上按 OK 或按返回即可关闭。"</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"换台时保持列表打开"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"叠加模式、备用频道和多画面：在其他频道上按 OK 会切换过去并保持列表打开，方便继续浏览。在正在播放的频道上按 OK 或按返回即可关闭。"</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"叠加：在列表旁显示节目表和详情"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"在频道列表旁显示所选频道的后续节目和正在播出的内容。关闭：仅显示列表；按右键仍可打开。"</string>
     <string name="iptv_settings_channel_up_down_moves_within">"频道上 / 下的范围"</string>

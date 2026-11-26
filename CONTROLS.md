@@ -41,6 +41,8 @@ In the guide's **Gear** (Guide display), the arrows move between the switches an
 | **▶** | The channel's schedule · **▶** again for the date picker |
 | **Back** | Close the overlay |
 
+With **Keep Lists Open When Changing Channel** on (Settings › Live TV › Opening & Channel Surfing), **OK** on another channel switches to it and the list stays open; **OK** on the playing channel or **Back** closes it. The same goes for the **Backups** lists (the play bar's Backups button and **▶** twice in full screen).
+
 ### On Demand
 | Button | Action |
 |---|---|
@@ -99,3 +101,5 @@ In the guide's **Gear** (Guide display), the arrows move between the switches an
 | **◀ / ▶** in a full-screen pane | The next pane · **▲** top bar · **▼** the picker |
 | **◀** at the left edge of the picker | Up to the top first · again opens the menu |
 | **Back** | Close the picker → back to all the panes (still playing) → hide the bar → leave Multiview |
+
+With **Keep Lists Open When Changing Channel** on, **OK** on a channel or game puts it in the pane and the picker stays open; **OK** on what's already in the pane or **Back** closes it.

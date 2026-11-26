@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"Nach Wahl einer Gruppe landest du auf den Sendernamen: Hoch und Runter wechseln den Sender, OK spielt ab, Rechts zeigt das Programm, Links geht zurück zu den Gruppen"</string>
     <string name="iptv_settings_overlay_mode">"Overlay-Modus"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"Links beim Zuschauen zeigt Sender und Programm über dem Video. Aus: Links geht zurück zum Programmführer."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Overlay: Liste beim Senderwechsel offen lassen"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK auf einem anderen Sender schaltet um und die Liste bleibt offen, sodass du weiter durchschalten kannst. OK auf dem laufenden Sender oder Zurück schließt sie."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Liste beim Senderwechsel offen lassen"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Overlay-Modus, Backups und Multiview: OK auf einem anderen Sender schaltet um und die Liste bleibt offen, sodass du weiter durchschalten kannst. OK auf dem laufenden Sender oder Zurück schließt sie."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"Overlay: Programm und Details neben der Liste anzeigen"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"Die kommenden Sendungen des markierten Senders und was gerade läuft, neben der Senderliste. Aus: nur die Liste; Rechts öffnet sie trotzdem."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"Sender hoch/runter wechselt innerhalb"</string>

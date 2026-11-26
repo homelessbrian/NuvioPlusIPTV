@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"グループを選ぶとチャンネル名に移動します: 上下でチャンネル変更、OK で再生、右で番組表、左でグループに戻ります"</string>
     <string name="iptv_settings_overlay_mode">"オーバーレイモード"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"視聴中に左を押すと、映像の上にチャンネルと番組表を表示します。オフ: 左で番組表に戻ります。"</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"オーバーレイ: チャンネルを変えても一覧を開いたまま"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"別のチャンネルで OK を押すと切り替わり、一覧は開いたままなので続けて切り替えられます。再生中のチャンネルで OK を押すか、戻るで閉じます。"</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"チャンネルを変えても一覧を開いたまま"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"オーバーレイ、バックアップ、マルチビュー: 別のチャンネルで OK を押すと切り替わり、一覧は開いたままなので続けて切り替えられます。再生中のチャンネルで OK を押すか、戻るで閉じます。"</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"オーバーレイ: 一覧の横に番組表と詳細を表示"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"チャンネル一覧の横に、選択中のチャンネルのこの先の番組と放送中の内容を表示します。オフ: 一覧のみ。右で開くこともできます。"</string>
     <string name="iptv_settings_channel_up_down_moves_within">"チャンネル上下の範囲"</string>

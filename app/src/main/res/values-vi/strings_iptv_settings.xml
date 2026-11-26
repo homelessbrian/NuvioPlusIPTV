@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"Chọn nhóm sẽ đáp vào tên kênh: Lên và Xuống đổi kênh, OK để phát, Phải hiện lịch, Trái quay lại nhóm"</string>
     <string name="iptv_settings_overlay_mode">"Chế độ lớp phủ"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"Trái khi đang xem sẽ hiện kênh và lịch đè lên video. Tắt: Trái quay lại lịch."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Lớp phủ: giữ danh sách mở khi đổi kênh"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK trên kênh khác sẽ chuyển sang kênh đó và danh sách vẫn mở, để bạn tiếp tục lướt. OK trên kênh đang phát hoặc Quay lại sẽ đóng."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Giữ danh sách mở khi đổi kênh"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Chế độ lớp phủ, Dự phòng và Đa màn hình: OK trên kênh khác sẽ chuyển sang kênh đó và danh sách vẫn mở, để bạn tiếp tục lướt. OK trên kênh đang phát hoặc Quay lại sẽ đóng."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"Lớp phủ: hiện lịch và chi tiết cạnh danh sách"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"Các chương trình sắp tới của kênh đang chọn và nội dung đang phát, cạnh danh sách kênh. Tắt: chỉ danh sách; Phải vẫn mở được."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"Kênh Lên / Xuống di chuyển trong"</string>

@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"Memilih grup mendarat di nama saluran: Atas dan Bawah berganti saluran, OK memutar, Kanan menampilkan jadwal, Kiri kembali ke grup"</string>
     <string name="iptv_settings_overlay_mode">"Mode Overlay"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"Kiri saat menonton menampilkan saluran dan jadwal di atas video. Nonaktif: Kiri kembali ke panduan."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Overlay: Biarkan Daftar Terbuka Saat Berganti Saluran"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK pada saluran lain beralih ke sana dan daftar tetap terbuka, jadi Anda bisa terus menelusuri. OK pada saluran yang diputar atau Kembali menutupnya."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Biarkan Daftar Terbuka Saat Berganti Saluran"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Mode overlay, Cadangan, dan Multiview: OK pada saluran lain beralih ke sana dan daftar tetap terbuka, jadi Anda bisa terus menelusuri. OK pada saluran yang diputar atau Kembali menutupnya."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"Overlay: Tampilkan Jadwal dan Detail di Samping Daftar"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"Acara mendatang saluran yang disorot dan yang sedang tayang, di samping daftar saluran. Nonaktif: hanya daftar; Kanan tetap membukanya."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"Saluran Atas / Bawah Bergerak Dalam"</string>

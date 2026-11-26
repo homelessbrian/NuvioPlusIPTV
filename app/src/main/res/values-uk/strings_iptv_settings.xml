@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"Вибір групи переводить на назви каналів: «Вгору» й «Вниз» перемикають канал, OK відтворює, «Праворуч» показує програму, «Ліворуч» повертає до груп"</string>
     <string name="iptv_settings_overlay_mode">"Режим накладання"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"«Ліворуч» під час перегляду показує канали й програму поверх відео. Вимкнено: «Ліворуч» повертає в телегід."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Накладання: не закривати список під час зміни каналу"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK на іншому каналі перемикає на нього, і список лишається відкритим, щоб гортати далі. OK на поточному каналі або «Назад» закривають його."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Не закривати список під час зміни каналу"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Режим накладання, резервні канали та мультиекран: OK на іншому каналі перемикає на нього, і список лишається відкритим, щоб гортати далі. OK на поточному каналі або «Назад» закривають його."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"Накладання: програма й деталі поруч зі списком"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"Наступні передачі виділеного каналу й те, що в ефірі, поруч зі списком каналів. Вимкнено: лише список; «Праворуч» усе одно відкриває їх."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"Канал вгору / вниз у межах"</string>

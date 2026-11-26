@@ -1216,13 +1216,14 @@ internal fun LiveTvSettingsContent(
                         s.overlayMode,
                         { update { it.copy(overlayMode = !it.overlayMode) } }
                     )
+                    // Shown either way: it also covers the Backups lists and the Multiview picker.
+                    SettingsToggleRow(
+                        context.getString(R.string.iptv_settings_overlay_keep_list_open_when_changing_channel),
+                        context.getString(R.string.iptv_settings_ok_on_another_channel_switches_to_it_and),
+                        s.overlayKeepOpen,
+                        { update { it.copy(overlayKeepOpen = !it.overlayKeepOpen) } }
+                    )
                     if (s.overlayMode) {
-                        SettingsToggleRow(
-                            context.getString(R.string.iptv_settings_overlay_keep_list_open_when_changing_channel),
-                            context.getString(R.string.iptv_settings_ok_on_another_channel_switches_to_it_and),
-                            s.overlayKeepOpen,
-                            { update { it.copy(overlayKeepOpen = !it.overlayKeepOpen) } }
-                        )
                         SettingsToggleRow(
                             context.getString(R.string.iptv_settings_overlay_show_schedule_and_details_beside_the_list),
                             context.getString(R.string.iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what),

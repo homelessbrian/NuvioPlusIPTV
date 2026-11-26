@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"Grup seçmek seni kanal adlarına götürür: Yukarı ve Aşağı kanal değiştirir, OK oynatır, Sağ yayın akışını gösterir, Sol gruplara döner"</string>
     <string name="iptv_settings_overlay_mode">"Kaplama modu"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"İzlerken Sol, kanalları ve yayın akışını videonun üzerinde gösterir. Kapalı: Sol rehbere döner."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Kaplama: kanal değiştirirken liste açık kalsın"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Başka bir kanalda OK o kanala geçer ve liste açık kalır, böylece gezinmeye devam edebilirsin. Oynatılan kanalda OK veya Geri listeyi kapatır."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Kanal değiştirirken liste açık kalsın"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Kaplama modu, Yedekler ve Çoklu Görünüm: Başka bir kanalda OK o kanala geçer ve liste açık kalır, böylece gezinmeye devam edebilirsin. Oynatılan kanalda OK veya Geri listeyi kapatır."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"Kaplama: yayın akışını ve ayrıntıları listenin yanında göster"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"Seçili kanalın sıradaki programları ve şu an yayında olan, kanal listesinin yanında. Kapalı: yalnızca liste; Sağ yine de açar."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"Kanal yukarı/aşağı kapsamı"</string>

@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"בחירת קבוצה מביאה לשמות הערוצים: למעלה ולמטה מחליפים ערוץ, OK מנגן, ימינה מציג את לוח השידורים, שמאלה חוזר לקבוצות"</string>
     <string name="iptv_settings_overlay_mode">"מצב שכבת על"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"שמאלה בזמן צפייה מציג ערוצים ולוחות שידורים מעל הווידאו. כבוי: שמאלה חוזר למדריך."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"שכבת על: הרשימה נשארת פתוחה בהחלפת ערוץ"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK על ערוץ אחר עובר אליו והרשימה נשארת פתוחה, כדי להמשיך לדפדף. OK על הערוץ המתנגן או חזרה סוגרים אותה."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"הרשימה נשארת פתוחה בהחלפת ערוץ"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"מצב שכבת על, גיבויים ותצוגה מרובה: OK על ערוץ אחר עובר אליו והרשימה נשארת פתוחה, כדי להמשיך לדפדף. OK על הערוץ המתנגן או חזרה סוגרים אותה."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"שכבת על: הצגת לוח שידורים ופרטים ליד הרשימה"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"התוכניות הבאות של הערוץ המסומן ומה שמשודר עכשיו, ליד רשימת הערוצים. כבוי: רק הרשימה; ימינה עדיין פותח אותם."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"ערוץ למעלה / למטה זז בתוך"</string>

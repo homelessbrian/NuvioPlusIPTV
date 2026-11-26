@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"اختيار مجموعة ينقلك إلى أسماء القنوات: أعلى وأسفل لتغيير القناة، وOK للتشغيل، ويمين لعرض الجدول، ويسار للعودة إلى المجموعات"</string>
     <string name="iptv_settings_overlay_mode">"وضع التراكب"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"يسار أثناء المشاهدة يعرض القنوات والجداول فوق الفيديو. عند الإيقاف: يسار يعود إلى الدليل."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"التراكب: إبقاء القائمة مفتوحة عند تغيير القناة"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK على قناة أخرى ينتقل إليها وتبقى القائمة مفتوحة لتواصل التصفح. OK على القناة المعروضة أو رجوع يغلقها."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"إبقاء القائمة مفتوحة عند تغيير القناة"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"وضع التراكب والنسخ الاحتياطية والعرض المتعدد: OK على قناة أخرى ينتقل إليها وتبقى القائمة مفتوحة لتواصل التصفح. OK على القناة المعروضة أو رجوع يغلقها."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"التراكب: إظهار الجدول والتفاصيل بجانب القائمة"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"البرامج القادمة للقناة المحددة وما يُعرض الآن، بجانب قائمة القنوات. عند الإيقاف: القائمة فقط؛ ويمين ما زال يفتحها."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"تنقّل القناة لأعلى / لأسفل داخل"</string>

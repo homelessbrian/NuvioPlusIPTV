@@ -115,6 +115,10 @@ class MultiviewViewModel @Inject constructor(
     val use24HourClock: StateFlow<Boolean> = preferences.settings.map { it.use24HourClock }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** "Keep list open when changing channel" (Settings → Live TV): the channel picker stays after a pick. */
+    val keepListOpen: StateFlow<Boolean> = preferences.settings.map { it.overlayKeepOpen }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     /** The Live TV "Backup channel" setting (switch to another copy when a channel won't play). */
     val autoBackup: StateFlow<Boolean> = preferences.settings.map { it.autoBackupChannel }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)

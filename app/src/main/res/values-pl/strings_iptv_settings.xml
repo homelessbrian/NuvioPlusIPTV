@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"Wybór grupy przenosi do nazw kanałów: W górę i W dół zmieniają kanał, OK odtwarza, W prawo pokazuje program, W lewo wraca do grup"</string>
     <string name="iptv_settings_overlay_mode">"Tryb nakładki"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"W lewo podczas oglądania pokazuje kanały i program na obrazie. Wyłączone: W lewo wraca do przewodnika."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Nakładka: zostaw listę otwartą przy zmianie kanału"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK na innym kanale przełącza na niego, a lista zostaje otwarta, więc możesz dalej przełączać. OK na odtwarzanym kanale lub Wstecz ją zamyka."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Zostaw listę otwartą przy zmianie kanału"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Tryb nakładki, Zapasowe i Multiview: OK na innym kanale przełącza na niego, a lista zostaje otwarta, więc możesz dalej przełączać. OK na odtwarzanym kanale lub Wstecz ją zamyka."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"Nakładka: pokazuj program i szczegóły obok listy"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"Nadchodzące programy zaznaczonego kanału i to, co leci teraz, obok listy kanałów. Wyłączone: tylko lista; W prawo i tak je otwiera."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"Kanał w górę/w dół w obrębie"</string>

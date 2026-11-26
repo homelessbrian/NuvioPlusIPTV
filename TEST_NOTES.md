@@ -10,6 +10,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 ## Live TV
 - Guide display menu (the guide's gear): Up, Down, Left and Right move the highlight again, and Left at the edge still doesn't open Nuvio's menu
 - DNS setting (Cloudflare/Google) now also applies when playing channels, Multiview, catch-up, rewind and recordings, not only to loading playlists and guides
+- "Keep Lists Open When Changing Channel" now also keeps the Backups lists and the Multiview channel picker open while you switch, and the switch shows even when overlay mode is off
 
 ## Rewind Anytime
 

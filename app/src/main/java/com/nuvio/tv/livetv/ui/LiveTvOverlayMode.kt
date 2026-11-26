@@ -1181,6 +1181,13 @@ private fun BackupFlyoutContent(
     fun rowAt(i: Int): Int = rowOf.getOrElse(i) { i }
     // Opens on the first copy that isn't the one playing.
     var index by remember { mutableIntStateOf(channels.indexOfFirst { it.key != playingKey }.coerceAtLeast(0)) }
+    // The list can gain a row while it stays open ("Keep list open"): the cursor stays on its channel.
+    var shownChannels by remember { mutableStateOf(channels) }
+    if (shownChannels !== channels) {
+        val k = shownChannels.getOrNull(index)?.key
+        shownChannels = channels
+        channels.indexOfFirst { it.key == k }.takeIf { it >= 0 }?.let { index = it }
+    }
     var activity by remember { mutableIntStateOf(0) }
     val focus = remember { FocusRequester() }
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (rowAt(index) - 3).coerceAtLeast(0))

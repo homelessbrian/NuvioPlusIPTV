@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"Picking a group lands on the channel names: Up and Down change channel, OK plays, Right shows the schedule, Left goes back to the groups"</string>
     <string name="iptv_settings_overlay_mode">"Overlay Mode"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"Left while watching shows channels and schedules over the video. Off: Left goes back to the guide."</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Overlay: Keep List Open When Changing Channel"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"OK on another channel switches to it and the list stays open, so you can keep flicking through. OK on the playing channel or Back closes it."</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"Keep Lists Open When Changing Channel"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"Overlay mode, Backups and Multiview: OK on another channel switches to it and the list stays open, so you can keep flicking through. OK on the playing channel or Back closes it."</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"Overlay: Show Schedule and Details Beside the List"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"The highlighted channel\'s upcoming shows and what\'s on now, next to the channel list. Off: just the list; Right still opens them."</string>
     <string name="iptv_settings_channel_up_down_moves_within">"Channel Up / Down Moves Within"</string>

@@ -513,9 +513,21 @@ fun LiveTvPlayerScreen(
     }
     LaunchedEffect(sportsEligible) { if (!sportsEligible) sportsGamesOpen = false }
     val pinList = com.nuvio.tv.livetv.sports.SportsLive.pins.collectAsState().value
+    // "Keep list open when changing channel": a backups list stays on the channel it was opened
+    // for while you switch between its copies, so the list doesn't reshuffle under the cursor.
+    var backupListBase by remember { mutableStateOf<LiveChannel?>(null) }
+    LaunchedEffect(dialog) { if (dialog != PlayerDialog.BACKUPS && dialog != PlayerDialog.BACKUP_FLYOUT) backupListBase = null }
+    val backupBase = backupListBase ?: current
+    /** OK on another channel in a backups list: switch and keep the list open (the setting is on). */
+    fun keepBackupsOpen(ch: LiveChannel): Boolean {
+        if (!settings.overlayKeepOpen || ch.key == playback.channelKey) return false
+        if (backupListBase == null) backupListBase = current
+        viewModel.preview(ch)
+        return true
+    }
     // Other copies of this channel for the bar's backup button (live only; hidden channels included).
-    val backups = remember(current?.key, panelFull, playback.catchupTitle, backupsTick) {
-        current?.takeIf { playback.catchupTitle == null }?.let { viewModel.backupsFor(it) }.orEmpty()
+    val backups = remember(backupBase?.key, panelFull, playback.catchupTitle, backupsTick) {
+        backupBase?.takeIf { playback.catchupTitle == null }?.let { viewModel.backupsFor(it) }.orEmpty()
     }
     // A live game on this channel: the other channels showing it, under this channel's own
     // copies in both backup lists (worked out again each time a list opens).
@@ -529,11 +541,16 @@ fun LiveTvPlayerScreen(
         if (ch.sourceId == com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) sports.mayPlay(ch) else viewModel.canOfferAsBackup(ch)
     // Add-on streams arrive a moment after the game is found: the lists follow them.
     val sportsMatches = sportsRepo?.matches?.collectAsStateWithLifecycle()?.value
-    val gameBackups = remember(current?.key, panelFull, playback.catchupTitle, backupsTick, dialog, backups, sportsMatches) {
-        val ch = current?.takeIf { playback.catchupTitle == null }
+    val gameBackups = remember(backupBase?.key, backupListBase != null, panelFull, playback.catchupTitle, backupsTick, dialog, backups, sportsMatches) {
+        val ch = backupBase?.takeIf { playback.catchupTitle == null }
         if (ch == null || sportsRepo == null) null
         else runCatching { sportsRepo.gameChannelsFor(ch.key, exclude = backups.mapTo(HashSet()) { it.key }) }.getOrNull()
-            ?.let { g -> g.copy(channels = g.channels.filter(::offerAsBackup)) }?.takeIf { it.channels.isNotEmpty() }
+            ?.let { g ->
+                // Switched away with the list kept open: the channel it was opened on stays at the
+                // top of the game's channels (when it isn't already a copy above), to switch back to.
+                val back = if (backupListBase != null && backups.none { it.key == ch.key }) listOf(ch) else emptyList()
+                g.copy(channels = back + g.channels.filter(::offerAsBackup))
+            }?.takeIf { it.channels.isNotEmpty() }
     }
     // Watching a live game: its streams from your sports add-ons are looked for (again every few
     // minutes while it's on), for the backup lists, the Games list and Multiview.
@@ -1334,6 +1351,7 @@ fun LiveTvPlayerScreen(
                 onLongPress = { ch -> if (ch.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID) backupMenuFor = ch },
                 menuOpen = backupMenuFor != null,
                 onPick = { ch ->
+                    if (keepBackupsOpen(ch)) return@LiveTvBackupFlyout
                     dialog = PlayerDialog.NONE
                     if (ch.key != playback.channelKey) {
                         viewModel.preview(ch)
@@ -1649,6 +1667,7 @@ fun LiveTvPlayerScreen(
             playlistNames = playlistNamesForBackups,
             nowTitle = { key -> viewModel.currentProgram(key)?.title },
             onPick = { ch ->
+                if (keepBackupsOpen(ch)) return@BackupChannelsDialog
                 dialog = PlayerDialog.NONE
                 backupMenuLastKey = null
                 if (ch.key != playback.channelKey) {

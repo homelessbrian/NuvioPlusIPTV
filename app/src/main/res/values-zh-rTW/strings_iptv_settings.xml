@@ -283,8 +283,8 @@
     <string name="iptv_settings_picking_a_group_lands_on_the_channel_names">"選擇分組後落在頻道名稱上：上下換臺，OK 播放，右鍵顯示節目表，左鍵返回分組"</string>
     <string name="iptv_settings_overlay_mode">"疊加模式"</string>
     <string name="iptv_settings_left_while_watching_shows_channels_and_schedules_over">"觀看時按左鍵在影片上顯示頻道和節目表。關閉：左鍵返回節目指南。"</string>
-    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"疊加：換臺時保持列表開啟"</string>
-    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"在其他頻道上按 OK 會切換過去並保持列表開啟，方便繼續瀏覽。在正在播放的頻道上按 OK 或按返回即可關閉。"</string>
+    <string name="iptv_settings_overlay_keep_list_open_when_changing_channel">"換臺時保持列表開啟"</string>
+    <string name="iptv_settings_ok_on_another_channel_switches_to_it_and">"疊加模式、備用頻道和多畫面：在其他頻道上按 OK 會切換過去並保持列表開啟，方便繼續瀏覽。在正在播放的頻道上按 OK 或按返回即可關閉。"</string>
     <string name="iptv_settings_overlay_show_schedule_and_details_beside_the_list">"疊加：在列表旁顯示節目表和詳情"</string>
     <string name="iptv_settings_the_highlighted_channel_s_upcoming_shows_and_what">"在頻道列表旁顯示所選頻道的後續節目和正在播出的內容。關閉：僅顯示列表；按右鍵仍可開啟。"</string>
     <string name="iptv_settings_channel_up_down_moves_within">"頻道上 / 下的範圍"</string>

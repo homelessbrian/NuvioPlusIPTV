@@ -133,6 +133,7 @@ fun MultiviewScreen(
         }
     }
     val loadingGames = sportsUsed && !sportsWaited && sportsRows.none { it.games.isNotEmpty() } && (sportsBusy || !sportsSawBusy)
+    val keepListOpen by viewModel.keepListOpen.collectAsStateWithLifecycle()
     val hideScores = sports?.settings?.collectAsStateWithLifecycle()?.value?.hideScores ?: false
     val request = remember { if (startOnSports) SportsWatchLaunch.take() else null }
     // Kept current every composition: the session asks it when a pane's channel won't play.
@@ -658,18 +659,24 @@ fun MultiviewScreen(
             panelBackground = panelBackground,
             nowOn = viewModel::nowOn,
             onSelect = { option ->
+                // "Keep list open": a new channel fills the pane and the panel stays; OK on the
+                // channel already in the pane (or Back) closes it.
+                val stay = keepListOpen && option.key != state.panes.getOrNull(editedPane)?.channelKey
                 // Recheck against current permissions when OK is pressed, even during a search.
-                if (viewModel.activeProfileId.value != openingProfile) leaveChangedProfile()
-                else viewModel.allowedChannels.value.firstOrNull { it.key == option.key }
-                    ?.let {
-                        paneEvents.remove(editedPane)
-                        session.assignChannel(editedPane, it)
-                    }
-                editorOpen = false
+                if (viewModel.activeProfileId.value != openingProfile) { leaveChangedProfile(); editorOpen = false }
+                else {
+                    viewModel.allowedChannels.value.firstOrNull { it.key == option.key }
+                        ?.let {
+                            paneEvents.remove(editedPane)
+                            session.assignChannel(editedPane, it)
+                        }
+                    if (!stay) editorOpen = false
+                }
             },
             onClear = { paneEvents.remove(editedPane); session.clearPane(editedPane) },
             onRetry = { session.retryPane(editedPane) },
-            onClose = { editorOpen = false }
+            onClose = { editorOpen = false },
+            keepOpen = keepListOpen
         )
     }
     if (layoutOpen) {
