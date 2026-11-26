@@ -12,6 +12,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONObject
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -30,6 +31,11 @@ class TvSharedSettingsSyncTest {
     private fun prefs(file: String) = context.getSharedPreferences(file, Context.MODE_PRIVATE)
     private fun entry(type: String, value: Any) = JSONObject().put("t", type).put("v", value)
     private fun exported() = JSONObject().also(owner::exportInto)
+
+    @Before fun freshProcess() {
+        // The thumbnail owner is process-wide. Robolectric can reuse its classloader across devices.
+        SeekThumbSettings::class.java.getDeclaredField("loaded").apply { isAccessible = true }.setBoolean(null, false)
+    }
 
     @Test fun freshTvRestoresExplicitSeekOptionsAndPreservesLocalMemoryHistory() {
         val source = prefs("seek_thumbnails")
