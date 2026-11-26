@@ -197,11 +197,28 @@ class FastTuneEmulatorTest {
                     assertTrue("last zap never played", until { controller.state.value.channelKey == "$label-zapc" &&
                         controller.player?.isPlaying == true && controller.shiftCanSeek() })
                     Thread.sleep(4500)
-                    main { controller.togglePause() }
-                    assertTrue("pause failed", until(2000) { controller.player?.playWhenReady == false })
-                    Thread.sleep(650)
-                    main { controller.togglePause() }
-                    assertTrue("resume failed", until { controller.player?.isPlaying == true })
+                    val holds = mutableListOf(650L)
+                    args.getString("fixtureLongPauseMs")?.toLongOrNull()?.let { holds += it.coerceIn(20_000, 80_000) }
+                    for (holdMs in holds) {
+                        val sample = JSONObject().put("pauseMs", holdMs)
+                        fun position(key: String) {
+                            val p = checkNotNull(controller.player)
+                            sample.put("${key}PlayerMs", p.currentPosition)
+                                .put("${key}HistoryMs", (controller.shiftPositionWallMs() ?: 0L) -
+                                    (controller.shiftStartedAt.value ?: 0L))
+                                .put("${key}Scheme", p.currentMediaItem?.localConfiguration?.uri?.scheme)
+                        }
+                        main { controller.togglePause(); position("paused") }
+                        assertTrue("pause failed", until(2000) { controller.player?.playWhenReady == false })
+                        Thread.sleep(holdMs)
+                        main { position("held"); controller.togglePause(); position("atResume") }
+                        assertTrue("resume failed", until { controller.player?.isPlaying == true &&
+                            (controller.player?.videoDecoderCounters?.renderedOutputBufferCount ?: 0) > 0 })
+                        main { position("resumed") }
+                        record(sample)
+                        assertTrue("the position moved while paused: $sample",
+                            kotlin.math.abs(sample.getLong("heldHistoryMs") - sample.getLong("pausedHistoryMs")) <= 100)
+                    }
                     main { controller.shiftSeekBy(-4000) }
                     assertTrue("rewind did not present the recording", until { controller.player?.isPlaying == true &&
                         controller.player?.currentMediaItem?.localConfiguration?.uri?.scheme == "file" &&
