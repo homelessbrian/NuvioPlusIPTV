@@ -42,6 +42,7 @@ internal fun RemoteDiagram(
     selected: RemoteButton,
     configuration: RemoteConfiguration,
     focusRequesters: Map<String, FocusRequester>,
+    onActivate: ((RemoteButton) -> Unit)? = null,
     onSelect: (RemoteButton) -> Unit
 ) {
     val context = LocalContext.current
@@ -54,6 +55,7 @@ internal fun RemoteDiagram(
             selected = selected.canonical() == button,
             focusRequester = focusRequesters[button.identity],
             onSelect = { onSelect(button) },
+            onActivate = { onSelect(button); onActivate?.invoke(button) },
             modifier = modifier.testTag("remote_key_$code")
         )
     }
@@ -96,11 +98,12 @@ private fun RemoteKey(
     selected: Boolean,
     focusRequester: FocusRequester?,
     onSelect: () -> Unit,
+    onActivate: () -> Unit,
     modifier: Modifier
 ) {
     val shape = if (label == "OK") CircleShape else RoundedCornerShape(15.dp)
     Card(
-        onClick = onSelect,
+        onClick = onActivate,
         modifier = modifier.heightIn(min = 39.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { if (it.isFocused) onSelect() }

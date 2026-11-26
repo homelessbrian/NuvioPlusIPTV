@@ -3,6 +3,7 @@ package com.nuvio.tv.remote.ui
 import android.view.KeyEvent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +52,55 @@ class RemoteGuideFocusTest {
 
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private fun tag(code: Int) = "remote_key_$code"
+
+    @Test
+    fun okOpensSelectedButtonDetailsAndDownReachesEditingWithoutChangingSelection() {
+        val left = RemoteButton(KeyEvent.KEYCODE_DPAD_LEFT)
+        val configuration = RemoteConfiguration(bindings = listOf(
+            RemoteBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, left, RemoteAction.LAST_CHANNEL)
+        ))
+        var selected by mutableStateOf(left)
+        var activated: RemoteButton? = null
+        var editClicks = 0
+        val requests = RemoteCatalog.standardButtons.associate { it.identity to FocusRequester() }
+        val details = FocusRequester()
+        composeRule.setContent {
+            NuvioTheme {
+                Row {
+                    Box(Modifier.width(300.dp)) {
+                        RemoteDiagram(selected, configuration, requests, onActivate = {
+                            activated = it
+                            details.requestFocus()
+                        }) { selected = it }
+                    }
+                    Column(Modifier.width(400.dp)) {
+                        GuideReadout("How to use it", "Return to the last channel watched.",
+                            Modifier.focusRequester(details).testTag("details"))
+                        GuideRow("Change what this button does", { editClicks++ }, Modifier.testTag("edit"))
+                    }
+                }
+            }
+        }
+        composeRule.runOnIdle { requests.getValue(left.identity).requestFocus() }
+        composeRule.onNodeWithTag(tag(KeyEvent.KEYCODE_DPAD_LEFT))
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.onNodeWithTag(tag(KeyEvent.KEYCODE_DPAD_CENTER)).assertIsFocused()
+        composeRule.runOnIdle { assertEquals(null, activated) }
+        composeRule.onNodeWithTag(tag(KeyEvent.KEYCODE_DPAD_CENTER))
+            .performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithTag(tag(KeyEvent.KEYCODE_DPAD_LEFT))
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.onNodeWithTag("details").assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("edit").assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.runOnIdle {
+            assertEquals(left, activated)
+            assertEquals(left, selected)
+            assertEquals(RemoteAction.LAST_CHANNEL, configuration.bindings.single().action)
+            assertEquals(1, editClicks)
+        }
+    }
 
     @Test
     fun dpadExploresDirectionsAndReachesLastChannelButtonWithoutChangingAssignments() {

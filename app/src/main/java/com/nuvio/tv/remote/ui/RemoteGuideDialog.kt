@@ -121,6 +121,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
     var focusAfterClose by remember { mutableStateOf<FocusRequester?>(null) }
     var buttonToFocus by remember { mutableStateOf<String?>(selected.identity) }
     val changeFocus = remember { FocusRequester() }
+    val detailFocus = remember { FocusRequester() }
     val contextFocus = remember { FocusRequester() }
     val checkFocus = remember { FocusRequester() }
     val resetFocus = remember { FocusRequester() }
@@ -179,6 +180,12 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
     fun closePane() {
         if (capture != null) capture?.cancel()
         else { pane = null; draft = null; status = null }
+    }
+    fun activateButton(button: RemoteButton) {
+        if (capture != null || busy) return
+        selected = button
+        buttonToFocus = null
+        focusAfterClose = detailFocus
     }
     fun handleKey(event: KeyEvent): Boolean = router?.consumeDrained(event.nativeKeyEvent) == true || capture?.dispatch(event.nativeKeyEvent) == true
     fun startCapture(replacement: RemoteAction? = null) {
@@ -294,6 +301,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
             else -> target
         }
         val index = when (attachedTarget) {
+            detailFocus -> 3
             changeFocus -> 4
             restoreFocus -> 5
             renameFocus -> 5 + if (custom) 1 else 0
@@ -337,7 +345,9 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
             buttonToFocus = selected.identity
         }
     }
-    LaunchedEffect(selected.identity, screen, press) { helpListState.scrollToItem(0) }
+    LaunchedEffect(selected.identity, screen, press) {
+        if (focusAfterClose == null) helpListState.scrollToItem(0)
+    }
 
     Dialog(
         onDismissRequest = { if (capture != null) capture?.cancel() else onDismiss() },
@@ -366,11 +376,11 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
             }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
                 LazyColumn(Modifier.weight(.34f).testTag("remote_buttons"), state = buttonListState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    item(key = "diagram") { RemoteDiagram(selected, configuration, keyFocus) { selected = it } }
+                    item(key = "diagram") { RemoteDiagram(selected, configuration, keyFocus, onActivate = ::activateButton) { selected = it } }
                     item(key = "picture_hint") { GuideText(stringResource(R.string.remote_guide_picture_hint), secondary = true) }
                     if (extraButtons.isNotEmpty()) item(key = "extras_heading") { GuideText(stringResource(R.string.remote_guide_extra_buttons)) }
                     items(extraButtons, key = { it.button.identity }) { extra ->
-                        GuideRow(remoteButtonName(context, extra.button, configuration), { selected = extra.button },
+                        GuideRow(remoteButtonName(context, extra.button, configuration), { activateButton(extra.button) },
                             Modifier.focusRequester(keyFocus.getValue(extra.button.identity)).testTag("remote_extra_${extra.button.keyCode}"),
                             selected = selected.canonical() == extra.button.canonical(), onFocused = { selected = extra.button })
                     }
@@ -401,7 +411,8 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
                     item(key = "how_to") {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             GuideReadout(stringResource(R.string.remote_guide_how_to), action?.let { context.getString(it.helpRes(screen)) }
-                                ?: context.getString(if (navigationTitle(screen, selected) != null) R.string.remote_nav_help else if (press == RemotePress.HOLD) R.string.remote_guide_hold_original_help else R.string.remote_guide_unknown_help))
+                                ?: context.getString(if (navigationTitle(screen, selected) != null) R.string.remote_nav_help else if (press == RemotePress.HOLD) R.string.remote_guide_hold_original_help else R.string.remote_guide_unknown_help),
+                                Modifier.focusRequester(detailFocus).testTag("remote_how_to"))
                             if (custom) GuideText(context.getString(R.string.remote_guide_original_action, original?.let { context.getString(it.titleRes(screen)) } ?: context.getString(R.string.remote_guide_unknown_title)), secondary = true)
                         }
                     }
