@@ -66,13 +66,27 @@ internal fun RemoteGuideOverlays(
     onCancelCapture: () -> Unit,
     onSave: () -> Unit,
     onReset: () -> Unit,
-    onRename: (String) -> Unit
+    onRename: (String) -> Unit,
+    foundButton: RemoteButton? = null,
+    onAddFound: () -> Unit = {}
 ) {
     if (pane == null) return
     val context = LocalContext.current
     val firstFocus = remember(pane) { FocusRequester() }
-    LaunchedEffect(pane) { delay(70); runCatching { firstFocus.requestFocus() } }
+    if (pane != GuidePane.FIND_CONFIRM) LaunchedEffect(pane) { delay(70); runCatching { firstFocus.requestFocus() } }
     when (pane) {
+        GuidePane.FIND -> GuideSheet(stringResource(R.string.remote_guide_find_button), onDismiss, onKey,
+            footer = { GuideRow(stringResource(R.string.remote_guide_cancel), onDismiss,
+                Modifier.testTag("remote_find_cancel"), style = GuideRowStyle.QUIET) }) {
+            GuideReadout(stringResource(R.string.remote_guide_find_prompt),
+                stringResource(if (captureTimedOut) R.string.remote_guide_find_waiting else R.string.remote_guide_find_safe),
+                Modifier.focusRequester(firstFocus).testTag("remote_find_prompt"))
+            if (status != null) GuideText(status, secondary = true)
+        }
+        GuidePane.FIND_CONFIRM -> foundButton?.let { button ->
+            RemoteFindConfirmation(remoteButtonName(context, button, configuration), busy, status,
+                onKey, onAddFound, onDismiss)
+        }
         GuidePane.SCREEN -> GuideSheet(stringResource(R.string.remote_guide_context), onDismiss, onKey,
             width = 520.dp, footer = { GuideRow(stringResource(R.string.remote_guide_cancel), onDismiss, style = GuideRowStyle.QUIET) }) {
             RemoteScreen.entries.forEachIndexed { index, item ->
@@ -188,6 +202,33 @@ internal fun RemoteGuideOverlays(
                 if (label.isBlank()) GuideText(stringResource(R.string.remote_guide_name_empty), secondary = true)
             }
         }
+    }
+}
+
+/** A discovered key stays temporary until the user explicitly adds it to the guide. */
+@Composable
+internal fun RemoteFindConfirmation(
+    name: String,
+    busy: Boolean,
+    status: String?,
+    onKey: (KeyEvent) -> Boolean,
+    onAdd: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val cancelFocus = remember { FocusRequester() }
+    val dismissIfReady: () -> Unit = { if (!busy) onDismiss() }
+    LaunchedEffect(Unit) { delay(70); runCatching { cancelFocus.requestFocus() } }
+    GuideSheet(stringResource(R.string.remote_guide_find_confirm_title, name), dismissIfReady, onKey,
+        footer = {
+            GuideActionPair(
+                first = { modifier -> GuideRow(stringResource(R.string.remote_guide_cancel), dismissIfReady,
+                    modifier.focusRequester(cancelFocus).testTag("remote_find_confirm_cancel"), enabled = !busy, style = GuideRowStyle.QUIET) },
+                second = { modifier -> GuideRow(stringResource(if (busy) R.string.remote_guide_saving else R.string.remote_guide_find_add), onAdd,
+                    modifier.testTag("remote_find_add_confirm"), enabled = !busy, style = GuideRowStyle.PRIMARY) }
+            )
+        }) {
+        GuideText(stringResource(R.string.remote_guide_find_confirm_message))
+        if (status != null) GuideReadout(stringResource(R.string.remote_guide_find_button), status)
     }
 }
 

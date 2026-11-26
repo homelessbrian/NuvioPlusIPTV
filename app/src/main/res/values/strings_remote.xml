@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="remote_guide_title">Your remote</string>
+    <string name="remote_guide_find_button">Find a button</string>
+    <string name="remote_guide_find_prompt">Press a button on your remote</string>
+    <string name="remote_guide_find_safe">See what the button does without changing your settings. Press Back to cancel.</string>
+    <string name="remote_guide_find_waiting">Still listening for a button. Your settings have not changed. Press Back to cancel.</string>
+    <string name="remote_guide_find_confirm_title">Add %1$s to your guide?</string>
+    <string name="remote_guide_find_confirm_message">This button is not in your guide yet. Add it to see its options. Its action will stay as it is until you choose and save a change.</string>
+    <string name="remote_guide_find_add">Add to your guide</string>
     <string name="remote_guide_entry_subtitle">Learn what each button does, or change it for this TV</string>
     <string name="remote_guide_subtitle">Choose a button. Press OK to use its options on the right.</string>
     <string name="remote_guide_close">Back to Playback settings</string>

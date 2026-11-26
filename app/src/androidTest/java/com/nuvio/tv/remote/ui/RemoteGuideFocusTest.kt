@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -23,12 +25,14 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.semantics.SemanticsActions
@@ -99,6 +103,60 @@ class RemoteGuideFocusTest {
 
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private fun tag(code: Int) = "remote_key_$code"
+
+    @Test
+    fun unknownButtonNeedsExplicitAddAndCanBeCancelled() {
+        var shown by mutableStateOf(true)
+        var adds = 0
+        var cancels = 0
+        composeRule.setContent {
+            NuvioTheme {
+                if (shown) RemoteFindConfirmation("Blue button", false, null, { false },
+                    onAdd = { adds++; shown = false }, onDismiss = { cancels++; shown = false })
+            }
+        }
+        composeRule.runOnIdle { assertEquals(0, adds) }
+        composeRule.onNodeWithTag("remote_find_confirm_cancel").assertIsDisplayed().assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.runOnIdle {
+            assertEquals(0, adds)
+            assertEquals(1, cancels)
+            shown = true
+        }
+        composeRule.onNodeWithTag("remote_find_confirm_cancel").assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("remote_find_add_confirm").assertIsDisplayed().assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.runOnIdle {
+            assertEquals(1, adds)
+            assertEquals(1, cancels)
+        }
+    }
+
+    @Test
+    fun selectedButtonAndPressStayVisibleWhileOptionsScroll() {
+        composeRule.setContent {
+            NuvioTheme {
+                RemoteGuideDetails("Family button", RemotePress.ONCE, true, rememberLazyListState(),
+                    Modifier.width(600.dp).height(320.dp)) {
+                    items(8) { index ->
+                        GuideRow("Option $index", {}, Modifier.testTag("option_$index"),
+                            detail = "An explanation that stays with this option.")
+                    }
+                }
+            }
+        }
+        val heading = composeRule.onNodeWithTag("remote_selected_heading").assertIsDisplayed()
+        val initialBounds = heading.getUnclippedBoundsInRoot()
+        composeRule.onNodeWithTag("remote_button_help").performScrollToNode(hasTestTag("option_7"))
+        composeRule.onNodeWithTag("option_7").assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        heading.assertIsDisplayed()
+        assertEquals("The button heading must not scroll with the options", initialBounds, heading.getUnclippedBoundsInRoot())
+        composeRule.onNodeWithTag("option_7").assertIsFocused().performKeyInput { pressKey(Key.DirectionUp) }
+        heading.assertIsDisplayed()
+        assertEquals(initialBounds, heading.getUnclippedBoundsInRoot())
+    }
 
     @Test
     fun reviewActionsStayVisibleWhileLongWarningsScrollAtLargeTextSize() {
