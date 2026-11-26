@@ -112,6 +112,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
     var press by rememberSaveable { mutableStateOf(RemotePress.ONCE) }
     var selected by remember { mutableStateOf(RemoteButton(AndroidKeyEvent.KEYCODE_DPAD_LEFT)) }
     var pane by remember { mutableStateOf<GuidePane?>(null) }
+    var renameTarget by remember { mutableStateOf<RemoteButton?>(null) }
     var draft by remember { mutableStateOf<RemoteEditDraft?>(null) }
     var capture by remember { mutableStateOf<RemoteButtonCapture?>(null) }
     var captureAction by remember { mutableStateOf<RemoteAction?>(null) }
@@ -181,7 +182,14 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
     }
     fun closePane() {
         if (capture != null) capture?.cancel()
-        else { pane = null; draft = null; status = null }
+        else {
+            if (pane == GuidePane.RENAME) {
+                renameTarget?.let { selected = it; buttonToFocus = it.identity }
+                focusAfterClose = null
+                renameTarget = null
+            }
+            pane = null; draft = null; status = null
+        }
     }
     fun activateButton(button: RemoteButton) {
         if (capture != null || busy) return
@@ -465,7 +473,11 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
                         }, Modifier.focusRequester(restoreFocus), enabled = !busy && capture == null)
                     }
                     if (canRename) item(key = "rename") {
-                        GuideRow(stringResource(R.string.remote_guide_rename), { pane = GuidePane.RENAME; focusAfterClose = renameFocus }, Modifier.focusRequester(renameFocus), enabled = !busy && capture == null)
+                        GuideRow(stringResource(R.string.remote_guide_rename), {
+                            renameTarget = selected
+                            buttonToFocus = null; focusAfterClose = null
+                            pane = GuidePane.RENAME
+                        }, Modifier.focusRequester(renameFocus), enabled = !busy && capture == null)
                     }
                     item(key = "check") { GuideRow(stringResource(R.string.remote_guide_check_buttons), { focusAfterClose = checkFocus; pane = GuidePane.CHECK }, Modifier.focusRequester(checkFocus).testTag("remote_check_buttons"), enabled = capture == null && !busy) }
                     item(key = "reset") { GuideRow(stringResource(R.string.remote_guide_reset), { focusAfterClose = resetFocus; pane = GuidePane.RESET }, Modifier.focusRequester(resetFocus).testTag("remote_reset"), enabled = !busy && !state.loading && capture == null) }
@@ -475,7 +487,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
             }
         }
         RemoteGuideOverlays(
-            pane = pane, screen = screen, press = press, selected = selected,
+            pane = pane, screen = screen, press = press, selected = renameTarget ?: selected,
             configuration = configuration, defaults = defaults, draft = draft, busy = busy,
             captureAction = captureAction, captureTimedOut = captureTimedOut, status = visibleError ?: status,
             onKey = ::handleKey, onDismiss = ::closePane,
@@ -485,7 +497,17 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
             onReplacement = { startCapture(it) }, onCancelCapture = { capture?.cancel() },
             onSave = ::saveDraft,
             onReset = { perform(R.string.remote_guide_reset_done) { store.reset().also { if (it == RemoteMutationResult.SAVED || it == RemoteMutationResult.UNCHANGED) pane = null } } },
-            onRename = { label -> perform(R.string.remote_guide_saved) { store.renameButton(selected, label).also { if (it == RemoteMutationResult.SAVED || it == RemoteMutationResult.UNCHANGED) pane = null } } }
+            onRename = { label ->
+                val target = renameTarget ?: selected
+                perform(R.string.remote_guide_saved) {
+                    store.renameButton(target, label).also {
+                        if (it == RemoteMutationResult.SAVED || it == RemoteMutationResult.UNCHANGED) {
+                            selected = target; buttonToFocus = target.identity
+                            focusAfterClose = null; renameTarget = null; pane = null
+                        }
+                    }
+                }
+            }
         )
     }
 }

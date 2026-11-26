@@ -1,7 +1,9 @@
 package com.nuvio.tv.remote.ui
 
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,8 +17,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -125,15 +129,26 @@ internal fun RemoteGuideOverlays(
         }
         GuidePane.RENAME -> {
             var label by remember(selected.identity) { mutableStateOf(remoteButtonName(context, selected, configuration)) }
+            val saveFocus = remember { FocusRequester() }
+            val cancelFocus = remember { FocusRequester() }
             fun saveName() { if (!busy && label.trim().isNotEmpty()) onRename(label.trim().take(48)) }
+            fun moveFocus(event: KeyEvent, keyCode: Int, target: FocusRequester): Boolean =
+                event.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN && event.nativeKeyEvent.keyCode == keyCode &&
+                    runCatching { target.requestFocus(FocusDirection.Enter) }.getOrDefault(false)
             GuideSheet(stringResource(R.string.remote_guide_rename_title), onDismiss, onKey) {
-                LiveTextField(label, { label = it.take(48) }, stringResource(R.string.remote_guide_rename_hint),
-                    focusRequester = firstFocus, onDone = ::saveName)
+                Box(Modifier.onPreviewKeyEvent {
+                    moveFocus(it, AndroidKeyEvent.KEYCODE_DPAD_DOWN, if (busy || label.isBlank()) cancelFocus else saveFocus)
+                }) {
+                    LiveTextField(label, { label = it.take(48) }, stringResource(R.string.remote_guide_rename_hint),
+                        focusRequester = firstFocus, onDone = ::saveName)
+                }
                 if (status != null) GuideReadout(stringResource(R.string.remote_guide_rename_title), status, Modifier.testTag("remote_rename_status"))
                 if (label.isBlank()) GuideText(stringResource(R.string.remote_guide_name_empty), secondary = true)
                 GuideRow(stringResource(if (busy) R.string.remote_guide_saving else R.string.remote_guide_name_save),
-                    ::saveName, enabled = !busy && label.isNotBlank())
-                GuideRow(stringResource(R.string.remote_guide_cancel), onDismiss)
+                    ::saveName, Modifier.focusRequester(saveFocus).testTag("remote_rename_save").onPreviewKeyEvent {
+                        moveFocus(it, AndroidKeyEvent.KEYCODE_DPAD_UP, firstFocus)
+                    }, enabled = !busy && label.isNotBlank())
+                GuideRow(stringResource(R.string.remote_guide_cancel), onDismiss, Modifier.focusRequester(cancelFocus))
             }
         }
     }
