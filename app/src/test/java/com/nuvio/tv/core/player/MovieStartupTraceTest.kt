@@ -88,4 +88,38 @@ class MovieStartupTraceTest {
         assertTrue(trace.snapshot()!!.endsWith("stopping player"))
         assertNull(trace.snapshot(onlySlowStartup = true))
     }
+
+    @Test fun stalledDecoderRetryIdentifiesTheCurrentCandidateAndPreservesTheFirstFailure() {
+        fun video(name: String) = StartupVideoCodec.fromPlatform(name, "video/hevc", null, 1920, 1080)
+        val attempt = trace.begin()
+        val first = video("OMX.vendor.first")
+        attempt.codecEvent(MovieStartupStep.CODEC_OPEN, first)
+        attempt.codecEvent(MovieStartupStep.CODEC_ERROR, first, 1100)
+        uptime += 25
+        attempt.codecEvent(MovieStartupStep.CODEC_OPEN, video("c2.vendor.second"))
+        val report = trace.snapshot()!!
+        assertTrue(report.contains("Decoder attempt #2 at +25ms: configuring video decoder (c2.vendor.second"))
+        assertTrue(report.contains("video decoder error (OMX.vendor.first"))
+        assertTrue(report.contains("Android error 1100"))
+        assertFalse(report.contains(MovieStartupStep.CODEC_OPENED.label))
+    }
+
+    @Test fun aFrameCallbackCanArriveBeforeTheRenderCallReturns() {
+        val attempt = trace.begin()
+        attempt.mark(MovieStartupStep.RENDERER_FRAME_ENTER)
+        attempt.mark(MovieStartupStep.FIRST_FRAME)
+        uptime += 1
+        attempt.mark(MovieStartupStep.RENDERER_FRAME_SENT)
+        assertTrue(trace.snapshot()!!.endsWith("+1 first frame submitted to surface"))
+        assertNull(trace.snapshot(onlySlowStartup = true))
+    }
+
+    @Test fun videoOptionsDescribeTheInitialRequestAndBelongOnlyToThatMovie() {
+        val attempt = trace.begin()
+        attempt.requestedVideoOptions(removeHdr10Plus = false, tunneling = true)
+        attempt.requestedVideoOptions(removeHdr10Plus = true, tunneling = false)
+        assertTrue(trace.snapshot()!!.contains("Requested at startup: remove HDR10+ data off, tunneling on"))
+        trace.begin()
+        assertFalse(trace.snapshot()!!.contains("HDR10+"))
+    }
 }

@@ -109,7 +109,7 @@ internal fun PlayerRuntimeController.releaseMediaSession() {
 internal fun PlayerRuntimeController.installExoMediaSession(player: ExoPlayer) {
     releaseMediaSession()
     if (player.canAdvertiseSession()) {
-        currentMediaSession = MediaSession.Builder(context, SafeMediaSessionPlayer(player)).build()
+        currentMediaSession = MediaSession.Builder(context, SafeMediaSessionPlayer(player, movieStartupAttempt)).build()
         updateMediaSessionMetadata()
     }
 }

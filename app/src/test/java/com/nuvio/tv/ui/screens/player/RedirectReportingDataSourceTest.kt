@@ -22,10 +22,15 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -91,8 +96,8 @@ class RedirectReportingDataSourceTest {
 
     private fun reportingFactory(
         upstream: DataSource.Factory = OkHttpDataSource.Factory(OkHttpClient()),
-        firstBytes: (() -> Unit)? = null
-    ) = RedirectReportingDataSource.Factory(upstream, url("/play"), firstBytes) { resolvedUrl -> reported += resolvedUrl }
+        startupTrace: MovieStartupTrace.Attempt? = null
+    ) = RedirectReportingDataSource.Factory(upstream, url("/play"), startupTrace) { resolvedUrl -> reported += resolvedUrl }
 
     private fun readAll(factory: DataSource.Factory, path: String = "/play", position: Long = 0L): ByteArray {
         val source = factory.createDataSource()
@@ -150,13 +155,18 @@ class RedirectReportingDataSourceTest {
 
     @Test
     fun `only successful movie reads count and a seek cannot report them twice`() {
-        var observations = 0
-        val factory = reportingFactory(firstBytes = { observations++ })
+        val now = AtomicLong(0)
+        val trace = MovieStartupTrace.Recorder(now::get)
+        val factory = reportingFactory(startupTrace = trace.begin())
         readAll(factory, path = "/subtitle")
-        assertEquals(0, observations)
+        assertFalse(trace.snapshot()!!.contains(MovieStartupStep.UPSTREAM_OPEN.label))
         assertArrayEquals(file, readAll(factory))
+        val first = trace.snapshot()!!
+        assertTrue(first.contains(MovieStartupStep.UPSTREAM_REDIRECT.label))
+        assertTrue(first.contains(MovieStartupStep.FIRST_UPSTREAM_BYTES.label))
+        now.set(1000)
         readAll(factory, position = 300L * 1024L)
-        assertEquals(1, observations)
+        assertEquals(first, trace.snapshot())
     }
 
     @Test
@@ -164,16 +174,97 @@ class RedirectReportingDataSourceTest {
         val upstream = mockk<DataSource>(relaxed = true)
         every { upstream.uri } returns null
         every { upstream.read(any<ByteArray>(), any(), any()) } returnsMany listOf(0, C.RESULT_END_OF_INPUT)
-        var observations = 0
-        val source = reportingFactory(DataSource.Factory { upstream }) { observations++ }.createDataSource()
+        val trace = MovieStartupTrace.Recorder { 0 }
+        val source = reportingFactory(DataSource.Factory { upstream }, trace.begin()).createDataSource()
         try {
             source.open(DataSpec.Builder().setUri(uriOf(url("/play"))).build())
             assertEquals(0, source.read(ByteArray(1), 0, 0))
+            assertFalse(trace.snapshot()!!.contains(MovieStartupStep.UPSTREAM_READ.label))
             assertEquals(C.RESULT_END_OF_INPUT, source.read(ByteArray(1), 0, 1))
         } finally {
             source.close()
         }
-        assertEquals(0, observations)
+        assertTrue(trace.snapshot()!!.contains(MovieStartupStep.UPSTREAM_EMPTY.label))
+        assertFalse(trace.snapshot()!!.contains(MovieStartupStep.FIRST_UPSTREAM_BYTES.label))
+    }
+
+    @Test
+    fun `a pending open and its DNS failure can be reported before the UI receives an error`() {
+        val now = AtomicLong(0)
+        val trace = MovieStartupTrace.Recorder(now::get)
+        val inOpen = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        val failure = IOException("private request details", UnknownHostException("private.example"))
+        val upstream = mockk<DataSource>(relaxed = true)
+        every { upstream.open(any()) } answers {
+            inOpen.countDown()
+            check(finish.await(5, TimeUnit.SECONDS))
+            throw failure
+        }
+        val source = reportingFactory(DataSource.Factory { upstream }, trace.begin()).createDataSource()
+        val loader = Executors.newSingleThreadExecutor()
+        try {
+            val result = loader.submit<IOException> {
+                assertThrows(IOException::class.java) { source.open(DataSpec(uriOf(url("/play")))) }
+            }
+            assertTrue(inOpen.await(5, TimeUnit.SECONDS))
+            now.set(16_000)
+            val waiting = requireNotNull(trace.snapshot(onlySlowStartup = true))
+            assertTrue(waiting.contains(MovieStartupStep.UPSTREAM_OPEN.label))
+            assertTrue(waiting.contains("Worker sample: ${MovieStartupStep.UPSTREAM_OPEN.label}"))
+            assertFalse(waiting.contains(MovieStartupStep.UPSTREAM_OPENED.label))
+            finish.countDown()
+            assertSame(failure, result.get(5, TimeUnit.SECONDS))
+            val failed = requireNotNull(trace.snapshot(onlySlowStartup = true))
+            assertFalse(failed.contains("Worker sample:"))
+            assertTrue(failed.contains(MovieStartupStep.UPSTREAM_OPEN_ERROR.label))
+            assertTrue(failed.contains("DNS", ignoreCase = true))
+            assertFalse(failed.contains("private"))
+            assertFalse(failed.contains(url("/play")))
+        } finally {
+            finish.countDown()
+            loader.shutdownNow()
+            source.close()
+        }
+    }
+
+    @Test
+    fun `an HTTP refusal during opening keeps the status and excludes response contents`() {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) =
+                MockResponse().setResponseCode(403).setBody("private response text")
+        }
+        val trace = MovieStartupTrace.Recorder { 0L }
+        val factory = reportingFactory(startupTrace = trace.begin())
+        assertThrows(IOException::class.java) { readAll(factory) }
+        val report = trace.snapshot()!!
+        assertTrue(report.contains(MovieStartupStep.UPSTREAM_OPEN_ERROR.label))
+        assertTrue(report.contains("403"))
+        assertFalse(report.contains(MovieStartupStep.UPSTREAM_READ_ERROR.label))
+        assertFalse(report.contains("private"))
+    }
+
+    @Test
+    fun `a first body timeout retains its operation and the original exception`() {
+        val trace = MovieStartupTrace.Recorder { 0L }
+        val failure = SocketTimeoutException("private request details")
+        val upstream = mockk<DataSource>(relaxed = true)
+        every { upstream.uri } returns null
+        every { upstream.read(any<ByteArray>(), 0, 1) } throws failure
+        val source = reportingFactory(DataSource.Factory { upstream }, trace.begin()).createDataSource()
+        try {
+            source.open(DataSpec(uriOf(url("/play"))))
+            val thrown = assertThrows(IOException::class.java) { source.read(ByteArray(1), 0, 1) }
+            assertSame(failure, thrown)
+            val report = trace.snapshot()!!
+            assertTrue(report.contains(MovieStartupStep.UPSTREAM_OPENED.label))
+            assertTrue(report.contains(MovieStartupStep.UPSTREAM_READ_ERROR.label))
+            assertTrue(report.contains("timeout", ignoreCase = true))
+            assertFalse(report.contains("private"))
+            assertFalse(report.contains(MovieStartupStep.FIRST_UPSTREAM_BYTES.label))
+        } finally {
+            source.close()
+        }
     }
 
     @Test
@@ -192,7 +283,7 @@ class RedirectReportingDataSourceTest {
             firstArg<ByteArray>()[0] = 42
             1
         }
-        val factory = reportingFactory(DataSource.Factory { upstream }) { attempt.mark(MovieStartupStep.FIRST_UPSTREAM_BYTES) }
+        val factory = reportingFactory(DataSource.Factory { upstream }, attempt)
         val requested = url("/play")
         val loader = Executors.newSingleThreadExecutor()
         try {
@@ -211,10 +302,14 @@ class RedirectReportingDataSourceTest {
             now.set(16_000)
             val waiting = requireNotNull(trace.snapshot(onlySlowStartup = true))
             assertTrue(waiting.contains("buffering"))
-            assertFalse(waiting.contains("upstream bytes"))
+            assertTrue(waiting.contains(MovieStartupStep.UPSTREAM_OPENED.label))
+            assertTrue(waiting.contains(MovieStartupStep.UPSTREAM_READ.label))
+            assertTrue(waiting.contains("Worker sample: ${MovieStartupStep.UPSTREAM_READ.label}"))
+            assertFalse(waiting.contains(MovieStartupStep.FIRST_UPSTREAM_BYTES.label))
             deliver.countDown()
             assertEquals(42.toByte(), result.get(5, TimeUnit.SECONDS))
             val delivered = requireNotNull(trace.snapshot(onlySlowStartup = true))
+            assertFalse(delivered.contains("Worker sample:"))
             assertTrue(delivered.contains("+16000 first progressive upstream bytes"))
             assertFalse(delivered.contains(requested))
             now.set(16_250)
@@ -229,14 +324,14 @@ class RedirectReportingDataSourceTest {
 
     @Test
     fun `buffer reads still reach the parallel source behind it`() {
-        var observations = 0
+        val trace = MovieStartupTrace.Recorder { 0L }
         val factory = reportingFactory(
             ParallelRangeDataSource.Factory(
                 OkHttpDataSource.Factory(OkHttpClient()),
                 parallelConnections = 2,
                 chunkSize = 128L * 1024L
             ),
-            firstBytes = { observations++ }
+            startupTrace = trace.begin()
         )
         val source = factory.createDataSource() as androidx.media3.common.ByteBufferDataReader
         val out = ByteArrayOutputStream()
@@ -257,6 +352,6 @@ class RedirectReportingDataSourceTest {
         }
         assertArrayEquals(file, out.toByteArray())
         assertEquals(listOf(url("/release-b")), reported)
-        assertEquals(1, observations)
+        assertTrue(trace.snapshot()!!.contains(MovieStartupStep.FIRST_UPSTREAM_BYTES.label))
     }
 }
