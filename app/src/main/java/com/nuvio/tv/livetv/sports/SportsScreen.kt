@@ -231,6 +231,8 @@ fun SportsScreen(
     // while nothing plays in the window). State, read only by that panel, so moving the highlight
     // doesn't redraw the list.
     val hubFocus = remember { mutableStateOf<String?>(null) }
+    val gameCardFocus = remember { GameCardFocus() }
+    var focusedGameId by remember { mutableStateOf<String?>(null) }
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     // The page the open game came from (the Calendar): Back goes back there, not to the hub.
     var fromRoute by rememberSaveable { mutableStateOf<String?>(null) }
@@ -424,10 +426,11 @@ fun SportsScreen(
     val remoteContext = androidx.compose.ui.platform.LocalContext.current
     RemoteActionHost(
         screen = RemoteScreen.SPORTS,
-        enabled = !picker && fixFor == null && tableReq == null && openId == null && !topBarFocused
+        enabled = focusedGameId != null && !picker && fixFor == null && tableReq == null &&
+            openId == null && !topBarFocused
     ) { action ->
         fun unavailable() = LiveTvNotice.show(remoteContext.getString(com.nuvio.tv.R.string.remote_action_unavailable))
-        val focusedGame = (hubFocus.value ?: rowFocus[0])?.let { id -> known.firstOrNull { it.id == id } }
+        val focusedGame = focusedGameId?.let { id -> known.firstOrNull { it.id == id } }
         when (action) {
             RemoteAction.RETURN_FULLSCREEN -> {
                 if (videoOn && playingKey != null && playingNow) backToFullscreen() else unavailable()
@@ -454,8 +457,15 @@ fun SportsScreen(
     // A finished game's replays are looked for as soon as its card is highlighted.
     DisposableEffect(viewModel) {
         val warm: (SportsEvent) -> Unit = { hubFocus.value = it.id; viewModel.repo.warmGame(it) }
+        val focus: (Any, SportsEvent, Boolean) -> Unit = { owner, event, focused ->
+            focusedGameId = gameCardFocus.update(owner, event.id, focused)
+        }
         GameFocus.onGame = warm
-        onDispose { if (GameFocus.onGame === warm) GameFocus.onGame = null }
+        GameFocus.onFocusChanged = focus
+        onDispose {
+            if (GameFocus.onGame === warm) GameFocus.onGame = null
+            if (GameFocus.onFocusChanged === focus) GameFocus.onFocusChanged = null
+        }
     }
     Box(
         Modifier

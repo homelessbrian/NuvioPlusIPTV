@@ -408,6 +408,24 @@ internal fun StatusColumn(ev: SportsEvent, playing: Boolean, now: Long, use24h: 
 /** A game card got the highlight (the Sports page looks for a finished game's replays ahead of time). */
 internal object GameFocus {
     @Volatile var onGame: ((SportsEvent) -> Unit)? = null
+    @Volatile var onFocusChanged: ((Any, SportsEvent, Boolean) -> Unit)? = null
+
+    fun changed(owner: Any, event: SportsEvent, focused: Boolean) {
+        if (focused) onGame?.invoke(event)
+        onFocusChanged?.invoke(owner, event, focused)
+    }
+}
+
+/** A late blur from another card, including another copy of the same event, cannot clear focus. */
+internal class GameCardFocus {
+    private var owner: Any? = null
+    private var eventId: String? = null
+
+    fun update(card: Any, id: String, focused: Boolean): String? {
+        if (focused) { owner = card; eventId = id }
+        else if (owner === card) { owner = null; eventId = null }
+        return eventId
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -424,6 +442,10 @@ internal fun GameCard(
     onLongClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    val focusOwner = remember(ev.id) { Any() }
+    androidx.compose.runtime.DisposableEffect(focusOwner) {
+        onDispose { GameFocus.changed(focusOwner, ev, false) }
+    }
     val accent = NuvioTheme.colors.Secondary
     val league = SportsCatalog.league(ev.leagueId)
     val sport = league?.sport ?: Sport.OTHER
@@ -435,7 +457,7 @@ internal fun GameCard(
             .height(86.dp)
             // Big events (WrestleMania…): a gold border, same size as every other card.
             .sportsFrame(focused, premium, Color(0xFFFFCE54))
-            .onFocusChanged { focused = it.isFocused; if (it.isFocused) GameFocus.onGame?.invoke(ev) }
+            .onFocusChanged { focused = it.isFocused; GameFocus.changed(focusOwner, ev, it.isFocused) }
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -578,6 +600,10 @@ internal fun UpcomingRow(
     onLongClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    val focusOwner = remember(ev.id) { Any() }
+    androidx.compose.runtime.DisposableEffect(focusOwner) {
+        onDispose { GameFocus.changed(focusOwner, ev, false) }
+    }
     val accent = NuvioTheme.colors.Secondary
     val league = SportsCatalog.league(ev.leagueId)
     val sport = league?.sport ?: Sport.OTHER
@@ -587,7 +613,7 @@ internal fun UpcomingRow(
             .fillMaxWidth()
             .height(50.dp)
             .sportsFrame(focused, false, accent, radius = 12.dp)
-            .onFocusChanged { focused = it.isFocused; if (it.isFocused) GameFocus.onGame?.invoke(ev) }
+            .onFocusChanged { focused = it.isFocused; GameFocus.changed(focusOwner, ev, it.isFocused) }
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

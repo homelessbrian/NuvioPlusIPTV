@@ -343,6 +343,10 @@ internal fun MyTeamsRows(
                                 ) {
                                     itemsIndexed(row.events, key = { _, ev -> ev.id }) { i, ev ->
                                         val key = keyAt(i)
+                                        val focusOwner = remember(ev.id) { Any() }
+                                        androidx.compose.runtime.DisposableEffect(focusOwner) {
+                                            onDispose { GameFocus.changed(focusOwner, ev, false) }
+                                        }
                                         RowCard(
                                             ev = ev,
                                             follows = follows,
@@ -353,7 +357,10 @@ internal fun MyTeamsRows(
                                             playing = playing(ev),
                                             modifier = Modifier
                                                 .focusRequester(requesterFor(key))
-                                                .onFocusChanged { if (it.isFocused) { lastOnRow[0] = ev.id; previewId = ev.id; onFocusKey(key); GameFocus.onGame?.invoke(ev) } }
+                                                .onFocusChanged {
+                                                    if (it.isFocused) { lastOnRow[0] = ev.id; previewId = ev.id; onFocusKey(key) }
+                                                    GameFocus.changed(focusOwner, ev, it.isFocused)
+                                                }
                                                 .steadyRowKeys(state, i, row.events.size) { j -> requesterFor(keyAt(j)) },
                                             onClick = { onOpen(ev) },
                                             onLongClick = { onQuickWatch(ev) }

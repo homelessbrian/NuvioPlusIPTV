@@ -221,8 +221,11 @@ class RemoteInputRouter(
     private fun valid(current: Pending): Boolean = !closed && suspensions == 0 &&
         routes.contains(current.route) && activeRoute() === current.route && configuration() == current.configuration &&
         canRemap(current.route, current.button) &&
-        (current.once == null || canHandle(current.route, current.once)) &&
-        (current.hold == null || canHandle(current.route, current.hold))
+        // The original held handler may itself enter browse/seek state. Once native input owns
+        // this gesture, the unused custom short action no longer decides its eligibility.
+        (current.nativeHolding ||
+            (current.once == null || canHandle(current.route, current.once)) &&
+            (current.hold == null || canHandle(current.route, current.hold)))
 
     private fun cancelNative(current: Pending) {
         if (!current.nativeHolding) return

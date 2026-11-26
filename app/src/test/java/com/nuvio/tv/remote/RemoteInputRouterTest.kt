@@ -212,6 +212,32 @@ class RemoteInputRouterTest {
         assertEquals(2, actions.size)
     }
 
+    @Test fun originalHeldChannelSurfContinuesWhenItsUnusedCustomShortActionBecomesIneligible() {
+        val clock = Clock(); var browsing = false; var cancelled = 0
+        val native = mutableListOf<Int>(); val actions = mutableListOf<RemoteAction>()
+        val up = RemoteButton(KeyEvent.KEYCODE_DPAD_UP)
+        val config = RemoteConfiguration().withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, up, RemoteAction.OPEN_GUIDE)
+        val router = RemoteInputRouter({ config }, {
+            native += it.action
+            if (it.action == KeyEvent.ACTION_DOWN) browsing = true
+            true
+        }, 500, clock)
+        router.register(RemoteScreen.LIVE_TV, { true }, { actions += it; true },
+            onNativeCancel = { cancelled++ },
+            canHandleAction = { !browsing || it == RemoteAction.BROWSE_NEXT_CHANNEL || it == RemoteAction.BROWSE_PREVIOUS_CHANNEL },
+            canRemapButton = { !browsing || it.keyCode != KeyEvent.KEYCODE_DPAD_CENTER })
+        assertTrue(router.dispatch(event(KeyEvent.ACTION_DOWN, 0, up.keyCode)))
+        // The original DOWN starts channel surfing. OPEN_GUIDE is no longer allowed in that
+        // state, but it is not the action being executed: this is the unchanged held gesture.
+        assertTrue(router.dispatch(event(KeyEvent.ACTION_DOWN, 350, up.keyCode, repeat = 1)))
+        assertTrue(browsing)
+        assertTrue(router.dispatch(event(KeyEvent.ACTION_DOWN, 700, up.keyCode, repeat = 3)))
+        assertTrue(router.dispatch(event(KeyEvent.ACTION_UP, 800, up.keyCode)))
+        assertEquals(listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_DOWN, KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP), native)
+        assertTrue(actions.isEmpty())
+        assertEquals(0, cancelled)
+    }
+
     @Test fun captureRejectsMixedKeyBurstThenAcceptsCleanPressWithoutRepeatsOrOrphanUp() {
         val clock = Clock(); val added = mutableListOf<RemoteButton>(); val issues = mutableListOf<RemoteCaptureIssue>()
         val capture = RemoteButtonCapture({ added += it }, { fail("Not cancelled") }, 100, clock, { issues += it })
