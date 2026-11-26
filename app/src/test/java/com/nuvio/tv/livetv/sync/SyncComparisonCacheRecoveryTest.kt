@@ -11,6 +11,7 @@ import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.vpn.android.VpnBackup
 import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.auth.user.UserSession
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -60,6 +61,7 @@ class SyncComparisonCacheRecoveryTest {
     private val owners = mutableListOf<Any>()
     private val clients = mutableListOf<OkHttpClient>()
     private var cryptoMocked = false
+    private var sessionOwner = "account-a"
     private val removed = setOf("removed", "removed-guide", "readded", "readded-guide")
 
     @Before fun setUp() {
@@ -191,6 +193,7 @@ class SyncComparisonCacheRecoveryTest {
     }
 
     @Test fun `failed Cloud sealing never relabels an undeletable cache from another account`() {
+        sessionOwner = "current-account"
         val drive = newDrive()
         val cloud = newCloud(drive)
         val old = setup(listOf("previous-account"), emptyList())
@@ -328,9 +331,33 @@ class SyncComparisonCacheRecoveryTest {
         return owner
     }
 
+    @Test fun `changing accounts while the setup request is in flight discards the response`() {
+        val cloud = newCloud(newDrive())
+        val requests = mutableListOf<String>()
+        transport(cloud) { request ->
+            requests += request.method
+            assertEquals("Bearer fixture-account-a", request.header("Authorization"))
+            sessionOwner = "account-b"
+            JSONObject().put("revision", 1).put("data", setup(listOf("remote"), emptyList()))
+        }
+        suspendInvoke<Unit>(cloud, "reconcileAndReport", "account-a", null)
+        assertEquals(listOf("GET"), requests)
+        assertTrue(applied.isEmpty())
+        assertFalse(cloudStore().contains("base_user"))
+        assertFalse(cloudStore().contains("last_sync"))
+        coVerify(exactly = 0) { prefs.forgetRemovedSources(any()) }
+        assertNull(read(cloud, "account-b"))
+    }
+
     private fun newCloud(drive: LiveTvDriveSync): LiveTvCloudSync {
         val auth = mockk<Auth>()
-        every { auth.currentAccessTokenOrNull() } returns "synthetic-access-token"
+        every { auth.currentSessionOrNull() } answers {
+            val owner = sessionOwner
+            mockk<UserSession> {
+                every { user } returns mockk { every { id } returns owner }
+                every { accessToken } returns "fixture-$owner"
+            }
+        }
         val configuration = ServerConfiguration("https://api.nuvio.tv", "synthetic-key", ServerCapabilities(true, true), false)
         return spyk(LiveTvCloudSync(context, prefs, drive, mockk<AuthManager>(), auth, configuration), recordPrivateCalls = true)
             .also { owners += it }
