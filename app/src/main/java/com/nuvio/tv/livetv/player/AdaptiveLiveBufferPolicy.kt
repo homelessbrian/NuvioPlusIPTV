@@ -6,7 +6,6 @@ import kotlin.math.abs
 internal class AdaptiveLiveBufferPolicy {
     private var lastSampleMs: Long? = null
     private var lowSinceMs: Long? = null
-    private var fullSinceMs: Long? = null
     private var filling = false
     private var recovering = false
     private var speed = 1f
@@ -15,7 +14,6 @@ internal class AdaptiveLiveBufferPolicy {
     fun reset(rearm: Boolean = false) {
         lastSampleMs = null
         lowSinceMs = null
-        fullSinceMs = null
         filling = false
         recovering = false
         speed = 1f
@@ -34,7 +32,6 @@ internal class AdaptiveLiveBufferPolicy {
         }
         if (previous != null && nowMs - previous > 2_500) {
             lowSinceMs = null
-            fullSinceMs = null
         }
         lastSampleMs = nowMs
         if (bufferedMs >= TARGET_BUFFER_MS) memoryLimited = false
@@ -42,34 +39,24 @@ internal class AdaptiveLiveBufferPolicy {
             // The byte budget cannot hold the ordinary target. Recover instead of drifting
             // farther behind live forever; only new capacity evidence or a channel re-arms it.
             lowSinceMs = null
-            fullSinceMs = null
             filling = false
             recovering = false
         } else if (!filling) {
-            if (bufferedMs < LOW_BUFFER_MS) {
+            if (bufferedMs < TARGET_BUFFER_MS) {
                 if (lowSinceMs == null) lowSinceMs = nowMs
-                if (nowMs - lowSinceMs!! >= SUSTAINED_MS) filling = true
+                if (nowMs - lowSinceMs!! >= ENTRY_DELAY_MS) filling = true
             } else lowSinceMs = null
         }
         if (filling) {
-            if (bufferedMs >= TARGET_BUFFER_MS) {
-                if (fullSinceMs == null) fullSinceMs = nowMs
-                if (nowMs - fullSinceMs!! >= SUSTAINED_MS) recovering = true
-            } else {
-                fullSinceMs = null
-                if (bufferedMs < RECOVERY_REENTRY_MS) recovering = false
-            }
+            // A user-configured maximum of exactly 20 seconds can be reached for just one sample.
+            if (bufferedMs >= TARGET_BUFFER_MS) recovering = true
+            else if (bufferedMs < RECOVERY_REENTRY_MS) recovering = false
         }
         val target = if (filling && !recovering) refillSpeed(bufferedMs) else 1f
-        // Approach the emergency rate faster, and ease out of it as playable media returns.
-        val changePerSecond = when {
-            minOf(target, speed) < LOW_SPEED -> .01f
-            minOf(target, speed) < MILD_SPEED -> .005f
-            else -> .002f
-        }
+        val changePerSecond = if (target < speed) .025f else .015f
         // A late sample gives us no evidence about the buffer during the missed interval.
         val elapsedMs = nowMs - (previous ?: nowMs)
-        val step = if (elapsedMs <= 2_500) elapsedMs.coerceAtMost(2_000) / 1_000f * changePerSecond else 0f
+        val step = if (elapsedMs <= 2_500) elapsedMs.coerceAtMost(1_000) / 1_000f * changePerSecond else 0f
         speed = when {
             abs(target - speed) <= step -> target
             target < speed -> speed - step
@@ -79,7 +66,6 @@ internal class AdaptiveLiveBufferPolicy {
             filling = false
             recovering = false
             lowSinceMs = null
-            fullSinceMs = null
         }
         return speed
     }
@@ -96,13 +82,12 @@ internal class AdaptiveLiveBufferPolicy {
 
     companion object {
         const val TARGET_BUFFER_MS = 20_000L
-        private const val LOW_BUFFER_MS = 10_000L
-        private const val RECOVERY_REENTRY_MS = 18_000L
-        private const val SUSTAINED_MS = 3_000L
-        private const val MILD_RESERVE_MS = 8_000L
-        private const val LOW_RESERVE_MS = 5_000L
-        private const val CRITICAL_BUFFER_MS = 2_000L
-        private const val MILD_SPEED = .98f
+        private const val RECOVERY_REENTRY_MS = 19_500L
+        private const val ENTRY_DELAY_MS = 1_000L
+        private const val MILD_RESERVE_MS = 19_000L
+        private const val LOW_RESERVE_MS = 15_000L
+        private const val CRITICAL_BUFFER_MS = 10_000L
+        private const val MILD_SPEED = .97f
         private const val LOW_SPEED = .95f
         private const val CRITICAL_SPEED = .90f
     }
