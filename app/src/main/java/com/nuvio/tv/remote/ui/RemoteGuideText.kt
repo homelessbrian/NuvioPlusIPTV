@@ -6,7 +6,9 @@ import androidx.annotation.StringRes
 import com.nuvio.tv.R
 import com.nuvio.tv.remote.RemoteAction
 import com.nuvio.tv.remote.RemoteButton
+import com.nuvio.tv.remote.RemoteCatalog
 import com.nuvio.tv.remote.RemoteConfiguration
+import com.nuvio.tv.remote.RemoteExtraButton
 import com.nuvio.tv.remote.RemoteScreen
 
 @StringRes
@@ -105,6 +107,15 @@ internal fun RemoteAction.helpRes(screen: RemoteScreen? = null): Int = when {
     }
 }
 
+/** Restored assignments may be valid without an entry in the optional naming inventory. */
+internal fun RemoteConfiguration.guideExtraButtons(): List<RemoteExtraButton> {
+    val pictured = RemoteCatalog.standardButtons.map { it.canonical() }.toSet()
+    val named = extras.associateBy { it.button.canonical() }
+    return (extras.map { it.button } + bindings.map { it.button } + confirmedButtons)
+        .map { it.canonical() }.distinctBy { it.identity }.filter { it !in pictured }
+        .map { button -> named[button]?.copy(button = button) ?: RemoteExtraButton(button) }
+}
+
 internal fun remoteButtonName(context: Context, button: RemoteButton, configuration: RemoteConfiguration): String {
     configuration.extras.firstOrNull { it.button.canonical() == button.canonical() }?.label?.takeIf { it.isNotBlank() }?.let { return it }
     val resource = when (button.keyCode) {
@@ -142,7 +153,7 @@ internal fun remoteButtonName(context: Context, button: RemoteButton, configurat
     if (resource != null) return context.getString(resource)
     if (button.keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) return context.getString(R.string.remote_button_number, button.keyCode - KeyEvent.KEYCODE_0)
     if (button.keyCode in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z) return context.getString(R.string.remote_button_letter, ('A'.code + button.keyCode - KeyEvent.KEYCODE_A).toChar().toString())
-    val index = configuration.extras.indexOfFirst { it.button.canonical() == button.canonical() }
+    val index = configuration.guideExtraButtons().indexOfFirst { it.button.canonical() == button.canonical() }
     return if (index >= 0) context.getString(R.string.remote_button_extra_number, index + 1) else context.getString(R.string.remote_button_extra)
 }
 

@@ -136,10 +136,10 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
         else -> RemoteCatalog.defaults(screen)
     }
     val defaults = router?.defaultsFor(screen, fallback) ?: fallback
-    val allButtons = RemoteCatalog.buttons(configuration, defaults)
+    val extraButtons = configuration.guideExtraButtons()
+    val allButtons = (RemoteCatalog.buttons(configuration, defaults) + extraButtons.map { it.button }).distinctBy { it.identity }
     val buttonIds = allButtons.map { it.identity }
     val standardIds = RemoteCatalog.standardButtons.map { it.identity }.toSet()
-    val extraButtons = configuration.extras.filter { it.button.identity !in standardIds }
     // Keep existing requesters attached when a newly learned key is added.
     val focusCache = remember { mutableMapOf<String, FocusRequester>() }
     val keyFocus = remember(buttonIds) {
@@ -151,6 +151,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
     val action = RemoteCatalog.effectiveAction(configuration, screen, press, selected, defaults)
     val custom = configuration.bindings.any { it.screen == screen && it.press == press && it.button.canonical() == selected.canonical() }
     val protectedButton = RemoteCatalog.isProtected(screen, selected)
+    val canRename = selected.identity !in standardIds && configuration.extras.any { it.button.canonical() == selected.canonical() }
     val visibleError = when (state.error) {
         RemoteStoreError.LOAD_FAILED -> context.getString(R.string.remote_guide_load_failed)
         RemoteStoreError.SAVE_FAILED -> context.getString(R.string.remote_guide_save_failed)
@@ -189,7 +190,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
                 captureAction = null
                 if (replacement == null) {
                     val alreadyInGuide = button.canonical() in RemoteCatalog.standardButtons ||
-                        store.state.value.configuration.extras.any { it.button.canonical() == button.canonical() }
+                        store.state.value.configuration.guideExtraButtons().any { it.button.canonical() == button.canonical() }
                     busy = true
                     scope.launch {
                         try {
@@ -283,10 +284,10 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
         onDispose { lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(capture) { if (capture != null) { delay(12_000); captureTimedOut = true } }
-    LaunchedEffect(pane, capture, focusAfterClose, custom, extraButtons.map { it.button.identity }) {
+    LaunchedEffect(pane, capture, focusAfterClose, custom, canRename) {
         val target = focusAfterClose ?: return@LaunchedEffect
         if (pane != null || capture != null) return@LaunchedEffect
-        val renameVisible = extraButtons.any { it.button.canonical() == selected.canonical() }
+        val renameVisible = canRename
         val attachedTarget = when {
             target === restoreFocus && !custom -> if (protectedButton) contextFocus else changeFocus
             target === renameFocus && !renameVisible -> contextFocus
@@ -415,7 +416,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
                             focusAfterClose = restoreFocus; pane = GuidePane.REVIEW
                         }, Modifier.focusRequester(restoreFocus), enabled = !busy && capture == null)
                     }
-                    if (extraButtons.any { it.button.canonical() == selected.canonical() }) item(key = "rename") {
+                    if (canRename) item(key = "rename") {
                         GuideRow(stringResource(R.string.remote_guide_rename), { pane = GuidePane.RENAME; focusAfterClose = renameFocus }, Modifier.focusRequester(renameFocus), enabled = !busy && capture == null)
                     }
                     item(key = "check") { GuideRow(stringResource(R.string.remote_guide_check_buttons), { focusAfterClose = checkFocus; pane = GuidePane.CHECK }, Modifier.focusRequester(checkFocus).testTag("remote_check_buttons"), enabled = capture == null && !busy) }
