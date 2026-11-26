@@ -70,6 +70,7 @@ internal fun RemoteAction.helpRes(screen: RemoteScreen? = null): Int = when {
     screen == RemoteScreen.SPORTS && this == RemoteAction.SHOW_INFO -> R.string.remote_action_game_details_help
     screen == RemoteScreen.SPORTS && this == RemoteAction.ACTIVATE -> R.string.remote_action_watch_game_help
     screen == RemoteScreen.MOVIE && this == RemoteAction.SHOW_INFO -> R.string.remote_action_stream_info_help
+    screen == RemoteScreen.MOVIE && this == RemoteAction.PLAY_PAUSE -> R.string.remote_action_movie_play_pause_help
     screen == RemoteScreen.LIVE_TV && this == RemoteAction.SHOW_INFO -> R.string.remote_action_channel_info_help
     else -> when (this) {
     RemoteAction.OPEN_GUIDE -> R.string.remote_action_open_guide_help

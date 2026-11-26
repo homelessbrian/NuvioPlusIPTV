@@ -126,6 +126,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
     val checkFocus = remember { FocusRequester() }
     val resetFocus = remember { FocusRequester() }
     val addFocus = remember { FocusRequester() }
+    val captureCancelFocus = remember { FocusRequester() }
     val renameFocus = remember { FocusRequester() }
     val restoreFocus = remember { FocusRequester() }
     val buttonListState = rememberLazyListState()
@@ -138,6 +139,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
     }
     val defaults = router?.defaultsFor(screen, fallback) ?: fallback
     val extraButtons = configuration.guideExtraButtons()
+    val captureRowIndex = if (extraButtons.isEmpty()) 2 else extraButtons.size + 3
     val allButtons = (RemoteCatalog.buttons(configuration, defaults) + extraButtons.map { it.button }).distinctBy { it.identity }
     val buttonIds = allButtons.map { it.identity }
     val standardIds = RemoteCatalog.standardButtons.map { it.identity }.toSet()
@@ -189,6 +191,10 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
     }
     fun handleKey(event: KeyEvent): Boolean = router?.consumeDrained(event.nativeKeyEvent) == true || capture?.dispatch(event.nativeKeyEvent) == true
     fun startCapture(replacement: RemoteAction? = null) {
+        if (replacement == null) {
+            buttonToFocus = null
+            focusAfterClose = null
+        }
         captureAction = replacement
         captureTimedOut = false
         capture = RemoteButtonCapture(
@@ -200,18 +206,26 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
                         store.state.value.configuration.guideExtraButtons().any { it.button.canonical() == button.canonical() }
                     busy = true
                     scope.launch {
+                        var focusedCapturedButton = false
                         try {
                             val result = store.addButton(button)
                             if (result == RemoteMutationResult.SAVED || result == RemoteMutationResult.UNCHANGED) {
                                 selected = button
                                 focusAfterClose = null
                                 buttonToFocus = button.identity
+                                focusedCapturedButton = true
                                 status = context.getString(if (alreadyInGuide) R.string.remote_guide_already_added else R.string.remote_guide_added,
                                     remoteButtonName(context, button, store.state.value.configuration))
                             } else mutationMessage(result, R.string.remote_guide_saved)
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { status = context.getString(R.string.remote_guide_save_failed) }
-                        finally { busy = false }
+                        finally {
+                            busy = false
+                            if (!focusedCapturedButton) {
+                                buttonToFocus = null
+                                focusAfterClose = addFocus
+                            }
+                        }
                     }
                 } else {
                     val editing = draft
@@ -235,7 +249,13 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
                     }
                 }
             },
-            onCancelled = { capture = null; captureAction = null },
+            onCancelled = {
+                capture = null; captureAction = null
+                if (replacement == null) {
+                    buttonToFocus = null
+                    focusAfterClose = addFocus
+                }
+            },
             onIssue = { issue ->
                 captureTimedOut = false
                 status = context.getString(if (issue == RemoteCaptureIssue.AMBIGUOUS) R.string.remote_guide_capture_ambiguous else R.string.remote_guide_capture_unsupported)
@@ -291,7 +311,19 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
         onDispose { lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(capture) { if (capture != null) { delay(12_000); captureTimedOut = true } }
-    LaunchedEffect(pane, capture, focusAfterClose, custom, canRename) {
+    LaunchedEffect(capture, captureAction, captureRowIndex) {
+        val listening = capture ?: return@LaunchedEffect
+        if (captureAction != null) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive && capture === listening) {
+                buttonListState.scrollToItem(captureRowIndex)
+                withFrameNanos { }
+                if (runCatching { captureCancelFocus.requestFocus(FocusDirection.Enter) }.getOrDefault(false)) break
+                delay(80)
+            }
+        }
+    }
+    LaunchedEffect(pane, capture, focusAfterClose, custom, canRename, captureRowIndex) {
         val target = focusAfterClose ?: return@LaunchedEffect
         if (pane != null || capture != null) return@LaunchedEffect
         val renameVisible = canRename
@@ -301,6 +333,7 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
             else -> target
         }
         val index = when (attachedTarget) {
+            addFocus -> captureRowIndex
             detailFocus -> 3
             changeFocus -> 4
             restoreFocus -> 5
@@ -311,7 +344,10 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
         }
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (isActive && focusAfterClose === target) {
-                if (index != null) helpListState.scrollToItem(index)
+                if (index != null) {
+                    if (attachedTarget === addFocus) buttonListState.scrollToItem(index)
+                    else helpListState.scrollToItem(index)
+                }
                 withFrameNanos { }
                 if (runCatching { attachedTarget.requestFocus(FocusDirection.Enter) }.getOrDefault(false)) {
                     focusAfterClose = null
@@ -388,8 +424,9 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
                         if (capture != null && captureAction == null) {
                             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                                 GuideText(stringResource(R.string.remote_guide_add_prompt))
-                                GuideText(stringResource(if (captureTimedOut) R.string.remote_guide_add_timeout else R.string.remote_guide_add_hint), secondary = true)
-                                GuideRow(stringResource(R.string.remote_guide_cancel), { capture?.cancel() })
+                                GuideText(stringResource(if (captureTimedOut) R.string.remote_guide_add_still_listening else R.string.remote_guide_add_back_hint), secondary = true)
+                                GuideRow(stringResource(R.string.remote_guide_cancel), { capture?.cancel() },
+                                    Modifier.focusRequester(captureCancelFocus).testTag("remote_add_cancel"))
                             }
                         } else GuideRow(stringResource(R.string.remote_guide_add_button), { startCapture() }, Modifier.focusRequester(addFocus).testTag("remote_add_button"), enabled = !state.loading && !busy)
                     }

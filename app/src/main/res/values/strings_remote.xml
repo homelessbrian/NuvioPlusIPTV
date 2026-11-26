@@ -22,6 +22,9 @@
     <string name="remote_guide_extra_buttons">Your extra buttons</string>
     <string name="remote_guide_add_button">Add another button</string>
     <string name="remote_guide_add_prompt">Press the extra button once</string>
+    <string name="remote_action_movie_play_pause_help">Pause the movie or episode, or resume it.</string>
+    <string name="remote_guide_add_back_hint">Press Back to cancel.</string>
+    <string name="remote_guide_add_still_listening">Still listening. Press Back to cancel.</string>
     <string name="remote_guide_add_hint">Press it on your remote, not on the picture. Back cancels.</string>
     <string name="remote_guide_add_timeout">No button detected. Try again, or choose Cancel.</string>
     <string name="remote_guide_capture_ambiguous">This button sends more than one command. Try a different button, or Cancel.</string>
