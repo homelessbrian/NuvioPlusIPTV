@@ -105,9 +105,10 @@ internal fun GuideRow(
     trailingIcon: ImageVector? = null
 ) {
     val shape = settingsRowShape()
+    var focused by remember { mutableStateOf(false) }
     val chosen = selected == true
     val alpha = if (enabled) 1f else 0.4f
-    val contentColor = if (style == GuideRowStyle.PRIMARY) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary
+    val contentColor = if (style == GuideRowStyle.PRIMARY && !focused) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary
     val container = when {
         style == GuideRowStyle.PRIMARY -> NuvioTheme.colors.Secondary
         chosen -> NuvioTheme.colors.FocusBackground
@@ -117,11 +118,14 @@ internal fun GuideRow(
     }
     Card(
         onClick = { if (enabled) onClick() },
-        modifier = modifier.fillMaxWidth().focusProperties { canFocus = enabled }.onFocusChanged { if (it.isFocused) onFocused() }
+        modifier = modifier.fillMaxWidth().focusProperties { canFocus = enabled }.onFocusChanged {
+            focused = it.isFocused
+            if (it.isFocused) onFocused()
+        }
             .semantics { selected?.let { this.selected = it }; if (!enabled) disabled() },
         colors = CardDefaults.colors(
             containerColor = container,
-            focusedContainerColor = if (style == GuideRowStyle.PRIMARY) NuvioTheme.colors.Secondary else NuvioTheme.colors.FocusBackground
+            focusedContainerColor = NuvioTheme.colors.FocusBackground
         ),
         shape = CardDefaults.shape(shape),
         border = CardDefaults.border(
