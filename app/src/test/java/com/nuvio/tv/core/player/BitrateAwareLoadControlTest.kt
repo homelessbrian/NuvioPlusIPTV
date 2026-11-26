@@ -1,7 +1,7 @@
 package com.nuvio.tv.core.player
 
 import androidx.media3.common.C
-import androidx.media3.common.TrackGroup
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -10,7 +10,10 @@ import androidx.media3.exoplayer.analytics.PlayerId
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.TrackGroupArray
 import androidx.media3.exoplayer.trackselection.ExoTrackSelection
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.lang.reflect.Proxy
 
@@ -26,7 +29,6 @@ class BitrateAwareLoadControlTest {
             maxBufferMs = 50_000,
             bufferForPlaybackMs = 2_500,
             bufferForPlaybackAfterRebufferMs = 5_000,
-            prioritizeTimeOverSizeThresholds = true,
             backBufferDurationMs = 15_000,
             retainBackBufferFromKeyframe = true,
             budgetBytes = 100L * 1024L * 1024L
@@ -64,7 +66,6 @@ class BitrateAwareLoadControlTest {
             maxBufferMs = 50_000,
             bufferForPlaybackMs = 2_500,
             bufferForPlaybackAfterRebufferMs = 5_000,
-            prioritizeTimeOverSizeThresholds = true,
             backBufferDurationMs = 15_000,
             retainBackBufferFromKeyframe = true,
             budgetBytes = initialBudget.toLong()
@@ -96,4 +97,99 @@ class BitrateAwareLoadControlTest {
 
         assertEquals(shrunkBudget, calcTotalMethod.invoke(lc) as Int)
     }
+
+    @Test
+    fun `byte budget stops loading and starts high bitrate playback below time thresholds`() {
+        for (rebuffering in listOf(false, true)) {
+            withPreparedLoadControl(budgetSegments = 2) { control ->
+                val params = loadingParameters(bufferedDurationUs = 1_000_000L, rebuffering = rebuffering)
+                val first = control.allocator.allocate()
+                try {
+                    assertTrue(control.shouldContinueLoading(params))
+                    assertFalse(control.shouldStartPlayback(params))
+                    val second = control.allocator.allocate()
+                    try {
+                        // Scale only the byte allocation: 1s of media is below the 15s minimum
+                        // and both the 5s startup and 10s rebuffer thresholds used by this fixture.
+                        assertFalse(control.shouldContinueLoading(params))
+                        assertTrue(control.shouldStartPlayback(params))
+                    } finally {
+                        control.allocator.release(second)
+                    }
+                } finally {
+                    control.allocator.release(first)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `loading resumes after budget is freed and time thresholds still allow ordinary playback`() {
+        withPreparedLoadControl(budgetSegments = 1) { control ->
+            val belowMinimum = loadingParameters(bufferedDurationUs = 1_000_000L)
+            val allocation = control.allocator.allocate()
+            try {
+                assertFalse(control.shouldContinueLoading(belowMinimum))
+                assertTrue(control.shouldStartPlayback(belowMinimum))
+            } finally {
+                control.allocator.release(allocation)
+            }
+            assertTrue(control.shouldContinueLoading(belowMinimum))
+            assertFalse(control.shouldStartPlayback(belowMinimum))
+            assertTrue(control.shouldStartPlayback(loadingParameters(bufferedDurationUs = 5_000_000L)))
+            assertFalse(control.shouldStartPlayback(loadingParameters(bufferedDurationUs = 5_000_000L, rebuffering = true)))
+            assertTrue(control.shouldStartPlayback(loadingParameters(bufferedDurationUs = 10_000_000L, rebuffering = true)))
+        }
+    }
+
+    @Test
+    fun `lowering an active budget stops loading without blocking rebuffer recovery`() {
+        withPreparedLoadControl(budgetSegments = 2) { control ->
+            val params = loadingParameters(bufferedDurationUs = 1_000_000L, rebuffering = true)
+            val allocation = control.allocator.allocate()
+            try {
+                assertTrue(control.shouldContinueLoading(params))
+                assertFalse(control.shouldStartPlayback(params))
+                control.setBudgetBytesOverride(C.DEFAULT_BUFFER_SEGMENT_SIZE.toLong())
+                assertFalse(control.shouldContinueLoading(params))
+                assertTrue(control.shouldStartPlayback(params))
+            } finally {
+                control.allocator.release(allocation)
+            }
+        }
+    }
+
+    private fun withPreparedLoadControl(budgetSegments: Int, block: (BitrateAwareLoadControl) -> Unit) {
+        val control = BitrateAwareLoadControl(
+            minBufferMs = 15_000,
+            maxBufferMs = 45_000,
+            bufferForPlaybackMs = 5_000,
+            bufferForPlaybackAfterRebufferMs = 10_000,
+            backBufferDurationMs = 0,
+            retainBackBufferFromKeyframe = false,
+            budgetBytes = budgetSegments.toLong() * C.DEFAULT_BUFFER_SEGMENT_SIZE,
+            allocator = DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE, 0, false)
+        )
+        control.onPrepared(PlayerId.UNSET)
+        try {
+            control.onTracksSelected(loadingParameters(0L), TrackGroupArray.EMPTY, emptyArray())
+            block(control)
+        } finally {
+            control.onStopped(PlayerId.UNSET)
+            control.onReleased(PlayerId.UNSET)
+        }
+    }
+
+    private fun loadingParameters(bufferedDurationUs: Long, rebuffering: Boolean = false) = LoadControl.Parameters(
+        PlayerId.UNSET,
+        Timeline.EMPTY,
+        MediaSource.MediaPeriodId("movie"),
+        /* playbackPositionUs= */ 0L,
+        bufferedDurationUs,
+        /* playbackSpeed= */ 1f,
+        /* playWhenReady= */ true,
+        rebuffering,
+        /* targetLiveOffsetUs= */ C.TIME_UNSET,
+        /* lastRebufferRealtimeMs= */ C.TIME_UNSET
+    )
 }

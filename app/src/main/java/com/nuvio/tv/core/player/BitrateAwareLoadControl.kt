@@ -25,7 +25,6 @@ class BitrateAwareLoadControl(
     maxBufferMs: Int,
     bufferForPlaybackMs: Int,
     bufferForPlaybackAfterRebufferMs: Int,
-    prioritizeTimeOverSizeThresholds: Boolean,
     backBufferDurationMs: Int,
     retainBackBufferFromKeyframe: Boolean,
     /** Memory ceiling in bytes. */
@@ -38,7 +37,9 @@ class BitrateAwareLoadControl(
     bufferForPlaybackMs,
     bufferForPlaybackAfterRebufferMs,
     /* targetBufferBytes= */ C.LENGTH_UNSET,
-    prioritizeTimeOverSizeThresholds,
+    // Size priority both stops loading at the budget and allows playback to start there,
+    // even when a high-bitrate stream reaches it before the duration thresholds.
+    /* prioritizeTimeOverSizeThresholds= */ false,
     backBufferDurationMs,
     retainBackBufferFromKeyframe
 ) {
@@ -92,9 +93,8 @@ class BitrateAwareLoadControl(
     override fun calculateTargetBufferBytes(
         trackSelectionArray: Array<out ExoTrackSelection?>
     ): Int {
-        // Target = the memory budget. Time (Max Buffer Duration) is the real limit; this is
-        // just the memory cap. Sizing from advertised bitrate starved variable-bitrate peaks,
-        // so let high-bitrate fill up to the budget and low-bitrate stop at the time limit.
+        // Let high-bitrate streams fill up to the byte budget without requiring the minimum
+        // buffered duration; low-bitrate streams can stop at the maximum duration first.
         return currentTargetBufferBytes()
     }
 
