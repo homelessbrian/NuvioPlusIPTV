@@ -84,6 +84,7 @@ class SportsProbeHostTest {
         fixture.open()
         runCurrent()
         assertTrue(fixture.host.results.value.getValue(fixture.channel.key).playbackVerified)
+        assertEquals(50f, fixture.host.results.value.getValue(fixture.channel.key).frameRate, 0f)
         fixture.live.value = fixture.live.value.copy(parentalPin = "1234")
         fixture.user.emit(LiveUserState(lockedGroups = setOf(fixture.channel.groupId)))
         runCurrent()
@@ -235,6 +236,7 @@ class SportsProbeHostTest {
             val playback = mockk<LiveTvPlaybackController> {
                 every { state } returns this@Fixture.state
                 every { playingChannel } answers { playing }
+                every { measuredFps } returns 50f
             }
             val recorder = mockk<LiveTvRecorder> { every { recordings } returns this@Fixture.recordings }
             val preferences = mockk<LiveTvPreferences> {

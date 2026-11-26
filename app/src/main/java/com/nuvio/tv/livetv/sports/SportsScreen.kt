@@ -1732,8 +1732,8 @@ private fun GamePage(
     val shownRows = remember(shown, playingKey) { SportsMatcher.groupCopies(shown, playingKey) }
     val channelChecks by viewModel.channelChecks.collectAsStateWithLifecycle()
     // Each actual provider/copy is playable. Verified working sources lead, unavailable ones trail.
-    val displayRows = remember(shownRows, settings.autoCheckChannels, channelChecks) {
-        sportsProbeChannelRows(shownRows, channelChecks, settings.autoCheckChannels)
+    val displayRows = remember(shownRows, settings.autoCheckChannels, settings.bestChannelFirst, channelChecks) {
+        sportsProbeChannelRows(shownRows, channelChecks, settings.autoCheckChannels, settings.bestChannelFirst)
     }
     val probeChannels = remember(shownRows) { shownRows.flatten().map { it.channel }.distinctBy { it.key } }
     val latestProbeChannels = androidx.compose.runtime.rememberUpdatedState(probeChannels)

@@ -164,13 +164,13 @@ fun SportsSettingsContent(
                     )
                     SettingsToggleRow(
                         "Best Channel First",
-                        "Puts 4K and FHD channels at the top of each game's list, then the rest",
+                        "Lists each feed by resolution, then frame rate. With channel checks on, working feeds come first.",
                         s.bestChannelFirst,
                         { update { it.copy(bestChannelFirst = !it.bestChannelFirst) } }
                     )
                     SettingsActionRow(
                         title = "Channel checks",
-                        subtitle = "Automatic checks availability and picture size when you open a game. Playback takes priority; Back or Play stops the checks",
+                        subtitle = "Checks availability, resolution and frame rate when you open a game. Back or Play stops the checks.",
                         value = if (s.autoCheckChannels) "Automatic" else "Off",
                         leadingIcon = Icons.Default.Tune,
                         onClick = { dialog = "channelChecks" }

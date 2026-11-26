@@ -13,6 +13,8 @@ data class SportsProbeResult(
     /** Controlled, credential-free wording; never an exception message or stream URL. */
     val detail: String? = null,
     val playbackVerified: Boolean = false,
+    /** Frames per second observed from video presentation timestamps. Zero means unknown. */
+    val frameRate: Float = 0f,
 )
 
 fun interface SportsChannelProbe {

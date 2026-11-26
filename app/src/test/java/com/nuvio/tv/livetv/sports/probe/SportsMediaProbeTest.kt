@@ -59,6 +59,7 @@ class SportsMediaProbeTest {
             val observed = check(server, "/live.ts", headers = mapOf("Referer" to "https://fixture.invalid/"))
             assertEquals(SportsProbeStatus.WORKING, observed.status)
             assertTrue(observed.width > 0 && observed.height > 0)
+            assertEquals(25f, observed.frameRate, 0.05f)
             assertTrue(observed.checkedAtMs > 0)
             assertFalse(observed.playbackVerified)
             assertEquals(1, requests.size)
@@ -75,6 +76,7 @@ class SportsMediaProbeTest {
             assertEquals(SportsProbeStatus.WORKING, observed.status)
             assertEquals(actual.width, observed.width)
             assertEquals(actual.height, observed.height)
+            assertEquals(25f, observed.frameRate, 0.05f)
             assertNotEquals(7680, observed.width)
             assertTrue(requests.any { it.path == "/segment.ts" })
         }
@@ -210,7 +212,7 @@ class SportsMediaProbeTest {
 
     private fun fixtureDispatcher(segmentCode: Int = 200) = object : Dispatcher() {
         override fun dispatch(request: RecordedRequest): MockResponse = when (request.path?.substringBefore('?')) {
-            "/master.m3u8" -> MockResponse().setBody("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=7680x4320\n/variant.m3u8\n")
+            "/master.m3u8" -> MockResponse().setBody("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=7680x4320,FRAME-RATE=60\n/variant.m3u8\n")
             "/variant.m3u8" -> MockResponse().setBody("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:4,\n/segment.ts\n")
             "/segment.ts" -> if (segmentCode == 200) media() else MockResponse().setResponseCode(segmentCode)
             else -> media()

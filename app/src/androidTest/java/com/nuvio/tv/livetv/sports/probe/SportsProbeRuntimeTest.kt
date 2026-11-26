@@ -38,10 +38,13 @@ class SportsProbeRuntimeTest {
         listOf(ts, extensionless, hls).forEach {
             assertEquals(SportsProbeStatus.WORKING, it.status)
             assertTrue(it.width > 0 && it.height > 0)
+            assertTrue(it.frameRate > 0f)
             assertFalse(it.playbackVerified)
         }
         assertEquals(ts.width, extensionless.width)
         assertEquals(ts.height, extensionless.height)
+        assertEquals(ts.frameRate, extensionless.frameRate, 0.1f)
+        assertEquals(ts.frameRate, hls.frameRate, 0.1f)
         assertEquals(ts.width, hls.width)
         assertEquals(ts.height, hls.height)
         assertNotEquals("Advertised maximum was mistaken for an extracted video format", 7680, hls.width)
@@ -110,7 +113,8 @@ class SportsProbeRuntimeTest {
     }
 
     private fun describe(result: SportsProbeResult) = JSONObject().put("status", result.status.name)
-        .put("width", result.width).put("height", result.height).put("playbackVerified", result.playbackVerified)
+        .put("width", result.width).put("height", result.height).put("frameRate", result.frameRate)
+        .put("playbackVerified", result.playbackVerified)
         .put("elapsedMs", checkNotNull(elapsedMs[result]))
 
     private fun writeEvidence(name: String, evidence: JSONObject) {

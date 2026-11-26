@@ -3,6 +3,7 @@ package com.nuvio.tv.livetv.sports.probe
 import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -63,7 +64,18 @@ class AndroidSportsChannelProbe @Inject constructor(
     @ApplicationContext private val context: Context,
     private val stalker: StalkerGateway,
 ) : SportsChannelProbe {
-    override suspend fun check(channel: LiveChannel): SportsProbeResult = boundedSportsProbeCheck { preparationComplete ->
+    override suspend fun check(channel: LiveChannel): SportsProbeResult {
+        var verified: SportsProbeResult? = null
+        return boundedSportsProbeCheck(verified = { verified }) { preparationComplete ->
+            check(channel, preparationComplete) { verified = it }
+        }
+    }
+
+    private suspend fun check(
+        channel: LiveChannel,
+        preparationComplete: () -> Unit,
+        onVerified: (SportsProbeResult) -> Unit,
+    ): SportsProbeResult =
         serial.withLock {
             if (channel.drm != null) return@withLock result(SportsProbeStatus.PROTECTED, "Protected stream")
             var prepared: StalkerPlayback? = null
@@ -76,7 +88,7 @@ class AndroidSportsChannelProbe @Inject constructor(
                 if (runCatching { URI(url).scheme?.lowercase() }.getOrNull() !in setOf("http", "https")) {
                     return@withLock result(SportsProbeStatus.UNVERIFIED, "Unsupported stream format")
                 }
-                probeSportsMediaSource(beforeClose = { requests.close(); prepared?.policy?.retire() }) { decorate ->
+                probeSportsMediaSource(onVerified = onVerified, beforeClose = { requests.close(); prepared?.policy?.retire() }) { decorate ->
                     LiveTvMediaSourceBuilder(
                         forcedMime = prepared?.mimeType,
                         observeCaptions = false,
@@ -97,7 +109,6 @@ class AndroidSportsChannelProbe @Inject constructor(
                 prepared?.policy?.retire()
             }
         }
-    }
 
     private companion object {
         // Shared even when a test or a second host constructs another adapter.
@@ -110,11 +121,12 @@ internal const val SPORTS_PROBE_TIMEOUT_MS = 7_000L
 /** One budget covers queue admission, provider/VPN preparation and media; it never resets per phase. */
 internal suspend fun boundedSportsProbeCheck(
     timeoutMs: Long = SPORTS_PROBE_TIMEOUT_MS,
+    verified: () -> SportsProbeResult? = { null },
     check: suspend (preparationComplete: () -> Unit) -> SportsProbeResult,
 ): SportsProbeResult {
     var prepared = false
     return withTimeoutOrNull(timeoutMs) { check { prepared = true } }
-        ?: if (prepared) result(SportsProbeStatus.UNVERIFIED, "Slow or not verified")
+        ?: if (prepared) verified() ?: result(SportsProbeStatus.UNVERIFIED, "Slow or not verified")
         else result(SportsProbeStatus.DEFERRED, "Waiting for VPN or provider")
 }
 
@@ -124,12 +136,13 @@ internal suspend fun probeSportsMediaSource(
     timeoutMs: Long = SPORTS_PROBE_TIMEOUT_MS,
     maxReadBytes: Long = 16L * 1024 * 1024,
     beforeClose: () -> Unit = {},
+    onVerified: (SportsProbeResult) -> Unit = {},
     createSource: ((HttpDataSource.Factory) -> HttpDataSource.Factory) -> MediaSource,
 ): SportsProbeResult {
     val thread = HandlerThread("SportsChannelCheck").apply { start() }
     val handler = Handler(thread.looper)
     val budget = ProbeRequestBudget(maxReadBytes)
-    val started = android.os.SystemClock.elapsedRealtime()
+    val started = SystemClock.elapsedRealtime()
     var protocol = "unknown"
     return try {
         withContext(handler.asCoroutineDispatcher()) {
@@ -141,6 +154,7 @@ internal suspend fun probeSportsMediaSource(
             var prepared = false
             var sourcePrepared = false
             var loadFailure: IOException? = null
+            var working: SportsProbeResult? = null
             val allocations = ProbeAllocator(8 * 1024 * 1024)
             val caller = MediaSource.MediaSourceCaller { _, timeline ->
                 if (mediaPeriod == null && !timeline.isEmpty) {
@@ -179,8 +193,12 @@ internal suspend fun probeSportsMediaSource(
                     var firstTimeUs: Long? = null
                     var lastTimeUs: Long? = null
                     var samples = 0
+                    val timestamps = LongArray(24)
+                    var rateDeadline = Long.MAX_VALUE
+                    fun completed() = working?.copy(frameRate = probeFrameRate(timestamps, minOf(samples, timestamps.size)))
                     while (true) {
                         ensureActive()
+                        if (SystemClock.elapsedRealtime() >= rateDeadline) completed()?.let { return@withTimeoutOrNull it }
                         budget.failure.get()?.let { throw it }
                         loadFailure?.let { throw it }
                         source.maybeThrowSourceInfoRefreshError()
@@ -204,7 +222,10 @@ internal suspend fun probeSportsMediaSource(
                                 selected = true
                             }
                             if (prepared) period.readDiscontinuity()
-                            period.continueLoading(LoadingInfo.Builder().setPlaybackPositionUs(lastTimeUs ?: periodStartUs).build())
+                            // Once verified, inspect the current load without starting another segment just for frame rate.
+                            if (working == null) {
+                                period.continueLoading(LoadingInfo.Builder().setPlaybackPositionUs(lastTimeUs ?: periodStartUs).build())
+                            }
                             val video = stream
                             if (video != null) {
                                 video.maybeThrowError()
@@ -212,25 +233,40 @@ internal suspend fun probeSportsMediaSource(
                                     sample.clear()
                                     when (video.readData(holder, sample, SampleStream.FLAG_OMIT_SAMPLE_DATA)) {
                                         C.RESULT_FORMAT_READ -> {
+                                            if (holder.format?.drmInitData != null) return@withTimeoutOrNull result(SportsProbeStatus.PROTECTED, "Protected stream")
+                                            if (format != holder.format) {
+                                                completed()?.let { return@withTimeoutOrNull it }
+                                                firstTimeUs = null
+                                                lastTimeUs = null
+                                                samples = 0
+                                            }
                                             format = holder.format
-                                            if (format?.drmInitData != null) return@withTimeoutOrNull result(SportsProbeStatus.PROTECTED, "Protected stream")
                                         }
                                         C.RESULT_BUFFER_READ -> {
-                                            if (sample.isEndOfStream) return@withTimeoutOrNull result(SportsProbeStatus.UNVERIFIED, "Too little media to verify")
+                                            if (sample.isEndOfStream) return@withTimeoutOrNull completed()
+                                                ?: result(SportsProbeStatus.UNVERIFIED, "Too little media to verify")
                                             if (sample.isEncrypted) return@withTimeoutOrNull result(SportsProbeStatus.PROTECTED, "Protected stream")
                                             val timestamp = sample.timeUs
                                             if (timestamp != C.TIME_UNSET && timestamp != C.TIME_END_OF_SOURCE) {
                                                 firstTimeUs = firstTimeUs?.let { minOf(it, timestamp) } ?: timestamp
                                                 lastTimeUs = lastTimeUs?.let { maxOf(it, timestamp) } ?: timestamp
+                                                if (samples < timestamps.size) timestamps[samples] = timestamp
                                                 samples++
                                             }
-                                            if (samples >= 3 && lastTimeUs!! - firstTimeUs!! >= 40_000L) {
-                                                return@withTimeoutOrNull SportsProbeResult(
+                                            if (working == null && samples >= 3 && lastTimeUs!! - firstTimeUs!! >= 40_000L) {
+                                                val observed = SportsProbeResult(
                                                     SportsProbeStatus.WORKING,
                                                     width = format?.width?.coerceAtLeast(0) ?: 0,
                                                     height = format?.height?.coerceAtLeast(0) ?: 0,
                                                     checkedAtMs = System.currentTimeMillis(),
                                                 )
+                                                working = observed
+                                                onVerified(observed)
+                                                // A short extra window for sparse live delivery stays inside the original check deadline.
+                                                rateDeadline = SystemClock.elapsedRealtime() + 400L
+                                            }
+                                            if (samples >= timestamps.size) {
+                                                completed()?.let { return@withTimeoutOrNull it }
                                             }
                                         }
                                         else -> break
@@ -242,11 +278,11 @@ internal suspend fun probeSportsMediaSource(
                         delay(20L)
                     }
                     @Suppress("UNREACHABLE_CODE") result(SportsProbeStatus.UNVERIFIED, "Not verified")
-                } ?: result(SportsProbeStatus.UNVERIFIED, "Slow or not verified")
+                } ?: working ?: result(SportsProbeStatus.UNVERIFIED, "Slow or not verified")
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                sportsProbeFailure(failure)
+                working ?: sportsProbeFailure(failure)
             } finally {
                 // Cancel this check's Calls first. Closing a URLConnection/response alone can
                 // wait behind a blocked body read and delay Back or the next channel start.
@@ -260,7 +296,7 @@ internal suspend fun probeSportsMediaSource(
                 allocations.reset()
             }
         }.also { observed ->
-            LiveTvLoadReport.add("Sports channel check: ${observed.status}; $protocol; ${observed.width}x${observed.height}; ${budget.bytes.get()} bytes; ${android.os.SystemClock.elapsedRealtime() - started} ms")
+            LiveTvLoadReport.add("Sports channel check: ${observed.status}; $protocol; ${observed.width}x${observed.height}; ${budget.bytes.get()} bytes; ${SystemClock.elapsedRealtime() - started} ms")
         }
     } finally {
         thread.quitSafely()

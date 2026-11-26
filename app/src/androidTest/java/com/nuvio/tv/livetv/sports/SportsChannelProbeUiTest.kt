@@ -46,18 +46,20 @@ class SportsChannelProbeUiTest {
 
     @Test
     fun automaticResultsReorderRealRowsAndKeepFocusOnTheSameSource() {
-        val primary = match("primary", "Fixture Sports FHD", "Provider one", "FHD")
-        val copy = match("copy", "Fixture Sports HD", "Provider two", "HD")
+        val primary = match("primary", "TNT Sports 4 (720p25)", "Provider one", "HD")
+        val copy = match("copy", "TNT Sports 4", "Provider two", "HD")
+        val standard = match("standard", "TNT Sports 4 HD", "Provider three", "HD")
         val checks = mutableStateOf(mapOf(
             primary.channel.key to SportsProbeResult(SportsProbeStatus.CHECKING),
             copy.channel.key to SportsProbeResult(SportsProbeStatus.QUEUED),
+            standard.channel.key to SportsProbeResult(SportsProbeStatus.QUEUED),
         ))
         var chosen: String? = null
         compose.setContent {
             NuvioTheme {
                 Box(Modifier.fillMaxSize().background(Color(0xFF151820))) {
-                    val rows = sportsProbeChannelRows(listOf(listOf(primary, copy)), checks.value, automatic = true)
-                    LazyColumn(Modifier.width(660.dp).height(240.dp).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val rows = sportsProbeChannelRows(listOf(listOf(primary, standard, copy)), checks.value, automatic = true)
+                    LazyColumn(Modifier.width(740.dp).height(360.dp).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         itemsIndexed(rows, key = { _, row -> row[0].channel.key }) { index, row ->
                             val source = row[0]
                             SportsChannelRow(source, finished = false, playing = false, now = NOW,
@@ -70,6 +72,7 @@ class SportsChannelProbeUiTest {
         }
         val preferred = hasText(primary.channel.name)
         val alternative = hasText(copy.channel.name)
+        val lowerRate = hasText(standard.channel.name)
         focus(preferred)
         compose.onNode(preferred).assertTextContains("Checking…", substring = true)
         assertTrue(compose.onNode(preferred).fetchSemanticsNode().boundsInRoot.top <
@@ -79,20 +82,31 @@ class SportsChannelProbeUiTest {
                 primary.channel.key to SportsProbeResult(SportsProbeStatus.UNAVAILABLE,
                     checkedAtMs = NOW - 10_000, detail = "Access denied (401)"),
                 copy.channel.key to SportsProbeResult(SportsProbeStatus.WORKING,
-                    width = 1920, height = 1080, checkedAtMs = NOW - 5_000),
+                    width = 1920, height = 1080, checkedAtMs = NOW - 5_000, frameRate = 50f),
+                standard.channel.key to SportsProbeResult(SportsProbeStatus.WORKING,
+                    width = 1920, height = 1080, checkedAtMs = NOW - 5_000, frameRate = 25f),
             )
         }
         compose.onNode(preferred).assertIsDisplayed().assertIsFocused().assertTextContains("Unavailable now", substring = true)
-        compose.onNode(alternative).assertTextContains("Working", substring = true).assertTextContains("1920×1080", substring = true)
+        compose.onNode(alternative).assertTextContains("Working", substring = true)
+            .assertTextContains("1920×1080 · 50 fps", substring = true).assertTextContains("Measured")
+        compose.onNode(lowerRate).assertTextContains("1920�1080 � 25 fps", substring = true)
+        compose.onNode(preferred).assertTextContains("Reported")
+        assertTrue(compose.onNode(alternative).fetchSemanticsNode().boundsInRoot.top <
+            compose.onNode(lowerRate).fetchSemanticsNode().boundsInRoot.top)
         assertTrue(compose.onNode(alternative).fetchSemanticsNode().boundsInRoot.top <
             compose.onNode(preferred).fetchSemanticsNode().boundsInRoot.top)
         // Only the ordinary channel rows are actionable; checks add no buttons or pop-ups.
-        compose.onAllNodes(hasClickAction()).assertCountEquals(2)
+        compose.onAllNodes(hasClickAction()).assertCountEquals(3)
         saveScreenshot()
+        press(KeyEvent.KEYCODE_DPAD_UP)
+        compose.onNode(lowerRate).assertIsFocused()
         press(KeyEvent.KEYCODE_DPAD_UP)
         compose.onNode(alternative).assertIsFocused()
         press(KeyEvent.KEYCODE_DPAD_CENTER)
         compose.runOnIdle { assertEquals(copy.channel.key, chosen) }
+        press(KeyEvent.KEYCODE_DPAD_DOWN)
+        compose.onNode(lowerRate).assertIsFocused()
         press(KeyEvent.KEYCODE_DPAD_DOWN)
         compose.onNode(preferred).assertIsFocused()
         press(KeyEvent.KEYCODE_DPAD_CENTER)
@@ -102,7 +116,7 @@ class SportsChannelProbeUiTest {
                 SportsProbeStatus.DEFERRED, detail = "Video is playing"))
         }
         compose.onNode(preferred).assertIsFocused().assertTextContains("Check deferred", substring = true)
-        compose.onAllNodes(hasClickAction()).assertCountEquals(2)
+        compose.onAllNodes(hasClickAction()).assertCountEquals(3)
     }
 
     @Test

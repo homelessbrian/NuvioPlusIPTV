@@ -54,6 +54,16 @@ class SportsProbeDeadlineTest {
         assertTrue(closed)
     }
 
+    @Test fun `a stream verified before the deadline keeps its working status when frame rate is still unknown`() = runTest {
+        val working = SportsProbeResult(SportsProbeStatus.WORKING, 1920, 1080)
+        val result = boundedSportsProbeCheck(timeoutMs = 300, verified = { working }) { prepared ->
+            prepared()
+            awaitCancellation()
+        }
+        assertEquals(working, result)
+        assertEquals(300L, currentTime)
+    }
+
     @Test fun `caller cancellation propagates instead of becoming a timeout result`() = runTest {
         var closed = false
         var returnedResult = false

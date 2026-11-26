@@ -217,7 +217,8 @@ class SportsProbeHost @Inject constructor(
             !state.hasRenderedVideoFrame || state.videoWidth <= 0 || state.videoHeight <= 0) return null
         return when {
             state.isPlaying -> SportsProbeResult(SportsProbeStatus.WORKING, state.videoWidth, state.videoHeight,
-                System.currentTimeMillis(), "Playing on this TV", playbackVerified = true)
+                System.currentTimeMillis(), "Playing on this TV", playbackVerified = true,
+                frameRate = playback.measuredFps.takeIf { it in 1f..240f } ?: 0f)
             state.userPaused -> SportsProbeResult(SportsProbeStatus.UNVERIFIED, state.videoWidth, state.videoHeight,
                 System.currentTimeMillis(), "Playback paused")
             else -> null

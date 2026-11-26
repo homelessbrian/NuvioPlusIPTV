@@ -2,19 +2,28 @@ package com.nuvio.tv.livetv.sports.probe
 
 import com.nuvio.tv.livetv.sports.ChannelMatch
 
-/** Only observed health changes priority; preserve the existing preference order within each group. */
+/** Health takes priority. Compare like-status rows by quality when Best Channel First is on. */
 internal fun sportsProbeChannelRows(
     groups: List<List<ChannelMatch>>,
     checks: Map<String, SportsProbeResult>,
     automatic: Boolean,
+    bestChannelFirst: Boolean = true,
 ): List<List<ChannelMatch>> {
-    if (!automatic) return groups
-    return groups.flatten().distinctBy { it.channel.key }
-        .sortedBy {
-            when (checks[it.channel.key]?.status) {
-                SportsProbeStatus.WORKING -> 0
-                SportsProbeStatus.UNAVAILABLE -> 2
-                else -> 1
-            }
-        }.map { listOf(it) }
+    if (!automatic && !bestChannelFirst) return groups
+    val candidates = groups.flatten().distinctBy { it.channel.key }
+    val quality = if (bestChannelFirst) candidates.associate { match ->
+        match.channel.key to sportsRowQuality(match, if (automatic) checks[match.channel.key] else null)
+    } else emptyMap()
+    val byQuality = compareByDescending<ChannelMatch> { quality[it.channel.key]?.height ?: 0 }
+        .thenByDescending { quality[it.channel.key]?.frameRate ?: 0f }
+    // A 1080p50 and a 720p25 variant must both be selectable even with channel checks off.
+    if (!automatic) return candidates.sortedWith(byQuality).map { listOf(it) }
+    val byHealth = compareBy<ChannelMatch> {
+        when (checks[it.channel.key]?.status) {
+            SportsProbeStatus.WORKING -> 0
+            SportsProbeStatus.UNAVAILABLE -> 2
+            else -> 1
+        }
+    }
+    return candidates.sortedWith(if (bestChannelFirst) byHealth.then(byQuality) else byHealth).map { listOf(it) }
 }

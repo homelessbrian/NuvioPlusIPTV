@@ -68,6 +68,7 @@ import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.livetv.ui.formatClock
 import com.nuvio.tv.livetv.sports.probe.SportsProbeResult
 import com.nuvio.tv.livetv.sports.probe.SportsProbeStatusLine
+import com.nuvio.tv.livetv.sports.probe.sportsRowQuality
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -978,15 +979,16 @@ internal fun SportsChannelRow(
                     color = Color(0xFFC9CCD6), size = 9.sp, weight = FontWeight.Black
                 )
             }
-            // In automatic mode, only measured media gets a picture-quality badge.
-            val quality = if (showProbe) probe?.height?.takeIf { it > 0 }?.let { "${it}p" } else m.quality
+            val quality = remember(m.channel.name, m.channel.sourceId, m.quality, showProbe, probe) {
+                sportsRowQuality(m, probe.takeIf { showProbe })
+            }
             quality?.let { q ->
                 Spacer(Modifier.width(6.dp))
-                LiveText(
-                    q,
-                    modifier = Modifier.border(1.dp, accent.copy(alpha = 0.7f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
-                    color = accent, size = 9.sp, weight = FontWeight.Black
-                )
+                Column(Modifier.border(1.dp, accent.copy(alpha = 0.7f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    LiveText(q.label, color = accent, size = 9.sp, weight = FontWeight.Black)
+                    LiveText(q.source, color = sub, size = 9.sp, weight = FontWeight.Medium)
+                }
             }
             // Its other copies: their qualities ("+ HD SD"), or how many when they don't say.
             if (copies.isNotEmpty()) {

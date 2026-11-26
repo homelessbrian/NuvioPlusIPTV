@@ -149,6 +149,12 @@ internal class SportsMatcher(
         checkpoint()
         val byKey = input.channels.associateBy { it.key }
         val rank = preferenceRank(input.settings)
+        // A provider's channel can match many games. Parse its label once for this pass,
+        // including channels whose names contain no quality information.
+        val qualities = HashMap<String, SportsReportedQuality>()
+        fun quality(ch: LiveChannel) = qualities.getOrPut(ch.key) {
+            sportsMatchQuality(ch.name, input.quality[ch.key]) ?: UNKNOWN_QUALITY
+        }
         val tStart = System.currentTimeMillis()
         val nd0 = nameData(input.channels)
         val names = nd0.names
@@ -325,7 +331,7 @@ internal class SportsMatcher(
                         score = f.score,
                         how = f.how,
                         program = f.program,
-                        quality = input.quality[ch.key] ?: nameQuality(ch.name),
+                        quality = quality(ch).label.ifEmpty { null },
                         catchup = if (ch.stalkerRef != null) f.program?.let { CatchupUrlBuilder.isAvailable(ch, it, input.now) } == true
                         else ch.catchup != null && CatchupUrlBuilder.isAvailable(ch.catchup, f.program?.startMs ?: ev.startMs, input.now)
                     )
@@ -334,7 +340,7 @@ internal class SportsMatcher(
             // Every channel the guide has for it (FHD/HD/SD copies are folded into one row on the
             // game page, other regions under "+ N from other regions"), so nothing the guide shows
             // is left out. 40 is only a guard against a runaway list; it costs no extra searching.
-            return sortMatches(list, input.settings.bestChannelFirst, rank).take(40)
+            return orderedMatches(list, input.settings.bestChannelFirst, rank) { quality(it.channel) }.take(40)
         }
         fun urgent(ev: SportsEvent) = ev.state == GameState.LIVE ||
             (ev.state == GameState.PRE && ev.startMs in (input.now - 15 * MINUTE)..(input.now + 15 * MINUTE))
@@ -514,7 +520,8 @@ internal class SportsMatcher(
                         .filter { it.second > 0 }
                         .sortedWith(
                             compareByDescending<Triple<LiveChannel, Int, EpgProgram?>> { rank(it.first) }
-                                .thenByDescending { qualityRank(input.quality[it.first.key] ?: nameQuality(it.first.name)) }
+                                .thenByDescending { quality(it.first).height }
+                                .thenByDescending { quality(it.first).frameRate }
                         )
                         // More than the top few: their FHD/HD/SD copies (one row on the game page)
                         // and the same network from other providers, as backups if one freezes.
@@ -1748,20 +1755,9 @@ internal class SportsMatcher(
             "nine" to listOf("news", "gem extra")
         )
 
-        fun nameQuality(name: String): String? {
-            val n = norm(name)
-            return when {
-                listOf("4k", "uhd", "2160", "2160p").any { hasWord(n, it) } -> "4K"
-                listOf("fhd", "1080", "1080p", "1080i").any { hasWord(n, it) } -> "FHD"
-                listOf("hd", "720", "720p").any { hasWord(n, it) } -> "HD"
-                listOf("sd", "480", "576").any { hasWord(n, it) } -> "SD"
-                else -> null
-            }
-        }
+        fun nameQuality(name: String): String? = reportedSportsQuality(name)?.label
 
-        fun qualityRank(q: String?): Int = when (q) {
-            "4K" -> 4; "FHD" -> 3; "HD" -> 2; "SD" -> 1; else -> 2
-        }
+        private val UNKNOWN_QUALITY = SportsReportedQuality(0, 0f, "")
 
         /** Your own region's words, as channel names and groups use them ("UK: TNT Sports 1", group "UK | Sports"). */
         internal val REGION_WORDS = mapOf(
@@ -1820,13 +1816,13 @@ internal class SportsMatcher(
 
         /** Words that only say which copy of a channel it is (its quality, a backup feed). */
         private val COPY_WORDS = setOf(
-            "4k", "uhd", "2160", "2160p", "fhd", "1080", "1080p", "1080i", "hd", "720", "720p", "sd", "480", "576",
-            "hevc", "h265", "h264", "50fps", "60fps", "fps", "backup", "alt"
+            "hevc", "h265", "h264", "fps", "backup", "alt"
         )
 
         /** The same channel's copies (ESPN FHD, ESPN HD, ESPN SD) share this; other regions' don't. */
         fun copyKey(ch: LiveChannel): String =
-            norm(ch.name.replace("+", " plus ")).split(' ').filter { it.isNotEmpty() && it !in COPY_WORDS }.joinToString(" ")
+            norm(withoutSportsQualityTags(ch.name).replace("+", " plus ")).split(' ')
+                .filter { it.isNotEmpty() && it !in COPY_WORDS }.joinToString(" ")
 
         /**
          * [list] (in order) with each channel's copies together: one entry per channel, the first
@@ -1863,6 +1859,14 @@ internal class SportsMatcher(
         }
 
         fun sortMatches(list: List<ChannelMatch>, bestFirst: Boolean, rank: (LiveChannel) -> Int = { 0 }): List<ChannelMatch> {
+            val qualities = if (bestFirst) list.associate { it.channel.key to sportsMatchQuality(it.channel.name, it.quality) } else emptyMap()
+            return orderedMatches(list, bestFirst, rank) { qualities[it.channel.key] ?: UNKNOWN_QUALITY }
+        }
+
+        private fun orderedMatches(
+            list: List<ChannelMatch>, bestFirst: Boolean, rank: (LiveChannel) -> Int,
+            quality: (ChannelMatch) -> SportsReportedQuality,
+        ): List<ChannelMatch> {
             fun band(score: Int) = when {
                 score >= 150 -> 3
                 score >= 80 -> 2
@@ -1874,7 +1878,8 @@ internal class SportsMatcher(
                 compareByDescending<ChannelMatch> { if (band(it.score) == 3) 1 else 0 }
                     .thenByDescending { rank(it.channel) }
                     .thenByDescending { band(it.score) }
-                    .thenByDescending { qualityRank(it.quality) }
+                    .thenByDescending { quality(it).height }
+                    .thenByDescending { quality(it).frameRate }
                     .thenByDescending { it.score }
                     .thenBy { it.channel.name.length }
             ) else list.sortedWith(

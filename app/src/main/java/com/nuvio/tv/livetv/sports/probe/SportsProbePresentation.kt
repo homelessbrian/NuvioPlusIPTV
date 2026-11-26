@@ -27,8 +27,7 @@ internal fun SportsProbeStatusLine(result: SportsProbeResult?, now: Long, modifi
         SportsProbeStatus.DEFERRED -> "Check deferred"
         null -> "Not checked"
     }
-    val dimensions = result?.takeIf { it.width > 0 && it.height > 0 }?.let { "${it.width}×${it.height}" }
-        ?: "picture size unknown".takeIf { result?.status == SportsProbeStatus.WORKING }
+    val unknownSize = "picture size unknown".takeIf { result?.status == SportsProbeStatus.WORKING && result.height <= 0 }
     val age = result?.checkedAtMs?.takeIf { it > 0 }?.let {
         val seconds = ((now - it).coerceAtLeast(0) / 1_000)
         when {
@@ -39,7 +38,7 @@ internal fun SportsProbeStatusLine(result: SportsProbeResult?, now: Long, modifi
         }
     }
     LiveText(
-        listOfNotNull(status, dimensions, result?.detail?.takeIf { it.isNotBlank() && result?.playbackVerified != true }, age).joinToString(" · "),
+        listOfNotNull(status, unknownSize, result?.detail?.takeIf { it.isNotBlank() && result?.playbackVerified != true }, age).joinToString(" · "),
         modifier = modifier, color = color, size = 10.sp, weight = FontWeight.Medium, maxLines = 1,
     )
 }
