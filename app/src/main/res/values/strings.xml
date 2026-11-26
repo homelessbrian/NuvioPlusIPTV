@@ -318,6 +318,10 @@
     <string name="detail_lists_fallback">Lists</string>
     <string name="detail_lists_subtitle">Select which lists should include this title.</string>
     <string name="action_save">Save</string>
+    <string name="iptv_rec_rename_title">Rename recording</string>
+    <string name="iptv_rec_rename">Rename</string>
+    <string name="iptv_rec_rename_hint">Recording name</string>
+    <string name="iptv_rec_rename_saving">Saving…</string>
     <string name="action_saving">Saving…</string>
 
     <string name="appearance_language">App Language</string>

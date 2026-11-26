@@ -8,6 +8,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.io.RandomAccessFile
 import java.util.concurrent.ConcurrentHashMap
 
@@ -33,6 +34,8 @@ internal class RecordingFiles(
     private val onLibraryChanged: () -> Unit,
     /** Nothing left to join or copy (the recorder can let its background service go). */
     private val onIdle: () -> Unit = {},
+    /** Android uses same-directory POSIX replacement; host tests supply their platform's commit. */
+    private val replaceTitle: (File, String, () -> Unit) -> Unit = RecordingTitles::replaceLocal,
 ) {
     /** Recording folders with work left. */
     private val pending = ConcurrentHashMap.newKeySet<String>()
@@ -313,6 +316,90 @@ internal class RecordingFiles(
     // ---------------------------------------------------------------- network folder
 
     private fun remoteDir(id: String) = NetworkFolderStore.META_DIR + "/" + id
+
+    /** A finished recording's title only: media paths and its series rule remain unchanged. */
+    fun rename(rec: LiveTvRecording, title: String, stillCurrent: () -> Boolean): String {
+        val dir = File(rec.dir)
+        check(dir.name == rec.id && !isBusy(dir)) { "Wait until this recording has finished saving" }
+        val local = File(dir, "info.json")
+        if (!NetworkFolderStore.isNetworkDir(dir)) {
+            return RecordingTitles.rename(rec, title, { local.readText() },
+                { text, guard -> replaceTitle(dir, text, guard) }, stillCurrent)
+        }
+        val config = NetworkFolderStore.config(context) ?: error("The network folder is not set up")
+        check(NetworkMarker.folder(dir) == config.label) { "This recording belongs to a different network folder" }
+        // Own connection: changing Settings must not redirect an edit onto a different share.
+        SmbFolder(config).use { folder ->
+            fun current() = stillCurrent() && NetworkFolderStore.config(context) == config && !isBusy(dir)
+            val beforeLocal = local.readText()
+            val changed = RecordingTitles.rename(rec, title, { readRemoteInfo(folder, rec.id) }, { text, guard ->
+                replaceRemoteInfo(folder, rec.id, text, guard)
+            }, ::current)
+            try {
+                replaceTitle(dir, changed) {
+                    check(current() && local.readText() == beforeLocal) { "This recording changed. Reopen Recordings" }
+                }
+            } catch (e: Exception) {
+                throw java.io.IOException("The name was saved on the network folder, but could not be updated here. Reopen Recordings", e)
+            }
+            NetworkMarker.setMetaAt(dir, metaFiles(dir).maxOfOrNull { it.lastModified() } ?: 0L, config.label, infoCrc(dir))
+            return changed
+        }
+    }
+
+    /** Read names changed by another device when Recordings opens, rather than during playback. */
+    fun refreshTitles(
+        publish: (LiveTvRecording, String, () -> Unit) -> Unit = { _, _, commit -> commit() },
+        stillVisible: () -> Boolean,
+    ): Boolean {
+        val config = NetworkFolderStore.config(context) ?: return false
+        val root = NetworkFolderStore.root(context)
+        var changed = false
+        SmbFolder(config).use { folder ->
+            for (dir in root.listFiles().orEmpty().filter { it.isDirectory }) {
+                if (!stillVisible()) break
+                if (isBusy(dir) || NetworkMarker.folder(dir) != config.label) continue
+                val local = File(dir, "info.json")
+                val before = runCatching { local.readText() }.getOrNull() ?: continue
+                val rec = LiveTvRecording.fromJson(runCatching { JSONObject(before) }.getOrNull() ?: continue, dir.absolutePath) ?: continue
+                if (rec.isRecording || rec.id != dir.name) continue
+                val remote = JSONObject(readRemoteInfo(folder, rec.id))
+                if (remote.optString("id") != rec.id || remote.optLong("startedAtMs") != rec.startedAtMs ||
+                    remote.optString("status") != rec.status.name) continue
+                val title = runCatching { RecordingTitles.normalized(remote.getString("title")) }.getOrNull() ?: continue
+                if (title == rec.title) continue
+                // SMB reads stay outside the recorder lock. Only this local commit and its
+                // in-memory publication are serialized with queued keep saves and library loads.
+                publish(rec, title) {
+                    RecordingTitles.rename(rec, title, { local.readText() },
+                        { text, guard -> replaceTitle(dir, text, guard) },
+                        { stillVisible() && NetworkFolderStore.config(context) == config && !isBusy(dir) })
+                    NetworkMarker.setMetaAt(dir, metaFiles(dir).maxOfOrNull { it.lastModified() } ?: 0L, config.label, infoCrc(dir))
+                }
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    private fun readRemoteInfo(folder: SmbFolder, id: String): String {
+        val out = ByteArrayOutputStream()
+        folder.read(remoteDir(id) + "/info.json", 0, MAX_INFO_BYTES + 1L, out)
+        check(out.size() <= MAX_INFO_BYTES) { "The recording details are too large" }
+        return out.toString(Charsets.UTF_8.name())
+    }
+
+    private fun replaceRemoteInfo(folder: SmbFolder, id: String, text: String, beforeCommit: () -> Unit) {
+        val target = remoteDir(id) + "/info.json"
+        val temp = remoteDir(id) + "/.info-rename-" + java.util.UUID.randomUUID() + ".tmp"
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        try {
+            folder.writeBytes(temp, bytes)
+            check(folder.size(temp) == bytes.size.toLong()) { "The network folder did not keep the complete name" }
+            beforeCommit()
+            folder.rename(temp, target, replaceExisting = true)
+        } finally { runCatching { folder.delete(temp) } }
+    }
 
     private fun ensureRemoteDir(folder: SmbFolder, id: String) {
         if (made.add(id)) runCatching { folder.mkdirs(remoteDir(id)) }.onFailure { made.remove(id); throw it }
@@ -681,6 +768,7 @@ internal class RecordingFiles(
         runCatching { LiveTvRecording.fromJson(JSONObject(File(dir, "info.json").readText()), dir.absolutePath) }.getOrNull()
 
     companion object {
+        private const val MAX_INFO_BYTES = 1024 * 1024
         /** The running one (the recordings server asks it for another TV's newest details). */
         @Volatile var current: RecordingFiles? = null
             private set

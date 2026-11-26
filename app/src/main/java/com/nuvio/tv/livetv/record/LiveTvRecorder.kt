@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -387,11 +390,54 @@ class LiveTvRecorder @Inject constructor(
     }
 
     /** Keeps [id] for good (never removed by "Delete recordings after"), or lets it go again. */
+    @Synchronized
     fun setKeepForever(id: String, keep: Boolean) {
         val rec = _recordings.value.firstOrNull { it.id == id && !it.fromOtherTv } ?: return
         val changed = rec.copy(keepForever = keep)
         update(changed)
-        scope.launch { save(changed) }
+        scope.launch {
+            synchronized(this@LiveTvRecorder) {
+                // A rename or another keep choice may have happened while this save waited.
+                _recordings.value.firstOrNull { it.id == id && !it.fromOtherTv }?.let { save(it) }
+            }
+        }
+    }
+
+    /** Saves first, then publishes the new label. Never reports a failed disk/network write as saved. */
+    suspend fun rename(expected: LiveTvRecording, title: String): String? = withContext(Dispatchers.IO) {
+        synchronized(this@LiveTvRecorder) {
+            try {
+                fun current() = _move.value == null && _recordings.value.any {
+                    it.id == expected.id && it.dir == expected.dir && it.startedAtMs == expected.startedAtMs &&
+                        it.title == expected.title && it.status == expected.status && !it.isRecording
+                }
+                val saved = recordingFiles.rename(expected, title, ::current)
+                val renamed = JSONObject(saved).getString("title")
+                _recordings.update { list -> list.map { r ->
+                    if (r.id == expected.id && r.dir == expected.dir && r.startedAtMs == expected.startedAtMs &&
+                        r.title == expected.title && !r.isRecording) r.copy(title = renamed) else r
+                } }
+                null
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { e.message ?: "The recording name could not be saved" }
+        }
+    }
+
+    suspend fun refreshRecordingTitles() = withContext(Dispatchers.IO) {
+        val job = currentCoroutineContext()[Job]
+        val result = runCatching {
+            recordingFiles.refreshTitles(publish = { expected, title, commit ->
+                synchronized(this@LiveTvRecorder) {
+                    commit()
+                    _recordings.update { list -> list.map { r ->
+                        if (r.id == expected.id && r.dir == expected.dir && r.startedAtMs == expected.startedAtMs &&
+                            r.title == expected.title && r.status == expected.status) r.copy(title = title) else r
+                    } }
+                }
+            }) { job?.isActive != false }
+        }
+        currentCoroutineContext().ensureActive()
+        if (result.isFailure) LiveTvNotice.show("Recording names could not be refreshed from the network folder. Try opening Recordings again")
     }
 
     /**
