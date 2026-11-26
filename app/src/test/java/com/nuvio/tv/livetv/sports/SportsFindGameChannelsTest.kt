@@ -31,7 +31,7 @@ class SportsFindGameChannelsTest {
         context.deleteDatabase("livetv_guide2.db")
         db = EpgDatabase(context)
         for ((i, channel) in channels.withIndex()) {
-            db.writableDatabase.execSQL("INSERT INTO chan (ch,gid,sh) VALUES (?,?,0)", arrayOf(channel.key, i + 1))
+            db.writableDatabase.execSQL("INSERT INTO chan (ch,gid,sh) VALUES (?,?,0)", arrayOf<Any>(channel.key, i + 1))
         }
     }
 
@@ -40,7 +40,7 @@ class SportsFindGameChannelsTest {
     private fun insert(channel: Int, title: String, offset: Long) {
         val start = now + offset * hour
         db.writableDatabase.execSQL("INSERT INTO listings (gid,start,stop,title) VALUES (?,?,?,?)",
-            arrayOf(channel, start, start + hour, title))
+            arrayOf<Any>(channel, start, start + hour, title))
     }
 
     private fun find(event: SportsEvent, settings: SportsSettings, other: List<SportsEvent> = emptyList(),
