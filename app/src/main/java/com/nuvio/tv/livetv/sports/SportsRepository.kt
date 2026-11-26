@@ -305,24 +305,65 @@ class SportsRepository @Inject constructor(
     private val minuteTick: StateFlow<Long> = flow { while (true) { emit(System.currentTimeMillis() / 60_000L); delay(60_000L) } }
         .stateIn(scope, SharingStarted.Eagerly, System.currentTimeMillis() / 60_000L)
 
+    private class KnownInputs(val ev: List<SportsEvent>, val extra: List<SportsEvent>)
+
+    /**
+     * Painted copies of [known]'s games, kept while the colours stay the same. Season games
+     * used to be painted again every minute: thousands of new copies a minute, and a new list
+     * each time, which made the Sports pages and the channel search work everything out again.
+     */
+    private object KnownPaint {
+        var version = -1
+        var lastEv: List<SportsEvent>? = null
+        var lastExtra: List<SportsEvent>? = null
+        var painted = java.util.IdentityHashMap<SportsEvent, SportsEvent>()
+        /** Saved games shown as ended because they were live too long ago, by the saved copy. */
+        var ended = java.util.IdentityHashMap<SportsEvent, SportsEvent>()
+        var result: List<SportsEvent>? = null
+    }
+
     val known: StateFlow<List<SportsEvent>> = combine(
         combine(events, scheduleData, tsdbData, aheadData, lookedUp) { ev, s, t, a, lu ->
             val seen = HashSet<String>(ev.size * 2)
             ev.forEach { seen += dedupeKey(it) }
             val extra = (a.values.flatMap { it.events } + s.values.flatMap { it.events } + t.values.flatMap { it.events } + lu.values.flatMap { it.events })
                 .filter { seen.add(dedupeKey(it)) }
-            // Saved schedules can be days old: a game they still call live is over, and one they
-            // still call upcoming that started hours ago is left out (the scoreboard, in `ev`,
-            // has the real result for recent days).
-            ev + SportsStale.fixSaved(extra, System.currentTimeMillis())
+            KnownInputs(ev, extra)
         },
         TeamColors.version,
         minuteTick
-    ) { all, _, _ ->
-        // Games further ahead come from team schedules and season files, which often have no
-        // colours: the same ones as the page's own days and the rest of the app.
-        TeamColors.learnAll(all)
-        TeamColors.paintAll(all)
+    ) { inp, version, _ ->
+        val k = KnownPaint
+        // Saved schedules can be days old: a game they still call live is over, and one they
+        // still call upcoming that started hours ago is left out (the scoreboard, in `ev`,
+        // has the real result for recent days). Checked every minute, by the clock.
+        val now = System.currentTimeMillis()
+        val fresh = k.version != version || k.lastEv !== inp.ev || k.lastExtra !== inp.extra
+        if (k.lastExtra !== inp.extra) k.ended = java.util.IdentityHashMap()
+        // (What SportsStale.fixSaved does, keeping each ended copy so it isn't made again every minute.)
+        val all = ArrayList<SportsEvent>(inp.ev.size + inp.extra.size)
+        all.addAll(inp.ev)
+        for (e in inp.extra) {
+            if (SportsStale.isStalePre(e, now)) continue
+            all += if (SportsStale.isStaleLive(e, now)) k.ended.getOrPut(e) { SportsStale.fix(e, now) } else e
+        }
+        if (fresh) {
+            // Games further ahead come from team schedules and season files, which often have no
+            // colours: the same ones as the page's own days and the rest of the app.
+            TeamColors.learnAll(all)
+            val keep = java.util.IdentityHashMap<SportsEvent, SportsEvent>(all.size * 2)
+            if (k.version == version) for (e in all) {
+                val p = k.painted[e]
+                if (p != null) keep[e] = p
+            }
+            k.painted = keep
+            k.version = version; k.lastEv = inp.ev; k.lastExtra = inp.extra
+        }
+        val out = all.map { e -> k.painted.getOrPut(e) { TeamColors.paint(e) } }
+        // Nothing changed since last minute: the same list, so nothing downstream runs again.
+        val last = k.result
+        if (last != null && last.size == out.size && last.indices.all { last[it] === out[it] }) last
+        else out.also { k.result = it }
     }.flowOn(Dispatchers.Default).stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /**
