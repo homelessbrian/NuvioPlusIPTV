@@ -2106,11 +2106,11 @@ private fun GameScoreColumn(ev: SportsEvent, sides: List<Side>, hideScores: Bool
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TeamLogo(s.team, 22.dp)
                             Spacer(Modifier.width(6.dp))
-                            if (s.onOffense && live && !hideScores) OffensiveMarker(sport, s, 13.sp)
                             Column(Modifier.weight(1f)) {
                                 LiveText(s.rankedName(s.team.abbr.ifBlank { s.team.name }), color = Color.White, size = 13.sp, weight = FontWeight.ExtraBold)
                                 if (sport == Sport.AMERICAN_FOOTBALL && !hideScores) s.record?.let { LiveText(it, size = 9.sp, color = SportsLook.Dim) }
                             }
+                            if (s.onOffense && live && !hideScores) OffensiveMarker(sport, s, 13.sp)
                             if (showScore) LiveText(s.score.orEmpty(), color = Color.White, size = 18.sp, weight = FontWeight.Black)
                         }
                     }
@@ -2138,15 +2138,13 @@ private fun GameScoreColumn(ev: SportsEvent, sides: List<Side>, hideScores: Bool
                     TeamLogo(s.team, 44.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (s.onOffense && live && !hideScores) OffensiveMarker(sport, s, 19.sp)
-                            LiveText(s.rankedName(), color = Color.White, size = 19.sp, weight = FontWeight.Black, maxLines = 1)
-                        }
+                        LiveText(s.rankedName(), color = Color.White, size = 19.sp, weight = FontWeight.Black, maxLines = 1)
                         LiveText(
                             listOfNotNull(s.team.fullName.takeIf { it.isNotBlank() && it != s.team.name }, s.record?.takeIf { !hideScores }).joinToString(" · "),
                             color = Color.White.copy(alpha = 0.72f), size = 11.sp, maxLines = 1
                         )
                     }
+                    if (s.onOffense && live && !hideScores) OffensiveMarker(sport, s, 19.sp)
                     if (showScore) LiveText(s.score.orEmpty(), color = Color.White, size = 40.sp, weight = FontWeight.Black)
                 }
             }
