@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.sentrySettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+internal val Context.sentrySettingsDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "sentry_settings",
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
 )
