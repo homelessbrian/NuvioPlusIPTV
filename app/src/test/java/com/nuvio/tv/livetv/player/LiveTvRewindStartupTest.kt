@@ -181,13 +181,14 @@ class LiveTvRewindStartupTest {
 
     private fun start() {
         val method = LiveTvPlaybackController::class.java.getDeclaredMethod(
-            "startAlwaysBuffer", LiveChannel::class.java, String::class.java).apply { isAccessible = true }
-        assertTrue(method.invoke(controller, channel, channel.url) as Boolean)
+            "startAlwaysBuffer", LiveChannel::class.java, String::class.java,
+            Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
+        assertTrue(method.invoke(controller, channel, channel.url, false, false) as Boolean)
     }
 
     private fun shouldBuffer(): Boolean = LiveTvPlaybackController::class.java.getDeclaredMethod(
-        "shouldBuffer", LiveChannel::class.java, String::class.java).apply { isAccessible = true }
-        .invoke(controller, channel, null) as Boolean
+        "shouldBuffer", LiveChannel::class.java, String::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
+        .invoke(controller, channel, null, false) as Boolean
 
     private fun publishClocklessAt(segmenter: TsSegmenter, elapsedSincePieceOpenedMs: Long) {
         set(segmenter, "pieceStartWall", System.currentTimeMillis() - elapsedSincePieceOpenedMs)

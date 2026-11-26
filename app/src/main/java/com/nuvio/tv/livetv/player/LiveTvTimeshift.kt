@@ -45,7 +45,9 @@ class LiveTvTimeshift(private val context: Context) {
         val kind: Kind,
         val startedAtMs: Long,
         val playUri: Uri,
-        val dir: File
+        val dir: File,
+        /** A continuous live view of this recorder's own TS connection. */
+        val liveTs: DataSource.Factory? = null,
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -53,6 +55,15 @@ class LiveTvTimeshift(private val context: Context) {
     @Volatile var session: Session? = null
         private set
     @Volatile private var recording = false
+    private var liveFeed: LiveTsFeed? = null
+    private var retiringProvider: Job? = null
+    @Synchronized fun pendingLiveRelease(): Job? = retiringProvider?.takeUnless { it.isCompleted }
+    // A replacement may start before a canceled provider read has actually returned.
+    private val fastProvider = kotlinx.coroutines.sync.Mutex()
+    @Volatile var historyAvailable = false
+        private set
+    val liveReaderViable: Boolean get() = synchronized(this) { liveFeed?.bytes?.liveReaderViable == true }
+    @Synchronized fun setLivePaused(paused: Boolean) { liveFeed?.bytes?.setPaused(paused) }
 
     /** Time dropped from the start of an HLS recording (past the time limit). */
     @Volatile var trimmedMs: Long = 0L
@@ -99,23 +110,42 @@ class LiveTvTimeshift(private val context: Context) {
         refreshStream: (suspend () -> StalkerPlayback)? = null,
         policy: StalkerMediaPolicy? = null,
         mimeType: String? = null,
+        fastTs: Boolean = false,
+        fastTsHandoff: Boolean = false,
     ): Session? {
         if (mimeType == StalkerMimeProbe.DASH) return null
         stop()
-        val dir = File(baseDir, System.currentTimeMillis().toString()).apply { mkdirs() }
-            .takeIf { it.exists() } ?: File(context.cacheDir, "timeshift/" + System.currentTimeMillis()).apply { mkdirs() }
+        val previousProvider = pendingLiveRelease()
         val isHls = mimeType == StalkerMimeProbe.HLS || url.lowercase().substringBefore('?').endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true)
+        val shared = fastTs && reconnect && !isHls
+        // For a shared tune, even probing a slow drive must not delay the first live bytes.
+        val dir = if (shared) File(baseDir, java.util.UUID.randomUUID().toString())
+        else File(baseDir, System.currentTimeMillis().toString()).apply { mkdirs() }
+            .takeIf { it.exists() } ?: File(context.cacheDir, "timeshift/" + System.currentTimeMillis()).apply { mkdirs() }
         val now = System.currentTimeMillis()
         trimmedMs = 0L
         savedMs = 0L
         firstBatchMs = 0L
         recording = true
+        historyAvailable = true
         val s = if (isHls) {
             val local = File(dir, "index.m3u8")
-            Session(Kind.HLS, now, Uri.fromFile(local), dir).also { job = scope.launch { recordHls(url, headers, dir, local, keepMinutes ?: 24 * 60, live = reconnect, leadMs = leadMs, audioLanguage = audioLanguage, label = label, refreshStream = refreshStream, initialPolicy = policy) } }
+            Session(Kind.HLS, now, Uri.fromFile(local), dir).also {
+                job = scope.launch {
+                    previousProvider?.join()
+                    recordHls(url, headers, dir, local, keepMinutes ?: 24 * 60, live = reconnect, leadMs = leadMs, audioLanguage = audioLanguage, label = label, refreshStream = refreshStream, initialPolicy = policy)
+                }
+            }
         } else {
             val local = File(dir, "index.m3u8")
-            Session(Kind.TS, now, Uri.fromFile(local), dir).also { job = scope.launch { recordTs(url, headers, dir, keepMinutes, reconnect, label, refreshStream, policy) } }
+            val feed = if (shared) LiveTsFeed() else null
+            liveFeed = feed
+            Session(Kind.TS, now, Uri.fromFile(local), dir, feed).also {
+                job = scope.launch {
+                    previousProvider?.join()
+                    recordTs(url, headers, dir, keepMinutes, reconnect, label, refreshStream, policy, feed, fastTsHandoff)
+                }
+            }
         }
         session = s
         ACTIVE += s.dir
@@ -125,9 +155,25 @@ class LiveTvTimeshift(private val context: Context) {
     /** Stops recording and deletes it. */
     @Synchronized fun stop() {
         recording = false
-        job?.cancel()
+        historyAvailable = false
+        val previous = job
+        val fast = liveFeed != null
+        previous?.cancel()
+        liveFeed?.let { feed ->
+            feed.retire()?.let { connection ->
+                retiringProvider = feed.providerReleased
+                scope.launch { runCatching { connection.disconnect() } }
+            }
+        }
+        liveFeed = null
         job = null
-        session?.dir?.let { d -> ACTIVE -= d; scope.launch { runCatching { d.deleteRecursively() } } }
+        session?.dir?.let { d ->
+            if (!fast) ACTIVE -= d
+            scope.launch {
+                if (fast) { previous?.join(); ACTIVE -= d }
+                runCatching { d.deleteRecursively() }
+            }
+        }
         session = null
         trimmedMs = 0L
         savedMs = 0L
@@ -143,7 +189,7 @@ class LiveTvTimeshift(private val context: Context) {
      */
     fun cleanLeftovers(dirs: List<File>, olderThanMs: Long = 0L) {
         scope.launch {
-            val keep = ACTIVE.toSet()
+            val keep = synchronized(ACTIVE) { ACTIVE.toSet() }
             runCatching {
                 dirs.distinct().flatMap { it.listFiles()?.toList().orEmpty() }.forEach { f: File ->
                     if (f in keep) return@forEach
@@ -182,25 +228,34 @@ class LiveTvTimeshift(private val context: Context) {
         label: String = "Pause buffer",
         refreshStream: (suspend () -> StalkerPlayback)? = null,
         initialPolicy: StalkerMediaPolicy? = null,
+        feed: LiveTsFeed? = null,
+        fastTsHandoff: Boolean = false,
     ) {
         val writer = checkNotNull(currentCoroutineContext()[Job])
         // Pieces past the time limit are dropped as new ones come in (it records on, behind you).
-        val segmenter = TsSegmenter(dir, keepSec = keepMinutes?.let { it * 60.0 }) { _ -> }
+        val segmenter = TsSegmenter(dir, keepSec = keepMinutes?.let { it * 60.0 }, sharedLive = feed != null)
         val report = com.nuvio.tv.livetv.model.LiveTvLoadReport
         val began = System.currentTimeMillis()
-        // The player has only just let go of its connection: give the provider a moment, or
-        // accounts with one connection can refuse (or later cut) this one.
-        delay(2_500)
         var attempt = 0
         var policy = initialPolicy
+        var ownsProvider = false
+        val archive = feed?.let {
+            CoroutineScope(currentCoroutineContext()).launch {
+                saveLiveHistory(writer, dir, feed, segmenter, keepMinutes)
+            }
+        }
         try {
+            // Only a handoff from an existing player needs the provider's one-slot cooldown.
+            if (feed == null || fastTsHandoff) delay(2_500)
+            feed?.firstReader?.await()
+            if (feed != null) { fastProvider.lock(); ownsProvider = true }
             // Keeps going until you go live or change channel: a dropped connection is opened
             // again, with the gap marked, instead of ending the buffer (which sent you back to
             // live after half a minute or so).
             while (writer.isActive && recording && ownsWriter(writer, dir)) {
                 checkWriter(writer, dir)
                 if (attempt > 0) {
-                    segmenter.reconnected()
+                    if (feed == null) segmenter.reconnected()
                     delay((attempt * 2_000L).coerceAtMost(8_000L))
                 }
                 attempt++
@@ -214,7 +269,10 @@ class LiveTvTimeshift(private val context: Context) {
                         throw java.io.IOException("The Stalker stream changed its buffer format. Retry playback.")
                     }
                     if (fresh != null) { if (policy !== fresh.policy) policy?.retire(); policy = fresh.policy }
-                    val c = LiveHttp.open(fresh?.url ?: url, fresh?.headers ?: headers, 20_000, policy)
+                    val address = fresh?.url ?: url
+                    val requestHeaders = fresh?.headers ?: headers
+                    val c = if (feed == null) LiveHttp.open(address, requestHeaders, 20_000, policy)
+                    else LiveHttp.openObserved(address, requestHeaders, 20_000, policy, feed::opening)
                     try {
                         val code = c.responseCode
                         checkWriter(writer, dir)
@@ -228,22 +286,26 @@ class LiveTvTimeshift(private val context: Context) {
                                 checkWriter(writer, dir)
                                 if (n < 0) break
                                 bytes += n
-                                segmenter.write(buf, 0, n)
-                                withWriter(writer, dir) {
-                                    trimmedMs = (segmenter.trimmedSec * 1000).toLong()
-                                    savedMs = (segmenter.totalSec * 1000).toLong()
+                                if (feed != null) feed.bytes.append(buf, n) else {
+                                    segmenter.write(buf, 0, n)
+                                    publishProgress(writer, dir, segmenter)
                                 }
                             }
                             if (!recording) end = "stopped"
                             end
                         }
-                    } finally { c.disconnect() }
+                    } finally { c.disconnect(); feed?.released(c) }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     writer.ensureActive()
-                    if (refreshStream != null) "Stalker stream unavailable" else e.message ?: e.javaClass.simpleName
+                    when {
+                        refreshStream != null -> "Stalker stream unavailable"
+                        feed != null -> e.javaClass.simpleName
+                        else -> e.message ?: e.javaClass.simpleName
+                    }
                 }
+                feed?.bytes?.disconnected()
                 if (!recording) break
                 // A replay that came in and ended: it's all saved (no reconnecting, which would
                 // start the replay again from its beginning).
@@ -257,15 +319,59 @@ class LiveTvTimeshift(private val context: Context) {
                 if (bytes > 0) attempt = 1
             }
         } finally {
-            report.add("$label finished after ${(System.currentTimeMillis() - began) / 1000}s (${segmenter.totalSec.toInt()}s recorded)")
+            if (ownsProvider) fastProvider.unlock()
+            feed?.providerReleased?.complete(Unit)
             val complete = writer.isActive && ownsWriter(writer, dir)
-            runCatching { if (complete) segmenter.finish(ended = true) else segmenter.discard() }
+            if (feed != null) {
+                if (complete) feed.bytes.finish() else feed.bytes.stop()
+                archive?.join()
+            } else runCatching { if (complete) segmenter.finish(ended = true) else segmenter.discard() }
+            report.add("$label finished after ${(System.currentTimeMillis() - began) / 1000}s (${segmenter.totalSec.toInt()}s recorded)")
             synchronized(this) {
                 if (job === writer && session?.dir == dir) {
-                    if (complete) savedMs = (segmenter.totalSec * 1000).toLong()
+                    if (complete && historyAvailable) savedMs = (segmenter.totalSec * 1000).toLong()
                     recording = false
                 }
             }
+        }
+    }
+
+    private fun publishProgress(writer: Job, dir: File, segmenter: TsSegmenter) = withWriter(writer, dir) {
+        trimmedMs = (segmenter.trimmedSec * 1000).toLong()
+        savedMs = (segmenter.totalSec * 1000).toLong()
+    }
+
+    private fun saveLiveHistory(writer: Job, dir: File, feed: LiveTsFeed, segmenter: TsSegmenter, minutes: Int?) {
+        val buf = ByteArray(64 * 1024)
+        var position = 0L
+        var lastBoundary = -1L
+        try {
+            if ((!dir.mkdirs() && !dir.isDirectory) || dir.usableSpace <= ((minutes ?: 0) * 35L + 300L) * 1024 * 1024) {
+                throw java.io.IOException("Rewind storage unavailable")
+            }
+            while (true) {
+                val n = feed.bytes.readHistory(position, buf, lastBoundary)
+                checkWriter(writer, dir)
+                when (n) {
+                    -1 -> { segmenter.finish(); publishProgress(writer, dir, segmenter); return }
+                    LiveTsBuffer.DISCONTINUITY -> { segmenter.reconnected(); lastBoundary = position }
+                    else -> { segmenter.write(buf, 0, n); position += n }
+                }
+                publishProgress(writer, dir, segmenter)
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            synchronized(this) {
+                if (writer.isActive && job === writer && session?.dir == dir) {
+                    historyAvailable = false
+                    savedMs = 0L
+                    com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: storage could not keep up or save history; live connection continues")
+                }
+            }
+        } finally {
+            feed.bytes.releaseHistory()
+            runCatching { segmenter.discard() }
         }
     }
 

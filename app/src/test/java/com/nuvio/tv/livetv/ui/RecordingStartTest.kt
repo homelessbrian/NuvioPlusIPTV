@@ -17,9 +17,10 @@ import com.nuvio.tv.livetv.record.LiveTvRecording
 import com.nuvio.tv.livetv.record.LiveTvRecordingScheduler
 import io.mockk.every
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.mockk
 import io.mockk.verify
-import io.mockk.verifyOrder
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
@@ -55,11 +56,11 @@ class RecordingStartTest {
             runCurrent()
             assertTrue(prepared.await(5, TimeUnit.SECONDS))
             assertTrue(offMain.get())
-            verify(exactly = 0) { h.playback.handOverForRecording() }
+            coVerify(exactly = 0) { h.playback.handOverForRecording() }
             assertEquals(1, h.messages.size)
             release.countDown()
             until { h.messages.size == 2 }
-            verifyOrder {
+            coVerifyOrder {
                 h.recorder.prepareStorage(any())
                 h.playback.handOverForRecording()
                 h.recorder.start(channel = h.channel, url = any(), title = any(), episode = any(), description = any(),
@@ -75,7 +76,7 @@ class RecordingStartTest {
         try {
             h.viewModel.startRecording(h.channel, null, h.messages::add)
             until { h.messages.size == 2 }
-            verify(exactly = 0) { h.playback.handOverForRecording() }
+            coVerify(exactly = 0) { h.playback.handOverForRecording() }
             assertTrue(h.messages.last().contains("USB unavailable"))
         } finally { h.store.clear() }
     }
@@ -98,7 +99,7 @@ class RecordingStartTest {
             h.store.clear()
             release.countDown()
             until { discarded.get() }
-            verify(exactly = 0) { h.playback.handOverForRecording() }
+            coVerify(exactly = 0) { h.playback.handOverForRecording() }
             assertEquals(1, h.messages.size)
         } finally { release.countDown(); h.store.clear() }
     }
@@ -121,7 +122,7 @@ class RecordingStartTest {
             h.store.clear()
             release.countDown()
             until { finished.get() }
-            verify(exactly = 1) { h.playback.handOverForRecording() }
+            coVerify(exactly = 1) { h.playback.handOverForRecording() }
             verify(exactly = 0) { h.playback.playFromRecording(any()) }
             verify(exactly = 0) { h.playback.resumeAfterRecordingFailure() }
             assertEquals(1, h.messages.size)

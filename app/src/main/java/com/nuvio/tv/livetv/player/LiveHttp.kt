@@ -11,7 +11,13 @@ import com.nuvio.tv.livetv.stalker.StalkerMediaPolicy
  */
 object LiveHttp {
     /** The connection after the last redirect (its [HttpURLConnection.getURL] is where it ended up). */
-    fun open(url: String, headers: Map<String, String>, readTimeoutMs: Int = 20_000, policy: StalkerMediaPolicy? = null): HttpURLConnection {
+    fun open(url: String, headers: Map<String, String>, readTimeoutMs: Int = 20_000, policy: StalkerMediaPolicy? = null): HttpURLConnection =
+        openObserved(url, headers, readTimeoutMs, policy, null)
+
+    internal fun openObserved(
+        url: String, headers: Map<String, String>, readTimeoutMs: Int, policy: StalkerMediaPolicy?,
+        opening: ((HttpURLConnection) -> Unit)?,
+    ): HttpURLConnection {
         var current = url
         var secureContext = URL(url).protocol.equals("https", true)
         var hops = 0
@@ -30,12 +36,19 @@ object LiveHttp {
                 c.setRequestProperty("User-Agent", com.nuvio.tv.livetv.data.LiveTvRepository.DEFAULT_UA)
             }
             val code = try {
+                opening?.invoke(c)
                 c.responseCode
             } catch (notFound: java.net.UnknownHostException) {
-                if (ownLookup) throw notFound
+                if (ownLookup) {
+                    if (opening != null) c.disconnect()
+                    throw notFound
+                }
                 c.disconnect()
                 ownLookup = true
                 continue
+            } catch (failure: java.io.IOException) {
+                if (opening != null) c.disconnect()
+                throw failure
             }
             if (code in setOf(301, 302, 303, 307, 308) && hops < 8) {
                 val location = c.getHeaderField("Location")

@@ -175,26 +175,68 @@ class LiveTvPlaybackController @Inject constructor(
     @Volatile private var bufferStartedAt = 0L
     /** A channel whose buffer kept failing: played directly until another channel is picked. */
     @Volatile private var bufferFailedKey: String? = null
+    private val tuneReport = FastTuneReport()
+    private var tuneMediaId: String? = null
+    /** Non-null only while the player is reading the shared TS input rather than its saved pieces. */
+    private var fastLive: LiveTvTimeshift.Session? = null
+    private var fastPausePosition: Long? = null
+    private var fastWasPaused = false
+    private var historyMonitor: Job? = null
+    private var pendingProviderTune: Job? = null
 
-    private fun shouldBuffer(channel: LiveChannel, catchupTitle: String?): Boolean =
+    private fun fastTsCandidate(channel: LiveChannel, url: String): Boolean =
+        channel.drm == null &&
+            channel.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
+            channel.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID &&
+            (url.startsWith("http://", true) || url.startsWith("https://", true)) &&
+            !url.contains("m3u8", true) && !url.substringBefore('?').endsWith(".mpd", true) &&
+            when (forcedMime ?: stalkerMimeType) {
+                MimeTypes.VIDEO_MP2T -> true
+                null -> url.substringBefore('?').endsWith(".ts", true) ||
+                    url.substringAfter('?', "").substringBefore('#').split('&').any { it.equals("output=ts", true) }
+                else -> false
+            }
+
+    private fun shouldBuffer(channel: LiveChannel, catchupTitle: String?, fastTs: Boolean): Boolean =
         rewindAlways && timeshiftEnabled && catchupTitle == null && channel.drm == null &&
             stalkerMimeType != StalkerMimeProbe.DASH &&
-            com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.value &&
-            channel.key != bufferFailedKey && timeshift.hasRoomFor(timeshiftMinutes)
+            (fastTs || com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.value) &&
+            channel.key != bufferFailedKey && (fastTs || timeshift.hasRoomFor(timeshiftMinutes))
 
     /**
      * Rewind anytime: the channel is recorded from the moment it starts, and you watch from the
      * recording a few seconds behind live, so you can skip back at any time (up to the buffer
      * length) without having paused. One connection to the provider, as always.
      */
-    private fun startAlwaysBuffer(channel: LiveChannel, url: String): Boolean {
+    private fun startAlwaysBuffer(channel: LiveChannel, url: String, fastTs: Boolean, handoff: Boolean): Boolean {
         val p = _player ?: return false
-        val session = timeshift.start(url, channel.headers, timeshiftMinutes, refreshStream = bufferResolver(channel), policy = stalkerMediaPolicy, mimeType = stalkerMimeType) ?: return false
+        val session = timeshift.start(url, channel.headers, timeshiftMinutes, refreshStream = bufferResolver(channel),
+            policy = stalkerMediaPolicy, mimeType = stalkerMimeType, fastTs = fastTs, fastTsHandoff = handoff) ?: return false
         alwaysBuffer = true
         bufferStartedAt = System.currentTimeMillis()
         shiftPrepared = false
         _shiftStartedAt.value = session.startedAtMs
         shiftJob?.cancel()
+        session.liveTs?.let { factory ->
+            fastLive = session
+            val id = tuneMediaId
+            val item = MediaItem.Builder().setUri("rewind://live/stream.ts")
+                .setMediaId(requireNotNull(id)).setMimeType(MimeTypes.VIDEO_MP2T).build()
+            adaptiveBuffer.sourceChanged()
+            val source = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(
+                factory, com.nuvio.tv.livetv.multiview.liveTsExtractors()
+            ).createMediaSource(item)
+            p.setMediaSource(source)
+            p.prepare()
+            p.playWhenReady = true
+            historyMonitor = scope.launch {
+                while (timeshift.session === session && timeshift.historyAvailable && timeshift.isRecording) {
+                    if (hasFastHistory()) { tuneReport.historyReady(id); break }
+                    delay(200)
+                }
+            }
+            return true
+        }
         shiftJob = scope.launch {
             var waited = 0
             val f = java.io.File(session.playUri.path ?: "")
@@ -204,7 +246,7 @@ class LiveTvPlaybackController @Inject constructor(
             fun ready() = f.exists() && f.length() > 0 &&
                 (session.kind != LiveTvTimeshift.Kind.TS || timeshift.savedMs >= LOCAL_LIVE_OFFSET_MS)
             while (waited < 15_000 && !ready()) { delay(200); waited += 200 }
-            if (timeshift.session != session) return@launch
+            if (timeshift.session !== session || _player !== p) return@launch
             if (!ready()) { bufferFailed(); return@launch }
             p.setMediaSource(localRecordingSource(session.playUri))
             p.prepare()
@@ -236,7 +278,7 @@ class LiveTvPlaybackController @Inject constructor(
         scope.launch {
             com.nuvio.tv.livetv.ui.LiveTvFullscreen.active.collect { full ->
                 val ch = currentChannel ?: return@collect
-                if (!full || !rewindAlways || _shiftStartedAt.value != null || _recordingPlayback.value != null) return@collect
+                if (!full || !rewindAlways || fastLive != null || _shiftStartedAt.value != null || _recordingPlayback.value != null) return@collect
                 if (_state.value.catchupTitle != null || _player == null) return@collect
                 goLiveFresh()
             }
@@ -271,6 +313,7 @@ class LiveTvPlaybackController @Inject constructor(
     private fun reloadShiftAt(positionMs: Long, why: String) {
         val p = _player ?: return
         val session = timeshift.session ?: return
+        val absolutePosition = timeshift.trimmedMs + positionMs
         shiftReloads++
         com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: $why; picking up again")
         shiftJob?.cancel()
@@ -279,7 +322,8 @@ class LiveTvPlaybackController @Inject constructor(
             if (timeshift.session != session) return@launch
             // Never below what's actually still in the buffer (older parts may have been
             // trimmed since): a position earlier than that would just fail the same way again.
-            val startAt = positionMs.coerceAtLeast(timeshift.trimmedMs)
+            val startAt = if (session.liveTs != null) (absolutePosition - timeshift.trimmedMs).coerceAtLeast(0L)
+                else positionMs.coerceAtLeast(timeshift.trimmedMs)
             shiftStartPending = startAt == 0L
             p.setMediaSource(localRecordingSource(session.playUri), startAt)
             p.prepare()
@@ -303,18 +347,87 @@ class LiveTvPlaybackController @Inject constructor(
     fun shiftPositionWallMs(): Long? {
         val start = _shiftStartedAt.value ?: return null
         val p = _player ?: return start
+        if (fastLive != null) return start + (fastPausePosition ?: p.currentPosition.coerceAtLeast(0L))
         return start + timeshift.trimmedMs + if (shiftPrepared) p.currentPosition.coerceAtLeast(0) else 0L
     }
 
     /** Seek thumbnails: the rewind buffer's list of pieces on this box, while playing from it. */
     val shiftPlaylistFile: java.io.File?
         get() {
-            if (_shiftStartedAt.value == null || !shiftPrepared) return null
+            if (_shiftStartedAt.value == null || !shiftCanSeek()) return null
             return timeshift.session?.playUri?.path?.let { java.io.File(it) }?.takeIf { it.exists() }
         }
 
     /** Skipping back and forward works on every recording (TS ones are saved in pieces too now). */
-    fun shiftCanSeek(): Boolean = (timeshift.session != null && shiftPrepared) || _recordingPlayback.value != null || _ownTimeline.value
+    fun shiftCanSeek(): Boolean = if (fastLive != null) hasFastHistory()
+        else (timeshift.session != null && shiftPrepared) || _recordingPlayback.value != null || _ownTimeline.value
+
+    private fun hasFastHistory(): Boolean =
+        timeshift.historyAvailable && timeshift.savedMs - timeshift.trimmedMs >= LOCAL_LIVE_OFFSET_MS
+
+    /** Switch only in response to seeking or resuming a pause the forward reader can no longer serve. */
+    private fun playFastHistory(session: LiveTvTimeshift.Session, positionMs: Long, play: Boolean) {
+        val p = _player ?: return
+        if (fastLive !== session || timeshift.session !== session) return
+        val trimmed = timeshift.trimmedMs
+        val position = positionMs.coerceIn(trimmed, timeshift.savedMs.coerceAtLeast(trimmed)) - trimmed
+        timeshift.setLivePaused(true)
+        fastLive = null
+        fastPausePosition = null
+        shiftStartPending = position == 0L
+        shiftPrepared = true
+        p.setMediaSource(localRecordingSource(session.playUri), position)
+        p.prepare()
+        p.playWhenReady = play
+    }
+
+    private fun pauseFastLive(p: ExoPlayer) {
+        shiftJob?.cancel()
+        fastWasPaused = true
+        if (fastPausePosition == null) fastPausePosition = p.currentPosition.coerceAtLeast(0L)
+        p.pause()
+        _state.value = _state.value.copy(userPaused = true, isBuffering = false)
+        timeshift.setLivePaused(true)
+    }
+
+    private fun resumeFastLive(session: LiveTvTimeshift.Session, p: ExoPlayer) {
+        val position = fastPausePosition ?: p.currentPosition.coerceAtLeast(0L)
+        if (timeshift.liveReaderViable && p.playerError == null && p.playbackState != Player.STATE_ENDED) {
+            timeshift.setLivePaused(false)
+            fastPausePosition = null
+            p.play()
+            return
+        }
+        shiftJob?.cancel()
+        shiftJob = scope.launch {
+            _state.value = _state.value.copy(isBuffering = true)
+            var waited = 0
+            fun canResume() = hasFastHistory() && timeshift.savedMs >= position + HISTORY_RESUME_LEAD_MS
+            while (timeshift.historyAvailable && timeshift.isRecording && !canResume() && waited < 15_000) {
+                delay(200); waited += 200
+            }
+            if (_player !== p || timeshift.session !== session || fastLive !== session) return@launch
+            if (canResume()) playFastHistory(session, position, true)
+            else bufferFailed()
+        }
+    }
+
+    /** Analytics events carry the originating media timeline even when a newer tune uses the same player. */
+    private fun onFastSourceEnded(id: String?) {
+        val session = fastLive ?: return
+        if (id == null || tuneMediaId != id || fastPausePosition != null) return
+        scope.launch {
+            // Leave the player's callback batch before preparing a replacement source.
+            kotlinx.coroutines.yield()
+            if (fastLive === session && timeshift.session === session && tuneMediaId == id && fastPausePosition == null) {
+                val p = _player ?: return@launch
+                if (fastWasPaused && timeshift.historyAvailable) {
+                    fastPausePosition = p.currentPosition.coerceAtLeast(0L)
+                    resumeFastLive(session, p)
+                } else bufferFailed()
+            }
+        }
+    }
 
     // ---------------------------------------------------------------- a sports addon game's own timeline
 
@@ -443,11 +556,13 @@ class LiveTvPlaybackController @Inject constructor(
     val recordingStarting: StateFlow<Boolean> = _recordingStarting.asStateFlow()
 
     /** Lets go of the provider connection, so a recording of this channel can use it. */
-    fun handOverForRecording() {
+    suspend fun handOverForRecording() {
         val p = _player ?: return
-        if (_shiftStartedAt.value != null) stopShift()
+        pendingProviderTune?.cancel()
+        if (fastLive != null || _shiftStartedAt.value != null) stopShift()
         reconnectJob?.cancel()
         p.stop()
+        timeshift.pendingLiveRelease()?.join()
     }
 
     /** The live link the player is using for [channel] (its own link if something else is on). */
@@ -631,6 +746,7 @@ class LiveTvPlaybackController @Inject constructor(
      */
     fun pauseLive() {
         val p = _player ?: return
+        if (fastLive != null) { pauseFastLive(p); return }
         if (_recordingPlayback.value != null) { com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: paused a saved recording"); p.pause(); return }
         val ch = currentChannel
         if (_shiftStartedAt.value != null) { com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Pause buffer: paused again inside the buffer"); p.pause(); return }
@@ -752,12 +868,30 @@ class LiveTvPlaybackController @Inject constructor(
     fun shiftSeekBy(deltaMs: Long) {
         val p = _player ?: return
         if (!shiftCanSeek()) return
+        fastLive?.let { session ->
+            val position = fastPausePosition ?: p.currentPosition
+            if (deltaMs < 0 || fastPausePosition != null) {
+                shiftJob?.cancel()
+                playFastHistory(session, (position + deltaMs).coerceAtMost(timeshift.savedMs - HISTORY_RESUME_LEAD_MS), p.playWhenReady)
+            }
+            return
+        }
         val max = if (p.duration > 0) p.duration - 3_000 else p.currentPosition
         p.seekTo((p.currentPosition + deltaMs).coerceIn(0L, max.coerceAtLeast(0L)))
     }
 
     /** Go live: drop the recording and play the channel live again. */
     fun goLive() {
+        fastLive?.let { session ->
+            val p = _player ?: return
+            val livePosition = (timeshift.savedMs - LOCAL_LIVE_OFFSET_MS).coerceAtLeast(0L)
+            if (fastWasPaused && hasFastHistory() && livePosition > (fastPausePosition ?: p.currentPosition)) {
+                shiftJob?.cancel()
+                playFastHistory(session, livePosition, true)
+            } else if (fastPausePosition != null || p.playerError != null) resumeFastLive(session, p)
+            else p.play()
+            return
+        }
         // A sports addon game's own rewind window: back to its newest part.
         if (_ownTimeline.value) { _player?.seekToDefaultPosition(); _player?.play(); return }
         // Rewind anytime: back to the newest part of the buffer (it keeps your rewind history).
@@ -777,6 +911,11 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private fun stopShift() {
+        historyMonitor?.cancel()
+        historyMonitor = null
+        fastLive = null
+        fastPausePosition = null
+        fastWasPaused = false
         alwaysBuffer = false
         shiftStartPending = false
         shiftReloads = 0
@@ -889,6 +1028,8 @@ class LiveTvPlaybackController @Inject constructor(
         /** The caller sets the player's source itself right after (a recording from Recordings). */
         sourceLater: Boolean = false,
     ) {
+        pendingProviderTune?.cancel()
+        pendingProviderTune = null
         if (currentChannel?.key != channel.key) adaptiveBuffer.sourceChanged(newChannel = true)
         if (stalkerStream == null && overrideUrl == null && catchupTitle == null && channel.stalkerRef != null &&
             currentChannel?.key == channel.key && activeStalkerRef == channel.stalkerRef && _state.value.error == null &&
@@ -961,6 +1102,35 @@ class LiveTvPlaybackController @Inject constructor(
         reconnectAttempt: Int = 0,
         sourceLater: Boolean = false,
     ) {
+        val requestedUrl = overrideUrl ?: channel.url.let { u -> if (channel.key in tsInstead) tsLinkFor(u) ?: u else u }
+        // Fullscreen can claim the active preview without replacing its decoder or its upstream response.
+        if (rewindAlways && timeshiftEnabled && timeshift.session?.liveTs != null && currentChannel?.key == channel.key && currentUrl == requestedUrl &&
+            catchupTitle == null && !sourceLater && reconnectAttempt == 0 && _state.value.error == null &&
+            _player?.playbackState?.let { it != Player.STATE_IDLE && it != Player.STATE_ENDED } == true
+        ) return
+        val directHandoff = currentChannel?.sourceId == channel.sourceId && _shiftStartedAt.value == null &&
+            _recordingPlayback.value == null && _player?.playbackState?.let { it != Player.STATE_IDLE } == true
+        if (timeshift.session?.liveTs != null) {
+            _player?.stop()
+            stopShift()
+        }
+        val retiring = timeshift.pendingLiveRelease()
+        if (!sourceLater && retiring?.isActive == true) {
+            // An HTTP disconnect can block. The player stays responsive while its previous
+            // provider socket closes. The next tune, Stop or release cancels this request.
+            _state.value = LivePlaybackState(channelKey = channel.key, isBuffering = true, catchupTitle = catchupTitle)
+            reconnectJob?.cancel()
+            _player?.stop()
+            val generation = stalkerGeneration
+            pendingProviderTune = scope.launch {
+                retiring.join()
+                if (generation != stalkerGeneration || appInBackground) return@launch
+                pendingProviderTune = null
+                playResolved(channel, overrideUrl, catchupTitle, fallback, fallbacks, catchupStartMs,
+                    catchupLeadMs, catchupPrimaryUrl, catchupExpectWallMs, previousChannelKey, reconnectAttempt, sourceLater)
+            }
+            return
+        }
         // Something chosen to play (back from the background through a launcher row, say):
         // that wins over picking up what was on before.
         resumeAfterBackground = null
@@ -971,7 +1141,7 @@ class LiveTvPlaybackController @Inject constructor(
         savedRecordingId = null
         savedRecordingPlaylist = null
         _ownTimeline.value = false
-        if (_shiftStartedAt.value != null) stopShift()
+        if (fastLive != null || _shiftStartedAt.value != null) stopShift()
         if (_recordingPlayback.value != null) { _recordingPlayback.value = null; shiftJob?.cancel() }
         archiveStartWallMs = if (catchupTitle != null) catchupStartMs else null
         archiveWallMapped = false
@@ -991,7 +1161,7 @@ class LiveTvPlaybackController @Inject constructor(
             captionWatch?.cancel()
         }
         // A channel whose HLS playlist couldn't be read earlier: its TS link instead.
-        val url = overrideUrl ?: channel.url.let { u -> if (channel.key in tsInstead) tsLinkFor(u) ?: u else u }
+        val url = requestedUrl
         if (previousChannelKey != channel.key || currentUrl != url) {
             forcedMime = stalkerMimeType
             formatGuess = 0
@@ -1050,9 +1220,14 @@ class LiveTvPlaybackController @Inject constructor(
         if (catchupTitle == null) markStarting(channel.key)
         if (bufferFailedKey != null && bufferFailedKey != channel.key) bufferFailedKey = null
         // Rewind anytime (full screen): play through the rolling buffer instead.
-        if (shouldBuffer(channel, catchupTitle)) {
+        val fastTs = com.nuvio.tv.BuildConfig.FAST_TS_REWIND && !sourceLater &&
+            catchupTitle == null && fastTsCandidate(channel, url)
+        val buffer = shouldBuffer(channel, catchupTitle, fastTs)
+        tuneReport.clear()
+        tuneMediaId = if (fastTs) tuneReport.start(if (buffer) "shared" else "direct") else null
+        if (buffer) {
             p.stop()
-            if (startAlwaysBuffer(channel, url)) { p.playWhenReady = true; return }
+            if (startAlwaysBuffer(channel, url, fastTs, directHandoff)) { p.playWhenReady = true; return }
         }
         // A TS catch-up replay: saved while it plays, for instant skipping.
         if (catchupTitle != null && catchupCache && channel.drm == null &&
@@ -1240,6 +1415,10 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     fun stop() {
+        pendingProviderTune?.cancel()
+        pendingProviderTune = null
+        tuneReport.clear()
+        tuneMediaId = null
         adaptiveBuffer.sourceChanged(newChannel = true)
         stalkerMediaPolicy?.retire()
         stalkerMediaPolicy = null
@@ -1300,7 +1479,14 @@ class LiveTvPlaybackController @Inject constructor(
             checkRecordingStall(p, lastProgressAt)
             return
         }
-        if (_shiftStartedAt.value != null || _recordingPlayback.value != null) { lastProgressAt = android.os.SystemClock.elapsedRealtime(); return }
+        if (fastLive == null && timeshift.session?.liveTs != null && !timeshift.historyAvailable && p.playWhenReady) {
+            bufferFailed()
+            return
+        }
+        if (fastLive != null && !timeshift.historyAvailable) _shiftStartedAt.value = null
+        if ((_shiftStartedAt.value != null && fastLive == null) || _recordingPlayback.value != null) {
+            lastProgressAt = android.os.SystemClock.elapsedRealtime(); return
+        }
         val now = android.os.SystemClock.elapsedRealtime()
         val ch = currentChannel
         // Paused, in the background, nothing playing, or already showing an error: not a stall.
@@ -1329,6 +1515,7 @@ class LiveTvPlaybackController @Inject constructor(
         if (stillLoading && slowStarter() && now - lastProgressAt < STALL_MS + SLOW_START_EXTRA_MS) return
         if (now - lastProgressAt < STALL_MS || !autoReconnect) return
         lastProgressAt = now
+        if (fastLive != null) { bufferFailed(); return }
         val archive = _state.value.catchupTitle != null
         // A catch-up that never started (stuck on "Loading…" with no error): some panels answer
         // a form of catch-up link they don't really support with an empty stream instead of an
@@ -1531,6 +1718,11 @@ class LiveTvPlaybackController @Inject constructor(
 
     fun togglePause() {
         val p = _player ?: return
+        fastLive?.let { session ->
+            if ((p.playWhenReady && fastPausePosition == null) || shiftJob?.isActive == true) pauseFastLive(p)
+            else resumeFastLive(session, p)
+            return
+        }
         when {
             _shiftStartedAt.value != null -> if (p.isPlaying) p.pause() else resumeShift()
             _recordingPlayback.value != null -> if (p.isPlaying) p.pause() else p.play()
@@ -1940,6 +2132,29 @@ class LiveTvPlaybackController @Inject constructor(
                 addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
                     private var droppedTotal = 0L
                     private var lastReportAt = 0L
+                    private fun eventId(event: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime): String? {
+                        if (tuneMediaId == null || event.windowIndex !in 0 until event.timeline.windowCount) return null
+                        return event.timeline.getWindow(event.windowIndex, androidx.media3.common.Timeline.Window()).mediaItem.mediaId
+                    }
+                    override fun onRenderedFirstFrame(
+                        eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                        output: Any, renderTimeMs: Long,
+                    ) {
+                        tuneReport.firstFrame(eventId(eventTime))
+                    }
+                    override fun onPlaybackStateChanged(
+                        eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                        state: Int,
+                    ) {
+                        if (state == Player.STATE_BUFFERING && fastPausePosition == null) tuneReport.buffering(eventId(eventTime))
+                        if (state == Player.STATE_ENDED) onFastSourceEnded(eventId(eventTime))
+                    }
+                    override fun onPlayerError(
+                        eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                        error: PlaybackException,
+                    ) {
+                        onFastSourceEnded(eventId(eventTime))
+                    }
                     override fun onDroppedVideoFrames(
                         eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
                         droppedFrames: Int,
@@ -1993,6 +2208,7 @@ class LiveTvPlaybackController @Inject constructor(
                 if (slowStarter() && p.playbackState == Player.STATE_BUFFERING && p.bufferedPosition > bufferedBefore) return@launch
             }
             Log.w(TAG, "No picture after moving the video; restarting the stream")
+            if (fastLive != null) { bufferFailed(); return@launch }
             val archive = _state.value.catchupTitle != null
             val pos = p.currentPosition
             // A replay or highlight carries on where it was, as catch-up does.
@@ -2121,11 +2337,16 @@ class LiveTvPlaybackController @Inject constructor(
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            if (pendingProviderTune?.isActive == true) return
             _state.value = _state.value.copy(
                 isBuffering = playbackState == Player.STATE_BUFFERING,
                 error = if (playbackState == Player.STATE_READY) null else _state.value.error,
                 reconnectAttempt = if (playbackState == Player.STATE_READY) 0 else _state.value.reconnectAttempt
             )
+            if (playbackState == Player.STATE_ENDED && fastLive != null) {
+                // The analytics callback identifies the exact session that ended.
+                return
+            }
             if (playbackState == Player.STATE_ENDED && _shiftStartedAt.value != null && timeshift.isRecording) {
                 // Caught up with the end of what's recorded while it's still recording: carry on
                 // from here (the newest pieces come in), rather than dropping back to live.
@@ -2171,6 +2392,11 @@ class LiveTvPlaybackController @Inject constructor(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            if (pendingProviderTune?.isActive == true) return
+            if (fastLive != null) {
+                // Handle this from the generation-tagged analytics callback.
+                return
+            }
             // A recording that failed: back to live rather than reconnecting to nowhere.
             if (_shiftStartedAt.value != null && timeshift.isRecording && shiftReloads < 5) {
                 // A hiccup reading the buffer (it's still recording): pick up where it was.
@@ -2539,6 +2765,7 @@ class LiveTvPlaybackController @Inject constructor(
         }
         return com.nuvio.tv.livetv.multiview.LiveTvMediaSourceBuilder(
             drm = currentChannel?.drm,
+            mediaId = tuneMediaId,
             forcedMime = forcedMime,
             bufferSize = bufferSize,
             stalkerPolicy = stalkerMediaPolicy,
@@ -2582,6 +2809,10 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private fun release() {
+        pendingProviderTune?.cancel()
+        pendingProviderTune = null
+        tuneReport.clear()
+        tuneMediaId = null
         adaptiveBuffer.release()
         stalkerMediaPolicy?.retire()
         stalkerMediaPolicy = null
@@ -2629,6 +2860,9 @@ class LiveTvPlaybackController @Inject constructor(
                 stopReplayCache()
                 stopShift()
                 active.stop()
+                val generation = stalkerGeneration
+                timeshift.pendingLiveRelease()?.join()
+                if (stalkerGeneration != generation || _player !== active || appInBackground) return@launch
                 if (activeStalkerRef != null) { restartStalker(if (live) 0L else position); return@launch }
                 active.setMediaSource(buildMediaSource(url, channel.headers, live))
                 active.prepare()
@@ -2641,6 +2875,7 @@ class LiveTvPlaybackController @Inject constructor(
     companion object {
         /** Rewind Anytime starts with this much published TS media, matching its live offset. */
         private const val LOCAL_LIVE_OFFSET_MS = 8_000L
+        private const val HISTORY_RESUME_LEAD_MS = 3_000L
         /** A sports addon stream needs at least this much timeline to pause and skip in it by itself. */
         private const val OWN_MIN_MS = 60_000L
         /** A live sports addon stream with at least this much rewind window is paused and skipped in by itself. */

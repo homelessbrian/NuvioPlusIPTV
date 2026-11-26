@@ -67,6 +67,16 @@ class TsSegmenterTest {
         assertEquals(listOf(2.0), published)
     }
 
+    @Test fun `shared archive excludes time before a live decoder could identify the program`() {
+        val segmenter = TsSegmenter(temporary.newFolder(), sharedLive = true)
+        write(segmenter, clockPacket(256, 0), pat(), pmt())
+        writeWithWallAge(segmenter, 0, clockPacket(256, 4_050_000, clean = true))
+        assertFalse(segmenter.playlist.exists())
+        writeWithWallAge(segmenter, 0, clockPacket(256, 4_230_000, clean = true))
+        assertEquals(listOf(2.0), durations(segmenter))
+        segmenter.finish()
+    }
+
     @Test fun `a clockless stream still cuts using elapsed wall time`() {
         val segmenter = TsSegmenter(temporary.newFolder())
         write(segmenter, pat(), pmt())
