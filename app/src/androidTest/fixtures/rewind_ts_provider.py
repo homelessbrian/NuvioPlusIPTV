@@ -7,8 +7,8 @@ Generate the media once using an FFmpeg build with libx264:
 With the provider running, build and install the opt-in APKs on an isolated
 Android TV emulator. The example uses serial emulator-5588 and an x86_64 build:
   gradlew :app:assembleFullDebug :app:assembleFullDebugAndroidTest -PfastTsRewind=true -Pandroid.injected.build.abi=x86_64
-  adb -s emulator-5588 install -r -g app/build/outputs/apk/full/debug/app-full-universal-debug.apk
-  adb -s emulator-5588 install -r -g app/build/outputs/apk/androidTest/full/debug/app-full-debug-androidTest.apk
+  adb -s emulator-5588 install -r -t -g app/build/intermediates/apk/full/debug/app-full-universal-debug.apk
+  adb -s emulator-5588 install -r -t -g app/build/intermediates/apk/androidTest/full/debug/app-full-debug-androidTest.apk
   adb -s emulator-5588 shell am instrument -w -e class com.nuvio.tv.livetv.player.FastTuneEmulatorTest -e fixtureBase http://10.0.2.2:18961 -e fixtureLabel sample -e fixtureModes off,on,on,off -e fixtureSeconds 61 -e fixtureControls true com.nuvio.livetv.test/androidx.test.runner.AndroidJUnitRunner
   adb -s emulator-5588 pull /sdcard/Android/data/com.nuvio.livetv/files/fast-rewind-sample.jsonl .
   curl http://127.0.0.1:18961/stats
@@ -17,6 +17,9 @@ Use the generated full/debug output-metadata.json for the APK filename when ABI
 splits are enabled. Each receipt row contains firstFrameMs, historyReadyMs,
 stalls and stallMs. Group provider opens by the same channel label (sample-0-off,
 sample-1-on, etc.). Use a fresh fixtureLabel for each run.
+For pause recovery, add -e fixtureLongPauseMs 60000 to the controls run. Pause
+rows include player time, time within recorded history and the input URI scheme
+before the hold, during the hold, at resume and once playing again.
 
 The emulator reaches this host at 10.0.2.2. /stats counts GETs actually
 connected to the provider. Samples are paced in TS packet units including
