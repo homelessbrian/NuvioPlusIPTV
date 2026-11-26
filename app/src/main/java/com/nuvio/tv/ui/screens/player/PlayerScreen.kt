@@ -470,14 +470,14 @@ fun PlayerScreen(
             }
             RemoteAction.SHOW_CONTROLS -> { viewModel.onEvent(PlayerEvent.OnToggleControls); true }
             RemoteAction.SHOW_INFO -> {
-                hideControlsAfterStreamInfo = true
+                hideControlsAfterStreamInfo = !uiState.showControls
                 viewModel.onEvent(PlayerEvent.OnShowStreamInfo)
                 true
             }
             RemoteAction.OPTIONS -> { viewModel.onEvent(PlayerEvent.OnShowMoreDialog); true }
             RemoteAction.AUDIO -> { viewModel.onEvent(PlayerEvent.OnShowAudioOverlay); true }
             RemoteAction.SUBTITLES -> { viewModel.onEvent(PlayerEvent.OnShowSubtitleOverlay); true }
-            RemoteAction.RETURN -> { exitPlayer(); true }
+            RemoteAction.RETURN -> { handleBackPress(); true }
             RemoteAction.NONE -> true
             else -> false
         }
