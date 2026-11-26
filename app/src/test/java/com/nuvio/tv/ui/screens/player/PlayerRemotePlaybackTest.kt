@@ -60,19 +60,19 @@ class PlayerRemotePlaybackTest {
         val subject = mockk<PlayerRuntimeController>(relaxed = true)
         val ui = MutableStateFlow(PlayerUiState(pendingPreviewSeekPosition = 50_000, showSeekOverlay = true))
         val timeline = MutableStateFlow(PlaybackTimelineState(currentPosition = 50_000, duration = 100_000))
+        // Kotlin's member default arguments read backing fields rather than mocked getters.
+        // Initialize both flows so the real preview setter and timeline update run here too.
+        PlayerRuntimeController::class.java.getDeclaredField("_uiState").apply { isAccessible = true }.set(subject, ui)
+        PlayerRuntimeController::class.java.getDeclaredField("_playbackTimeline").apply { isAccessible = true }.set(subject, timeline)
         val player = mockk<ExoPlayer>(relaxed = true)
         every { player.currentPosition } returns 20_000L
         every { subject.currentInternalPlayerEngine } returns InternalPlayerEngine.EXOPLAYER
         every { subject._exoPlayer } returns player
         every { subject._uiState } returns ui
         every { subject._playbackTimeline } returns timeline
-        every { subject.pendingPreviewSeekPosition } answers { ui.value.pendingPreviewSeekPosition }
-        every { subject.pendingPreviewSeekPosition = any() } answers {
-            ui.value = ui.value.copy(pendingPreviewSeekPosition = firstArg())
-        }
-        every { subject.updatePlaybackTimeline(any(), any(), any(), any(), any()) } answers {
-            timeline.value = timeline.value.copy(currentPosition = firstArg())
-        }
+        every { subject.pendingPreviewSeekPosition } answers { callOriginal() }
+        every { subject.pendingPreviewSeekPosition = any() } answers { callOriginal() }
+        every { subject.updatePlaybackTimeline(any(), any(), any(), any(), any()) } answers { callOriginal() }
         subject.cancelRemoteNativeGesture()
         assertNull(ui.value.pendingPreviewSeekPosition)
         assertFalse(ui.value.showSeekOverlay)
