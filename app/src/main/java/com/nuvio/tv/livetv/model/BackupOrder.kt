@@ -64,6 +64,14 @@ object BackupOrder {
 
     fun withSources(s: LiveTvSettings, order: List<String>): LiveTvSettings = s.copy(backupSourceOrder = order.joinToString("\n"))
 
+    /** The Sports game page uses its usual match order until a source order is explicitly set. */
+    fun gameSourceOrder(s: LiveTvSettings, playlistIds: List<String>, addonNames: List<String>): List<String> =
+        if (groupBy(s) == SOURCE && s.backupSourceOrder.isNotBlank()) sources(s, playlistIds, addonNames) else emptyList()
+
+    fun withGameSourceOrder(s: LiveTvSettings, order: List<String>): LiveTvSettings =
+        if (order.isEmpty()) s.copy(backupSourceOrder = "")
+        else withSources(s.copy(backupGroupBy = SOURCE), order)
+
     fun reset(s: LiveTvSettings): LiveTvSettings = s.copy(backupSourceOrder = "", backupQualityOrder = "")
 
     /**

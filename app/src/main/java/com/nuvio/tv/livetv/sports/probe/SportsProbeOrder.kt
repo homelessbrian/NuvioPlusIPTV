@@ -1,6 +1,24 @@
 package com.nuvio.tv.livetv.sports.probe
 
 import com.nuvio.tv.livetv.sports.ChannelMatch
+import com.nuvio.tv.livetv.model.BackupOrder
+
+/** Give each source its saved priority, then apply the normal health and quality order inside it. */
+internal fun sportsGameChannelRows(
+    groups: List<List<ChannelMatch>>,
+    checks: Map<String, SportsProbeResult>,
+    automatic: Boolean,
+    bestChannelFirst: Boolean,
+    sourceOrder: List<String>,
+): List<List<ChannelMatch>> {
+    if (sourceOrder.isEmpty()) return sportsProbeChannelRows(groups, checks, automatic, bestChannelFirst)
+    // Explicit source order exposes every distinct feed, even if several from one service have
+    // the exact same name. Keep their incoming order for equal health and quality.
+    val bySource = groups.flatten().distinctBy { it.channel.key }.groupBy { BackupOrder.sourceKey(it.channel) }
+    return (sourceOrder + bySource.keys).distinct().mapNotNull(bySource::get).flatMap { channels ->
+        sportsProbeChannelRows(channels.map { listOf(it) }, checks, automatic, bestChannelFirst)
+    }
+}
 
 /** Health takes priority. Compare like-status rows by quality when Best Channel First is on. */
 internal fun sportsProbeChannelRows(

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.model.BackupOrder
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.player.LiveTvPlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -55,6 +56,11 @@ class SportsViewModel @Inject constructor(
     }
 
     val settings = repo.settings
+    internal val liveSettings = livePrefs.settings
+    internal val playlists = livePrefs.playlists
+    internal fun saveGameSourceOrder(order: List<String>) {
+        viewModelScope.launch { livePrefs.updateSettings { BackupOrder.withGameSourceOrder(it, order) } }
+    }
     val follows = repo.follows
     val events = repo.events
     /** The page's days plus followed teams' whole seasons (My Teams, game pages). */

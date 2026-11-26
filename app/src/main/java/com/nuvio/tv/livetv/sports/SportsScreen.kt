@@ -74,7 +74,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.nuvio.tv.livetv.model.LiveChannel
-import com.nuvio.tv.livetv.sports.probe.sportsProbeChannelRows
+import com.nuvio.tv.livetv.model.BackupOrder
+import com.nuvio.tv.ui.screens.settings.SportsSourceOrderDialog
+import com.nuvio.tv.livetv.sports.probe.sportsGameChannelRows
 import com.nuvio.tv.livetv.record.LiveTvNotice
 import com.nuvio.tv.livetv.ui.ChannelLogo
 import com.nuvio.tv.livetv.ui.LivePlayerSurface
@@ -1728,12 +1730,24 @@ private fun GamePage(
     // None of them from that region: show them all (with a line saying so) rather than nothing.
     val noneInRegion = regionChoice.isNotBlank() && matches.isNotEmpty() && inRegion.isEmpty()
     val shown = if (regionChoice.isBlank() || otherRegions || noneInRegion) matches else inRegion
-    // One row per channel: its FHD/HD/SD copies folded in (the one playing leads).
-    val shownRows = remember(shown, playingKey) { SportsMatcher.groupCopies(shown, playingKey) }
+    val liveSettings by viewModel.liveSettings.collectAsStateWithLifecycle(initialValue = null)
+    val playlists by viewModel.playlists.collectAsStateWithLifecycle(initialValue = null)
+    val addonNames = remember(matches) {
+        matches.map { it.channel }.filter(BackupOrder::isAddon).map { it.sourceName }.distinct()
+    }
+    val playlistIds = remember(playlists, matches) {
+        (playlists.orEmpty().map { it.id } + matches.map { it.channel }.filterNot(BackupOrder::isAddon).map { it.sourceId }).distinct()
+    }
+    val sourceOrder = remember(liveSettings?.backupGroupBy, liveSettings?.backupSourceOrder, playlistIds, addonNames) {
+        liveSettings?.let { BackupOrder.gameSourceOrder(it, playlistIds, addonNames) }.orEmpty()
+    }
+    val shownRows = remember(shown, playingKey, sourceOrder.isNotEmpty()) {
+        if (sourceOrder.isNotEmpty()) shown.map { listOf(it) } else SportsMatcher.groupCopies(shown, playingKey)
+    }
     val channelChecks by viewModel.channelChecks.collectAsStateWithLifecycle()
     // Each actual provider/copy is playable. Verified working sources lead, unavailable ones trail.
-    val displayRows = remember(shownRows, settings.autoCheckChannels, settings.bestChannelFirst, channelChecks) {
-        sportsProbeChannelRows(shownRows, channelChecks, settings.autoCheckChannels, settings.bestChannelFirst)
+    val displayRows = remember(shownRows, settings.autoCheckChannels, settings.bestChannelFirst, channelChecks, sourceOrder) {
+        sportsGameChannelRows(shownRows, channelChecks, settings.autoCheckChannels, settings.bestChannelFirst, sourceOrder)
     }
     val probeChannels = remember(shownRows) { shownRows.flatten().map { it.channel }.distinctBy { it.key } }
     val latestProbeChannels = androidx.compose.runtime.rememberUpdatedState(probeChannels)
@@ -1785,6 +1799,32 @@ private fun GamePage(
     // Up from the first channel and Down from the lower team go to it (it sits off to the right,
     // so the TV would otherwise jump past it).
     val regionFocus = remember(ev.id) { FocusRequester() }
+    val sortFocus = remember(ev.id) { FocusRequester() }
+    var sortSources by remember(ev.id) { mutableStateOf(false) }
+    var restoreSortFocus by remember(ev.id) { mutableStateOf(false) }
+    val sortButton = liveSettings != null && playlists != null
+    fun dismissSort() {
+        sortSources = false
+        restoreSortFocus = true
+    }
+    LaunchedEffect(sortSources, restoreSortFocus) {
+        if (!sortSources && restoreSortFocus && sortButton && ev.state != GameState.POST) {
+            androidx.compose.runtime.withFrameNanos { }
+            sortFocus.requestFocus()
+            restoreSortFocus = false
+        }
+    }
+    if (sortSources && sortButton && ev.state != GameState.POST) {
+        val installedAddons by androidx.compose.runtime.produceState<List<String>?>(initialValue = null) {
+            value = viewModel.repo.liveStreamAddonNames()
+        }
+        SportsSourceOrderDialog(
+            settings = checkNotNull(liveSettings), playlists = playlists.orEmpty(),
+            addonNames = (installedAddons.orEmpty() + addonNames).distinct(), loading = installedAddons == null,
+            onSave = { order -> viewModel.saveGameSourceOrder(order); dismissSort() },
+            onReset = { viewModel.saveGameSourceOrder(emptyList()); dismissSort() }, onDismiss = ::dismissSort,
+        )
+    }
     // What each channel's guide says now (the "Watch on" list's coloured lines), checked every minute.
     var guideNow by remember(ev.id) { mutableStateOf<Map<String, com.nuvio.tv.livetv.model.EpgProgram?>>(emptyMap()) }
     val guideKeys = remember(matches) { matches.filter { it.channel.sourceId != SportsAddonSource.SOURCE_ID }.map { it.channel.key }.distinct() }
@@ -1858,6 +1898,12 @@ private fun GamePage(
             if (ev.state == GameState.POST) { replaysBlock(); return@Column }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectionHeader("WATCH ON YOUR CHANNELS", modifier = Modifier.weight(1f))
+                if (sortButton) SportsAction(
+                    androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_sports_sort_sources),
+                    modifier = Modifier.padding(end = 4.dp).focusRequester(sortFocus).focusProperties {
+                        if (displayRows.isNotEmpty()) down = first
+                    },
+                ) { sortSources = true }
                 if (regionButton) RegionButton(
                     regionChoice,
                     Modifier.padding(top = 6.dp, end = 6.dp).focusRequester(regionFocus).focusProperties { down = first }
@@ -1876,10 +1922,7 @@ private fun GamePage(
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                 ) {
-                    itemsIndexed(displayRows, key = { _, g ->
-                        if (settings.autoCheckChannels) g[0].channel.key
-                        else SportsMatcher.copyKey(g[0].channel).ifBlank { g[0].channel.key }
-                    }) { i, g ->
+                    itemsIndexed(displayRows, key = { _, g -> g.first().channel.key }) { i, g ->
                         val m = g[0]
                         SportsChannelRow(
                             m = m,
@@ -1894,7 +1937,8 @@ private fun GamePage(
                             probePosition = i.takeIf { settings.autoCheckChannels },
                             guide = if (ev.state == GameState.POST || m.channel.sourceId == SportsAddonSource.SOURCE_ID) null
                                 else guideLine(ev, m, guideNow[m.channel.key], now, use24h),
-                            modifier = if (i == 0 && regionButton) Modifier.focusProperties { up = regionFocus } else Modifier,
+                            modifier = if (i == 0 && (regionButton || sortButton))
+                                Modifier.focusProperties { up = if (sortButton) sortFocus else regionFocus } else Modifier,
                             onClick = { playAfterChecks { onChoose(m) } }
                         )
                     }

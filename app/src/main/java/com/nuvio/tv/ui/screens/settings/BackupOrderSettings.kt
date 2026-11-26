@@ -10,8 +10,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -132,6 +134,60 @@ internal fun BackupOrderDialog(
                     enabled = settings.backupSourceOrder.isNotBlank() || settings.backupQualityOrder.isNotBlank(),
                     onClick = { onUpdate { BackupOrder.reset(it) } }
                 )
+            }
+        }
+    }
+}
+
+/** Edits the same source order as Backups without exposing unrelated heading or quality settings. */
+@Composable
+internal fun SportsSourceOrderDialog(
+    settings: LiveTvSettings,
+    playlists: List<PlaylistSource>,
+    addonNames: List<String>,
+    onSave: (List<String>) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit,
+    loading: Boolean = false,
+) {
+    val names = remember(playlists) { playlists.associate { it.id to it.name } }
+    val current = remember(settings.backupSourceOrder, names, addonNames) {
+        BackupOrder.sources(settings, names.keys.toList(), addonNames)
+    }
+    var edited by remember { mutableStateOf<List<String>?>(null) }
+    val order = edited?.let { draft -> draft.filter { it in current } + current.filter { it !in draft } } ?: current
+    val first = remember { FocusRequester() }
+    val addonTag = stringResource(R.string.livetv_backups_addon_tag)
+    val playlistTag = stringResource(R.string.livetv_backups_playlist_tag)
+    NuvioDialog(
+        onDismiss = onDismiss, title = stringResource(R.string.iptv_sports_sort_sources),
+        subtitle = stringResource(R.string.iptv_sports_source_order_hint), width = 640.dp,
+    ) {
+        LazyColumn(Modifier.heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)) {
+            item(key = "apply") {
+                SettingsActionRow(
+                    title = stringResource(R.string.iptv_sports_use_source_order), subtitle = null,
+                    enabled = !loading && order.isNotEmpty(), onClick = { onSave(order) },
+                    modifier = Modifier.focusRequester(first),
+                )
+            }
+            itemsIndexed(order, key = { _, source -> "source:$source" }) { i, source ->
+                val addon = BackupOrder.isAddonKey(source)
+                OrderRow(
+                    title = if (addon) BackupOrder.addonName(source) else names[source] ?: source,
+                    subtitle = if (addon) addonTag else playlistTag, canUp = i > 0, canDown = i < order.lastIndex,
+                    onMove = { by -> edited = order.toMutableList().apply { add(i + by, removeAt(i)) } },
+                )
+            }
+            if (order.isEmpty() && !loading) item { Heading(stringResource(R.string.iptv_backup_order_no_sources), null) }
+            if (settings.backupSourceOrder.isNotBlank()) item(key = "reset") {
+                SettingsActionRow(title = stringResource(R.string.iptv_backup_order_reset), subtitle = null, onClick = onReset)
+            }
+        }
+        LaunchedEffect(loading, order.isEmpty()) {
+            if (!loading && order.isNotEmpty()) {
+                androidx.compose.runtime.withFrameNanos { }
+                first.requestFocus()
             }
         }
     }
