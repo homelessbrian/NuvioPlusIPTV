@@ -28,6 +28,22 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [34])
 class AdaptiveLiveBufferTest {
+    @Test fun `critical buffer slows PCM playback and a refill restores normal pitch and speed`() = runTest {
+        val h = Harness(backgroundScope)
+        h.enablePcm()
+        h.bufferedMs = 2_000
+        for (second in 0L..16L) {
+            h.tick(this, second)
+            assertEquals(1f, h.parameters.pitch)
+        }
+        assertEquals(.90f, h.parameters.speed, .00001f)
+        h.bufferedMs = 20_000
+        for (second in 17L..55L) h.tick(this, second)
+        assertEquals(PlaybackParameters.DEFAULT, h.parameters)
+        verify(exactly = 0) { h.player.prepare(); h.player.stop() }
+        h.helper.release()
+    }
+
     @Test fun `unsupported commands never read forbidden measurements and restore owned speed`() = runTest {
         val h = Harness(backgroundScope)
         h.enablePcm()
@@ -77,6 +93,7 @@ class AdaptiveLiveBufferTest {
         var now = 0L
         var readCurrent = true
         var readTimeline = true
+        var bufferedMs = 8_000L
         var parameters = PlaybackParameters.DEFAULT
         val listeners = mutableListOf<Player.Listener>()
         val player = mockk<ExoPlayer>(relaxed = true)
@@ -97,7 +114,7 @@ class AdaptiveLiveBufferTest {
             }
             every { player.mediaItemCount } answers { check(readTimeline) { "Forbidden timeline getter" }; 1 }
             every { player.currentPosition } answers { check(readCurrent) { "Forbidden position getter" }; now }
-            every { player.totalBufferedDuration } answers { check(readCurrent) { "Forbidden buffer getter" }; 8_000L }
+            every { player.totalBufferedDuration } answers { check(readCurrent) { "Forbidden buffer getter" }; bufferedMs }
             every { player.playbackParameters } answers { parameters }
             every { player.playbackParameters = any() } answers {
                 parameters = firstArg(); listeners.toList().forEach { it.onPlaybackParametersChanged(parameters) }

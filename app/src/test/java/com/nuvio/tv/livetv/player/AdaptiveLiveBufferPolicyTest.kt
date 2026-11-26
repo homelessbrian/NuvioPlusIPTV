@@ -41,6 +41,41 @@ class AdaptiveLiveBufferPolicyTest {
         assertEquals(1f, policy.sample(8_000, 60_000))
     }
 
+    @Test fun `draining and refilling pass the same speed anchors with bounded rate changes`() {
+        val policy = AdaptiveLiveBufferPolicy()
+        var now = 0L
+        var speed = 1f
+        fun hold(bufferMs: Long, target: Float) {
+            repeat(35) {
+                val before = speed
+                speed = policy.sample(bufferMs, now)
+                now += 1_000
+                assertTrue(kotlin.math.abs(speed - before) <= .01001f)
+                assertTrue(speed in .90f..1f)
+                assertTrue(speed >= minOf(before, target) - .00001f)
+                assertTrue(speed <= maxOf(before, target) + .00001f)
+            }
+            assertEquals(target, speed, .00001f)
+        }
+        hold(8_000, .98f)
+        hold(7_000, .97f)
+        hold(5_000, .95f)
+        hold(3_500, .925f)
+        hold(2_000, .90f)
+        hold(250, .90f)
+        hold(5_000, .95f)
+        hold(12_000, .98f)
+        hold(20_000, 1f)
+    }
+
+    @Test fun `one near-empty reading or a missing sample cannot cause an emergency jump`() {
+        val policy = AdaptiveLiveBufferPolicy()
+        for (sec in 0..15) policy.sample(8_000, sec * 1_000L)
+        assertEquals(.98f, policy.sample(200, 25_000), .00001f)
+        assertEquals(.97f, policy.sample(200, 26_000), .00001f)
+        assertTrue(policy.sample(9_000, 27_000) > .97f)
+    }
+
     @Test fun `unachievable byte capped target recovers without retrigger until capacity or channel changes`() {
         val policy = AdaptiveLiveBufferPolicy()
         for (second in 0L..12L) policy.sample(8_000, second * 1_000)

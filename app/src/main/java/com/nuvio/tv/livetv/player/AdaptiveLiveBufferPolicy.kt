@@ -60,14 +60,21 @@ internal class AdaptiveLiveBufferPolicy {
                 if (bufferedMs < RECOVERY_REENTRY_MS) recovering = false
             }
         }
-        val target = if (filling && !recovering) MIN_SPEED else 1f
-        // A delayed UI callback cannot make the next rate change an audible jump.
-        val step = ((nowMs - (previous ?: nowMs)).coerceIn(0, 2_000) * RAMP_PER_MS).toFloat()
+        val target = if (filling && !recovering) refillSpeed(bufferedMs) else 1f
+        // Approach the emergency rate faster, and ease out of it as playable media returns.
+        val changePerSecond = when {
+            minOf(target, speed) < LOW_SPEED -> .01f
+            minOf(target, speed) < MILD_SPEED -> .005f
+            else -> .002f
+        }
+        // A late sample gives us no evidence about the buffer during the missed interval.
+        val elapsedMs = nowMs - (previous ?: nowMs)
+        val step = if (elapsedMs <= 2_500) elapsedMs.coerceAtMost(2_000) / 1_000f * changePerSecond else 0f
         speed = when {
             abs(target - speed) <= step -> target
             target < speed -> speed - step
             else -> speed + step
-        }.coerceIn(MIN_SPEED, 1f)
+        }.coerceIn(CRITICAL_SPEED, 1f)
         if (recovering && speed == 1f) {
             filling = false
             recovering = false
@@ -77,13 +84,27 @@ internal class AdaptiveLiveBufferPolicy {
         return speed
     }
 
+    // Interpolate between anchors so a chunk arriving at a boundary cannot flip speed tiers.
+    private fun refillSpeed(bufferedMs: Long): Float = when {
+        bufferedMs <= CRITICAL_BUFFER_MS -> CRITICAL_SPEED
+        bufferedMs < LOW_RESERVE_MS -> CRITICAL_SPEED + (LOW_SPEED - CRITICAL_SPEED) *
+            (bufferedMs - CRITICAL_BUFFER_MS) / (LOW_RESERVE_MS - CRITICAL_BUFFER_MS)
+        bufferedMs < MILD_RESERVE_MS -> LOW_SPEED + (MILD_SPEED - LOW_SPEED) *
+            (bufferedMs - LOW_RESERVE_MS) / (MILD_RESERVE_MS - LOW_RESERVE_MS)
+        else -> MILD_SPEED
+    }
+
     companion object {
         const val TARGET_BUFFER_MS = 20_000L
         private const val LOW_BUFFER_MS = 10_000L
         private const val RECOVERY_REENTRY_MS = 18_000L
         private const val SUSTAINED_MS = 3_000L
-        private const val MIN_SPEED = .98f
-        private const val RAMP_PER_MS = .000002
+        private const val MILD_RESERVE_MS = 8_000L
+        private const val LOW_RESERVE_MS = 5_000L
+        private const val CRITICAL_BUFFER_MS = 2_000L
+        private const val MILD_SPEED = .98f
+        private const val LOW_SPEED = .95f
+        private const val CRITICAL_SPEED = .90f
     }
 }
 
