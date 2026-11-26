@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -901,15 +903,25 @@ internal fun SportsChannelRow(
     /** Observed stream health for this exact source; copies never inherit the leading result. */
     probe: SportsProbeResult? = null,
     showProbe: Boolean = false,
+    /** A reordered, keyed row keeps its focus and scrolls with its channel rather than its old slot. */
+    probePosition: Int? = null,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(showProbe, probePosition, focused) {
+        if (showProbe && probePosition != null && focused) {
+            androidx.compose.runtime.withFrameNanos { }
+            bringIntoView.bringIntoView()
+        }
+    }
     val accent = NuvioTheme.colors.Secondary
     val ink = Color.White
     val sub = SportsLook.Dim
     val withGuide = guide != null && !finished
     Box(
         modifier
+            .bringIntoViewRequester(bringIntoView)
             .fillMaxWidth()
             .height((if (withGuide) 66.dp else 56.dp) + if (showProbe) 18.dp else 0.dp)
             .sportsFrame(focused, false, accent, radius = 12.dp)

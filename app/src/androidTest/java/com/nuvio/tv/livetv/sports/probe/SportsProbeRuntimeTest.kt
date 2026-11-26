@@ -7,6 +7,7 @@ import com.nuvio.tv.livetv.multiview.LiveTvMediaSourceBuilder
 import com.nuvio.tv.livetv.player.LiveDns
 import java.io.File
 import java.io.IOException
+import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
@@ -29,6 +30,7 @@ import org.junit.runner.RunWith
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
 class SportsProbeRuntimeTest {
+    private val elapsedMs = IdentityHashMap<SportsProbeResult, Long>()
     @Test fun continuousTsAndHlsRequireVideoSamplesAndUseTheirActualDimensions() = runBlocking {
         val ts = check("/continuous.ts")
         val extensionless = check("/extensionless")
@@ -65,15 +67,20 @@ class SportsProbeRuntimeTest {
             withTimeout(3_000) { while ("/slow.ts" !in reading) delay(10) }
             val started = System.nanoTime()
             withTimeout(3_000) { pending.cancelAndJoin() }
-            val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
-            assertTrue("Cancellation waited for the socket timeout", elapsedMs < 3_000)
+            val cancelMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+            assertTrue("Cancellation waited for the socket timeout", cancelMs < 3_000)
             assertTrue("No owned HTTP call was cancelled", calls.isNotEmpty() && calls.all { it.isCanceled() })
             assertTrue("HTTP body still active after cancellation completed", active.isEmpty())
+            val timedOut = check("/slow.ts", SportsProbeHttpSession(factory))
+            assertEquals(SportsProbeStatus.UNVERIFIED, timedOut.status)
+            assertTrue("Deadline cleanup exceeded one second", checkNotNull(elapsedMs[timedOut]) < SPORTS_PROBE_TIMEOUT_MS + 1_000)
+            assertTrue("Timed-out HTTP body remained active", active.isEmpty())
             val next = check("/continuous.ts", SportsProbeHttpSession(factory))
             assertEquals(SportsProbeStatus.WORKING, next.status)
             assertTrue(active.isEmpty())
-            writeEvidence("cancellation", JSONObject().put("cancelMs", elapsedMs)
-                .put("ownedCalls", calls.size).put("activeAfter", active.size).put("next", describe(next)))
+            writeEvidence("cancellation", JSONObject().put("cancelMs", cancelMs)
+                .put("ownedCalls", calls.size).put("activeAfter", active.size).put("next", describe(next))
+                .put("deadlineMs", SPORTS_PROBE_TIMEOUT_MS).put("timedOut", describe(timedOut)))
         } finally {
             calls.forEach(Call::cancel)
             client.connectionPool.evictAll()
@@ -86,18 +93,25 @@ class SportsProbeRuntimeTest {
             "Pass -e probeBaseUrl http://10.0.2.2:<fixture-port> with the owned loopback fixture running"
         }.trimEnd('/')
         // Inject only the loopback transport boundary: production still uses its VPN adapter.
-        return try {
-            probeSportsMediaSource(beforeClose = session::close) { decorate ->
-                LiveTvMediaSourceBuilder(observeCaptions = false, requireHttpSources = true,
-                    continuousTs = true, requireMediaPreparation = true,
-                    httpDecorator = decorate, httpFactoryOverride = session.factory(emptyMap()))
-                    .build(base + path, emptyMap(), isLive = true)
+        val started = android.os.SystemClock.elapsedRealtime()
+        val observed = try {
+            boundedSportsProbeCheck { prepared ->
+                prepared()
+                probeSportsMediaSource(beforeClose = session::close) { decorate ->
+                    LiveTvMediaSourceBuilder(observeCaptions = false, requireHttpSources = true,
+                        continuousTs = true, requireMediaPreparation = true,
+                        httpDecorator = decorate, httpFactoryOverride = session.factory(emptyMap()))
+                        .build(base + path, emptyMap(), isLive = true)
+                }
             }
         } finally { session.close() }
+        elapsedMs[observed] = android.os.SystemClock.elapsedRealtime() - started
+        return observed
     }
 
     private fun describe(result: SportsProbeResult) = JSONObject().put("status", result.status.name)
         .put("width", result.width).put("height", result.height).put("playbackVerified", result.playbackVerified)
+        .put("elapsedMs", checkNotNull(elapsedMs[result]))
 
     private fun writeEvidence(name: String, evidence: JSONObject) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

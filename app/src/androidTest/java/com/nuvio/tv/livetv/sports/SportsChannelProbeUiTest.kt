@@ -5,10 +5,13 @@ import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,9 +31,11 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.sports.probe.SportsProbeResult
 import com.nuvio.tv.livetv.sports.probe.SportsProbeStatus
+import com.nuvio.tv.livetv.sports.probe.sportsProbeChannelRows
 import com.nuvio.tv.ui.theme.NuvioTheme
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,7 +45,7 @@ class SportsChannelProbeUiTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun automaticStatusUpdatesKeepFocusAndEachSourceKeepsItsResult() {
+    fun automaticResultsReorderRealRowsAndKeepFocusOnTheSameSource() {
         val primary = match("primary", "Fixture Sports FHD", "Provider one", "FHD")
         val copy = match("copy", "Fixture Sports HD", "Provider two", "HD")
         val checks = mutableStateOf(mapOf(
@@ -51,13 +56,13 @@ class SportsChannelProbeUiTest {
         compose.setContent {
             NuvioTheme {
                 Box(Modifier.fillMaxSize().background(Color(0xFF151820))) {
-                    Column(Modifier.width(660.dp).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(primary, copy).forEach { source ->
-                            androidx.compose.runtime.key(source.channel.key) {
-                                SportsChannelRow(source, finished = false, playing = false, now = NOW,
-                                    probe = checks.value[source.channel.key], showProbe = true,
-                                    onClick = { chosen = source.channel.key })
-                            }
+                    val rows = sportsProbeChannelRows(listOf(listOf(primary, copy)), checks.value, automatic = true)
+                    LazyColumn(Modifier.width(660.dp).height(240.dp).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        itemsIndexed(rows, key = { _, row -> row[0].channel.key }) { index, row ->
+                            val source = row[0]
+                            SportsChannelRow(source, finished = false, playing = false, now = NOW,
+                                probe = checks.value[source.channel.key], showProbe = true, probePosition = index,
+                                onClick = { chosen = source.channel.key })
                         }
                     }
                 }
@@ -67,6 +72,8 @@ class SportsChannelProbeUiTest {
         val alternative = hasText(copy.channel.name)
         focus(preferred)
         compose.onNode(preferred).assertTextContains("Checking…", substring = true)
+        assertTrue(compose.onNode(preferred).fetchSemanticsNode().boundsInRoot.top <
+            compose.onNode(alternative).fetchSemanticsNode().boundsInRoot.top)
         compose.runOnIdle {
             checks.value = mapOf(
                 primary.channel.key to SportsProbeResult(SportsProbeStatus.UNAVAILABLE,
@@ -77,14 +84,16 @@ class SportsChannelProbeUiTest {
         }
         compose.onNode(preferred).assertIsDisplayed().assertIsFocused().assertTextContains("Unavailable now", substring = true)
         compose.onNode(alternative).assertTextContains("Working", substring = true).assertTextContains("1920×1080", substring = true)
+        assertTrue(compose.onNode(alternative).fetchSemanticsNode().boundsInRoot.top <
+            compose.onNode(preferred).fetchSemanticsNode().boundsInRoot.top)
         // Only the ordinary channel rows are actionable; checks add no buttons or pop-ups.
         compose.onAllNodes(hasClickAction()).assertCountEquals(2)
         saveScreenshot()
-        press(KeyEvent.KEYCODE_DPAD_DOWN)
+        press(KeyEvent.KEYCODE_DPAD_UP)
         compose.onNode(alternative).assertIsFocused()
         press(KeyEvent.KEYCODE_DPAD_CENTER)
         compose.runOnIdle { assertEquals(copy.channel.key, chosen) }
-        press(KeyEvent.KEYCODE_DPAD_UP)
+        press(KeyEvent.KEYCODE_DPAD_DOWN)
         compose.onNode(preferred).assertIsFocused()
         press(KeyEvent.KEYCODE_DPAD_CENTER)
         compose.runOnIdle { assertEquals(primary.channel.key, chosen) }
@@ -94,6 +103,53 @@ class SportsChannelProbeUiTest {
         }
         compose.onNode(preferred).assertIsFocused().assertTextContains("Check deferred", substring = true)
         compose.onAllNodes(hasClickAction()).assertCountEquals(2)
+    }
+
+    @Test
+    fun focusedChannelRemainsVisibleWhenItsResultMovesItBeyondTheViewport() {
+        val sources = List(8) { match("source-$it", "Fixture Sports $it", "Provider $it", "HD") }
+        val current = sources[2] // Visible, but not the LazyColumn's first-visible-item scroll anchor.
+        val checks = mutableStateOf(emptyMap<String, SportsProbeResult>())
+        var chosen: String? = null
+        compose.setContent {
+            NuvioTheme {
+                Box(Modifier.fillMaxSize().background(Color(0xFF151820)).padding(24.dp)) {
+                    val rows = sportsProbeChannelRows(sources.map { listOf(it) }, checks.value, automatic = true)
+                    val list = rememberLazyListState()
+                    LazyColumn(Modifier.width(660.dp).height(260.dp), state = list,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        itemsIndexed(rows, key = { _, row -> row[0].channel.key }) { index, row ->
+                            val source = row[0]
+                            SportsChannelRow(source, finished = false, playing = false, now = NOW,
+                                probe = checks.value[source.channel.key], showProbe = true, probePosition = index,
+                                onClick = { chosen = source.channel.key })
+                        }
+                    }
+                }
+            }
+        }
+        val focused = hasText(current.channel.name)
+        focus(focused)
+        compose.runOnIdle {
+            checks.value = mapOf(
+                current.channel.key to SportsProbeResult(SportsProbeStatus.UNAVAILABLE),
+                sources.last().channel.key to SportsProbeResult(SportsProbeStatus.WORKING, width = 1280, height = 720),
+            )
+        }
+        compose.onNode(focused).assertIsDisplayed().assertIsFocused()
+            .assertTextContains("Unavailable now", substring = true)
+        press(KeyEvent.KEYCODE_DPAD_CENTER)
+        compose.runOnIdle { assertEquals(current.channel.key, chosen) }
+        // A later successful check moves this same focused channel back to the top.
+        compose.runOnIdle {
+            checks.value = checks.value + (current.channel.key to SportsProbeResult(
+                SportsProbeStatus.WORKING, width = 1920, height = 1080))
+        }
+        compose.onNode(focused).assertIsDisplayed().assertIsFocused().assertTextContains("Working", substring = true)
+        press(KeyEvent.KEYCODE_DPAD_DOWN)
+        compose.onNode(hasText(sources.last().channel.name)).assertIsFocused()
+        press(KeyEvent.KEYCODE_DPAD_CENTER)
+        compose.runOnIdle { assertEquals(sources.last().channel.key, chosen) }
     }
 
     @Test

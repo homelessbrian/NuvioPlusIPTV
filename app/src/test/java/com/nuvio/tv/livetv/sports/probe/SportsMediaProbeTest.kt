@@ -145,6 +145,24 @@ class SportsMediaProbeTest {
         }
     }
 
+    @Test fun `one deadline includes preparation and a stalled media body then closes it`() = runBlocking {
+        server { server, requests ->
+            server.enqueue(MockResponse().setHeader("Content-Type", "video/mp2t")
+                .setBody(Buffer().write(fixture)).setBodyDelay(20, TimeUnit.SECONDS))
+            val active = AtomicInteger()
+            val started = System.nanoTime()
+            val observed = boundedSportsProbeCheck(timeoutMs = 500) { prepared ->
+                delay(250)
+                prepared()
+                check(server, "/live.ts", active = active)
+            }
+            assertEquals(SportsProbeStatus.UNVERIFIED, observed.status)
+            assertTrue("Total deadline waited for a fresh media timeout", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 1_500)
+            assertEquals(0, active.get())
+            assertEquals(1, requests.size)
+        }
+    }
+
     private suspend fun check(
         server: MockWebServer,
         path: String,

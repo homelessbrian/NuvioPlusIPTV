@@ -63,40 +63,39 @@ class AndroidSportsChannelProbe @Inject constructor(
     @ApplicationContext private val context: Context,
     private val stalker: StalkerGateway,
 ) : SportsChannelProbe {
-    override suspend fun check(channel: LiveChannel): SportsProbeResult = serial.withLock {
-        if (channel.drm != null) return@withLock result(SportsProbeStatus.PROTECTED, "Protected stream")
-        var prepared: StalkerPlayback? = null
-        val requests = SportsProbeHttpSession()
-        try {
-            val ready = withTimeoutOrNull(20_000L) {
+    override suspend fun check(channel: LiveChannel): SportsProbeResult = boundedSportsProbeCheck { preparationComplete ->
+        serial.withLock {
+            if (channel.drm != null) return@withLock result(SportsProbeStatus.PROTECTED, "Protected stream")
+            var prepared: StalkerPlayback? = null
+            val requests = SportsProbeHttpSession()
+            try {
                 if (channel.stalkerRef != null) prepared = stalker.prepare(channel, probeMimeType = false)
                 awaitVpnForPlayback(context, prepared?.url ?: channel.url)
-                true
-            } ?: false
-            if (!ready) return@withLock result(SportsProbeStatus.DEFERRED, "Waiting for VPN or provider")
-            val url = prepared?.url ?: channel.url
-            if (runCatching { URI(url).scheme?.lowercase() }.getOrNull() !in setOf("http", "https")) {
-                return@withLock result(SportsProbeStatus.UNVERIFIED, "Unsupported stream format")
+                preparationComplete()
+                val url = prepared?.url ?: channel.url
+                if (runCatching { URI(url).scheme?.lowercase() }.getOrNull() !in setOf("http", "https")) {
+                    return@withLock result(SportsProbeStatus.UNVERIFIED, "Unsupported stream format")
+                }
+                probeSportsMediaSource(beforeClose = { requests.close(); prepared?.policy?.retire() }) { decorate ->
+                    LiveTvMediaSourceBuilder(
+                        forcedMime = prepared?.mimeType,
+                        observeCaptions = false,
+                        requireHttpSources = true,
+                        stalkerPolicy = prepared?.policy,
+                        continuousTs = true,
+                        httpDecorator = decorate,
+                        requireMediaPreparation = true,
+                        httpFactoryOverride = requests.factory(prepared?.headers ?: channel.headers),
+                    ).build(url, prepared?.headers ?: channel.headers, isLive = true)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                sportsProbeFailure(failure)
+            } finally {
+                requests.close()
+                prepared?.policy?.retire()
             }
-            probeSportsMediaSource(beforeClose = { requests.close(); prepared?.policy?.retire() }) { decorate ->
-                LiveTvMediaSourceBuilder(
-                    forcedMime = prepared?.mimeType,
-                    observeCaptions = false,
-                    requireHttpSources = true,
-                    stalkerPolicy = prepared?.policy,
-                    continuousTs = true,
-                    httpDecorator = decorate,
-                    requireMediaPreparation = true,
-                    httpFactoryOverride = requests.factory(prepared?.headers ?: channel.headers),
-                ).build(url, prepared?.headers ?: channel.headers, isLive = true)
-            }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            sportsProbeFailure(failure)
-        } finally {
-            requests.close()
-            prepared?.policy?.retire()
         }
     }
 
@@ -106,10 +105,23 @@ class AndroidSportsChannelProbe @Inject constructor(
     }
 }
 
+internal const val SPORTS_PROBE_TIMEOUT_MS = 7_000L
+
+/** One budget covers queue admission, provider/VPN preparation and media; it never resets per phase. */
+internal suspend fun boundedSportsProbeCheck(
+    timeoutMs: Long = SPORTS_PROBE_TIMEOUT_MS,
+    check: suspend (preparationComplete: () -> Unit) -> SportsProbeResult,
+): SportsProbeResult {
+    var prepared = false
+    return withTimeoutOrNull(timeoutMs) { check { prepared = true } }
+        ?: if (prepared) result(SportsProbeStatus.UNVERIFIED, "Slow or not verified")
+        else result(SportsProbeStatus.DEFERRED, "Waiting for VPN or provider")
+}
+
 /** Real Media3 periods and sample queues; the source factory remains injectable for loopback tests. */
 @OptIn(UnstableApi::class)
 internal suspend fun probeSportsMediaSource(
-    timeoutMs: Long = 10_000L,
+    timeoutMs: Long = SPORTS_PROBE_TIMEOUT_MS,
     maxReadBytes: Long = 16L * 1024 * 1024,
     beforeClose: () -> Unit = {},
     createSource: ((HttpDataSource.Factory) -> HttpDataSource.Factory) -> MediaSource,

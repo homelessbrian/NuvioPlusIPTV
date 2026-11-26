@@ -74,6 +74,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.sports.probe.sportsProbeChannelRows
 import com.nuvio.tv.livetv.record.LiveTvNotice
 import com.nuvio.tv.livetv.ui.ChannelLogo
 import com.nuvio.tv.livetv.ui.LivePlayerSurface
@@ -1729,14 +1730,13 @@ private fun GamePage(
     val shown = if (regionChoice.isBlank() || otherRegions || noneInRegion) matches else inRegion
     // One row per channel: its FHD/HD/SD copies folded in (the one playing leads).
     val shownRows = remember(shown, playingKey) { SportsMatcher.groupCopies(shown, playingKey) }
-    // Automatic checks expose each actual provider/copy as its own ordinary play row.
-    val displayRows = remember(shownRows, settings.autoCheckChannels) {
-        if (settings.autoCheckChannels) shownRows.flatten().distinctBy { it.channel.key }.map { listOf(it) }
-        else shownRows
+    val channelChecks by viewModel.channelChecks.collectAsStateWithLifecycle()
+    // Each actual provider/copy is playable. Verified working sources lead, unavailable ones trail.
+    val displayRows = remember(shownRows, settings.autoCheckChannels, channelChecks) {
+        sportsProbeChannelRows(shownRows, channelChecks, settings.autoCheckChannels)
     }
     val probeChannels = remember(shownRows) { shownRows.flatten().map { it.channel }.distinctBy { it.key } }
     val latestProbeChannels = androidx.compose.runtime.rememberUpdatedState(probeChannels)
-    val channelChecks by viewModel.channelChecks.collectAsStateWithLifecycle()
     val channelListState = remember(ev.id) { LazyListState() }
     DisposableEffect(lifecycleOwner, ev.id, settings.autoCheckChannels, ev.state) {
         val observer = LifecycleEventObserver { _, event ->
@@ -1891,6 +1891,7 @@ private fun GamePage(
                             copies = g.drop(1),
                             probe = channelChecks[m.channel.key],
                             showProbe = settings.autoCheckChannels,
+                            probePosition = i.takeIf { settings.autoCheckChannels },
                             guide = if (ev.state == GameState.POST || m.channel.sourceId == SportsAddonSource.SOURCE_ID) null
                                 else guideLine(ev, m, guideNow[m.channel.key], now, use24h),
                             modifier = if (i == 0 && regionButton) Modifier.focusProperties { up = regionFocus } else Modifier,
