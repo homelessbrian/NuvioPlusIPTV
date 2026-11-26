@@ -103,6 +103,22 @@ class RemoteHostDefaultsTest {
         assertEquals(RemoteAction.PLAY_PAUSE, live.action(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
     }
 
+    @Test fun `paused movie HUD keeps resume shortcuts available while navigation stays native`() {
+        for (code in listOf(KeyEvent.KEYCODE_PROG_RED, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+            KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE)) {
+            assertEquals(true, RemoteHostDefaults.canRemapMovieButton(RemoteButton(code), controlsOwnNavigation = false))
+            // Both paused controls and a focused skip button use the same navigation ownership rule.
+            assertEquals(true, RemoteHostDefaults.canRemapMovieButton(RemoteButton(code), controlsOwnNavigation = true))
+        }
+        for (code in listOf(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BACK)) {
+            assertEquals(false, RemoteHostDefaults.canRemapMovieButton(RemoteButton(code), controlsOwnNavigation = true))
+        }
+        assertEquals(true, RemoteHostDefaults.canRemapMovieButton(RemoteButton(KeyEvent.KEYCODE_DPAD_CENTER), controlsOwnNavigation = false))
+        assertEquals(true, RemoteCatalog.isProtected(RemoteScreen.MOVIE, RemoteButton(KeyEvent.KEYCODE_BACK)))
+    }
+
     @Test fun `menu navigation remains protected even when offered as default help`() {
         for (screen in listOf(RemoteScreen.TV_GUIDE, RemoteScreen.SPORTS, RemoteScreen.MULTIVIEW)) {
             assertEquals(RemoteAction.NAVIGATE_LEFT, RemoteCatalog.defaults(screen).action(KeyEvent.KEYCODE_DPAD_LEFT))

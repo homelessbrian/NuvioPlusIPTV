@@ -18,6 +18,10 @@ object RemoteHostDefaults {
     fun canRemapLiveButton(button: RemoteButton, browsing: Boolean): Boolean =
         !browsing || button.canonical().keyCode != KeyEvent.KEYCODE_DPAD_CENTER
 
+    /** The HUD owns navigation, while extra/media shortcuts must still be able to resume a movie. */
+    fun canRemapMovieButton(button: RemoteButton, controlsOwnNavigation: Boolean): Boolean =
+        !controlsOwnNavigation || !RemoteCatalog.isProtected(RemoteScreen.TV_GUIDE, button.canonical())
+
     /** Both built-in movie engines use this same screen-level key handler. */
     fun movie(hasChapters: Boolean = true, isLive: Boolean = false): List<RemoteDefaultBinding> =
         RemoteCatalog.defaults(RemoteScreen.MOVIE).filterNot {

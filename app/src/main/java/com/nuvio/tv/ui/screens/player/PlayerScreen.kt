@@ -438,7 +438,7 @@ fun PlayerScreen(
     RemoteActionHost(
         screen = RemoteScreen.MOVIE,
         enabled = !exitDispatched && !externalHandoffInProgress && !uiState.playbackEnded &&
-            uiState.error == null && !uiState.showControls && !skipButtonActuallyVisible &&
+            uiState.error == null &&
             !postPlayRecommendationState.isVisible && !postPlayRecommendationState.isLoadingRecommendation &&
             !shouldConfirmNextEpisodeOnEnd && uiState.postPlayMode == null &&
             !uiState.showEpisodesPanel && !uiState.showSourcesPanel && !uiState.showPartyPanel &&
@@ -447,7 +447,10 @@ fun PlayerScreen(
             !uiState.showSubtitleDelayOverlay && !uiState.showSubtitleTimingDialog &&
             !uiState.showMoreDialog && !uiState.showStreamInfoOverlay,
         defaults = { RemoteHostDefaults.movie(hasChapters = uiState.chapters.isNotEmpty(), isLive = uiState.isLive) },
-        onNativeCancel = viewModel::cancelRemoteNativeGesture
+        onNativeCancel = viewModel::cancelRemoteNativeGesture,
+        canRemapButton = {
+            RemoteHostDefaults.canRemapMovieButton(it, controlsOwnNavigation = uiState.showControls || skipButtonActuallyVisible)
+        }
     ) { action ->
         fun unavailable() = android.widget.Toast.makeText(
             context, com.nuvio.tv.R.string.remote_action_unavailable, android.widget.Toast.LENGTH_SHORT).show()
