@@ -157,6 +157,36 @@ class SportsProbeHostTest {
         assertTrue(fixture.host.results.value.isEmpty())
     }
 
+    @Test fun `closing and reopening the same game reuses fresh source health`() = runTest {
+        val fixture = Fixture(backgroundScope)
+        fixture.open()
+        runCurrent()
+        assertEquals(1, fixture.opens)
+
+        fixture.host.close("game")
+        fixture.open()
+        runCurrent()
+
+        assertEquals(1, fixture.opens)
+        assertEquals(SportsProbeStatus.WORKING, fixture.host.results.value.getValue(fixture.channel.key).status)
+    }
+
+    @Test fun `a fresh playback target outside the game probe index is allowed until that source changes`() = runTest {
+        val fixture = Fixture(backgroundScope)
+        val target = source().copy(key = "other-game", url = "https://fixture.invalid/other-game.ts")
+        fixture.channelList.value = listOf(fixture.channel, target)
+        fixture.open()
+        runCurrent()
+        val guard = fixture.host.playbackGuard(target)
+        assertTrue(guard())
+
+        fixture.channelList.value = listOf(fixture.channel, target.copy(url = "https://fixture.invalid/replaced.ts"))
+
+        assertFalse(guard())
+        runCurrent()
+        assertFalse(guard())
+    }
+
     @Test fun `finished-game replay guards retain current published videos but reject removed ones`() = runTest {
         val replay = source().copy(key = "video:fixture", sourceId = SportsVideos.SOURCE_ID,
             groupId = SportsVideos.SOURCE_ID)
@@ -186,6 +216,7 @@ class SportsProbeHostTest {
         val sources = MutableStateFlow(listOf(PlaylistSource("provider", "Provider", "https://fixture.invalid/list.m3u")))
         val installed = MutableStateFlow(installed)
         val profile = MutableStateFlow(1)
+        val channelList = MutableStateFlow(listOf(channel))
         val state = MutableStateFlow(LivePlaybackState())
         val recordings = MutableStateFlow<List<LiveTvRecording>>(emptyList())
         val known = MutableStateFlow(listOf(SportsEvent("game", "league", 1_800_000_000_000L,
@@ -212,7 +243,7 @@ class SportsProbeHostTest {
                 every { playlists } returns sources
             }
             val channelStore = mockk<LiveTvChannelStore> {
-                every { displayChannels } returns MutableStateFlow(listOf(channel))
+                every { displayChannels } returns this@Fixture.channelList
             }
             val addons = mockk<AddonRepository> { every { getInstalledAddons() } returns this@Fixture.installed }
             val profiles = mockk<ProfileManager> {

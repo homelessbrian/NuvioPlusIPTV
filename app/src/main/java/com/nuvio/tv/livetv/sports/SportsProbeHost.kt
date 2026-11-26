@@ -68,6 +68,11 @@ class SportsProbeHost @Inject constructor(
     private var sourceKeys = emptySet<String>()
     private var indexJob: Job? = null
     private lateinit var indexDispatcher: CoroutineDispatcher
+    private data class RuleCache(val user: LiveUserState, val live: LiveTvSettings, val sports: SportsSettings,
+        val addons: Set<String>, val unlocked: Set<String>, val value: SportsWatchRules)
+    private var ruleCache: RuleCache? = null
+    private data class EventCache(val input: List<SportsEvent>, val id: String, val value: SportsEvent?)
+    private var eventCache: EventCache? = null
     internal val results get() = queue.results
     internal val blockedByPlayback get() = queue.blockedByPlayback
 
@@ -139,7 +144,7 @@ class SportsProbeHost @Inject constructor(
         gameId = id
         lastMatches = repository.matches.value[id].orEmpty().map { it.channel }
         val keys = candidates.filter { it.sourceId != SportsAddonSource.SOURCE_ID }.mapTo(HashSet()) { it.key }
-        if (keys != sourceKeys || sourceIndex?.input !== channels.displayChannels.value) {
+        if (keys != sourceKeys || sourceIndex?.input !== channels.displayChannels.value || keys.any { it !in sourceIndex?.values.orEmpty() }) {
             sourceKeys = keys
             rebuildSourceIndex()
         }
@@ -151,8 +156,6 @@ class SportsProbeHost @Inject constructor(
         gameId = null
         lastMatches = emptyList()
         indexJob?.cancel()
-        sourceKeys = emptySet()
-        sourceIndex = null
         queue.close(id)
     }
 
@@ -167,29 +170,33 @@ class SportsProbeHost @Inject constructor(
         return {
             selectedProfile == openingProfile && profiles.activeProfileReady.value && profiles.activeProfileId.value == selectedProfile &&
                 (gameId == null || selectedGame == gameId) &&
-                (if (replay) replayAllowed(candidate) else selectedGame == null || allowed(candidate, selectedGame))
+                (if (replay) replayAllowed(candidate) else playbackSourceAllowed(candidate))
         }
     }
 
     /** Keep only this game's sources, and never scan the full playlist on each badge update. */
     private fun rebuildSourceIndex() {
         indexJob?.cancel()
-        sourceIndex = null
-        if (gameId == null) return
         val input = channels.displayChannels.value
+        val previous = sourceIndex?.takeIf { it.input === input }?.values.orEmpty()
+        if (sourceIndex?.input !== input) sourceIndex = null
+        if (gameId == null) return
         val wanted = sourceKeys
         indexJob = scope.launch {
             val found = withContext(indexDispatcher) {
-                val out = HashMap<String, LiveChannel>()
+                val out = LinkedHashMap(previous)
                 for ((at, channel) in input.withIndex()) {
                     if (at % 1024 == 0) currentCoroutineContext().ensureActive()
                     if (channel.key in wanted) out[channel.key] = channel
                 }
+                val old = out.keys.filter { it !in wanted }.iterator()
+                while (out.size > maxOf(128, wanted.size) && old.hasNext()) out.remove(old.next())
                 out
             }
             if (channels.displayChannels.value === input && sourceKeys == wanted && gameId != null) {
                 sourceIndex = SourceIndex(input, found)
-                invalidate()
+                // Index readiness is not an authorization or network change; retain fresh health.
+                queue.refresh()
             }
         }
     }
@@ -220,17 +227,15 @@ class SportsProbeHost @Inject constructor(
     private fun replayAllowed(candidate: LiveChannel): Boolean {
         val sports = repository.settings.value
         if (!sports.showInSidebar) return false
-        val currentUser = user.value ?: return false
-        val currentLive = live.value ?: return false
         val published = (repository.vodMatches.value.keys + repository.videoMatches.value.keys).any { id ->
-            val event = repository.known.value.firstOrNull { it.id == id }
-            event != null && event.leagueId !in sports.hiddenLeagues && SportsVideos.merge(
+            val matches = SportsVideos.merge(
                 repository.vodMatches.value[id].orEmpty(), repository.videoMatches.value[id].orEmpty(),
                 sports.showHighlights, sports.showCondensed,
-            ).any { it.channel == candidate }
+            )
+            matches.any { it.channel == candidate } && event(id)?.let { it.leagueId !in sports.hiddenLeagues } == true
         }
         if (!published) return false
-        val rules = SportsWatchRules(currentUser, currentLive, sports, enabledAddons.value.orEmpty(), ParentalControls.unlocked.value)
+        val rules = currentRules() ?: return false
         return when (candidate.sourceId) {
             SportsAddonSource.SOURCE_ID -> rules.permitsAddon(candidate)
             SportsVideos.SOURCE_ID -> rules.permits(candidate)
@@ -242,12 +247,10 @@ class SportsProbeHost @Inject constructor(
     private fun allowed(candidate: LiveChannel, selectedGame: String? = gameId): Boolean {
         if (!profiles.activeProfileReady.value || profiles.activeProfileId.value != openingProfile) return false
         val id = selectedGame ?: return false
-        val event = repository.known.value.firstOrNull { it.id == id } ?: return false
+        val event = event(id) ?: return false
         val sports = repository.settings.value
         if (event.state == GameState.POST || !sports.showInSidebar || event.leagueId in sports.hiddenLeagues) return false
-        val currentUser = user.value ?: return false
-        val currentLive = live.value ?: return false
-        val rules = SportsWatchRules(currentUser, currentLive, sports, enabledAddons.value.orEmpty(), ParentalControls.unlocked.value)
+        val rules = currentRules() ?: return false
         val fresh = if (candidate.sourceId == SportsAddonSource.SOURCE_ID) {
             repository.matches.value[id].orEmpty().firstOrNull { it.channel.key == candidate.key }?.channel
                 ?.takeIf { rules.permitsAddon(it) }
@@ -257,5 +260,48 @@ class SportsProbeHost @Inject constructor(
                 ?.takeIf { rules.permits(it) }
         }
         return fresh == candidate && profiles.activeProfileReady.value && profiles.activeProfileId.value == openingProfile
+    }
+
+    /** Playback may target another game's channel; the probe page is not its source authority. */
+    private fun playbackSourceAllowed(candidate: LiveChannel): Boolean {
+        val rules = currentRules() ?: return false
+        val fresh = if (candidate.sourceId == SportsAddonSource.SOURCE_ID) {
+            repository.matches.value.entries.firstNotNullOfOrNull { (id, matches) ->
+                matches.firstOrNull { sameTransport(it.channel, candidate) }?.channel
+                    ?.takeIf { event(id)?.let { game -> game.leagueId !in repository.settings.value.hiddenLeagues } == true && rules.permitsAddon(it) }
+            }
+        } else {
+            val source = sources.value?.firstOrNull { it.id == candidate.sourceId && it.enabled && it.liveEnabled }
+            if (source == null) null else channels.displayChannels.value.firstOrNull { it.key == candidate.key }
+                ?.takeIf { rules.permits(it) }
+        }
+        return fresh != null && sameTransport(fresh, candidate)
+    }
+
+    private fun sameTransport(a: LiveChannel, b: LiveChannel) = a.key == b.key && a.sourceId == b.sourceId &&
+        a.url == b.url && a.headers == b.headers && a.stalkerRef == b.stalkerRef && a.drm == b.drm
+
+    private fun currentRules(): SportsWatchRules? {
+        val currentUser = user.value ?: return null
+        val currentLive = live.value ?: return null
+        val sports = repository.settings.value
+        if (!sports.showInSidebar) return null
+        val addons = enabledAddons.value.orEmpty()
+        val unlocked = ParentalControls.unlocked.value
+        val old = ruleCache
+        if (old != null && old.user === currentUser && old.live === currentLive && old.sports === sports &&
+            old.addons === addons && old.unlocked === unlocked) return old.value
+        val rules = SportsWatchRules(currentUser, currentLive, sports, addons, unlocked)
+        ruleCache = RuleCache(currentUser, currentLive, sports, addons, unlocked, rules)
+        return rules
+    }
+
+    private fun event(id: String): SportsEvent? {
+        val input = repository.known.value
+        val old = eventCache
+        if (old != null && old.input === input && old.id == id) return old.value
+        val value = input.firstOrNull { it.id == id }
+        eventCache = EventCache(input, id, value)
+        return value
     }
 }

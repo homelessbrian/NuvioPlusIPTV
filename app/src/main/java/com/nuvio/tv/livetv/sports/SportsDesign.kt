@@ -966,7 +966,9 @@ internal fun SportsChannelRow(
                     color = Color(0xFFC9CCD6), size = 9.sp, weight = FontWeight.Black
                 )
             }
-            m.quality?.let { q ->
+            // In automatic mode, only measured media gets a picture-quality badge.
+            val quality = if (showProbe) probe?.height?.takeIf { it > 0 }?.let { "${it}p" } else m.quality
+            quality?.let { q ->
                 Spacer(Modifier.width(6.dp))
                 LiveText(
                     q,

@@ -129,7 +129,7 @@ class SportsViewModel @Inject constructor(
         videoJob?.cancel()
     }
 
-    private fun playAfterChecks(m: ChannelMatch, rememberWatched: Boolean, replay: Boolean = false) {
+    private fun playAfterChecks(m: ChannelMatch, rememberWatched: Boolean, replay: Boolean = false, onStarted: () -> Unit = {}) {
         cancelPendingPlayback()
         val request = playbackRequest
         val stillAllowed = channelProbeHost.playbackGuard(m.channel, replay)
@@ -137,6 +137,7 @@ class SportsViewModel @Inject constructor(
             channelProbeHost.stopAndJoin()
             if (request != playbackRequest || !stillAllowed()) return@launch
             playback.play(m.channel)
+            onStarted()
             if (rememberWatched) runCatching { livePrefs.recordWatched(m.channel.key) }
         }
     }
@@ -153,8 +154,7 @@ class SportsViewModel @Inject constructor(
         previewReturn.cancel()
         videoJob?.cancel()
         if (!SportsVideos.needsResolving(m.channel)) {
-            playAfterChecks(m, rememberWatched = false, replay = true)
-            onReady()
+            playAfterChecks(m, rememberWatched = false, replay = true, onStarted = onReady)
             return
         }
         val request = playbackRequest

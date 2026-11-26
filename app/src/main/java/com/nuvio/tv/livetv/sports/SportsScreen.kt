@@ -1744,7 +1744,10 @@ private fun GamePage(
                 Lifecycle.Event.ON_RESUME -> if (!gameIsClosing.value && ev.state != GameState.POST && settings.autoCheckChannels) {
                     viewModel.openChannelChecks(ev.id, latestProbeChannels.value, settings.autoCheckChannels)
                 }
-                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP, Lifecycle.Event.ON_DESTROY -> viewModel.closeChannelChecks(ev.id)
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP, Lifecycle.Event.ON_DESTROY -> {
+                    pendingPlay?.cancel()
+                    viewModel.closeChannelChecks(ev.id)
+                }
                 else -> Unit
             }
         }
