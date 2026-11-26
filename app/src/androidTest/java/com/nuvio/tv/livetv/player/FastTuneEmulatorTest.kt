@@ -26,6 +26,7 @@ import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.theme.NuvioTheme
 import dagger.hilt.android.EntryPointAccessors
 import java.io.File
+import java.net.URL
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
@@ -48,6 +49,7 @@ class FastTuneEmulatorTest {
         val modes = (args.getString("fixtureModes") ?: "off,on,on,off").split(',')
         require(modes.isNotEmpty() && modes.all { it in setOf("on", "off") })
         val seconds = args.getString("fixtureSeconds")?.toIntOrNull()?.coerceIn(8, 65) ?: 61
+        val strict = args.getString("fixtureStrictControls") == "true"
         val context = instrumentation.targetContext
         val receipt = File(context.getExternalFilesDir(null), "fast-rewind-$label.jsonl").apply { writeText("") }
         val loading = EntryPointAccessors.fromApplication(context, LoadingEntryPoint::class.java)
@@ -163,8 +165,9 @@ class FastTuneEmulatorTest {
                 }
                 if (args.getString("fixtureControls") == "true") {
                     // Switch directly from a moving picture; measure any intentional handoff waiting.
-                    val activeZaps = listOf(false to "off-a", false to "off-b", false to "off-c",
-                        true to "on-a", true to "on-b", true to "on-c")
+                    val activeZaps = if (strict) listOf(true to "on-a", false to "off-a",
+                        true to "on-b", true to "on-c") else listOf(false to "off-a", false to "off-b",
+                        false to "off-c", true to "on-a", true to "on-b", true to "on-c")
                     activeZaps.forEach { (enabled, suffix) ->
                         configure(enabled)
                         assertTrue("rewind setting did not apply", until { controller.rewindAlways == enabled })
@@ -198,12 +201,15 @@ class FastTuneEmulatorTest {
                         controller.player?.isPlaying == true && controller.shiftCanSeek() })
                     Thread.sleep(4500)
                     val holds = mutableListOf(650L)
-                    args.getString("fixtureLongPauseMs")?.toLongOrNull()?.let { holds += it.coerceIn(20_000, 80_000) }
+                    args.getString("fixtureLongPauseMs")?.toLongOrNull()?.takeIf { it > 0 }?.let {
+                        holds += it.coerceIn(20_000, 110_000)
+                    }
                     for (holdMs in holds) {
                         val sample = JSONObject().put("pauseMs", holdMs)
                         fun position(key: String) {
                             val p = checkNotNull(controller.player)
                             sample.put("${key}PlayerMs", p.currentPosition)
+                                .put("${key}Frames", p.videoDecoderCounters?.also { it.ensureUpdated() }?.renderedOutputBufferCount)
                                 .put("${key}HistoryMs", (controller.shiftPositionWallMs() ?: 0L) -
                                     (controller.shiftStartedAt.value ?: 0L))
                                 .put("${key}Scheme", p.currentMediaItem?.localConfiguration?.uri?.scheme)
@@ -211,13 +217,28 @@ class FastTuneEmulatorTest {
                         main { controller.togglePause(); position("paused") }
                         assertTrue("pause failed", until(2000) { controller.player?.playWhenReady == false })
                         Thread.sleep(holdMs)
-                        main { position("held"); controller.togglePause(); position("atResume") }
-                        assertTrue("resume failed", until { controller.player?.isPlaying == true &&
-                            (controller.player?.videoDecoderCounters?.renderedOutputBufferCount ?: 0) > 0 })
+                        var previousCounters: androidx.media3.exoplayer.DecoderCounters? = null
+                        main {
+                            position("held")
+                            previousCounters = controller.player?.videoDecoderCounters
+                            controller.togglePause()
+                            position("atResume")
+                        }
+                        assertTrue("no new video frame rendered after resuming", until {
+                            val p = controller.player
+                            val counters = p?.videoDecoderCounters?.also { it.ensureUpdated() }
+                            p?.isPlaying == true && counters != null && counters.renderedOutputBufferCount >
+                                (if (counters === previousCounters) sample.getInt("heldFrames") else 0)
+                        })
                         main { position("resumed") }
                         record(sample)
                         assertTrue("the position moved while paused: $sample",
                             kotlin.math.abs(sample.getLong("heldHistoryMs") - sample.getLong("pausedHistoryMs")) <= 100)
+                        if (holdMs >= 100_000 && strict) {
+                            assertTrue("the long hold did not use the recording: $sample", sample.getString("resumedScheme") == "file")
+                            assertTrue("recording resumed away from the paused position: $sample",
+                                kotlin.math.abs(sample.getLong("resumedHistoryMs") - sample.getLong("pausedHistoryMs")) <= 1000)
+                        }
                     }
                     main { controller.shiftSeekBy(-4000) }
                     assertTrue("rewind did not present the recording", until { controller.player?.isPlaying == true &&
@@ -226,6 +247,18 @@ class FastTuneEmulatorTest {
                     main { controller.goLive() }
                     assertTrue("go-live failed", until { controller.player?.isPlaying == true })
                     record(JSONObject().put("controls", "zap, pause, resume, rewind and go-live").put("passed", true))
+                    if (strict) {
+                        val events = JSONObject(URL("$base/stats").readText()).getJSONArray("events")
+                        val run = (0 until events.length()).map(events::getJSONObject)
+                            .filter { it.getString("channel").startsWith("$label-") }
+                        assertTrue("provider refused a competing request: $run",
+                            run.none { it.getString("action") == "refused" })
+                        val opened = run.filter { it.getString("action") == "open" }
+                            .groupingBy { it.getString("channel") }.eachCount()
+                        assertTrue("a tune opened the provider more than once: $opened", opened.values.all { it == 1 })
+                        assertTrue("a fully tuned switch did not open the provider: $opened",
+                            activeZaps.all { (_, suffix) -> opened["$label-active-$suffix"] == 1 } && opened["$label-zapc"] == 1)
+                    }
                 }
             }
         } finally {

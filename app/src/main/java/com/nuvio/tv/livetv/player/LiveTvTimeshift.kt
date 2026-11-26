@@ -158,13 +158,14 @@ class LiveTvTimeshift(private val context: Context) {
         historyAvailable = false
         val previous = job
         val fast = liveFeed != null
-        previous?.cancel()
         liveFeed?.let { feed ->
-            feed.retire()?.let { connection ->
-                retiringProvider = feed.providerReleased
+            val connection = feed.retire()
+            if (feed.requestedProvider) retiringProvider = feed.providerReleased
+            if (connection != null) {
                 scope.launch { runCatching { connection.disconnect() } }
             }
         }
+        previous?.cancel()
         liveFeed = null
         job = null
         session?.dir?.let { d ->
@@ -273,10 +274,12 @@ class LiveTvTimeshift(private val context: Context) {
                     val requestHeaders = fresh?.headers ?: headers
                     val c = if (feed == null) LiveHttp.open(address, requestHeaders, 20_000, policy)
                     else LiveHttp.openObserved(address, requestHeaders, 20_000, policy, feed::opening)
+                    var acceptedPlayback = false
                     try {
                         val code = c.responseCode
+                        acceptedPlayback = code in 200..299
                         checkWriter(writer, dir)
-                        if (code !in 200..299) "HTTP $code"
+                        if (!acceptedPlayback) "HTTP $code"
                         else c.inputStream.use { input ->
                             val buf = ByteArray(64 * 1024)
                             var end = "the provider ended the stream"
@@ -294,7 +297,9 @@ class LiveTvTimeshift(private val context: Context) {
                             if (!recording) end = "stopped"
                             end
                         }
-                    } finally { c.disconnect(); feed?.released(c) }
+                    } finally {
+                        try { c.disconnect() } finally { feed?.released(c, acceptedPlayback) }
+                    }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -319,8 +324,13 @@ class LiveTvTimeshift(private val context: Context) {
                 if (bytes > 0) attempt = 1
             }
         } finally {
-            if (ownsProvider) fastProvider.unlock()
-            feed?.providerReleased?.complete(Unit)
+            try {
+                val settleMs = feed?.remainingSettleMs() ?: 0L
+                if (settleMs > 0) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { delay(settleMs) }
+            } finally {
+                if (ownsProvider) fastProvider.unlock()
+                feed?.providerReleased?.complete(Unit)
+            }
             val complete = writer.isActive && ownsWriter(writer, dir)
             if (feed != null) {
                 if (complete) feed.bytes.finish() else feed.bytes.stop()

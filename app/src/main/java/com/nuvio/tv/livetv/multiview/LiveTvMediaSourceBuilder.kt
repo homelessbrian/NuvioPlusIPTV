@@ -6,6 +6,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory
 import androidx.media3.exoplayer.hls.HlsExtractorFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -45,6 +46,7 @@ internal class LiveTvMediaSourceBuilder(
     /** Explicit channel intent: the shared Live TV player also opens finite Sports replays. */
     private val continuousTs: Boolean = false,
     private val mediaId: String? = null,
+    private val trackProgressiveHttp: ((HttpDataSource.Factory) -> HttpDataSource.Factory)? = null,
 ) {
     private fun captionExtractor(factory: DefaultHlsExtractorFactory): HlsExtractorFactory =
         if (observeCaptions) LiveCaptions.Hls(factory) else factory
@@ -89,7 +91,8 @@ internal class LiveTvMediaSourceBuilder(
         val continuousTransport = continuousTs && isLive && item.localConfiguration?.mimeType == MimeTypes.VIDEO_MP2T &&
             item.localConfiguration?.uri?.scheme?.lowercase() in setOf("http", "https")
         val progressiveHttp = if (continuousTransport) ContinuousTsDataSourceFactory(http) else http
-        return DefaultMediaSourceFactory(progressiveHttp, liveTsExtractors(observeCaptions)).createMediaSource(item)
+        val transport = trackProgressiveHttp?.invoke(progressiveHttp) ?: progressiveHttp
+        return DefaultMediaSourceFactory(transport, liveTsExtractors(observeCaptions)).createMediaSource(item)
     }
 
     /**

@@ -18,9 +18,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.GZIPInputStream
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import okio.Buffer
 import org.junit.After
 import org.junit.Assert.*
@@ -91,6 +94,7 @@ class LiveTsFeedHttpTest {
         val canceled = CountDownLatch(1)
         val release = CountDownLatch(1)
         val enteredNext = CountDownLatch(1)
+        val providerClose = AtomicLong(0L)
         val oldUrl = URL("http://fixture.invalid/old.ts")
         val old = object : HttpURLConnection(oldUrl) {
             override fun connect() = Unit
@@ -99,6 +103,7 @@ class LiveTsFeedHttpTest {
             override fun disconnect() {
                 canceled.countDown()
                 check(release.await(5, TimeUnit.SECONDS)) { "Disconnect blocked the replacement call" }
+                providerClose.compareAndSet(0L, System.nanoTime())
             }
             override fun getInputStream(): InputStream = object : InputStream() {
                 override fun read(): Int = error("Bulk reads expected")
@@ -111,7 +116,14 @@ class LiveTsFeedHttpTest {
         }
         MockWebServer().use { next ->
             val fixture = ByteArray(8192) { 23 }
-            next.enqueue(MockResponse().setBody(Buffer().write(fixture)))
+            next.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val closedAt = providerClose.get()
+                    return if (closedAt == 0L || System.nanoTime() - closedAt < TimeUnit.MILLISECONDS.toNanos(125)) {
+                        MockResponse().setResponseCode(429)
+                    } else MockResponse().setBody(Buffer().write(fixture))
+                }
+            }
             every { VpnHttpClient.openConnection(any<URL>()) } answers {
                 val url = firstArg<URL>()
                 if (url.toString() == oldUrl.toString()) old else {
@@ -130,9 +142,12 @@ class LiveTsFeedHttpTest {
                 try {
                     newView.open(viewUri)
                     assertTrue(canceled.await(1, TimeUnit.SECONDS))
-                    assertNotNull(recorder.pendingLiveRelease())
+                    val directHandoff = checkNotNull(recorder.pendingLiveRelease())
                     assertFalse(enteredNext.await(200, TimeUnit.MILLISECONDS))
                     release.countDown()
+                    runBlocking { withTimeout(3_000) { directHandoff.join() } }
+                    assertTrue("Direct fallback must respect the provider's slot too",
+                        System.nanoTime() - providerClose.get() >= TimeUnit.MILLISECONDS.toNanos(125))
                     assertTrue(enteredNext.await(3, TimeUnit.SECONDS))
                     val out = ByteArray(32)
                     val n = newView.read(out, 0, out.size)
