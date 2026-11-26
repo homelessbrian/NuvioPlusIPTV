@@ -776,6 +776,57 @@ internal class SportsFeeds {
             return out
         }
 
+        private fun overallRecord(records: JSONArray?): String? {
+            var untyped: String? = null
+            for (i in 0 until (records?.length() ?: 0)) {
+                val entry = records?.optJSONObject(i) ?: continue
+                val summary = entry.str("summary") ?: continue
+                val type = entry.str("type")
+                val name = entry.str("name")
+                if (type.equals("total", true) || type.equals("overall", true) || name.equals("overall", true)) return summary
+                if (type == null && name == null && records.length() == 1) untyped = summary
+            }
+            return untyped
+        }
+
+        private val battingInning = Regex("""^(Top|Bot|Bottom)\s+(?:of\s+(?:the\s+)?)?\d+(?:st|nd|rd|th)?$""", RegexOption.IGNORE_CASE)
+
+        private fun offensiveTeam(
+            league: League, competition: JSONObject, type: JSONObject?,
+            competitors: JSONArray, away: Side, home: Side
+        ): String? {
+            if (away.team.id == home.team.id) return null
+            return when (league.sport) {
+                Sport.AMERICAN_FOOTBALL -> {
+                    if (type?.str("name") != "STATUS_IN_PROGRESS" || type.str("description")?.let { !it.equals("In Progress", true) } == true) return null
+                    competition.optJSONObject("situation")?.str("possession")
+                        ?.takeIf { it == away.team.id || it == home.team.id }
+                }
+                Sport.BASEBALL -> {
+                    val phase = type?.str("description")
+                    if (phase != null && !phase.equals("In Progress", true) && !phase.equals("Live", true)) return null
+                    val description = type?.str("shortDetail") ?: type?.str("detail") ?: return null
+                    val half = battingInning.matchEntire(description)?.groupValues?.get(1) ?: return null
+                    val battingSide = if (half.equals("Top", true)) "away" else "home"
+                    (0 until competitors.length()).mapNotNull { competitors.optJSONObject(it) }
+                        .singleOrNull { it.str("homeAway") == battingSide }?.optJSONObject("team")?.str("id")
+                }
+                Sport.CRICKET -> {
+                    val phase = type?.str("description")
+                    if (!phase.equals("Live", true) && !phase.equals("In Progress", true)) return null
+                    (0 until competitors.length()).mapNotNull { competitors.optJSONObject(it) }.singleOrNull { side ->
+                        val innings = side.optJSONArray("linescores")
+                        (0 until (innings?.length() ?: 0)).any { i ->
+                            val inning = innings?.optJSONObject(i) ?: return@any false
+                            (inning.optInt("isCurrent", 0) == 1 || inning.optBoolean("isCurrent")) &&
+                                inning.optBoolean("isBatting")
+                        }
+                    }?.optJSONObject("team")?.str("id")
+                }
+                else -> null
+            }
+        }
+
         private fun parseEvent(league: League, ev: JSONObject): SportsEvent? {
             val espnId = ev.str("id") ?: return null
             val start = parseIso(ev.str("date")) ?: return null
@@ -896,7 +947,10 @@ internal class SportsFeeds {
                 val side = Side(
                     team = team,
                     score = score,
-                    record = co.optJSONArray("records")?.optJSONObject(0)?.str("summary"),
+                    record = if (league.sport == Sport.AMERICAN_FOOTBALL) overallRecord(co.optJSONArray("records"))
+                             else co.optJSONArray("records")?.optJSONObject(0)?.str("summary"),
+                    collegeRank = if (league.id == "football/college-football")
+                        co.optJSONObject("curatedRank")?.optInt("current", 0)?.takeIf { it in 1..25 } else null,
                     winner = co.optBoolean("winner", false),
                     home = co.str("homeAway") == "home",
                     periods = periods
@@ -905,11 +959,12 @@ internal class SportsFeeds {
             }
             val h: Side = home ?: return null
             val a: Side = away ?: return null
+            val offense = if (state == GameState.LIVE) offensiveTeam(league, comp, type, competitors, a, h) else null
 
             val situation = comp?.optJSONObject("situation")?.let { s ->
                 val dd = s.str("downDistanceText") ?: s.str("shortDownDistanceText")
-                val pos = s.str("possession")
-                val who = listOf(h, a).firstOrNull { it.team.id == pos }?.team?.abbr
+                val who = if (league.sport == Sport.AMERICAN_FOOTBALL)
+                    listOf(h, a).firstOrNull { it.team.id == offense }?.team?.let { it.abbr.ifBlank { it.name } } else null
                 when {
                     dd != null && who != null -> "$who ball · $dd"
                     dd != null -> dd
@@ -928,8 +983,8 @@ internal class SportsFeeds {
                 title = title,
                 subtitle = listOfNotNull(headline, week, venue).joinToString(" · ").ifBlank { null },
                 status = status,
-                away = a,
-                home = h,
+                away = if (offense == a.team.id) a.copy(onOffense = true) else a,
+                home = if (offense == h.team.id) h.copy(onOffense = true) else h,
                 broadcasts = broadcasts.toList(),
                 situation = situation,
                 progress = progress,
@@ -1629,7 +1684,7 @@ internal object OtherFeeds {
         val inning = line?.let { l -> listOf(l.optString("inningState").ifBlank { l.optString("inningHalf") }, l.optString("currentInningOrdinal")).filter { it.isNotBlank() }.joinToString(" ") }.orEmpty()
         val type = JSONObject().put("state", state)
             .put("name", if (off) "STATUS_POSTPONED" else "")
-            .put("description", if (off) detailed else "")
+            .put("description", detailed)
             .put("shortDetail", when (state) { "in" -> inning.ifBlank { "Live" }; "post" -> "Final"; else -> "" })
         val status = JSONObject().put("type", type)
         val teams = g.optJSONObject("teams") ?: return null
