@@ -848,7 +848,7 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
-    private suspend fun migrateProfile(profileId: Int) {
+    internal suspend fun migrateProfile(profileId: Int) {
         factory.get(profileId, FEATURE).edit { prefs ->
                 val loadControlMigrated = prefs[migrationLoadControlDefaultsAlignedDoneKey] ?: false
                 if (!loadControlMigrated) {

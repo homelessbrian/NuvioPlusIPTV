@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.profileDataStore: DataStore<Preferences> by preferencesDataStore(
+internal val Context.profileDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "profile_settings",
     corruptionHandler = ReplaceFileCorruptionHandler { ex ->
         android.util.Log.e("ProfileDataStore", "DataStore corrupted: ${ex.message} — resetting to empty")

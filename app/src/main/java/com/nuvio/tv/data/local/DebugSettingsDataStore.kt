@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.debugDataStore: DataStore<Preferences> by preferencesDataStore(
+internal val Context.debugDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "debug_settings",
     corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() }
 )

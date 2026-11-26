@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.torrentDataStore by preferencesDataStore(
+internal val Context.torrentDataStore by preferencesDataStore(
     name = "torrent_settings",
     corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() }
 )
