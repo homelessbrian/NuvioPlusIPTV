@@ -26,6 +26,16 @@ class CloudPreferencePatchTest {
     }
 
     @Test
+    fun configuredSharedFolderSurvivesASettingsOnlyRoundTripAndAnEmptyFolderDoesNotClearIt() {
+        val withFolder = data("""{"network_folder":{"t":"str","v":"{\"host\":\"fixture.invalid\",\"share\":\"recordings\"}"}}""")
+        val blank = data("""{"network_folder":{"t":"str","v":""}}""")
+        assertTrue(CloudPreferencePatch.hasChoices(withFolder, false))
+        assertFalse(CloudPreferencePatch.hasChoices(blank, false))
+        val saved = CloudPreferencePatch.onlyChoices(withFolder)
+        assertEquals(withFolder.toString(), CloudPreferencePatch.overlay(saved, blank).toString())
+    }
+
+    @Test
     fun cleanInstallMarkersAndMalformedEntriesDoNotTriggerFirstTimeConflict() {
         val defaults = data("""{"group_playlist_headings":{"t":"b","v":true},"mobile_setting_v1_update_channel":{"t":"str","v":"stable"},"profile_seeded_p2":{"t":"b","v":true},"mobile_setting_v1_layout_group_playlist_headings":{"t":"b","v":true},"seek_thumbs_enabled":{"t":"b","v":"wrong type"}}""")
         assertFalse(CloudPreferencePatch.hasChoices(defaults, false))
