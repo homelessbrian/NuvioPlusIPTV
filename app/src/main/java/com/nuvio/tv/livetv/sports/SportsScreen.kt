@@ -357,7 +357,7 @@ fun SportsScreen(
     /** Full screen in Live TV (from the start when the game is over). */
     fun watch(ev: SportsEvent, m: ChannelMatch?) {
         if (m == null) {
-            LiveTvNotice.show("No channel found for ${ev.title}. Open it and use Fix Channel to pick one.")
+            LiveTvNotice.show("No channel found for ${ev.title}. Open Fix Channel to search or pick one.")
             return
         }
         SportsLaunch.openedFromSports(ev.id)
@@ -388,7 +388,7 @@ fun SportsScreen(
     fun quickWatch(ev: SportsEvent) {
         val m = matches[ev.id]?.firstOrNull()
         when {
-            m == null -> LiveTvNotice.show("No channel found for ${ev.title}. Open it and use Fix Channel to pick one.")
+            m == null -> LiveTvNotice.show("No channel found for ${ev.title}. Open Fix Channel to search or pick one.")
             videoOn && ev.state != GameState.POST -> { SportsLaunch.pickGame(ev.id, m.channel.key); viewModel.playHere(m) }
             else -> watch(ev, m)
         }
@@ -1835,12 +1835,11 @@ private fun GamePage(
                     "Your channels are checked for this game from " +
                         java.text.SimpleDateFormat(if (use24h) "EEE HH:mm" else "EEE h:mm a", java.util.Locale.getDefault())
                             .format(java.util.Date(ev.startMs - SportsMatcher.AHEAD_MS)) +
-                        ". Know where it's on? Pick a channel now and it's remembered.",
+                        ". To search now, open Fix channel and choose Find Channels.",
                     color = SportsLook.Dim, size = 12.sp, maxLines = 3
                 )
                 else -> LiveText(
-                    "Not in your channels' guides right now. Guides update during the day, so check back closer to the start. " +
-                        "Know where it's on? Pick a channel and it's remembered.",
+                    "No matching channels yet. Open Fix channel to search your guide again or pick a channel by name.",
                     color = SportsLook.Dim, size = 12.sp, maxLines = 3
                 )
             }
@@ -1927,7 +1926,7 @@ private fun GamePage(
                 }
             }
             val m = f()
-            item { SportsAction(if (matches.isEmpty()) "Pick a channel" else "Fix channel", modifier = m, onClick = onFix) }
+            item { SportsAction("Fix channel", modifier = m, onClick = onFix) }
         }
     }
     val details: @Composable () -> Unit = {
@@ -2272,7 +2271,7 @@ private fun PlayRow(p: ScoringPlay, sport: Sport, sides: List<Side> = emptyList(
 
 @Composable
 private fun FixChannelDialog(ev: SportsEvent, matches: List<ChannelMatch>, hideScores: Boolean, viewModel: SportsViewModel, onDismiss: () -> Unit) {
-    var picking by remember { mutableStateOf(matches.isEmpty()) }
+    var picking by remember(ev.id) { mutableStateOf(false) }
     var chosen by remember { mutableStateOf<LiveChannel?>(null) }
     val pick = chosen
     if (pick != null) {
@@ -2340,16 +2339,39 @@ private fun FixChannelDialog(ev: SportsEvent, matches: List<ChannelMatch>, hideS
         return
     }
     val first = remember { FocusRequester() }
+    var searching by remember(ev.id) { mutableStateOf(false) }
+    var searchMessage by remember(ev.id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(ev.id, searching) {
+        if (searching) {
+            try {
+                if (viewModel.repo.findChannelsForGame(ev) > 0) {
+                    LiveTvNotice.show("Channel list updated for ${ev.title}")
+                    onDismiss()
+                } else {
+                    searchMessage = "No channels matched this game. You can still pick one by name."
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                searchMessage = "Channel search failed. Try again."
+            } finally {
+                searching = false
+            }
+        }
+    }
     SportsDialog(onDismiss = onDismiss, width = 560.dp, header = { GameHeaderBands(ev, hideScores) }) {
         LiveText("Fix the channel", size = 18.sp, weight = FontWeight.Bold)
-        LiveText("Take wrong channels off the list, or pick the right one.", color = SportsLook.Dim, size = 12.sp, maxLines = 2)
+        LiveText(searchMessage ?: "Search your channels and TV guide for this game, or pick a channel by name.", color = SportsLook.Dim, size = 12.sp, maxLines = 2)
         Spacer(Modifier.height(8.dp))
+        SportsMenuRow(if (searching) "Finding channels…" else "Find Channels", Modifier.focusRequester(first)) {
+            searchMessage = null
+            searching = true
+        }
         LazyColumn(Modifier.heightIn(max = 260.dp).keepFocusWhileHeld(horizontal = false), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            itemsIndexed(matches, key = { _, m -> m.channel.key }) { i, m ->
+            items(matches.filter { it.channel.sourceId != SportsAddonSource.SOURCE_ID }, key = { it.channel.key }) { m ->
                 ChannelLine(
                     channel = m.channel,
                     detail = "Not this channel",
-                    modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
                     onClick = {
                         viewModel.repo.blockChannel(ev, m.channel.key)
                         LiveTvNotice.show("${m.channel.name} won't be used for this game")

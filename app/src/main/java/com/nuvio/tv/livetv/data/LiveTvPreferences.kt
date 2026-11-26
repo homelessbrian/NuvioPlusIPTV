@@ -294,7 +294,7 @@ class LiveTvPreferences @Inject constructor(
     // The first profile uses the original keys (so nothing moves for it); the others use the same
     // names with "_p<id>" on the end, the same way Nuvio names its own per-profile files.
 
-    private val currentProfile: Int get() = profileManager.activeProfileId.value
+    internal val currentProfile: Int get() = profileManager.activeProfileId.value
 
     private val personalStringKeys: List<Preferences.Key<String>> = listOf(
         Keys.favorites, Keys.recent, Keys.recentGroups, Keys.lastChannel, Keys.previousChannel, Keys.lastGroup,

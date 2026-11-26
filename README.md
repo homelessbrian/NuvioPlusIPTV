@@ -130,7 +130,7 @@ Have a sports addon installed in Nuvio, like **HighFly** or **StremVerse**? Spor
   - **Channels from:** show only one region's or language's channels (UK, US, Ireland, Canada, Australia, English, or a language), with the rest one click away. Game reminders and Watch now use them first too.
 - **Games list in Quick Channels:** while you watch a live game, a **Games** list shows the league's other games. OK on one shows its channels.
 - **Switch when a channel fails:** during a live game, if a channel won't start, drops or keeps freezing, the next channel showing it takes over.
-- **Fix Channel:** pick the right channel once, for one game, every game on that network, or every game for a team. It's remembered. Each network can have its own link, listed under **Your Channel Links**, and games with a link skip the guide search.
+- **Fix Channel:** pick the right channel once, for one game, every game on that network, or every game for a team. Each network can have its own link under **Your Channel Links**. Choose **Find Channels** to look for more broadcasts of this game, even if you've already picked a channel.
 - **Video window:** hold OK on a game to watch it on the Sports page while you keep browsing. Hold Back for full screen.
 - **Watch from the start** on channels with catch-up.
 - **Game pages:**
@@ -434,7 +434,7 @@ Some internet companies block IPTV servers. Open **Settings → Live TV → DNS*
 <details>
 <summary><b>Sports shows the wrong channel for a game, or none at all.</b></summary>
 
-Open the game and press **Fix channel**. Pick the right channel for that game, for every game on that network, or for every game a team plays. It's remembered from then on. **MAYBE** means the app wasn't sure; a channel whose guide lists the game is marked **SHOWING IT**.
+Open the game and press **Fix channel → Find Channels** to search your current guide and playlist for that game again. If you already know the channel, choose **Pick the right channel** and save it for this game, its network or a team. **MAYBE** means the app was unsure. A channel whose guide lists the game is marked **SHOWING IT**.
 </details>
 
 <details>
