@@ -9,6 +9,8 @@ import kotlinx.coroutines.CompletableDeferred
 import java.io.InterruptedIOException
 import java.net.HttpURLConnection
 
+internal const val LIVE_PROVIDER_SETTLE_MS = 200L
+
 /** Ownership of the one provider connection, including connections awaiting HTTP headers. */
 internal class LiveTsFeed : DataSource.Factory {
     val bytes = LiveTsBuffer()
@@ -16,6 +18,9 @@ internal class LiveTsFeed : DataSource.Factory {
     val providerReleased = CompletableDeferred<Unit>()
     private var closed = false
     private var connection: HttpURLConnection? = null
+    @Volatile var requestedProvider = false
+        private set
+    private var lastPlaybackCloseNs: Long? = null
 
     @Synchronized fun opening(c: HttpURLConnection) {
         if (closed) {
@@ -23,17 +28,27 @@ internal class LiveTsFeed : DataSource.Factory {
             throw InterruptedIOException("Live session closed")
         }
         connection = c
+        requestedProvider = true
     }
 
-    @Synchronized fun released(c: HttpURLConnection) {
+    @Synchronized fun released(c: HttpURLConnection, acceptedPlayback: Boolean) {
         if (connection === c) connection = null
+        if (acceptedPlayback) lastPlaybackCloseNs = System.nanoTime()
+    }
+
+    /** A one-slot server can observe its socket closing shortly after disconnect() returns. */
+    @Synchronized fun remainingSettleMs(): Long {
+        val closedAt = lastPlaybackCloseNs ?: return 0
+        val remainingNs = LIVE_PROVIDER_SETTLE_MS * 1_000_000 - (System.nanoTime() - closedAt)
+        return if (remainingNs <= 0) 0 else (remainingNs + 999_999) / 1_000_000
     }
 
     /** Revoke synchronously; the caller disconnects this socket on an IO worker. */
     fun retire(): HttpURLConnection? {
+        val active = synchronized(this) { closed = true; connection.also { connection = null } }
         bytes.stop()
         firstReader.cancel()
-        return synchronized(this) { closed = true; connection.also { connection = null } }
+        return active
     }
 
     override fun createDataSource(): DataSource = object : BaseDataSource(false) {
@@ -61,4 +76,5 @@ internal class LiveTsFeed : DataSource.Factory {
             if (address != null) { address = null; transferEnded() }
         }
     }
+
 }

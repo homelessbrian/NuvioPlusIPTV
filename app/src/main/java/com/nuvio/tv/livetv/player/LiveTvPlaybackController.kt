@@ -183,14 +183,30 @@ class LiveTvPlaybackController @Inject constructor(
     private var fastWasPaused = false
     private var historyMonitor: Job? = null
     private var pendingProviderTune: Job? = null
+    private var directResponse: DirectTsHandoff? = null
+    private var directRelease: Job? = null
 
-    private fun fastTsCandidate(channel: LiveChannel, url: String): Boolean =
+    private fun retireDirectResponse() {
+        val tracked = directResponse ?: return
+        directResponse = null
+        val prior = directRelease
+        val latest = tracked.retire()
+        directRelease = when {
+            prior?.isActive != true -> latest
+            latest == null -> prior
+            else -> scope.launch { prior.join(); latest.join() }
+        }
+    }
+
+    private fun fastTsCandidate(channel: LiveChannel, url: String, mime: String?): Boolean =
         channel.drm == null &&
             channel.sourceId != com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID &&
             channel.sourceId != com.nuvio.tv.livetv.sports.SportsAddonSource.SOURCE_ID &&
             (url.startsWith("http://", true) || url.startsWith("https://", true)) &&
-            !url.contains("m3u8", true) && !url.substringBefore('?').endsWith(".mpd", true) &&
-            when (forcedMime ?: stalkerMimeType) {
+            !url.contains("m3u8", true) && !url.substringBefore('?').contains("/hls/", true) &&
+            !com.nuvio.tv.livetv.model.PlaylistSource.asksForHls(url) &&
+            !url.substringBefore('?').endsWith(".mpd", true) &&
+            when (mime) {
                 MimeTypes.VIDEO_MP2T -> true
                 null -> url.substringBefore('?').endsWith(".ts", true) ||
                     url.substringAfter('?', "").substringBefore('#').split('&').any { it.equals("output=ts", true) }
@@ -561,8 +577,10 @@ class LiveTvPlaybackController @Inject constructor(
         pendingProviderTune?.cancel()
         if (fastLive != null || _shiftStartedAt.value != null) stopShift()
         reconnectJob?.cancel()
+        retireDirectResponse()
         p.stop()
         timeshift.pendingLiveRelease()?.join()
+        directRelease?.join()
     }
 
     /** The live link the player is using for [channel] (its own link if something else is on). */
@@ -1101,6 +1119,7 @@ class LiveTvPlaybackController @Inject constructor(
         previousChannelKey: String? = currentChannel?.key,
         reconnectAttempt: Int = 0,
         sourceLater: Boolean = false,
+        retainUntrackedGrace: Boolean = false,
     ) {
         val requestedUrl = overrideUrl ?: channel.url.let { u -> if (channel.key in tsInstead) tsLinkFor(u) ?: u else u }
         // Fullscreen can claim the active preview without replacing its decoder or its upstream response.
@@ -1108,13 +1127,26 @@ class LiveTvPlaybackController @Inject constructor(
             catchupTitle == null && !sourceLater && reconnectAttempt == 0 && _state.value.error == null &&
             _player?.playbackState?.let { it != Player.STATE_IDLE && it != Player.STATE_ENDED } == true
         ) return
-        val directHandoff = currentChannel?.sourceId == channel.sourceId && _shiftStartedAt.value == null &&
-            _recordingPlayback.value == null && _player?.playbackState?.let { it != Player.STATE_IDLE } == true
+        val sameSource = currentChannel?.key == channel.key && currentUrl == requestedUrl
+        val nextMime = when {
+            overrideUrl == null && channel.key in plainTs -> MimeTypes.VIDEO_MP2T
+            sameSource -> forcedMime ?: stalkerMimeType
+            else -> stalkerMimeType
+        }
+        val fastTs = com.nuvio.tv.BuildConfig.FAST_TS_REWIND && !sourceLater &&
+            catchupTitle == null && fastTsCandidate(channel, requestedUrl, nextMime)
+        val trackedHandoff = fastTs && rewindAlways && timeshiftEnabled && channel.key != bufferFailedKey && directResponse != null
+        val directHandoff = retainUntrackedGrace || (!trackedHandoff && currentChannel?.sourceId == channel.sourceId &&
+            _shiftStartedAt.value == null && _recordingPlayback.value == null && _player?.playbackState?.let { it != Player.STATE_IDLE } == true)
+        if (trackedHandoff) {
+            retireDirectResponse()
+            _player?.stop()
+        }
         if (timeshift.session?.liveTs != null) {
             _player?.stop()
             stopShift()
         }
-        val retiring = timeshift.pendingLiveRelease()
+        val retiring = timeshift.pendingLiveRelease()?.takeIf { it.isActive } ?: directRelease
         if (!sourceLater && retiring?.isActive == true) {
             // An HTTP disconnect can block. The player stays responsive while its previous
             // provider socket closes. The next tune, Stop or release cancels this request.
@@ -1127,7 +1159,7 @@ class LiveTvPlaybackController @Inject constructor(
                 if (generation != stalkerGeneration || appInBackground) return@launch
                 pendingProviderTune = null
                 playResolved(channel, overrideUrl, catchupTitle, fallback, fallbacks, catchupStartMs,
-                    catchupLeadMs, catchupPrimaryUrl, catchupExpectWallMs, previousChannelKey, reconnectAttempt, sourceLater)
+                    catchupLeadMs, catchupPrimaryUrl, catchupExpectWallMs, previousChannelKey, reconnectAttempt, sourceLater, directHandoff)
             }
             return
         }
@@ -1220,12 +1252,11 @@ class LiveTvPlaybackController @Inject constructor(
         if (catchupTitle == null) markStarting(channel.key)
         if (bufferFailedKey != null && bufferFailedKey != channel.key) bufferFailedKey = null
         // Rewind anytime (full screen): play through the rolling buffer instead.
-        val fastTs = com.nuvio.tv.BuildConfig.FAST_TS_REWIND && !sourceLater &&
-            catchupTitle == null && fastTsCandidate(channel, url)
         val buffer = shouldBuffer(channel, catchupTitle, fastTs)
         tuneReport.clear()
         tuneMediaId = if (fastTs) tuneReport.start(if (buffer) "shared" else "direct") else null
         if (buffer) {
+            retireDirectResponse()
             p.stop()
             if (startAlwaysBuffer(channel, url, fastTs, directHandoff)) { p.playWhenReady = true; return }
         }
@@ -1415,6 +1446,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     fun stop() {
+        retireDirectResponse()
         pendingProviderTune?.cancel()
         pendingProviderTune = null
         tuneReport.clear()
@@ -2752,6 +2784,10 @@ class LiveTvPlaybackController @Inject constructor(
 
     private fun buildMediaSource(url: String, headers: Map<String, String>, isLive: Boolean): androidx.media3.exoplayer.source.MediaSource {
         adaptiveBuffer.sourceChanged()
+        val trackDirect = com.nuvio.tv.BuildConfig.FAST_TS_REWIND && isLive && !replayLocal &&
+            savedRecordingId == null && savedRecordingPlaylist == null && _recordingPlayback.value == null &&
+            timeshift.session == null && currentChannel?.let { fastTsCandidate(it, url, forcedMime ?: stalkerMimeType) } == true
+        if (!trackDirect) retireDirectResponse()
         // A YouTube highlight from Sports: its picture and sound are two files, played together
         // the way trailers are (read in pieces, as YouTube slows down whole-file downloads).
         if (currentChannel?.sourceId == com.nuvio.tv.livetv.sports.SportsVideos.SOURCE_ID) {
@@ -2766,6 +2802,9 @@ class LiveTvPlaybackController @Inject constructor(
         return com.nuvio.tv.livetv.multiview.LiveTvMediaSourceBuilder(
             drm = currentChannel?.drm,
             mediaId = tuneMediaId,
+            trackProgressiveHttp = if (trackDirect) { factory ->
+                (directResponse ?: DirectTsHandoff(scope).also { directResponse = it }).wrap(factory)
+            } else null,
             forcedMime = forcedMime,
             bufferSize = bufferSize,
             stalkerPolicy = stalkerMediaPolicy,
@@ -2809,6 +2848,7 @@ class LiveTvPlaybackController @Inject constructor(
     }
 
     private fun release() {
+        retireDirectResponse()
         pendingProviderTune?.cancel()
         pendingProviderTune = null
         tuneReport.clear()
@@ -2859,9 +2899,11 @@ class LiveTvPlaybackController @Inject constructor(
                 val live = _state.value.catchupTitle == null
                 stopReplayCache()
                 stopShift()
+                retireDirectResponse()
                 active.stop()
                 val generation = stalkerGeneration
                 timeshift.pendingLiveRelease()?.join()
+                directRelease?.join()
                 if (stalkerGeneration != generation || _player !== active || appInBackground) return@launch
                 if (activeStalkerRef != null) { restartStalker(if (live) 0L else position); return@launch }
                 active.setMediaSource(buildMediaSource(url, channel.headers, live))

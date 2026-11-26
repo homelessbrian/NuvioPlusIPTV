@@ -4,6 +4,8 @@ import android.net.Uri
 import android.os.Looper
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import com.nuvio.tv.livetv.model.LiveChannel
@@ -16,8 +18,10 @@ import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -162,12 +166,13 @@ class FastRewindControllerTest {
     }
 
     @Test fun `only known ordinary live TS URLs qualify for the forward view`() {
-        val method = controller.javaClass.getDeclaredMethod("fastTsCandidate", LiveChannel::class.java, String::class.java)
+        val method = controller.javaClass.getDeclaredMethod("fastTsCandidate", LiveChannel::class.java, String::class.java, String::class.java)
             .apply { isAccessible = true }
-        fun eligible(url: String, item: LiveChannel = channel) = method.invoke(controller, item, url) as Boolean
+        fun eligible(url: String, item: LiveChannel = channel) = method.invoke(controller, item, url, null) as Boolean
         assertTrue(eligible(channel.url))
         assertTrue(eligible("https://example.invalid/tune?output=ts"))
         assertFalse(eligible("https://example.invalid/manifest.m3u8?output=ts"))
+        assertFalse(eligible("https://example.invalid/live.ts?output_format=hls"))
         assertFalse(eligible("https://example.invalid/live.mpd?output=ts"))
         assertFalse(eligible("https://example.invalid/channel"))
         assertFalse(eligible("file:///local.ts"))
@@ -189,5 +194,44 @@ class FastRewindControllerTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertNull(controller.state.value.channelKey)
         verify(exactly = 1) { player.setMediaSource(any<MediaSource>()); player.prepare() }
+    }
+
+    private fun startFromDirect(): LiveChannel {
+        assumeTrue(com.nuvio.tv.BuildConfig.FAST_TS_REWIND)
+        every { recorder.session } returns null
+        every { recorder.pendingLiveRelease() } returns null
+        field("fastLive").set(controller, null)
+        @Suppress("UNCHECKED_CAST")
+        (field("_shiftStartedAt").get(controller) as MutableStateFlow<Long?>).value = null
+        var state = Player.STATE_READY
+        every { player.playbackState } answers { state }
+        every { player.stop() } answers { state = Player.STATE_IDLE }
+        val next = channel.copy(key = "next", url = "https://example.invalid/next.ts")
+        every { recorder.start(next.url, next.headers, controller.timeshiftMinutes,
+            fastTs = true, fastTsHandoff = any()) } returns session
+        return next
+    }
+
+    @Test fun `known direct response closes and settles before shared tune without legacy hold`() {
+        val next = startFromDirect()
+        val build = controller.javaClass.getDeclaredMethod("buildMediaSource", String::class.java, Map::class.java,
+            Boolean::class.javaPrimitiveType).apply { isAccessible = true }
+        build.invoke(controller, channel.url, channel.headers, true)
+        val owner = field("directResponse").get(controller) as DirectTsHandoff
+        val http = mockk<HttpDataSource>(relaxed = true)
+        val tracked = owner.wrap(mockk { every { createDataSource() } returns http }).createDataSource()
+        tracked.open(mockk<DataSpec>())
+        controller.play(next)
+        shadowOf(Looper.getMainLooper()).idleFor(3, TimeUnit.SECONDS)
+        verify(exactly = 0) { recorder.start(next.url, any(), any(), fastTs = true, fastTsHandoff = any()) }
+        tracked.close()
+        shadowOf(Looper.getMainLooper()).idleFor(LIVE_PROVIDER_SETTLE_MS + 1, TimeUnit.MILLISECONDS)
+        verify(exactly = 1) { recorder.start(next.url, any(), any(), fastTs = true, fastTsHandoff = false) }
+    }
+
+    @Test fun `untracked active direct source retains conservative handoff`() {
+        val next = startFromDirect()
+        controller.play(next)
+        verify(exactly = 1) { recorder.start(next.url, any(), any(), fastTs = true, fastTsHandoff = true) }
     }
 }

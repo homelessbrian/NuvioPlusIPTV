@@ -17,9 +17,14 @@ Use the generated full/debug output-metadata.json for the APK filename when ABI
 splits are enabled. Each receipt row contains firstFrameMs, historyReadyMs,
 stalls and stallMs. Group provider opens by the same channel label (sample-0-off,
 sample-1-on, etc.). Use a fresh fixtureLabel for each run.
-For pause recovery, add -e fixtureLongPauseMs 60000 to the controls run. Pause
+For a file-backed recovery test generate 145 seconds of media (change -t 82
+to -t 145 above) and add -e fixtureLongPauseMs 100000 to the controls run. Pause
 rows include player time, time within recorded history and the input URI scheme
 before the hold, during the hold, at resume and once playing again.
+For a one-slot provider run a second instance on a free port with --max-active 1
+and pass -e fixtureStrictControls true to measure the feature handoffs.
+Its /stats reports refused attempts independently of accepted opens. A tune with
+a refused attempt followed by an open recovered by retrying.
 
 The emulator reaches this host at 10.0.2.2. /stats counts GETs actually
 connected to the provider. Samples are paced in TS packet units including
@@ -37,20 +42,28 @@ from pathlib import Path
 
 
 class Provider(ThreadingHTTPServer):
-    def __init__(self, port, fixture):
+    def __init__(self, port, fixture, max_active):
         super().__init__(("127.0.0.1", port), Connection)
         self.fixture = fixture
+        self.max_active = max_active
         self.lock = threading.Lock()
         self.active = 0
         self.peak = 0
+        self.refused = 0
         self.events = []
 
     def event(self, action, channel):
         with self.lock:
+            if action == "open" and self.max_active and self.active >= self.max_active:
+                self.refused += 1
+                self.events.append(dict(action="refused", channel=channel, active=self.active,
+                                        ms=time.monotonic_ns() // 1_000_000))
+                return False
             self.active += 1 if action == "open" else -1
             self.peak = max(self.peak, self.active)
             self.events.append(dict(action=action, channel=channel, active=self.active,
                                     ms=time.monotonic_ns() // 1_000_000))
+            return True
 
 
 class Connection(BaseHTTPRequestHandler):
@@ -61,7 +74,7 @@ class Connection(BaseHTTPRequestHandler):
         s = self.server
         if self.path == "/stats":
             with s.lock:
-                data = json.dumps(dict(active=s.active, peak=s.peak, events=s.events)).encode()
+                data = json.dumps(dict(active=s.active, peak=s.peak, refused=s.refused, events=s.events)).encode()
             self.send_response(200)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
@@ -71,7 +84,9 @@ class Connection(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         channel = self.path[1:-3]
-        s.event("open", channel)
+        if not s.event("open", channel):
+            self.send_error(503, "Fixture connection limit")
+            return
         try:
             self.send_response(200)
             self.send_header("Content-Type", "video/mp2t")
@@ -93,7 +108,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--port", type=int, default=18961)
+    parser.add_argument("--max-active", type=int, choices=(0, 1), default=0,
+                        help="set 1 to refuse overlapping requests with HTTP 503")
     args = parser.parse_args()
     if not args.fixture.is_file():
         parser.error("generate the fixture.ts file first")
-    Provider(args.port, args.fixture).serve_forever()
+    Provider(args.port, args.fixture, args.max_active).serve_forever()
