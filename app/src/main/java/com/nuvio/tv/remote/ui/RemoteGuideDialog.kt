@@ -8,6 +8,7 @@ import android.content.ContextWrapper
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
@@ -47,6 +57,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import com.nuvio.tv.R
 import com.nuvio.tv.remote.RemoteAction
 import com.nuvio.tv.remote.RemoteButton
@@ -398,93 +410,106 @@ fun RemoteGuideDialog(onDismiss: () -> Unit, viewModel: RemoteGuideViewModel = h
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
         BackHandler { if (capture != null) capture?.cancel() else onDismiss() }
-        Column(
-            Modifier.fillMaxSize().background(NuvioTheme.colors.Background).padding(24.dp)
+        Box(Modifier.fillMaxSize().background(NuvioTheme.colors.Background)
+            .padding(horizontal = NuvioTheme.spacing.xl, vertical = NuvioTheme.spacing.lg)) {
+          Column(
+            Modifier.fillMaxSize().background(NuvioTheme.colors.BackgroundElevated, NuvioTheme.shapes.sidePanel)
+                .border(NuvioTheme.spacing.hairline, NuvioTheme.colors.Border, NuvioTheme.shapes.sidePanel)
+                .padding(NuvioTheme.spacing.settings.inner)
                 .onPreviewKeyEvent(::handleKey).testTag("remote_guide"),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    GuideText(stringResource(R.string.remote_guide_title), title = true)
-                    GuideText(stringResource(R.string.remote_guide_subtitle), secondary = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.lg), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)) {
+                    Text(stringResource(R.string.remote_guide_title), color = NuvioTheme.colors.TextPrimary,
+                        style = MaterialTheme.typography.headlineMedium)
+                    Text(stringResource(R.string.remote_guide_subtitle), color = NuvioTheme.colors.TextSecondary,
+                        style = MaterialTheme.typography.bodyMedium)
                 }
                 GuideRow(stringResource(screen.titleRes()), {
                     focusAfterClose = contextFocus; pane = GuidePane.SCREEN
-                }, Modifier.widthIn(max = 280.dp).focusRequester(contextFocus).testTag("remote_context"), enabled = capture == null && !busy)
+                }, Modifier.widthIn(max = 230.dp).focusRequester(contextFocus).testTag("remote_context"),
+                    enabled = capture == null && !busy, style = GuideRowStyle.CHOICE, trailingIcon = Icons.Default.KeyboardArrowDown)
             }
             if (visibleError != null || status != null || state.loading || state.canUndo) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    GuideText(visibleError ?: status ?: stringResource(if (state.loading) R.string.remote_guide_wait else R.string.remote_guide_saved), Modifier.weight(1f).testTag("remote_status"), secondary = visibleError == null)
-                    if (state.canUndo) GuideRow(stringResource(R.string.remote_guide_undo), { perform(R.string.remote_guide_undone) { store.undo() } }, Modifier.widthIn(max = 225.dp).testTag("remote_undo"), enabled = !busy && capture == null)
+                Row(Modifier.fillMaxWidth().background(NuvioTheme.colors.BackgroundCard, NuvioTheme.shapes.badge)
+                    .padding(horizontal = NuvioTheme.spacing.md, vertical = NuvioTheme.spacing.xs),
+                    horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md), verticalAlignment = Alignment.CenterVertically) {
+                    Text(visibleError ?: status ?: stringResource(if (state.loading) R.string.remote_guide_wait else R.string.remote_guide_saved),
+                        Modifier.weight(1f).testTag("remote_status"), color = if (visibleError == null) NuvioTheme.colors.TextSecondary else NuvioTheme.colors.TextPrimary,
+                        style = MaterialTheme.typography.bodyMedium)
+                    if (state.canUndo) GuideRow(stringResource(R.string.remote_guide_undo), { perform(R.string.remote_guide_undone) { store.undo() } }, Modifier.widthIn(max = 210.dp).testTag("remote_undo"), enabled = !busy && capture == null, style = GuideRowStyle.QUIET, leadingIcon = Icons.Default.Undo)
                 }
             }
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
-                LazyColumn(Modifier.weight(.34f).testTag("remote_buttons"), state = buttonListState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xl)) {
+                LazyColumn(Modifier.weight(.30f).testTag("remote_buttons"), state = buttonListState, verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)) {
                     item(key = "diagram") { RemoteDiagram(selected, configuration, keyFocus, onActivate = ::activateButton) { selected = it } }
-                    item(key = "picture_hint") { GuideText(stringResource(R.string.remote_guide_picture_hint), secondary = true) }
-                    if (extraButtons.isNotEmpty()) item(key = "extras_heading") { GuideText(stringResource(R.string.remote_guide_extra_buttons)) }
+                    item(key = "picture_hint") { Text(stringResource(R.string.remote_guide_picture_hint), color = NuvioTheme.colors.TextSecondary, style = MaterialTheme.typography.bodyMedium) }
+                    if (extraButtons.isNotEmpty()) item(key = "extras_heading") { Text(stringResource(R.string.remote_guide_extra_buttons), color = NuvioTheme.colors.TextPrimary, style = MaterialTheme.typography.titleMedium) }
                     items(extraButtons, key = { it.button.identity }) { extra ->
                         GuideRow(remoteButtonName(context, extra.button, configuration), { activateButton(extra.button) },
                             Modifier.focusRequester(keyFocus.getValue(extra.button.identity)).testTag("remote_extra_${extra.button.keyCode}"),
+                            detail = if (extra.label.isNotBlank()) context.getString(R.string.remote_guide_physical_button, remotePhysicalButtonName(context, extra.button, configuration)) else null,
                             selected = selected.canonical() == extra.button.canonical(), onFocused = { selected = extra.button })
                     }
                     item(key = "capture") {
                         if (capture != null && captureAction == null) {
-                            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            RemoteListeningPanel {
                                 GuideText(stringResource(R.string.remote_guide_add_prompt))
                                 GuideText(stringResource(if (captureTimedOut) R.string.remote_guide_add_still_listening else R.string.remote_guide_add_back_hint), secondary = true)
                                 GuideRow(stringResource(R.string.remote_guide_cancel), { capture?.cancel() },
-                                    Modifier.focusRequester(captureCancelFocus).testTag("remote_add_cancel"))
+                                    Modifier.focusRequester(captureCancelFocus).testTag("remote_add_cancel"), style = GuideRowStyle.QUIET)
                             }
-                        } else GuideRow(stringResource(R.string.remote_guide_add_button), { startCapture() }, Modifier.focusRequester(addFocus).testTag("remote_add_button"), enabled = !state.loading && !busy)
+                        } else GuideRow(stringResource(R.string.remote_guide_add_button), { startCapture() }, Modifier.focusRequester(addFocus).testTag("remote_add_button"), enabled = !state.loading && !busy, leadingIcon = Icons.Default.Add)
                     }
                 }
-                LazyColumn(Modifier.weight(.66f).testTag("remote_button_help"), state = helpListState, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    item(key = "button_name") { GuideText(name, secondary = true) }
+                LazyColumn(Modifier.weight(.70f).testTag("remote_button_help"), state = helpListState, verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)) {
+                    item(key = "button_name") { RemoteSelectedButtonHeading(name, custom) }
                     item(key = "action_title") {
                         val title = action?.let { context.getString(it.titleRes(screen)) }
                             ?: if (press == RemotePress.HOLD) context.getString(R.string.remote_guide_hold_original_title)
                             else navigationTitle(screen, selected)?.let(context::getString) ?: context.getString(R.string.remote_guide_unknown_title)
-                        GuideText(title, title = true)
-                        GuideText(stringResource(if (custom) R.string.remote_guide_changed else R.string.remote_guide_original), secondary = true)
+                        Text(title, color = NuvioTheme.colors.TextPrimary, style = MaterialTheme.typography.titleLarge)
                     }
                     item(key = "press_type") {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            RemotePress.entries.forEach { kind -> GuideRow(stringResource(if (kind == RemotePress.ONCE) R.string.remote_press_once else R.string.remote_press_hold), { press = kind }, Modifier.weight(1f).testTag("remote_press_${kind.name}"), selected = press == kind, enabled = capture == null && !busy) }
+                            RemotePress.entries.forEach { kind -> GuideRow(stringResource(if (kind == RemotePress.ONCE) R.string.remote_press_once else R.string.remote_press_hold), { press = kind }, Modifier.weight(1f).testTag("remote_press_${kind.name}"), selected = press == kind, enabled = capture == null && !busy, style = GuideRowStyle.CHOICE) }
                         }
                     }
                     item(key = "how_to") {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             GuideReadout(stringResource(R.string.remote_guide_how_to), action?.let { context.getString(it.helpRes(screen)) }
                                 ?: context.getString(if (navigationTitle(screen, selected) != null) R.string.remote_nav_help else if (press == RemotePress.HOLD) R.string.remote_guide_hold_original_help else R.string.remote_guide_unknown_help),
-                                Modifier.focusRequester(detailFocus).testTag("remote_how_to"))
-                            if (custom) GuideText(context.getString(R.string.remote_guide_original_action, original?.let { context.getString(it.titleRes(screen)) } ?: context.getString(R.string.remote_guide_unknown_title)), secondary = true)
+                                Modifier.focusRequester(detailFocus).testTag("remote_how_to")
+                                    .background(NuvioTheme.colors.BackgroundCard, NuvioTheme.shapes.button))
+                            if (custom) Text(context.getString(R.string.remote_guide_original_action, original?.let { context.getString(it.titleRes(screen)) } ?: context.getString(R.string.remote_guide_unknown_title)), color = NuvioTheme.colors.TextSecondary, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                     item(key = "change") {
                         if (protectedButton) GuideText(stringResource(R.string.remote_guide_protected), secondary = true)
-                        else GuideRow(stringResource(R.string.remote_guide_change), ::openEditor, Modifier.focusRequester(changeFocus).testTag("remote_change_button"), enabled = !state.loading && !busy && capture == null)
+                        else GuideRow(stringResource(R.string.remote_guide_change), ::openEditor, Modifier.focusRequester(changeFocus).testTag("remote_change_button"), enabled = !state.loading && !busy && capture == null, style = GuideRowStyle.PRIMARY, leadingIcon = Icons.Default.Tune, trailingIcon = Icons.Default.KeyboardArrowRight)
                     }
                     if (custom) item(key = "restore_button") {
                         GuideRow(stringResource(R.string.remote_guide_restore_button), {
                             draft = RemoteEditDraft(screen, press, selected, configuration, configuration.withBinding(screen, press, selected, null), state.revision, defaults)
                             status = null
                             focusAfterClose = restoreFocus; pane = GuidePane.REVIEW
-                        }, Modifier.focusRequester(restoreFocus), enabled = !busy && capture == null)
+                        }, Modifier.focusRequester(restoreFocus), enabled = !busy && capture == null, style = GuideRowStyle.QUIET, leadingIcon = Icons.Default.Restore)
                     }
                     if (canRename) item(key = "rename") {
                         GuideRow(stringResource(R.string.remote_guide_rename), {
                             renameTarget = selected
                             buttonToFocus = null; focusAfterClose = null
                             pane = GuidePane.RENAME
-                        }, Modifier.focusRequester(renameFocus), enabled = !busy && capture == null)
+                        }, Modifier.focusRequester(renameFocus), enabled = !busy && capture == null, style = GuideRowStyle.QUIET, leadingIcon = Icons.Default.Edit)
                     }
-                    item(key = "check") { GuideRow(stringResource(R.string.remote_guide_check_buttons), { focusAfterClose = checkFocus; pane = GuidePane.CHECK }, Modifier.focusRequester(checkFocus).testTag("remote_check_buttons"), enabled = capture == null && !busy) }
-                    item(key = "reset") { GuideRow(stringResource(R.string.remote_guide_reset), { focusAfterClose = resetFocus; pane = GuidePane.RESET }, Modifier.focusRequester(resetFocus).testTag("remote_reset"), enabled = !busy && !state.loading && capture == null) }
-                    item(key = "read_only") { GuideText(stringResource(R.string.remote_guide_read_only), secondary = true) }
-                    item(key = "close") { GuideRow(stringResource(R.string.remote_guide_close), onDismiss, Modifier.testTag("remote_close")) }
+                    item(key = "check") { GuideRow(stringResource(R.string.remote_guide_check_buttons), { focusAfterClose = checkFocus; pane = GuidePane.CHECK }, Modifier.focusRequester(checkFocus).testTag("remote_check_buttons"), enabled = capture == null && !busy, style = GuideRowStyle.QUIET, trailingIcon = Icons.Default.KeyboardArrowRight) }
+                    item(key = "reset") { GuideRow(stringResource(R.string.remote_guide_reset), { focusAfterClose = resetFocus; pane = GuidePane.RESET }, Modifier.focusRequester(resetFocus).testTag("remote_reset"), enabled = !busy && !state.loading && capture == null, style = GuideRowStyle.QUIET) }
+                    item(key = "read_only") { Text(stringResource(R.string.remote_guide_read_only), color = NuvioTheme.colors.TextSecondary, style = MaterialTheme.typography.bodyMedium) }
+                    item(key = "close") { GuideRow(stringResource(R.string.remote_guide_close), onDismiss, Modifier.testTag("remote_close"), style = GuideRowStyle.QUIET) }
                 }
             }
+          }
         }
         RemoteGuideOverlays(
             pane = pane, screen = screen, press = press, selected = renameTarget ?: selected,

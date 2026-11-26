@@ -12,7 +12,11 @@
     <string name="remote_screen_movie">Watching a movie</string>
     <string name="remote_press_once">Press once</string>
     <string name="remote_press_hold">Press and hold</string>
-    <string name="remote_guide_picture_hint">Your remote may look different. Choose the button with the same symbol.</string>
+    <string name="remote_guide_picture_hint">Your remote may look different.</string>
+    <string name="remote_guide_physical_button">On your remote: %1$s</string>
+    <string name="remote_guide_choose_another_button">Choose another button</string>
+    <string name="remote_button_channel_down_short">CH −</string>
+    <string name="remote_button_channel_up_short">CH +</string>
     <string name="remote_guide_original">Original setting</string>
     <string name="remote_guide_changed">Changed</string>
     <string name="remote_guide_original_action">Originally: %1$s</string>

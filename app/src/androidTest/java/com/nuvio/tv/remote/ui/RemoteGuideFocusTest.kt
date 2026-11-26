@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -13,6 +14,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -26,8 +28,11 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.nuvio.tv.R
@@ -41,6 +46,7 @@ import com.nuvio.tv.remote.RemotePress
 import com.nuvio.tv.remote.RemoteScreen
 import com.nuvio.tv.ui.theme.NuvioTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,6 +58,46 @@ class RemoteGuideFocusTest {
 
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private fun tag(code: Int) = "remote_key_$code"
+
+    @Test
+    fun reviewActionsStayVisibleWhileLongWarningsScrollAtLargeTextSize() {
+        val left = RemoteButton(KeyEvent.KEYCODE_DPAD_LEFT)
+        val before = RemoteConfiguration()
+        val after = before.withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, left, RemoteAction.LAST_CHANNEL)
+            .withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE,
+                RemoteButton(KeyEvent.KEYCODE_DPAD_RIGHT), RemoteAction.NONE)
+        val defaults = RemoteCatalog.defaults(RemoteScreen.LIVE_TV)
+        val draft = RemoteEditDraft(RemoteScreen.LIVE_TV, RemotePress.ONCE, left, before, after, 0, defaults)
+        var saves = 0
+        composeRule.setContent {
+            NuvioTheme {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
+                    RemoteGuideOverlays(
+                        pane = GuidePane.REVIEW, screen = RemoteScreen.LIVE_TV, press = RemotePress.ONCE,
+                        selected = left, configuration = before, defaults = defaults, draft = draft,
+                        busy = false, captureAction = null, captureTimedOut = false, status = null,
+                        onKey = { false }, onDismiss = {}, onScreen = {}, onAction = {}, onButton = { _, _ -> },
+                        onReplacement = {}, onCancelCapture = {}, onSave = { saves++ }, onReset = {}, onRename = {}
+                    )
+                }
+            }
+        }
+        fun assertActionsVisible() {
+            val height = (context.resources.displayMetrics.heightPixels / context.resources.displayMetrics.density).dp
+            for (id in listOf("remote_review_cancel", "remote_review_save")) {
+                val node = composeRule.onNodeWithTag(id).assertIsDisplayed()
+                val bounds = node.getUnclippedBoundsInRoot()
+                assertTrue("$id is clipped above the screen", bounds.top >= 0.dp)
+                assertTrue("$id is clipped below the screen", bounds.bottom <= height)
+            }
+        }
+        assertActionsVisible()
+        composeRule.onNodeWithTag("remote_replacement_SHOW_INFO").performScrollTo().assertIsDisplayed()
+        assertActionsVisible()
+        composeRule.onNodeWithTag("remote_review_save").performClick()
+        composeRule.runOnIdle { assertEquals(1, saves) }
+    }
 
     @Test
     fun okOpensSelectedButtonDetailsAndDownReachesEditingWithoutChangingSelection() {

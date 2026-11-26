@@ -67,11 +67,11 @@ internal fun RemoteGuideChecks(
     val missing = RemoteCatalog.supportedActions(screen).filter { it != RemoteAction.NONE && it !in covered }
     GuideListSheet(stringResource(R.string.remote_guide_check_buttons), onDismiss, onKey, state = listState) {
         item("context") { GuideText(context.getString(screen.titleRes()), secondary = true) }
-        item("close_top") { GuideRow(context.getString(R.string.remote_guide_done), onDismiss, Modifier.focusRequester(firstFocus)) }
+        item("close_top") { GuideRow(context.getString(R.string.remote_guide_done), onDismiss, Modifier.focusRequester(firstFocus), style = GuideRowStyle.QUIET) }
         if (captureAction != null) {
             item("capture_title") { GuideText(context.getString(R.string.remote_guide_replacement_prompt, context.getString(captureAction.titleRes(screen)))) }
             item("capture_help") { GuideText(context.getString(if (captureTimedOut) R.string.remote_guide_add_timeout else R.string.remote_guide_add_hint), secondary = true) }
-            item("capture_cancel") { GuideRow(context.getString(R.string.remote_guide_cancel), onCancelCapture, Modifier.focusRequester(cancelFocus)) }
+            item("capture_cancel") { GuideRow(context.getString(R.string.remote_guide_cancel), onCancelCapture, Modifier.focusRequester(cancelFocus), style = GuideRowStyle.QUIET) }
         }
         if (status != null) item("status") { GuideText(status, secondary = true) }
         item("unassigned_title") { GuideText(context.getString(R.string.remote_guide_unassigned_title), title = true) }
@@ -93,6 +93,6 @@ internal fun RemoteGuideChecks(
                 GuideRow(context.getString(R.string.remote_guide_review_context, remoteButtonName(context, button, configuration), context.getString(kind.labelRes())), { onButton(button, kind) }, enabled = captureAction == null)
             }
         }
-        item("close_bottom") { GuideRow(context.getString(R.string.remote_guide_done), onDismiss) }
+        item("close_bottom") { GuideRow(context.getString(R.string.remote_guide_done), onDismiss, style = GuideRowStyle.QUIET) }
     }
 }
