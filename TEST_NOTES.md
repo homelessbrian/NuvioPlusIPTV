@@ -18,6 +18,8 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 ## Sports
 - Low-memory TVs: Sports does less in the background while a channel plays, so it no longer runs the app out of memory
 - Followed leagues with no game on, and every league's week ahead, now come from the smaller ready-made score files
+- Finding channels for games is much faster on big playlists: the networks step reads only what's on each channel at the time, and later rounds only read the guide around new or changed games
+- A game's page reads only what's on now and next for its channels, not a week of listings every minute
 
 ## Other
 - Low-memory TVs: a channel downloads less ahead while memory is nearly full, and the freeze checker can no longer be what closes the app (crash while watching Live TV on a 224 MB Xiaomi TV)

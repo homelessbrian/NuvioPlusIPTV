@@ -482,13 +482,14 @@ internal class SportsMatcher(
             }
             val keys = slot.flatMap { ev -> ev.broadcasts.flatMap { candidates[networkKey(it)].orEmpty() } }.map { it.key }.distinct()
             if (keys.isEmpty()) return@forEach
-            val onNow: Map<String, EpgProgram?> = sportsCatching {
-                db.range(at - input.shiftMs, at - input.shiftMs + 1, light = true, channels = keys, checkpoint = checkpoint)
-                    .mapValues { (_, l) -> l.firstOrNull()?.let { p -> p.copy(startMs = p.startMs + input.shiftMs, stopMs = p.stopMs + input.shiftMs) } }
-            }.getOrDefault(emptyMap())
+            val onNow: Map<String, EpgProgram?> = showsOnAt(at - input.shiftMs, keys)
+                .mapValues { (_, p) -> p.copy(startMs = p.startMs + input.shiftMs, stopMs = p.stopMs + input.shiftMs) }
+            // Each show's title made matchable once, not again for every game, network and word.
+            val onNowTitle = HashMap<String, String>()
+            fun titleOf(key: String, p: EpgProgram) = onNowTitle.getOrPut(key) { norm(p.title) }
             for (ev in slot) {
                 val league = SportsCatalog.league(ev.leagueId) ?: continue
-                val sporty = (league.guideWords + SPORT_WORDS).map { norm(it).trim() }
+                val sporty = sportyWords.getOrPut(league.id) { (league.guideWords + SPORT_WORDS).map { norm(it).trim() } }
                 for (b in ev.broadcasts) {
                     val n = networkKey(b)
                     input.settings.networkChannels[n]?.let { key -> add(ev.id, key, 75, "Your channel for $b", onNow[key]) }
@@ -504,7 +505,7 @@ internal class SportsMatcher(
                                 p == null -> if (keys.size < 400 && national) 45 else 0
                                 // The guide says it's a different game: not this one.
                                 terms[ev.id]?.otherGame(showText!!) == true -> 0
-                                sporty.any { hasWord(norm(p.title), it) } && SportsCatalog.NOT_LIVE_WORDS.none { hasWord(norm(p.title), it) } ->
+                                titleOf(ch.key, p).let { t -> sporty.any { hasWord(t, it) } && SportsCatalog.NOT_LIVE_WORDS.none { hasWord(t, it) } } ->
                                     if (national) 62 else 52
                                 else -> 0
                             }
@@ -550,6 +551,28 @@ internal class SportsMatcher(
             (if (multi.isNotEmpty()) " · multi-day: $multi" else "") + takeTableNotes()
         checkpoint()
         return Result(out, summary)
+    }
+
+    /** A league's sports words, made matchable once (they never change). */
+    private val sportyWords = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+
+    /**
+     * The show on at [atMs] (guide time) on each of [keys]: the earliest-starting show that's
+     * still on then. Asks the guide for each channel's current show directly (two rows a
+     * channel), instead of reading six hours of listings for every network channel once per
+     * half-hour, which took most of a minute on big playlists. If that can't be read, the old
+     * way is used.
+     */
+    private fun showsOnAt(atMs: Long, keys: List<String>): Map<String, EpgProgram> {
+        sportsCatching {
+            return db.nowNext(atMs, channels = keys, checkpoint = checkpoint)
+                .mapNotNull { (k, l) -> l.firstOrNull()?.takeIf { it.startMs <= atMs && it.stopMs > atMs }?.let { k to it } }
+                .toMap()
+        }
+        return sportsCatching {
+            db.range(atMs, atMs + 1, light = true, channels = keys, checkpoint = checkpoint)
+                .mapNotNull { (k, l) -> l.firstOrNull()?.let { k to it } }.toMap()
+        }.getOrDefault(emptyMap())
     }
 
     /**
@@ -848,6 +871,30 @@ internal class SportsMatcher(
      * every so often so the screen and video keep priority on slower boxes.
      */
     private fun guideHitsBySlot(slots: List<GuideSlot>, gentle: Boolean, rev: Long? = null): List<List<Pair<String, EpgProgram>>> {
+        if (slots.size <= 1) return guideHitsBySlotOnce(slots, gentle, rev)
+        // Half-hours far apart (a game now and one tomorrow evening, with everything in between
+        // unchanged) are read as separate stretches: one read from the first to the last used
+        // to go through the whole guide in between for nothing. Each half-hour only uses shows
+        // inside its own window, so what's found is the same.
+        val order = slots.indices.sortedBy { slots[it].fromMs }
+        val groups = ArrayList<MutableList<Int>>()
+        var groupTo = Long.MIN_VALUE
+        for (i in order) {
+            val s = slots[i]
+            if (groups.isEmpty() || s.fromMs > groupTo + 2 * HOUR) { groups += mutableListOf(i); groupTo = s.toMs }
+            else { groups.last() += i; groupTo = maxOf(groupTo, s.toMs) }
+        }
+        if (groups.size == 1) return guideHitsBySlotOnce(slots, gentle, rev)
+        val out = arrayOfNulls<List<Pair<String, EpgProgram>>>(slots.size)
+        for (g in groups) {
+            checkpoint()
+            val got = guideHitsBySlotOnce(g.map { slots[it] }, gentle, rev)
+            g.forEachIndexed { j, i -> out[i] = got[j] }
+        }
+        return out.map { it.orEmpty() }
+    }
+
+    private fun guideHitsBySlotOnce(slots: List<GuideSlot>, gentle: Boolean, rev: Long? = null): List<List<Pair<String, EpgProgram>>> {
         if (slots.isEmpty()) return emptyList()
         val words = slots.flatMapTo(HashSet<String>()) { it.words }
         val from = slots.minOf { it.fromMs }

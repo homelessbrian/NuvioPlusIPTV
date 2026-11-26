@@ -3001,15 +3001,19 @@ class SportsRepository @Inject constructor(
         updateSettings { it.copy(leagueNetworkChannels = it.leagueNetworkChannels - networkId) }
 
     /**
-     * What's on now and what's next on each channel, from the stored guide (a week ahead, so a
-     * channel that's only on some nights still says when). Times are shifted by the guide offset.
+     * What's on now and what's next on each channel, from the stored guide (however far ahead,
+     * so a channel that's only on some nights still says when). Times are shifted by the guide
+     * offset. Only the two shows needed are read for each channel: this is asked every minute
+     * on a game's page, and it used to read a whole week of listings for up to 40 channels.
      */
     suspend fun nowAndNext(keys: Collection<String>): Map<String, Pair<com.nuvio.tv.livetv.model.EpgProgram?, com.nuvio.tv.livetv.model.EpgProgram?>> =
         withContext(Dispatchers.IO) {
             if (keys.isEmpty()) return@withContext emptyMap()
             val shift = prefs.settings.first().epgOffsetMinutes * MINUTE
             val now = System.currentTimeMillis()
-            val listings = runCatching { guideDb.range(now - shift, now - shift + 7 * DAY, channels = keys) }.getOrDefault(emptyMap())
+            val listings = runCatching { guideDb.nowNext(now - shift, channels = keys) }
+                .recoverCatching { guideDb.range(now - shift, now - shift + 7 * DAY, channels = keys) }
+                .getOrDefault(emptyMap())
             keys.associateWith { k ->
                 val list = listings[k].orEmpty()
                     .map { p -> if (shift == 0L) p else p.copy(startMs = p.startMs + shift, stopMs = p.stopMs + shift) }
