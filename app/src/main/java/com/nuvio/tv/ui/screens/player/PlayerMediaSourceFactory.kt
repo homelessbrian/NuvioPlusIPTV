@@ -46,6 +46,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.core.network.NoDelaySocketFactory
+import com.nuvio.tv.core.player.MovieStartupStep
+import com.nuvio.tv.core.player.MovieStartupTrace
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.VodCacheSizeMode
 import okhttp3.ConnectionPool
@@ -196,7 +198,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         mediaMetadata: androidx.media3.common.MediaMetadata? = null,
         cacheKey: String? = null,
         bluray: BlurayPlaylistResolver.RemoteLayout? = null,
-        onFirstUpstreamBytes: (() -> Unit)? = null
+        startupTrace: MovieStartupTrace.Attempt? = null
     ): MediaSource {
         val sanitizedHeaders = sanitizeHeaders(headers)
         // A Blu-ray folder plays its feature playlist, clip by clip.
@@ -311,7 +313,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val progressiveUpstreamFactory: DataSource.Factory =
             RedirectReportingDataSource.Factory(
                 networkProgressiveFactory, url,
-                onFirstUpstreamBytes = if (isHls || isDash) null else onFirstUpstreamBytes
+                startupTrace = if (isHls || isDash) null else startupTrace
             ) { resolvedUrl ->
                 onStreamRedirected?.invoke(url, resolvedUrl)
             }
@@ -334,7 +336,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             val cache = obtainVodCache(context, vodCacheMaxBytes)
             if (cache != null) {
                 currentVodCacheActive = true
-                buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache)
+                buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache, startupTrace)
             } else {
                 currentVodCacheActive = false
                 progressiveUpstreamFactory
@@ -485,7 +487,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
     }
 
-    private fun buildVodCacheDataSourceFactory(upstreamFactory: DataSource.Factory, cache: SimpleCache): DataSource.Factory {
+    private fun buildVodCacheDataSourceFactory(
+        upstreamFactory: DataSource.Factory,
+        cache: SimpleCache,
+        startupTrace: MovieStartupTrace.Attempt?
+    ): DataSource.Factory {
         val dataSinkFactory = DataSink.Factory {
             VodCacheWriteSink(
                 CacheDataSink.Factory().setCache(cache)
@@ -502,6 +508,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             .setEventListener(object : CacheDataSource.EventListener {
                 override fun onCachedBytesRead(cacheSizeBytes: Long, cachedBytesRead: Long) {
                     vodCacheBytesReadFromCache.addAndGet(cachedBytesRead)
+                    if (cachedBytesRead > 0) startupTrace?.mark(MovieStartupStep.CACHE_READ)
                 }
 
                 override fun onCacheIgnored(reason: Int) {

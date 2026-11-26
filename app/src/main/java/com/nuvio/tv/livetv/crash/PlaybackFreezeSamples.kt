@@ -23,13 +23,23 @@ internal class PlaybackFreezeSamples {
     }
 
     fun appendTo(report: StringBuilder) {
-        startup?.let { report.appendLine(it) }
         if (updates > 0 || (startup != null && samples > 0)) {
             report.append("Android playback-state Binder call observed in $updates/$samples main-thread samples")
             if (updates == 1) report.append(" (at +${firstMs}ms)")
             if (updates > 1) report.append(" (first +${firstMs}ms, last +${lastMs}ms)")
             report.appendLine()
         }
+        startup?.let { report.appendLine(it) }
+    }
+
+    /** The outstanding heartbeat actually returned. Only retain incidents during movie startup. */
+    fun recovered(heartbeatMs: Long, mainThreadSnapshots: List<String> = emptyList()): String? {
+        if (startup == null) return null
+        return buildString {
+            append("The UI heartbeat returned after ").append(heartbeatMs).appendLine("ms.")
+            appendTo(this)
+            mainThreadSnapshots.forEach { appendLine(); appendLine(it) }
+        }.trimEnd()
     }
 
     fun reset() {

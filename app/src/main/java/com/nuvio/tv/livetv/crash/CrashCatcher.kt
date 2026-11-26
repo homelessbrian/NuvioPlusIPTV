@@ -41,8 +41,10 @@ object CrashCatcher {
     private const val FREEZE_FILE = "pending_freeze.txt"
     private const val BUSY_FILE = "busy_report.txt"
     private const val SLOW_START_FILE = "slow_movie_startup.txt"
+    private const val RECOVERED_FILE = "recovered_movie_freeze.txt"
     internal const val SLOW_START_HEADING = "SAVED SLOW MOVIE START"
-    private val slowStartFileLock = Any()
+    internal const val RECOVERED_HEADING = "RECOVERED MOVIE STARTUP FREEZE"
+    private val startupFileLock = Any()
     private const val PREFS = "livetv_crash_catcher"
     private const val KEY_EXIT_SEEN = "exit_seen_at"
     private const val KEY_SELF_KILL = "self_kill_at"
@@ -158,11 +160,12 @@ object CrashCatcher {
         val crashFile = File(context.filesDir, FILE_NAME)
         val crash = runCatching { crashFile.takeIf { it.exists() }?.readText()?.trimEnd()?.ifBlank { null } }.getOrNull()
         val slowFile = File(context.filesDir, SLOW_START_FILE)
-        val slow = runCatching {
-            synchronized(slowStartFileLock) {
-                AtomicFile(slowFile).openRead().bufferedReader().use { it.readText() }.trimEnd().ifBlank { null }
-            }
+        val recoveredFile = File(context.filesDir, RECOVERED_FILE)
+        fun storedStartup(file: File): String? = runCatching {
+            synchronized(startupFileLock) { AtomicFile(file).openRead().bufferedReader().use { it.readText() }.trimEnd().ifBlank { null } }
         }.getOrNull()
+        val slow = storedStartup(slowFile)
+        val recovered = storedStartup(recoveredFile)
         val busy = runCatching {
             val file = File(context.filesDir, BUSY_FILE).takeIf { it.exists() } ?: return@runCatching null
             val report = file.readText().trimEnd().ifBlank { return@runCatching null }
@@ -172,24 +175,28 @@ object CrashCatcher {
             "SAVED CPU SNAPSHOT (file last saved: $savedAt)\n" +
                 "This snapshot may be from a different app run than any crash or freeze report.\n\n$report"
         }.getOrNull()
-        // A fresh slow start can be the only current problem. Keep an older crash accessible too.
-        val sections = if (slow != null && crash != null && slowFile.lastModified() > crashFile.lastModified()) {
-            listOfNotNull(slow, "PREVIOUS SAVED CRASH OR FREEZE\n$crash", busy)
-        } else {
-            listOfNotNull(crash, slow, busy)
-        }
-        return sections
+        // The latest movie incident may be the one the viewer reopened this report to share.
+        val incidents = listOfNotNull(crash?.let { crashFile to it }, recovered?.let { recoveredFile to it }, slow?.let { slowFile to it })
+            .sortedByDescending { it.first.lastModified() }
+            .mapIndexed { index, (file, report) ->
+                if (index > 0 && file == crashFile) "PREVIOUS SAVED CRASH OR FREEZE\n$report" else report
+            }
+        return (incidents + listOfNotNull(busy))
             .joinToString("\n\n────────\n\n").ifBlank { null }
     }
 
     private fun saveSlowStart(app: Context, snapshot: String) {
-        val text = "$SLOW_START_HEADING (observed: ${reportTime(System.currentTimeMillis())})\n" +
-            "The UI answered at least ${MovieStartupTrace.SLOW_STARTUP_MS / 1000}s into player startup with no first picture reported. " +
-            "This sample is separate from any saved crash.\n" +
+        val description = "The UI answered at least ${MovieStartupTrace.SLOW_STARTUP_MS / 1000}s into player startup with no first picture reported. " +
+            "This sample is separate from any saved crash."
+        saveStartupIncident(app, SLOW_START_FILE, SLOW_START_HEADING, "$description\n$snapshot")
+    }
+
+    private fun saveStartupIncident(app: Context, name: String, heading: String, snapshot: String) {
+        val text = "$heading (observed: ${reportTime(System.currentTimeMillis())})\n" +
             "Nuvio + IPTV ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · kit ${com.nuvio.tv.livetv.model.LiveTvLoadReport.KIT_STAMP}\n" +
             "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}\n$snapshot"
-        synchronized(slowStartFileLock) {
-            val file = AtomicFile(File(app.filesDir, SLOW_START_FILE))
+        synchronized(startupFileLock) {
+            val file = AtomicFile(File(app.filesDir, name))
             val stream = file.startWrite()
             try {
                 stream.write(text.toByteArray(Charsets.UTF_8))
@@ -471,9 +478,23 @@ object CrashCatcher {
                 // The whole app was paused (in the background, device asleep): start over.
                 if (now - lastLoop > 3_000) { answeredAt.set(now); askedAt = 0L }
                 lastLoop = now
-                val heartbeatAnswered = askedAt != 0L && answeredAt.get() >= askedAt
+                val responseAt = answeredAt.get()
+                val heartbeatAnswered = askedAt != 0L && responseAt >= askedAt
                 if (askedAt == 0L || heartbeatAnswered) {
-                    if (written) { runCatching { File(app.filesDir, FREEZE_FILE).delete() }; written = false }
+                    if (written) {
+                        if (heartbeatAnswered && !memoryNearlyFull()) {
+                            playbackSamples.recovered(responseAt - askedAt, samples)?.let {
+                                runCatching {
+                                    saveStartupIncident(app, RECOVERED_FILE, RECOVERED_HEADING, it)
+                                    // This heartbeat already has a more informative record. A later
+                                    // startup milestone can still update the separate slow-start file.
+                                    savedSlowSnapshot = MovieStartupTrace.slowSnapshot()
+                                }
+                            }
+                        }
+                        runCatching { File(app.filesDir, FREEZE_FILE).delete() }
+                        written = false
+                    }
                     if (looks > 0) playbackSamples.reset()
                     ownLines.clear(); samples.clear(); looks = 0; nextLookAt = 0L; lastWriteAt = 0L
                     askedAt = now

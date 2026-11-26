@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.crash
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,5 +34,18 @@ class PlaybackFreezeSamplesTest {
         assertTrue(buildString { samples.appendTo(this) }.contains("0/1 main-thread samples\n"))
         samples.observe(10_200, arrayOf(binder, playback), null)
         assertTrue(buildString { samples.appendTo(this) }.contains("1/2 main-thread samples (at +10200ms)"))
+    }
+
+    @Test fun aRecoveredMovieFreezeKeepsItsOriginalObservationsOnlyForThisHeartbeat() {
+        val samples = PlaybackFreezeSamples()
+        samples.observe(2_000, arrayOf(binder, playback), null)
+        assertNull(samples.recovered(16_000))
+        samples.observe(5_000, arrayOf(playback), "Movie startup #2")
+        val recovered = requireNotNull(samples.recovered(16_000, listOf("Look 1: platform stack")))
+        assertTrue(recovered.contains("heartbeat returned after 16000ms"))
+        assertTrue(recovered.contains("1/2 main-thread samples (at +2000ms)"))
+        assertTrue(recovered.endsWith("Look 1: platform stack"))
+        samples.reset()
+        assertNull(samples.recovered(17_000))
     }
 }

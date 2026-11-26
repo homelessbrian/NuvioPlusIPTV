@@ -297,6 +297,10 @@ internal fun PlayerRuntimeController.initializePlayer(
             configuredBackBufferMs = 0
 
             val playerSettings = playerSettingsDataStore.playerSettings.first()
+            startupTrace?.requestedVideoOptions(
+                removeHdr10Plus = playerSettings.stripHdr10PlusSei,
+                tunneling = playerSettings.tunnelingEnabled
+            )
             currentPlayerSettingsForReport = playerSettings
             rememberAudioDelayPerDeviceEnabled = playerSettings.rememberAudioDelayPerDevice
             // Always watch output-device changes so Bluetooth connect/disconnect can switch
@@ -1013,6 +1017,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             // ── Renderers Factory (Combining Libass offsets + Audio Gain + Video Fallback) ──
             val renderersFactory = SubtitleOffsetRenderersFactory(
                 context = context,
+                startupTrace = startupTrace,
                 subtitleDelayUsProvider = { subtitleDelayUs.get() + streamSubtitleDelayUs.get() },
                 audioDelayUsProvider = audioDelayUs::get,
                 shouldNormalizeCuePositionProvider = { true },
@@ -1262,9 +1267,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     mediaMetadata = buildMediaSessionMetadata(),
                     cacheKey = currentStreamCacheKey,
                     bluray = currentStreamBluray,
-                    onFirstUpstreamBytes = startupTrace?.let { attempt ->
-                        { attempt.mark(MovieStartupStep.FIRST_UPSTREAM_BYTES) }
-                    }
+                    startupTrace = startupTrace
                 )
 
                 if (initialResumePosition > 0L) {
@@ -2378,6 +2381,7 @@ private const val SEEK_SOURCE_SETTLE_MS = 800L
 
 private class SubtitleOffsetRenderersFactory(
     context: Context,
+    private val startupTrace: MovieStartupTrace.Attempt?,
     private val subtitleDelayUsProvider: () -> Long,
     private val audioDelayUsProvider: () -> Long,
     private val shouldNormalizeCuePositionProvider: () -> Boolean,
@@ -2437,7 +2441,7 @@ private class SubtitleOffsetRenderersFactory(
         for (renderer in built) {
             if (renderer::class.java == MediaCodecVideoRenderer::class.java) {
                 val builder = MediaCodecVideoRenderer.Builder(context)
-                    .setCodecAdapterFactory(getCodecAdapterFactory())
+                    .setCodecAdapterFactory(observeStartupVideoCodecFactory(getCodecAdapterFactory(), startupTrace))
                     .setMediaCodecSelector(mediaCodecSelector)
                     .setAllowedJoiningTimeMs(allowedVideoJoiningTimeMs)
                     .setEnableDecoderFallback(enableDecoderFallback)
@@ -2445,7 +2449,7 @@ private class SubtitleOffsetRenderersFactory(
                     .setEventListener(eventListener)
                     .setMaxDroppedFramesToNotify(DefaultRenderersFactory.MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY)
                     .setMapDV7ToHevc(mapDv7ToHevc)
-                out.add(HardwareFirstVideoRenderer(builder))
+                out.add(HardwareFirstVideoRenderer(builder, startupTrace))
             } else {
                 out.add(renderer)
             }
