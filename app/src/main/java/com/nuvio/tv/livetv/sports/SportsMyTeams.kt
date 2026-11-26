@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +57,7 @@ import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.livetv.ui.formatClock
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -105,6 +107,7 @@ private val ROW_TOP_INSET = 33.dp
 
 /** The top half of My Sports: the big card (or the video window) and the table beside it. */
 private val TOP_HEIGHT = 186.dp
+private const val ROW_PREVIEW_DELAY_MS = 450L
 
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
@@ -143,7 +146,10 @@ internal fun MyTeamsRows(
     onQuickWatch: (SportsEvent) -> Unit,
     onPick: () -> Unit
 ) {
-    val playingId = playingEventId(playingKey, page.heroes + page.rows.flatMap { it.events }, matches, now)
+    val playingId = playingKey?.let { key ->
+        val games = remember(page) { page.heroes + page.rows.flatMap { it.events } }
+        playingEventId(key, games, matches, now)
+    }
     fun playing(ev: SportsEvent) = ev.id == playingId
     fun channelOf(ev: SportsEvent) = matches[ev.id]?.firstOrNull()?.channel?.name ?: ev.broadcasts.firstOrNull()
     val heroes = page.heroes
@@ -154,7 +160,9 @@ internal fun MyTeamsRows(
     // The top half follows the card you're on: the big card shows the highlighted row game (the
     // next big game again when the highlight goes back up to it), the table beside it its league.
     var previewId by remember { mutableStateOf<String?>(null) }
-    val preview: SportsEvent? = previewId?.let { id -> page.rows.firstNotNullOfOrNull { r -> r.events.firstOrNull { it.id == id } } }
+    val preview = remember(page, previewId) {
+        previewId?.let { id -> page.rows.firstNotNullOfOrNull { row -> row.events.firstOrNull { it.id == id } } }
+    }
     val shownEv: SportsEvent? = preview ?: hero
     val showVideo = videoOn && windowInUse
     // No big card while the window is in use: the highlight starts on the first row instead.
@@ -351,9 +359,18 @@ internal fun MyTeamsRows(
                                             hideScores = settings.hideScores,
                                             channel = channelOf(ev),
                                             playing = playing(ev),
+                                            columnState = columnState,
+                                            rowState = state,
+                                            onPreview = { previewId = ev.id },
                                             modifier = Modifier
                                                 .focusRequester(requesterFor(key))
-                                                .onFocusChanged { if (it.isFocused) { lastOnRow[0] = ev.id; previewId = ev.id; onFocusKey(key); GameFocus.onGame?.invoke(ev) } }
+                                                .onFocusChanged {
+                                                    if (it.isFocused) {
+                                                        lastOnRow[0] = ev.id
+                                                        onFocusKey(key)
+                                                        GameFocus.onGame?.invoke(ev)
+                                                    }
+                                                }
                                                 .steadyRowKeys(state, i, row.events.size) { j -> requesterFor(keyAt(j)) },
                                             onClick = { onOpen(ev) },
                                             onLongClick = { onQuickWatch(ev) }
@@ -414,11 +431,23 @@ internal fun RowCard(
     hideScores: Boolean,
     channel: String?,
     playing: Boolean,
+    columnState: LazyListState,
+    rowState: LazyListState,
+    onPreview: () -> Unit,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Moving focus still updates the highlight immediately. Only a card you stay on
+    // updates the large preview and standings after both lists finish moving.
+    if (focused) {
+        LaunchedEffect(ev.id, columnState, rowState) {
+            delay(ROW_PREVIEW_DELAY_MS)
+            snapshotFlow { !columnState.isScrollInProgress && !rowState.isScrollInProgress }.first { it }
+            if (focused) onPreview()
+        }
+    }
     val accent = NuvioTheme.colors.Secondary
     val league = SportsCatalog.league(ev.leagueId)
     val sport = league?.sport ?: Sport.OTHER
