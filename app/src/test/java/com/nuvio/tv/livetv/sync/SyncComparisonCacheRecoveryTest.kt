@@ -280,6 +280,44 @@ class SyncComparisonCacheRecoveryTest {
         coVerify(exactly = 1) { prefs.forgetRemovedSources(removed) }
     }
 
+    @Test fun `account sync saves seek choices without a playlist and restores a fresh installation`() {
+        local = JSONObject().put("seek_thumbs_enabled", JSONObject().put("t", "b").put("v", true))
+            .put("seek_thumbs_include_4k", JSONObject().put("t", "b").put("v", false))
+            .put("seek_thumbs_when", entry("SEEKING"))
+            .put("seek_thumbs_storage_mb", JSONObject().put("t", "i").put("v", 250))
+            .put("vpn_profiles_v1", entry("""{"profiles":[]}"""))
+        val choices = CloudPreferencePatch.onlyChoices(local)
+        var snapshot = JSONObject()
+        var revision = 0
+        var saves = 0
+        fun cloud(): LiveTvCloudSync = newCloud(newDrive()).also { client ->
+            transport(client) { request ->
+                if (request.method == "PUT") {
+                    val payload = body(request)
+                    assertEquals(revision, payload.getInt("baseRevision"))
+                    snapshot = payload.getJSONObject("data")
+                    saves++
+                    revision++
+                }
+                JSONObject().put("revision", revision).put("data", snapshot)
+            }
+        }
+        suspendInvoke<Unit>(cloud(), "decideFirstTime", "account-a", true)
+        assertEquals(choices.toString(), snapshot.toString())
+        assertEquals(1, saves)
+
+        cloudStore().edit().clear().commit()
+        local = JSONObject().put("group_playlist_headings", JSONObject().put("t", "b").put("v", true))
+        val fresh = cloud()
+        suspendInvoke<Unit>(fresh, "decideFirstTime", "account-a", false)
+        choices.keys().forEach { key ->
+            assertEquals(choices.get(key).toString(), applied.single().get(key).toString())
+        }
+        assertTrue(applied.single().has("group_playlist_headings"))
+        assertEquals(1, saves)
+        assertNull(fresh.state.value.prompt)
+    }
+
     private fun newDrive(): LiveTvDriveSync {
         val owner = spyk(LiveTvDriveSync(context, prefs, mockk<LiveTvRepository>()), recordPrivateCalls = true)
         owners += owner
