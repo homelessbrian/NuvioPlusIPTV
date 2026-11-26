@@ -97,6 +97,8 @@ internal object SportsEventCodec {
         t.record?.let { o.put("tr", it) }
         s.score?.let { o.put("s", it) }
         s.record?.let { o.put("r", it) }
+        s.collegeRank?.let { o.put("rk", it) }
+        if (s.onOffense) o.put("of", true)
         if (s.winner) o.put("w", true)
         if (s.home) o.put("h", true)
         if (s.periods.isNotEmpty()) o.put("pe", JSONArray(s.periods))
@@ -120,7 +122,9 @@ internal object SportsEventCodec {
         record = str(o, "r"),
         winner = o.optBoolean("w", false),
         home = o.optBoolean("h", false),
-        periods = strings(o.optJSONArray("pe"))
+        periods = strings(o.optJSONArray("pe")),
+        collegeRank = o.optInt("rk", 0).takeIf { league == "football/college-football" && it in 1..25 },
+        onOffense = o.optBoolean("of", false)
     )
 
     private fun str(o: JSONObject, k: String): String? = if (o.has(k) && !o.isNull(k)) o.optString(k) else null

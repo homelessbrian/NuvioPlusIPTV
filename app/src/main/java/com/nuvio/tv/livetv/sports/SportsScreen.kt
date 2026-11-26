@@ -1527,6 +1527,7 @@ internal fun ScoreboardStrip(
                             .then(if (onTeam != null) Modifier.teamSelectable { onTeam(s) } else Modifier),
                         logo = if (big) 44.dp else 30.dp, name = if (big) 19.sp else 13.sp, score = if (big) 34.sp else 22.sp,
                         extra = listOfNotNull(s.record, if (s.home) "Home" else "Away").joinToString(" · "),
+                        offenseSport = sport.takeIf { ev.state == GameState.LIVE && !hideScores },
                         trailing = preGame?.get(s.team.id)?.takeIf { pre }?.let { t -> @Composable { PreGameTeamStats(t, wide) } }
                     )
                 }
@@ -2105,7 +2106,11 @@ private fun GameScoreColumn(ev: SportsEvent, sides: List<Side>, hideScores: Bool
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TeamLogo(s.team, 22.dp)
                             Spacer(Modifier.width(6.dp))
-                            LiveText(s.team.abbr.ifBlank { s.team.name }, color = Color.White, size = 13.sp, weight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                            if (s.onOffense && live && !hideScores) OffensiveMarker(sport, s, 13.sp)
+                            Column(Modifier.weight(1f)) {
+                                LiveText(s.rankedName(s.team.abbr.ifBlank { s.team.name }), color = Color.White, size = 13.sp, weight = FontWeight.ExtraBold)
+                                if (sport == Sport.AMERICAN_FOOTBALL && !hideScores) s.record?.let { LiveText(it, size = 9.sp, color = SportsLook.Dim) }
+                            }
                             if (showScore) LiveText(s.score.orEmpty(), color = Color.White, size = 18.sp, weight = FontWeight.Black)
                         }
                     }
@@ -2133,7 +2138,10 @@ private fun GameScoreColumn(ev: SportsEvent, sides: List<Side>, hideScores: Bool
                     TeamLogo(s.team, 44.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        LiveText(s.team.name, color = Color.White, size = 19.sp, weight = FontWeight.Black, maxLines = 1)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (s.onOffense && live && !hideScores) OffensiveMarker(sport, s, 19.sp)
+                            LiveText(s.rankedName(), color = Color.White, size = 19.sp, weight = FontWeight.Black, maxLines = 1)
+                        }
                         LiveText(
                             listOfNotNull(s.team.fullName.takeIf { it.isNotBlank() && it != s.team.name }, s.record?.takeIf { !hideScores }).joinToString(" · "),
                             color = Color.White.copy(alpha = 0.72f), size = 11.sp, maxLines = 1

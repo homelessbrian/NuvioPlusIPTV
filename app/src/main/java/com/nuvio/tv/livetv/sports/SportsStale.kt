@@ -50,8 +50,8 @@ internal object SportsStale {
             status = "Ended",
             progress = null,
             situation = null,
-            away = ev.away?.copy(score = null, winner = false),
-            home = ev.home?.copy(score = null, winner = false)
+            away = ev.away?.copy(score = null, winner = false, onOffense = false),
+            home = ev.home?.copy(score = null, winner = false, onOffense = false)
         )
 
     /** [fix] for a list; the same list back when nothing needed it (the usual case). */
