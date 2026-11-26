@@ -73,7 +73,8 @@ class StalkerClient(
             if (total != null && (total < rows.size || total > limits.maxItems)) throw StalkerException(StalkerError.PAGINATION_FAILED)
             if (total != null && total > rows.size) null else rows
         } catch (e: StalkerException) {
-            if (e.error in setOf(StalkerError.UNSUPPORTED, StalkerError.INVALID_RESPONSE)) null else throw e
+            // A bulk catalogue can exceed the response limit even when its smaller pages are safe.
+            if (e.error in setOf(StalkerError.UNSUPPORTED, StalkerError.INVALID_RESPONSE, StalkerError.TOO_LARGE)) null else throw e
         }
         val rows = all ?: pages("itv", mapOf("genre" to "*", "sortby" to "number"))
         checkItemCount(rows.size)
@@ -445,7 +446,9 @@ class StalkerClient(
             return sequentialPages(2, { fetch(it) }, { add(it) }, result)
         }
         val size = pageSize ?: firstRows.size.toLong()
-        val lastPage = ((total + size - 1) / size).coerceAtMost(limits.maxPages.toLong()).toInt()
+        val pageCount = (total + size - 1) / size
+        if (pageCount > limits.maxPages) throw StalkerException(StalkerError.TOO_LARGE)
+        val lastPage = pageCount.toInt()
         var next = 2
         while (next <= lastPage) {
             currentCoroutineContext().ensureActive()
@@ -478,7 +481,7 @@ class StalkerClient(
             val size = (value as? JsonObject)?.integer("max_page_items")
             if (size != null && rows.size < size) return result
         }
-        return result
+        throw StalkerException(StalkerError.TOO_LARGE)
     }
 
     private suspend fun acquireSession(): Session {
