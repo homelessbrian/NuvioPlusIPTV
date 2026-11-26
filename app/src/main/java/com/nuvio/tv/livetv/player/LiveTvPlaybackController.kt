@@ -50,7 +50,9 @@ data class LivePlaybackState(
      * You paused it (play/pause), as opposed to it just not playing yet: between channels and
      * while reconnecting it isn't playing either, and that must not count as paused.
      */
-    val userPaused: Boolean = false
+    val userPaused: Boolean = false,
+    /** First-frame evidence for observers; reset with the rest of the state on channel changes. */
+    val hasRenderedVideoFrame: Boolean = false
 )
 
 data class LiveTrackOption(
@@ -2036,6 +2038,7 @@ class LiveTvPlaybackController @Inject constructor(
 
         override fun onRenderedFirstFrame() {
             awaitingFrame = false
+            if (_state.value.channelKey != null) _state.value = _state.value.copy(hasRenderedVideoFrame = true)
             // Playing fine for a while: no longer counts as "the app closed while this was starting".
             currentChannel?.key?.let { key ->
                 scope.launch {

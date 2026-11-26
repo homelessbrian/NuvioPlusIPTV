@@ -168,6 +168,13 @@ fun SportsSettingsContent(
                         s.bestChannelFirst,
                         { update { it.copy(bestChannelFirst = !it.bestChannelFirst) } }
                     )
+                    SettingsActionRow(
+                        title = "Channel checks",
+                        subtitle = "Automatic checks availability and picture size when you open a game. Playback takes priority; Back or Play stops the checks",
+                        value = if (s.autoCheckChannels) "Automatic" else "Off",
+                        leadingIcon = Icons.Default.Tune,
+                        onClick = { dialog = "channelChecks" }
+                    )
                 }
             }
             item(key = "reminders") {
@@ -271,6 +278,13 @@ fun SportsSettingsContent(
 
     val close: () -> Unit = { dialog = null }
     when (dialog) {
+        "channelChecks" -> SettingsSingleChoiceDialog(
+            title = "Channel checks",
+            options = listOf(SettingsPickerOption("off", "Off"), SettingsPickerOption("automatic", "Automatic")),
+            selectedValue = if (s.autoCheckChannels) "automatic" else "off",
+            onOptionSelected = { value -> update { it.copy(autoCheckChannels = value == "automatic") }; close() },
+            onDismiss = close
+        )
         "region" -> SettingsSingleChoiceDialog(
             title = "Your region",
             options = listOf(SettingsPickerOption("", "Same as this TV (${SportsCatalog.regionName(SportsCatalog.deviceRegion())})")) +

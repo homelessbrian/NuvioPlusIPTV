@@ -189,12 +189,16 @@ class StalkerGateway @Inject constructor(
         profiles.activeProfileId.first { it == savedId }
     }
 
-    suspend fun prepare(channel: LiveChannel): StalkerPlayback {
+    suspend fun prepare(channel: LiveChannel): StalkerPlayback = prepare(channel, probeMimeType = true)
+
+    suspend fun prepare(channel: LiveChannel, probeMimeType: Boolean): StalkerPlayback {
         val ref = channel.stalkerRef ?: throw StalkerException(StalkerError.INVALID_CONFIG)
-        return prepare(channel.sourceId, ref)
+        return prepare(channel.sourceId, ref, probeMimeType)
     }
 
-    suspend fun prepare(sourceId: String, ref: StalkerStreamRef): StalkerPlayback {
+    suspend fun prepare(sourceId: String, ref: StalkerStreamRef): StalkerPlayback = prepare(sourceId, ref, probeMimeType = true)
+
+    suspend fun prepare(sourceId: String, ref: StalkerStreamRef, probeMimeType: Boolean): StalkerPlayback {
         val stream = resolve(sourceId, ref)
         val source = prefs.currentPlaylists().firstOrNull { it.id == sourceId && it.isStalker && it.enabled }
             ?: throw StalkerException(StalkerError.STALE_SESSION)
@@ -219,7 +223,7 @@ class StalkerGateway @Inject constructor(
             owned += OwnedPolicy(source, WeakReference(policy))
         }
         try {
-            val mimeType = StalkerMimeProbe.mimeFromUrl(stream.url) ?: policy.probeMimeType(stream.url)
+            val mimeType = StalkerMimeProbe.mimeFromUrl(stream.url) ?: if (probeMimeType) policy.probeMimeType(stream.url) else null
             assertCurrent(source)
             if (withContext(Dispatchers.IO) { VpnPlaybackProtection.requireUniformHttpRouting() } != routing)
                 throw StalkerException(StalkerError.STALE_SESSION)

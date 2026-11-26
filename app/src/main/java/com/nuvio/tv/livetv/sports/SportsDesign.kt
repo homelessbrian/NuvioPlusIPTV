@@ -64,6 +64,8 @@ import coil3.compose.AsyncImage
 import com.nuvio.tv.livetv.ui.ChannelLogo
 import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.livetv.ui.formatClock
+import com.nuvio.tv.livetv.sports.probe.SportsProbeResult
+import com.nuvio.tv.livetv.sports.probe.SportsProbeStatusLine
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -896,6 +898,9 @@ internal fun SportsChannelRow(
     copies: List<ChannelMatch> = emptyList(),
     /** What the channel's guide says (on now, later, something else on): a coloured line of its own. */
     guide: GuideLine? = null,
+    /** Observed stream health for this exact source; copies never inherit the leading result. */
+    probe: SportsProbeResult? = null,
+    showProbe: Boolean = false,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -906,7 +911,7 @@ internal fun SportsChannelRow(
     Box(
         modifier
             .fillMaxWidth()
-            .height(if (withGuide) 66.dp else 56.dp)
+            .height((if (withGuide) 66.dp else 56.dp) + if (showProbe) 18.dp else 0.dp)
             .sportsFrame(focused, false, accent, radius = 12.dp)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
@@ -946,6 +951,7 @@ internal fun SportsChannelRow(
                     GuideLineText(guide, modifier = Modifier.padding(vertical = 1.dp))
                     LiveText(if (focused && !m.sure) line else guide.detail ?: line, color = sub, size = 10.sp, maxLines = 1)
                 } else LiveText(line, color = sub, size = 10.sp, maxLines = 1)
+                if (showProbe) SportsProbeStatusLine(probe, now)
             }
             Spacer(Modifier.width(8.dp))
             when {
