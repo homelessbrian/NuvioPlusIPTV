@@ -1,12 +1,13 @@
 package com.nuvio.tv.remote.ui
 
 import android.view.KeyEvent
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -14,7 +15,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -34,7 +34,6 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.nuvio.tv.R
@@ -49,6 +48,8 @@ import com.nuvio.tv.remote.RemoteScreen
 import com.nuvio.tv.ui.theme.NuvioTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.BeforeClass
+import org.junit.AfterClass
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -56,6 +57,44 @@ import org.junit.runner.RunWith
 /** Exercises the real TV components in an Activity without Hilt, accounts or media requests. */
 @RunWith(AndroidJUnit4::class)
 class RemoteGuideFocusTest {
+    companion object {
+        private var previousFontScale: Float? = null
+        private var capturedFontScale = false
+
+        // Dialogs create a new Android composition. An outer LocalDensity override does not
+        // exercise their real font scaling, so set the system value before Activity creation.
+        @JvmStatic @BeforeClass
+        fun useLargeSystemText() {
+            val saved = shell("settings get system font_scale")
+            previousFontScale = saved.toFloatOrNull()
+            require(saved == "null" || previousFontScale?.isFinite() == true) { "Unreadable font scale: $saved" }
+            capturedFontScale = true
+            shell("settings put system font_scale 1.5")
+            awaitFontScale(1.5f)
+        }
+
+        @JvmStatic @AfterClass
+        fun restoreSystemText() {
+            if (!capturedFontScale) return
+            shell(previousFontScale?.let { "settings put system font_scale $it" }
+                ?: "settings delete system font_scale")
+            awaitFontScale(previousFontScale ?: 1f)
+        }
+
+        private fun shell(command: String): String = ParcelFileDescriptor.AutoCloseInputStream(
+            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
+        ).bufferedReader().use { it.readText().trim() }
+
+        private fun awaitFontScale(expected: Float) {
+            val resources = InstrumentationRegistry.getInstrumentation().targetContext.resources
+            val deadline = SystemClock.uptimeMillis() + 10_000
+            while (kotlin.math.abs(resources.configuration.fontScale - expected) > .01f && SystemClock.uptimeMillis() < deadline) {
+                SystemClock.sleep(50)
+            }
+            assertEquals("Android font scale", expected, resources.configuration.fontScale, .01f)
+        }
+    }
+
     @get:Rule val composeRule = createComposeRule()
 
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
@@ -63,6 +102,7 @@ class RemoteGuideFocusTest {
 
     @Test
     fun reviewActionsStayVisibleWhileLongWarningsScrollAtLargeTextSize() {
+        assertEquals(1.5f, context.resources.configuration.fontScale, .01f)
         val left = RemoteButton(KeyEvent.KEYCODE_DPAD_LEFT)
         val before = RemoteConfiguration()
         val after = before.withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, left, RemoteAction.LAST_CHANNEL)
@@ -73,16 +113,13 @@ class RemoteGuideFocusTest {
         var saves = 0
         composeRule.setContent {
             NuvioTheme {
-                val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
-                    RemoteGuideOverlays(
-                        pane = GuidePane.REVIEW, screen = RemoteScreen.LIVE_TV, press = RemotePress.ONCE,
-                        selected = left, configuration = before, defaults = defaults, draft = draft,
-                        busy = false, captureAction = null, captureTimedOut = false, status = null,
-                        onKey = { false }, onDismiss = {}, onScreen = {}, onAction = {}, onButton = { _, _ -> },
-                        onReplacement = {}, onCancelCapture = {}, onSave = { saves++ }, onReset = {}, onRename = {}
-                    )
-                }
+                RemoteGuideOverlays(
+                    pane = GuidePane.REVIEW, screen = RemoteScreen.LIVE_TV, press = RemotePress.ONCE,
+                    selected = left, configuration = before, defaults = defaults, draft = draft,
+                    busy = false, captureAction = null, captureTimedOut = false, status = null,
+                    onKey = { false }, onDismiss = {}, onScreen = {}, onAction = {}, onButton = { _, _ -> },
+                    onReplacement = {}, onCancelCapture = {}, onSave = { saves++ }, onReset = {}, onRename = {}
+                )
             }
         }
         fun assertActionsVisible() {
@@ -95,6 +132,10 @@ class RemoteGuideFocusTest {
             }
         }
         assertActionsVisible()
+        val keepBounds = composeRule.onNodeWithTag("remote_review_cancel").getUnclippedBoundsInRoot()
+        val saveBounds = composeRule.onNodeWithTag("remote_review_save").getUnclippedBoundsInRoot()
+        assertEquals("Large-text footer must stack", keepBounds.left, saveBounds.left)
+        assertTrue("Save must follow Keep", saveBounds.top >= keepBounds.bottom)
         composeRule.onNodeWithTag("remote_replacement_SHOW_INFO").performScrollTo().assertIsDisplayed()
             .performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         assertActionsVisible()
