@@ -53,7 +53,11 @@ internal class SportsMatcher(
         /** Show name, network and user picks promptly while the full guide search runs. */
         val readGuide: Boolean = true,
         /** Networks are only looked at for games starting before this (quick channels: games on now or soon; names are looked for in every game). */
-        val networksUntil: Long = Long.MAX_VALUE
+        val networksUntil: Long = Long.MAX_VALUE,
+        /** A requested game searches the guide even when it already has a channel link. */
+        val requestedGames: Set<String> = emptySet(),
+        /** Search just this game. Other events supply context to distinguish overlapping tournaments. */
+        val onlyGame: String? = null
     )
 
     /** One guide find from step 1, kept to be used again while the guide and the half-hour's games stay the same. */
@@ -172,19 +176,23 @@ internal class SportsMatcher(
         // "Grand Prix"…) counts, not one that merely shares a word or two with the title ("United States").
         val noStart = HashSet<String>()
         val events = input.events.mapNotNull { ev ->
-            val start = SportsMatchingEvents.startMs(ev, input.now) ?: return@mapNotNull null
+            val start = SportsMatchingEvents.startMs(ev, input.now)
+                ?: if (ev.id in input.requestedGames) ev.startMs else return@mapNotNull null
             (if (start == ev.startMs) ev else ev.copy(startMs = start))
                 .also { if (!ev.hasTime || raceWeekend(ev)) noStart.add(ev.id) }
         }
-        val wanted = events.filter { SportsMatchingEvents.inWindow(it, input.now) }
+        val contextEvents = events.filter { SportsMatchingEvents.inWindow(it, input.now) || it.id in input.requestedGames }
+        val wanted = contextEvents.filter { (input.onlyGame == null || it.id == input.onlyGame) && it.state != GameState.OFF }
         // A channel you picked yourself shows straight away, however far off the game is (the
         // search above only looks a couple of days ahead).
-        val byId = events.filter { SportsMatchingEvents.eligible(it, input.settings, input.now) }.associateBy { it.id }
+        val byId = events.filter { (input.onlyGame == null || it.id == input.onlyGame) &&
+            (SportsMatchingEvents.eligible(it, input.settings, input.now) || (it.id in input.requestedGames && it.state != GameState.OFF))
+        }.associateBy { it.id }
         var byGuide = 0; var byName = 0; var byNetwork = 0
 
         // Shows found in the guide already know their channels.
-        val guideWanted = wanted.filter { it.source == EventSource.GUIDE }
-        guideWanted.forEach { ev ->
+        val guideWanted = contextEvents.filter { it.source == EventSource.GUIDE && it.id !in input.requestedGames }
+        guideWanted.filter { input.onlyGame == null || it.id == input.onlyGame }.forEach { ev ->
             ev.guideHits.forEach { (key, p) -> add(ev.id, key, 100, "Guide: ${p.title}", p) }
         }
         // A race, show or fight night from a schedule (TheSportsDB's "Portugal Sprint Race") also
@@ -194,7 +202,8 @@ internal class SportsMatcher(
         if (guideWanted.isNotEmpty()) {
             val guideByLeague = guideWanted.groupBy { it.leagueId }
             for (ev in wanted) {
-                if (ev.source == EventSource.GUIDE || !ev.hasTime || ev.home != null || ev.away != null) continue
+                // Explicit searches read current listings; sibling guide cards may still hold old channel links.
+                if (ev.id in input.requestedGames || ev.source == EventSource.GUIDE || !ev.hasTime || ev.home != null || ev.away != null) continue
                 if (SportsCatalog.league(ev.leagueId)?.kind != LeagueKind.EVENT) continue
                 for (g in guideByLeague[ev.leagueId].orEmpty()) for ((key, p) in g.guideHits) {
                     if (ev.startMs >= p.startMs - 15 * MINUTE && ev.startMs < p.stopMs)
@@ -203,20 +212,22 @@ internal class SportsMatcher(
             }
         }
 
-        val teamEvents = wanted.filter { it.source != EventSource.GUIDE }
+        val teamEvents = wanted.filter { it.source != EventSource.GUIDE || it.id in input.requestedGames }
         // Fights found in the guide ("Boxing : Canelo Alvarez vs. Christian Mbilli") are also looked
         // for by channel name: their event channels ("Canelo v Mbilli") usually have no listings.
         val guideFights = wanted.filter { ev ->
-            ev.source == EventSource.GUIDE && SportsCatalog.league(ev.leagueId)?.sport == Sport.FIGHTING &&
+            ev.source == EventSource.GUIDE && ev.id !in input.requestedGames && SportsCatalog.league(ev.leagueId)?.sport == Sport.FIGHTING &&
                 SportsCatalog.fightSides(ev.title) != null
         }
-        val terms = (teamEvents + guideFights).associate { ev -> ev.id to termsFor(ev) }
+        val multiEvents = contextEvents.filter { it.id in noStart && it.source != EventSource.GUIDE }
+        val terms = (teamEvents + guideFights + multiEvents).distinctBy { it.id }.associate { ev -> ev.id to termsFor(ev) }
+        val fightCards = teamEvents.filter { it.id in input.requestedGames && SportsCatalog.league(it.leagueId)?.sport == Sport.FIGHTING }
+            .associate { it.id to UFC_NUMBER.find(norm(it.title))?.groupValues?.get(1) }
 
         // Tournaments and race weekends running at the same time (several tennis events, two golf
         // tours): a channel or show that just says "Tennis" or "Golf" can't tell them apart.
         // Each one's own words ("basel", "bermuda") pick it out; the competition's words only
         // count when no other event running now uses them.
-        val multiEvents = teamEvents.filter { it.id in noStart }
         val specific: Map<String, Set<String>> = multiEvents.associate { ev ->
             val league = terms[ev.id]?.leagueWords.orEmpty().flatMap { it.split(' ') }.toSet()
             ev.id to norm(ev.title).trim().split(' ')
@@ -267,16 +278,20 @@ internal class SportsMatcher(
         // ---- 1. The guide, a half-hour slot at a time.
         // The guide is read once for all the slots (it used to be searched again for every slot,
         // which on a slower box took minutes); each show is checked against every slot's words as it goes by.
-        val guideSlots = teamEvents.filter { input.readGuide && it.id !in linked }.groupBy { it.startMs / (30 * MINUTE) }.values.mapNotNull { slot ->
+        val guideSlots = teamEvents.filter { input.readGuide && (it.id !in linked || it.id in input.requestedGames) }.groupBy { it.startMs / (30 * MINUTE) }.values.mapNotNull { slot ->
             val slotStart = slot.minOf { it.startMs }
             val slotEnd = slot.maxOf { it.startMs }
-            val words = slot.flatMap { ev -> terms[ev.id]?.sqlWords.orEmpty() }.map { it.trim() }.filter { it.length >= 3 }.toSet()
+            val cardStarts = slot.filter { it.id in fightCards }.map { it.startMs }
+            val words = slot.flatMap { ev ->
+                val words = terms[ev.id]?.sqlWords.orEmpty()
+                if (ev.id in input.requestedGames && ev.source == EventSource.GUIDE) words + norm(ev.title).trim() else words
+            }.map { it.trim() }.filter { it.length >= 3 }.toSet()
             if (words.isEmpty()) null
             else GuideSlot(
                 slot = slot,
-                fromMs = slotStart - 100 * MINUTE - input.shiftMs,
-                toMs = slotEnd + 70 * MINUTE - input.shiftMs,
-                minStopMs = slotStart + 10 * MINUTE - input.shiftMs,
+                fromMs = minOf(slotStart - 100 * MINUTE, cardStarts.minOrNull()?.minus(6 * HOUR) ?: Long.MAX_VALUE) - input.shiftMs,
+                toMs = maxOf(slotEnd + 70 * MINUTE, cardStarts.maxOrNull()?.plus(6 * HOUR) ?: Long.MIN_VALUE) - input.shiftMs,
+                minStopMs = minOf(slotStart + 10 * MINUTE, cardStarts.minOrNull()?.minus(6 * HOUR) ?: Long.MAX_VALUE) - input.shiftMs,
                 words = words
             )
         }
@@ -302,7 +317,7 @@ internal class SportsMatcher(
         var reused = 0
         for (gs in guideSlots) {
             checkpoint()
-            val cacheable = gs.slot.none { it.id in noStart }
+            val cacheable = gs.slot.none { it.id in noStart || it.id in input.requestedGames }
             val sig = if (cacheable) slotSignature(gs, discIds) else null
             val kept = sig?.let { prevCache[it] }
             if (kept != null) {
@@ -347,7 +362,11 @@ internal class SportsMatcher(
             val passSlots = pass.map { toScan[it] }
             var passScanned = true
             val slotHits = sportsCatching { guideHitsBySlot(passSlots, input.gentle, rev) }
-                .getOrElse { passScanned = false; passSlots.map { emptyList() } }
+                .getOrElse {
+                    if (input.onlyGame != null) throw it
+                    passScanned = false
+                    passSlots.map { emptyList() }
+                }
             passSlots.forEachIndexed { slotIndex, gs ->
                 checkpoint()
                 val slot = gs.slot
@@ -372,6 +391,7 @@ internal class SportsMatcher(
                     Triple(key, p, nt to norm(desc))
                 }
                 var comparisons = 0
+                val usualFrom = slot.minOf { it.startMs } - 100 * MINUTE
                 for (ev in slot) {
                     checkpoint()
                     val t = terms[ev.id] ?: continue
@@ -380,8 +400,19 @@ internal class SportsMatcher(
                         val (nt, nd) = texts
                         // Disc golf shows never count for regular golf.
                         if (ev.id !in discIds && (hasWord(nt, "disc golf") || hasWord(nd, "disc golf"))) continue
-                        if (p.startMs > ev.startMs + 60 * MINUTE || p.stopMs < ev.startMs + 15 * MINUTE) continue
-                        var score = t.scoreText(nt, nd)
+                        val usualTime = p.startMs in usualFrom..(ev.startMs + 60 * MINUTE) && p.stopMs >= ev.startMs + 15 * MINUTE
+                        val cardNumber = fightCards[ev.id]
+                        val listedCard = if (ev.id in fightCards) UFC_NUMBER.find(nt)?.groupValues?.get(1)
+                            ?: UFC_NUMBER.find(nd)?.groupValues?.get(1) else null
+                        if (cardNumber != null && listedCard != null && cardNumber != listedCard) continue
+                        val sameCard = cardNumber != null && cardNumber == listedCard
+                        if (!usualTime && !(ev.id in fightCards && p.startMs in (ev.startMs - 6 * HOUR)..(ev.startMs + 6 * HOUR) &&
+                                (sameCard || t.namesBothFighters(nt, nd)))) continue
+                        if (ev.id in fightCards && FIGHT_STUDIO_WORDS.any { hasWord(nt, it) }) continue
+                        var score = when {
+                            sameCard || (ev.source == EventSource.GUIDE && ev.id in input.requestedGames && nt.trim() == norm(ev.title).trim()) -> 100
+                            else -> t.scoreText(nt, nd)
+                        }
                         // No start time (a race weekend, a tournament): a show on now that names this
                         // event, or the competition when nothing else of its kind is on.
                         if (ev.id in noStart) {
@@ -433,7 +464,12 @@ internal class SportsMatcher(
             // all of them (with tens of thousands of channels, every game against every channel took minutes).
             forNamed(tokenIndex, t.anchorTokens(), names) { ch, nn ->
                 if (!discEvent && ch.key in discNames) return@forNamed
-                if (t.inName(nn)) { add(ev.id, ch.key, 95, "Channel name", null); byName++ }
+                val card = fightCards[ev.id]
+                if (ev.id in fightCards && (FIGHT_STUDIO_WORDS.any { hasWord(nn, it) } ||
+                        SportsCatalog.NOT_LIVE_WORDS.any { hasWord(nn, it) })) return@forNamed
+                val namedCard = if (card == null) null else UFC_NUMBER.find(nn)?.groupValues?.get(1)
+                if (namedCard != null && namedCard != card) return@forNamed
+                if (namedCard != null || t.inName(nn)) { add(ev.id, ch.key, 95, "Channel name", null); byName++ }
                 // A channel named for the event ("Tennis: Swiss Indoors Basel") or for the competition
                 // ("Sky Sports F1") when nothing else of its kind is on.
                 else if (ev.id in noStart) {
@@ -1370,6 +1406,9 @@ internal class SportsMatcher(
     ) {
         private fun any(text: String, list: List<String>) = list.any { hasWord(text, it) }
 
+        fun namesBothFighters(nt: String, nd: String): Boolean =
+            (any(nt, fightA) || any(nd, fightA)) && (any(nt, fightB) || any(nd, fightB))
+
         fun scoreText(nt: String, nd: String): Int {
             val base = baseScore(nt, nd)
             if (fightA.isEmpty() || fightB.isEmpty()) return base
@@ -1519,6 +1558,8 @@ internal class SportsMatcher(
     companion object {
         private const val MINUTE = 60_000L
         private const val HOUR = 60 * MINUTE
+        private val UFC_NUMBER = Regex("""\bufc\s+(\d{1,4})\b""")
+        private val FIGHT_STUDIO_WORDS = listOf("weigh in", "weigh ins", "weighin", "countdown", "press conference")
         /** How far ahead games are looked for in your channels (most guides cover 2–3 days). */
         const val AHEAD_MS = 56 * HOUR
 
