@@ -307,7 +307,7 @@ internal fun ScoreLabel(score: String, dim: Boolean, size: TextUnit) {
 
 // ------------------------------------------------------------------ team bands and status
 
-/** The current possession or batting marker stays beside the name, including on narrow cards. */
+/** Identifies the team with possession or at bat. */
 @Composable
 internal fun OffensiveMarker(sport: Sport?, side: Side, size: TextUnit) {
     val label = when (sport) {
@@ -315,16 +315,16 @@ internal fun OffensiveMarker(sport: Sport?, side: Side, size: TextUnit) {
         Sport.BASEBALL, Sport.CRICKET -> "${side.team.name} batting"
         else -> return
     }
-    LiveText(sport.icon, size = size, modifier = Modifier.padding(end = 3.dp)
+    LiveText(sport.icon, size = size, modifier = Modifier.padding(horizontal = 3.dp)
         .clearAndSetSemantics { contentDescription = label })
 }
 
 @Composable
-internal fun HeroTeamName(side: Side, sport: Sport, live: Boolean, hideScores: Boolean, align: Alignment.Horizontal) {
-    Column(horizontalAlignment = align) {
+internal fun HeroTeamName(side: Side, sport: Sport, live: Boolean, hideScores: Boolean, align: Alignment.Horizontal, modifier: Modifier = Modifier) {
+    Column(modifier, horizontalAlignment = align) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            LiveText(side.rankedName(), modifier = Modifier.weight(1f, fill = false), color = Color.White, size = 19.sp, weight = FontWeight.Black)
             if (side.onOffense && live && !hideScores) OffensiveMarker(sport, side, 19.sp)
-            LiveText(side.rankedName(), color = Color.White, size = 19.sp, weight = FontWeight.Black)
         }
         if (sport == Sport.AMERICAN_FOOTBALL && !hideScores) {
             side.record?.let { LiveText(it, color = Color.White.copy(alpha = 0.75f), size = 11.sp) }
@@ -361,13 +361,13 @@ internal fun TeamBand(
         Spacer(Modifier.width(9.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (side.onOffense) OffensiveMarker(offenseSport, side, name)
                 LiveText(side.rankedName(), modifier = Modifier.weight(1f, fill = false), color = if (dim) Color.White.copy(alpha = 0.75f) else Color.White, size = name, weight = FontWeight.ExtraBold)
                 if (followed) LiveText(" ★", color = Color(0xFFF5C400), size = name * 0.8f)
                 if (inlineRecord) side.record?.let { LiveText("  $it", color = Color.White.copy(alpha = 0.7f), size = name * 0.82f) }
             }
             extra?.takeIf { it.isNotBlank() }?.let { LiveText(it, color = Color.White.copy(alpha = 0.6f), size = name * 0.68f, weight = FontWeight.SemiBold) }
         }
+        if (side.onOffense) OffensiveMarker(offenseSport, side, name)
         if (showScore) ScoreLabel(side.score.orEmpty(), dim, score)
         else trailing?.invoke()
     }

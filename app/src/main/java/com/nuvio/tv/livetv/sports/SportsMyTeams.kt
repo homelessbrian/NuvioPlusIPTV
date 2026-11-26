@@ -611,7 +611,7 @@ private fun HeroCard(
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                         TeamLogo(sides[0].team, 50.dp)
                         Spacer(Modifier.width(10.dp))
-                        HeroTeamName(sides[0], sport, ev.state == GameState.LIVE, hideScores, Alignment.Start)
+                        HeroTeamName(sides[0], sport, ev.state == GameState.LIVE, hideScores, Alignment.Start, Modifier.weight(1f, fill = false))
                     }
                     Box(
                         Modifier.clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 12.dp, vertical = 4.dp),
@@ -621,7 +621,7 @@ private fun HeroCard(
                         else LiveText(if (sport.homeFirst) "VS" else "AT", color = Color.White, size = 14.sp, weight = FontWeight.Black)
                     }
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-                        HeroTeamName(sides[1], sport, ev.state == GameState.LIVE, hideScores, Alignment.End)
+                        HeroTeamName(sides[1], sport, ev.state == GameState.LIVE, hideScores, Alignment.End, Modifier.weight(1f, fill = false))
                         Spacer(Modifier.width(10.dp))
                         TeamLogo(sides[1].team, 50.dp)
                     }
