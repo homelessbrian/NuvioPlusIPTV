@@ -195,7 +195,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         audioDelayUsProvider: (() -> Long)? = null,
         mediaMetadata: androidx.media3.common.MediaMetadata? = null,
         cacheKey: String? = null,
-        bluray: BlurayPlaylistResolver.RemoteLayout? = null
+        bluray: BlurayPlaylistResolver.RemoteLayout? = null,
+        onFirstUpstreamBytes: (() -> Unit)? = null
     ): MediaSource {
         val sanitizedHeaders = sanitizeHeaders(headers)
         // A Blu-ray folder plays its feature playlist, clip by clip.
@@ -308,7 +309,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             httpDataSourceFactory
         }
         val progressiveUpstreamFactory: DataSource.Factory =
-            RedirectReportingDataSource.Factory(networkProgressiveFactory, url) { resolvedUrl ->
+            RedirectReportingDataSource.Factory(
+                networkProgressiveFactory, url,
+                onFirstUpstreamBytes = if (isHls || isDash) null else onFirstUpstreamBytes
+            ) { resolvedUrl ->
                 onStreamRedirected?.invoke(url, resolvedUrl)
             }
 

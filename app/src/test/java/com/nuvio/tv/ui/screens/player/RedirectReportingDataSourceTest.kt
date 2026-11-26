@@ -5,6 +5,8 @@ import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.nuvio.tv.core.player.MovieStartupStep
+import com.nuvio.tv.core.player.MovieStartupTrace
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -18,10 +20,17 @@ import okio.Buffer
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 class RedirectReportingDataSourceTest {
 
@@ -80,8 +89,10 @@ class RedirectReportingDataSourceTest {
 
     private fun url(path: String) = server.url(path).toString()
 
-    private fun reportingFactory(upstream: DataSource.Factory = OkHttpDataSource.Factory(OkHttpClient())) =
-        RedirectReportingDataSource.Factory(upstream, url("/play")) { resolvedUrl -> reported += resolvedUrl }
+    private fun reportingFactory(
+        upstream: DataSource.Factory = OkHttpDataSource.Factory(OkHttpClient()),
+        firstBytes: (() -> Unit)? = null
+    ) = RedirectReportingDataSource.Factory(upstream, url("/play"), firstBytes) { resolvedUrl -> reported += resolvedUrl }
 
     private fun readAll(factory: DataSource.Factory, path: String = "/play", position: Long = 0L): ByteArray {
         val source = factory.createDataSource()
@@ -138,13 +149,94 @@ class RedirectReportingDataSourceTest {
     }
 
     @Test
+    fun `only successful movie reads count and a seek cannot report them twice`() {
+        var observations = 0
+        val factory = reportingFactory(firstBytes = { observations++ })
+        readAll(factory, path = "/subtitle")
+        assertEquals(0, observations)
+        assertArrayEquals(file, readAll(factory))
+        readAll(factory, position = 300L * 1024L)
+        assertEquals(1, observations)
+    }
+
+    @Test
+    fun `opening or reaching EOF before any bytes does not report a read`() {
+        val upstream = mockk<DataSource>(relaxed = true)
+        every { upstream.uri } returns null
+        every { upstream.read(any<ByteArray>(), any(), any()) } returnsMany listOf(0, C.RESULT_END_OF_INPUT)
+        var observations = 0
+        val source = reportingFactory(DataSource.Factory { upstream }) { observations++ }.createDataSource()
+        try {
+            source.open(DataSpec.Builder().setUri(uriOf(url("/play"))).build())
+            assertEquals(0, source.read(ByteArray(1), 0, 0))
+            assertEquals(C.RESULT_END_OF_INPUT, source.read(ByteArray(1), 0, 1))
+        } finally {
+            source.close()
+        }
+        assertEquals(0, observations)
+    }
+
+    @Test
+    fun `a slow first read leaves a startup report until the first frame arrives`() {
+        val now = AtomicLong(0L)
+        val trace = MovieStartupTrace.Recorder(now::get)
+        val attempt = trace.begin()
+        attempt.mark(MovieStartupStep.BUFFERING)
+        val readStarted = CountDownLatch(1)
+        val deliver = CountDownLatch(1)
+        val upstream = mockk<DataSource>(relaxed = true)
+        every { upstream.uri } returns null
+        every { upstream.read(any<ByteArray>(), 0, 1) } answers {
+            readStarted.countDown()
+            check(deliver.await(5, TimeUnit.SECONDS))
+            firstArg<ByteArray>()[0] = 42
+            1
+        }
+        val factory = reportingFactory(DataSource.Factory { upstream }) { attempt.mark(MovieStartupStep.FIRST_UPSTREAM_BYTES) }
+        val requested = url("/play")
+        val loader = Executors.newSingleThreadExecutor()
+        try {
+            val result = loader.submit<Byte> {
+                val source = factory.createDataSource()
+                try {
+                    source.open(DataSpec.Builder().setUri(uriOf(requested)).build())
+                    val buffer = ByteArray(1)
+                    assertEquals(1, source.read(buffer, 0, 1))
+                    buffer[0]
+                } finally {
+                    source.close()
+                }
+            }
+            assertTrue(readStarted.await(5, TimeUnit.SECONDS))
+            now.set(16_000)
+            val waiting = requireNotNull(trace.snapshot(onlySlowStartup = true))
+            assertTrue(waiting.contains("buffering"))
+            assertFalse(waiting.contains("upstream bytes"))
+            deliver.countDown()
+            assertEquals(42.toByte(), result.get(5, TimeUnit.SECONDS))
+            val delivered = requireNotNull(trace.snapshot(onlySlowStartup = true))
+            assertTrue(delivered.contains("+16000 first progressive upstream bytes"))
+            assertFalse(delivered.contains(requested))
+            now.set(16_250)
+            attempt.mark(MovieStartupStep.FIRST_FRAME)
+            assertNull(trace.snapshot(onlySlowStartup = true))
+            assertTrue(requireNotNull(trace.snapshot()).contains("+16250 first video frame"))
+        } finally {
+            deliver.countDown()
+            loader.shutdownNow()
+        }
+    }
+
+    @Test
     fun `buffer reads still reach the parallel source behind it`() {
+        var observations = 0
         val factory = reportingFactory(
             ParallelRangeDataSource.Factory(
                 OkHttpDataSource.Factory(OkHttpClient()),
                 parallelConnections = 2,
                 chunkSize = 128L * 1024L
-            )
+            ),
+            firstBytes = { observations++ }
         )
         val source = factory.createDataSource() as androidx.media3.common.ByteBufferDataReader
         val out = ByteArrayOutputStream()
@@ -165,5 +257,6 @@ class RedirectReportingDataSourceTest {
         }
         assertArrayEquals(file, out.toByteArray())
         assertEquals(listOf(url("/release-b")), reported)
+        assertEquals(1, observations)
     }
 }

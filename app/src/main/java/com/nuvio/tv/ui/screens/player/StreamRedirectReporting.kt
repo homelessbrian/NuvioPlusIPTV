@@ -18,8 +18,11 @@ import java.util.concurrent.atomic.AtomicReference
 internal class RedirectReportingDataSource(
     private val upstream: DataSource,
     private val requestedUrl: String,
+    private val firstUpstreamBytes: AtomicReference<(() -> Unit)?>?,
     private val onRedirect: (resolvedUrl: String) -> Unit
 ) : DataSource by upstream, androidx.media3.common.ByteBufferDataReader {
+
+    private var watchFirstRead = false
 
     // Interface delegation only covers DataSource, so without these the cache sees an upstream that
     // cannot do buffer reads and throws once a read crosses from a cached span back to the network.
@@ -27,11 +30,24 @@ internal class RedirectReportingDataSource(
         upstream is androidx.media3.common.ByteBufferDataReader && upstream.supportsByteBufferRead()
 
     override fun read(buffer: java.nio.ByteBuffer, length: Int): Int =
-        (upstream as androidx.media3.common.ByteBufferDataReader).read(buffer, length)
+        observeRead((upstream as androidx.media3.common.ByteBufferDataReader).read(buffer, length))
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+        observeRead(upstream.read(buffer, offset, length))
+
+    private fun observeRead(count: Int): Int {
+        if (watchFirstRead && count > 0) {
+            watchFirstRead = false
+            firstUpstreamBytes?.getAndSet(null)?.let { callback -> runCatching { callback() } }
+        }
+        return count
+    }
 
     override fun open(dataSpec: DataSpec): Long {
+        watchFirstRead = false
         val length = upstream.open(dataSpec)
         if (dataSpec.uri.toString() == requestedUrl) {
+            watchFirstRead = firstUpstreamBytes?.get() != null
             val resolvedUrl = upstream.uri?.toString()
             if (resolvedUrl != null && canonicalStreamUrl(resolvedUrl) != canonicalStreamUrl(requestedUrl)) {
                 onRedirect(resolvedUrl)
@@ -47,12 +63,15 @@ internal class RedirectReportingDataSource(
     class Factory(
         private val upstream: DataSource.Factory,
         private val requestedUrl: String,
+        onFirstUpstreamBytes: (() -> Unit)? = null,
         private val onRedirect: (resolvedUrl: String) -> Unit
     ) : DataSource.Factory {
         private val lastReportedUrl = AtomicReference<String?>(null)
+        // Seeks and overlapping loads share one observation for this media source.
+        private val firstUpstreamBytes = onFirstUpstreamBytes?.let { AtomicReference<(() -> Unit)?>(it) }
 
         override fun createDataSource(): DataSource =
-            RedirectReportingDataSource(upstream.createDataSource(), requestedUrl) { resolvedUrl ->
+            RedirectReportingDataSource(upstream.createDataSource(), requestedUrl, firstUpstreamBytes) { resolvedUrl ->
                 if (lastReportedUrl.getAndSet(resolvedUrl) != resolvedUrl) onRedirect(resolvedUrl)
             }
     }
