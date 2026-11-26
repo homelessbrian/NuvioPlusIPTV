@@ -25,6 +25,8 @@ import com.nuvio.tv.livetv.sync.UsenetBackup
 import com.nuvio.tv.livetv.sync.DeviceSettingsBackup
 import com.nuvio.tv.livetv.sync.PlaybackSettingsBackup
 import com.nuvio.tv.livetv.sync.SyncPart
+import com.nuvio.tv.livetv.sync.TvSharedSettingsSync
+import com.nuvio.tv.livetv.sync.TvPreferenceSettingsSync
 import com.nuvio.tv.livetv.sync.SyncParts
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -50,7 +52,9 @@ class LiveTvPreferences @Inject constructor(
     @ApplicationContext private val context: Context,
     private val profileManager: com.nuvio.tv.core.profile.ProfileManager,
     private val usenetBackup: UsenetBackup,
-    private val playbackBackup: PlaybackSettingsBackup
+    private val playbackBackup: PlaybackSettingsBackup,
+    private val sharedSettings: TvSharedSettingsSync,
+    private val preferenceSettings: TvPreferenceSettingsSync,
 ) {
     // A provider edit/restore and publication of its staged imports are ordered together.
     // Unrelated playback/display preferences do not wait for a catalogue import.
@@ -1806,18 +1810,26 @@ class LiveTvPreferences @Inject constructor(
      * VPN profiles/selections live outside DataStore and use their existing backup observer.
      */
     val changes: Flow<Unit> = channelFlow {
-        val vpnChanges = Channel<Unit>(Channel.CONFLATED)
+        val externalChanges = Channel<Unit>(Channel.CONFLATED)
         // Listen before taking the initial stored snapshot. A native edit during startup is
         // buffered until after the initial emission, so callers' drop(1) cannot discard it.
         val observers = mutableListOf<AutoCloseable>()
         try {
-            observers += com.nuvio.vpn.android.VpnPlaybackProtection.observeBackupChanges { vpnChanges.trySend(Unit) }
-            observers += usenetBackup.observeChanges { vpnChanges.trySend(Unit) }
-            observers += playbackBackup.observeChanges { vpnChanges.trySend(Unit) }
-            val projection = SetupSyncProjection({ it in SYNC_EXCLUDED }, ::syncString)
+            observers += com.nuvio.vpn.android.VpnPlaybackProtection.observeBackupChanges { externalChanges.trySend(Unit) }
+            observers += usenetBackup.observeChanges { externalChanges.trySend(Unit) }
+            observers += playbackBackup.observeChanges { externalChanges.trySend(Unit) }
+            observers += sharedSettings.observeChanges { externalChanges.trySend(Unit) }
+            val preferenceSnapshotReady = kotlinx.coroutines.CompletableDeferred<Unit>()
+            launch {
+                preferenceSettings.changes.collect {
+                    if (!preferenceSnapshotReady.complete(Unit)) externalChanges.trySend(Unit)
+                }
+            }
+            val projection = SetupSyncProjection({ it in SYNC_EXCLUDED && DeviceSettingsBackup.wireName(it) == null }, ::syncString)
             var previous = projection.values(store.data.first())
+            preferenceSnapshotReady.await()
             send(Unit)
-            launch { for (change in vpnChanges) send(Unit) }
+            launch { for (change in externalChanges) send(Unit) }
             store.data.collect { stored ->
                 val current = projection.values(stored)
                 if (current != previous) {
@@ -1827,7 +1839,7 @@ class LiveTvPreferences @Inject constructor(
             }
         } finally {
             observers.asReversed().forEach { it.close() }
-            vpnChanges.close()
+            externalChanges.close()
         }
     }
 
@@ -1843,7 +1855,7 @@ class LiveTvPreferences @Inject constructor(
     }
 
     private fun isExternalBackupKey(name: String): Boolean =
-        name == com.nuvio.vpn.android.VpnBackup.KEY || name == DeviceSettingsBackup.KEY ||
+        TvSharedSettingsSync.isFamily(name) || name == com.nuvio.vpn.android.VpnBackup.KEY || name == DeviceSettingsBackup.KEY ||
             UsenetBackup.isKey(name) || PlaybackSettingsBackup.isKey(name)
 
     /** Older clients can preserve unknown keys in DataStore. Move secrets into their owner. */
@@ -1876,7 +1888,8 @@ class LiveTvPreferences @Inject constructor(
         val out = JSONObject()
         p.asMap().forEach { (key, value) ->
             val name = key.name
-            if (name in SYNC_EXCLUDED || isExternalBackupKey(name)) return@forEach
+            val wire = DeviceSettingsBackup.wireName(name)
+            if (wire == null && (name in SYNC_EXCLUDED || isExternalBackupKey(name))) return@forEach
             val entry = when (value) {
                 is Boolean -> JSONObject().put("t", "b").put("v", value)
                 is Int -> JSONObject().put("t", "i").put("v", value)
@@ -1887,7 +1900,7 @@ class LiveTvPreferences @Inject constructor(
                 }
                 else -> null
             } ?: return@forEach
-            out.put(name, entry)
+            out.put(wire ?: name, entry)
         }
         val vpnKey = stringPreferencesKey(com.nuvio.vpn.android.VpnBackup.KEY)
         val vpn = com.nuvio.vpn.android.VpnBackup.prepareExport(context, p[vpnKey])
@@ -1895,12 +1908,15 @@ class LiveTvPreferences @Inject constructor(
         out.put(com.nuvio.vpn.android.VpnBackup.KEY, JSONObject().put("t", "str").put("v", vpn))
         usenetBackup.exportInto(out)
         playbackBackup.exportInto(out)
+        sharedSettings.exportInto(out)
+        preferenceSettings.exportInto(out)
         return out
     }
 
     /** A deliberate backup also includes playback choices that automatic sync keeps on each TV. */
     suspend fun exportForBackup(): JSONObject {
         val data = exportForSync()
+        playbackBackup.exportInto(data, includeDefaults = true)
         val local = JSONObject()
         val stored = store.data.first()
         val effective = buildSettings(stored)
@@ -1929,6 +1945,9 @@ class LiveTvPreferences @Inject constructor(
         device?.let { playbackBackup.validateDeviceSettings(it.getJSONObject("playback")) }
         usenetBackup.validate(data)
         playbackBackup.validate(data)
+        sharedSettings.validate(data)
+        preferenceSettings.validate(data)
+        DeviceSettingsBackup.validateLiveChoices(data)
         // A settings-only backup must not empty the target's existing providers or VPN profiles.
         val setup = if (device != null && !syncHasSources(data)) exportForSync().also { current ->
             data.keys().forEach { name ->
@@ -1940,7 +1959,7 @@ class LiveTvPreferences @Inject constructor(
             val local = it.getJSONObject("liveTv")
             store.edit { p ->
                 local.keys().forEach { name ->
-                    if (DeviceSettingsBackup.includes(name)) {
+                    if (DeviceSettingsBackup.includes(name) && !data.has(DeviceSettingsBackup.wireName(name))) {
                         val entry = local.getJSONObject(name)
                         when (entry.getString("t")) {
                             "b" -> p[booleanPreferencesKey(name)] = entry.getBoolean("v")
@@ -1949,7 +1968,7 @@ class LiveTvPreferences @Inject constructor(
                     }
                 }
             }
-            playbackBackup.restoreDeviceSettings(it.getJSONObject("playback"))
+            playbackBackup.restoreDeviceSettings(TvSharedSettingsSync.legacyPlaybackChoices(it.getJSONObject("playback"), data))
         }
         return changed
     }
@@ -1968,12 +1987,17 @@ class LiveTvPreferences @Inject constructor(
     suspend fun importFromSync(data: JSONObject): Set<String> = sourceMutations.withLock {
         usenetBackup.validate(data)
         playbackBackup.validate(data)
+        sharedSettings.validate(data)
+        preferenceSettings.validate(data)
+        DeviceSettingsBackup.validateLiveChoices(data)
         migrateLegacyUsenet()
         data.optJSONObject(com.nuvio.vpn.android.VpnBackup.KEY)?.optString("v")?.let {
             com.nuvio.vpn.android.VpnBackup.restoreSetup(context, it)
         }
         usenetBackup.restoreFrom(data)
         playbackBackup.restoreFrom(data)
+        sharedSettings.restoreFrom(data)
+        preferenceSettings.restoreFrom(data)
         // Playlists whose address or login changed, and guides whose link or user agent changed: they need downloading again.
         val changed = HashSet<String>()
         store.edit { p ->
@@ -1984,9 +2008,11 @@ class LiveTvPreferences @Inject constructor(
                 @Suppress("UNCHECKED_CAST")
                 p.remove(it as Preferences.Key<Any>)
             }
-            data.keys().forEach { name ->
-                if (name in SYNC_EXCLUDED || isExternalBackupKey(name)) return@forEach
-                val e = data.optJSONObject(name) ?: return@forEach
+            data.keys().forEach { wire ->
+                val nativeName = DeviceSettingsBackup.localName(wire)
+                val name = nativeName ?: wire
+                if (nativeName == null && (name in SYNC_EXCLUDED || isExternalBackupKey(name))) return@forEach
+                val e = data.optJSONObject(wire) ?: return@forEach
                 when (e.optString("t")) {
                     "b" -> p[booleanPreferencesKey(name)] = e.optBoolean("v")
                     "i" -> p[intPreferencesKey(name)] = e.optInt("v")

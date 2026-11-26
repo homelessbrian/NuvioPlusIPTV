@@ -69,6 +69,8 @@ class PlaybackSettingsBackupTest {
     @After fun tearDown() = unmockkAll()
 
     @Test fun `subtitle settings roundtrip through their active owners`() {
+        every { autoPreferences.contains(any()) } returns true
+        every { audioPreferences.contains(any()) } returns true
         enabled.value = false
         aggressive.value = false
         tolerance.value = 500

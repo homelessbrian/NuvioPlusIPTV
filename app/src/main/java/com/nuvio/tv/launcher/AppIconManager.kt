@@ -95,6 +95,7 @@ class AppIconManager @Inject constructor(
         _state.value = current.copy(pending = option, changeFailed = false)
         val changed = activate(option, current.iptvBranding)
         _state.value = if (changed) {
+            brandingPrefs.edit().putString("color", option.name).apply()
             AppIconSettingsState(selected = option, iptvBranding = current.iptvBranding)
         } else {
             current.copy(changeFailed = true)

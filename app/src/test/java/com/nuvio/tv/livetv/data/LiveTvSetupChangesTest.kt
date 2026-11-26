@@ -70,7 +70,8 @@ class LiveTvSetupChangesTest {
             listeners += listener
             AutoCloseable { listeners -= listener }
         }
-        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), mockk(relaxed = true))
+        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), mockk(relaxed = true),
+            mockk(relaxed = true), mockk(relaxed = true) { every { changes } returns kotlinx.coroutines.flow.flowOf(Unit) })
         val field = LiveTvPreferences::class.java.getDeclaredField("store").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         store = field.get(preferences) as DataStore<Preferences>
@@ -107,7 +108,7 @@ class LiveTvSetupChangesTest {
 
     private suspend fun Channel<JSONObject>.next(): JSONObject = withTimeout(5_000) { receive() }
 
-    @Test fun `watching and per-TV changes never invoke portable VPN export`() = runBlocking {
+    @Test fun `watch history stays local while changed playback choices trigger setup sync`() = runBlocking {
         observe { snapshots ->
             preferences.recordWatched("one")
             preferences.setLastGroup("group-one")
@@ -116,14 +117,14 @@ class LiveTvSetupChangesTest {
                 it[stringPreferencesKey("last_channel_p2")] = "second-profile"
                 it[stringPreferencesKey("last_group_p2")] = "second-group"
                 it[stringPreferencesKey("recent_p2")] = "[\"second-profile\"]"
-                it[stringPreferencesKey("buffer_size")] = "large"
-                it[booleanPreferencesKey("audio_passthrough")] = true
             }
             assertNull(withTimeoutOrNull(200) { snapshots.receive() })
             assertEquals(0, exports.get())
+            store.edit { it[stringPreferencesKey("buffer_size")] = "large" }
+            assertEquals("large", snapshots.next().getJSONObject("tv_setting_v1_live_buffer_size").getString("v"))
             preferences.toggleFavorite("portable-favorite")
             assertTrue(snapshots.next().getJSONObject("favorites").getString("v").contains("portable-favorite"))
-            assertEquals(1, exports.get())
+            assertEquals(2, exports.get())
         }
     }
 

@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Seek thumbnail settings (Settings > Playback > Seek Thumbnails). Off by default; every limit is
- * a choice the user can change. Kept on this device only (each box has its own memory and storage).
+ * a choice the user can change. Chosen options follow Setup Sync. Generated thumbnails and memory warnings stay local.
  */
 object SeekThumbSettings {
     /** When thumbnails are made. */
@@ -58,17 +58,33 @@ object SeekThumbSettings {
         return _values.value
     }
 
+    @Synchronized
     fun update(context: Context, change: (Values) -> Values) {
-        load(context)
-        val next = change(_values.value)
-        _values.value = next
-        context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
-            .putBoolean(ENABLED, next.enabled)
-            .putBoolean(INCLUDE_4K, next.include4k)
-            .putString(WHEN, next.whenToMake.name)
-            .putInt(STORAGE_MB, next.storageMb)
-            .putLong(LOW_MEMORY_AT, next.lastLowMemoryAt)
-            .apply()
+        val current = load(context)
+        val next = change(current)
+        restore(context, next.enabled.takeIf { it != current.enabled },
+            next.include4k.takeIf { it != current.include4k },
+            next.whenToMake.takeIf { it != current.whenToMake },
+            next.storageMb.takeIf { it != current.storageMb })
+        if (current.lastLowMemoryAt != next.lastLowMemoryAt) {
+            context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+                .putLong(LOW_MEMORY_AT, next.lastLowMemoryAt).apply()
+            _values.value = next
+        }
+    }
+
+    /** Missing fields keep their local value, including the RAM-based 4K default on a new TV. */
+    @Synchronized
+    internal fun restore(context: Context, enabled: Boolean?, include4k: Boolean?, whenToMake: When?, storageMb: Int?) {
+        val current = load(context)
+        val edit = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        enabled?.let { edit.putBoolean(ENABLED, it) }
+        include4k?.let { edit.putBoolean(INCLUDE_4K, it) }
+        whenToMake?.let { edit.putString(WHEN, it.name) }
+        storageMb?.let { edit.putInt(STORAGE_MB, it) }
+        _values.value = current.copy(enabled = enabled ?: current.enabled, include4k = include4k ?: current.include4k,
+            whenToMake = whenToMake ?: current.whenToMake, storageMb = storageMb ?: current.storageMb)
+        edit.apply()
     }
 
     /** Android counts this box as low on memory (most cheap sticks and older boxes). */
