@@ -572,7 +572,16 @@ fun LiveTvPlayerScreen(
         screen = if (playingRecording) RemoteScreen.MOVIE else RemoteScreen.LIVE_TV,
         enabled = current != null && playback.error == null && upNext == null &&
             !sportsGamesOpen && !listVisible && dialog == PlayerDialog.NONE &&
-            !panelFull && controlFocus == null && browseKey == null,
+            !panelFull && controlFocus == null,
+        canHandleAction = { RemoteHostDefaults.canHandleLiveAction(it, browsing = browseKey != null) },
+        canRemapButton = { RemoteHostDefaults.canRemapLiveButton(it, browsing = browseKey != null) },
+        onNativeCancel = {
+            okHoldJob?.cancel()
+            okHoldJob = null
+            longPressFired = false
+            rightDownAt = 0L
+            rightHoldDone = false
+        },
         defaults = {
             if (playingRecording) RemoteHostDefaults.recording()
             else {
@@ -614,8 +623,8 @@ fun LiveTvPlayerScreen(
                 true
             }
             RemoteAction.PLAY_PAUSE -> { viewModel.playback.togglePause(); true }
-            RemoteAction.PLAY -> { if (playback.userPaused) viewModel.playback.togglePause(); true }
-            RemoteAction.PAUSE -> { if (!playback.userPaused) viewModel.playback.togglePause(); true }
+            RemoteAction.PLAY -> { viewModel.playback.setPaused(false); true }
+            RemoteAction.PAUSE -> { viewModel.playback.setPaused(true); true }
             RemoteAction.NEXT_CHAPTER, RemoteAction.PREVIOUS_CHAPTER -> { unavailable(); true }
             RemoteAction.OPTIONS -> { openGear(); true }
             RemoteAction.AUDIO -> { openGear("audio"); true }

@@ -11,6 +11,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.nuvio.tv.remote.RemoteAction
+import com.nuvio.tv.remote.RemoteButton
 import com.nuvio.tv.remote.RemoteCatalog
 import com.nuvio.tv.remote.RemoteDefaultBinding
 import com.nuvio.tv.remote.RemoteInputOwner
@@ -22,6 +23,9 @@ fun RemoteActionHost(
     screen: RemoteScreen,
     enabled: Boolean,
     defaults: () -> List<RemoteDefaultBinding> = { RemoteCatalog.defaults(screen) },
+    onNativeCancel: () -> Unit = {},
+    canHandleAction: (RemoteAction) -> Boolean = { true },
+    canRemapButton: (RemoteButton) -> Boolean = { true },
     onAction: (RemoteAction) -> Boolean
 ) {
     val owner = LocalContext.current.remoteInputOwner()
@@ -31,6 +35,9 @@ fun RemoteActionHost(
     val currentEnabled = rememberUpdatedState(enabled && !sidebarExpanded && windowFocused)
     val currentAction = rememberUpdatedState(onAction)
     val currentDefaults = rememberUpdatedState(defaults)
+    val currentNativeCancel = rememberUpdatedState(onNativeCancel)
+    val currentCanHandle = rememberUpdatedState(canHandleAction)
+    val currentCanRemap = rememberUpdatedState(canRemapButton)
     DisposableEffect(owner, lifecycleOwner, screen) {
         val router = owner?.remoteInputRouter
         val registration = router?.register(
@@ -40,7 +47,10 @@ fun RemoteActionHost(
                     lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
             },
             onAction = { currentAction.value(it) },
-            defaults = { currentDefaults.value() }
+            defaults = { currentDefaults.value() },
+            onNativeCancel = { currentNativeCancel.value() },
+            canHandleAction = { currentCanHandle.value(it) },
+            canRemapButton = { currentCanRemap.value(it) }
         )
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) router?.cancelPending()

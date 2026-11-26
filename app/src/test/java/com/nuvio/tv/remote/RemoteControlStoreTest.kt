@@ -3,7 +3,9 @@ package com.nuvio.tv.remote
 import android.view.KeyEvent
 import java.io.IOException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
@@ -18,10 +20,13 @@ import org.robolectric.annotation.Config
 class RemoteControlStoreTest {
     private class Memory(var failure: Boolean = false) : RemoteControlPersistence {
         override val raw = MutableStateFlow("")
+        var acknowledgment: CompletableDeferred<Unit>? = null
         override suspend fun compareAndSet(expected: String, value: String): Boolean {
             if (failure) throw IOException("unavailable storage")
             if (raw.value != expected) return false
-            raw.value = value; return true
+            raw.value = value
+            acknowledgment?.await()
+            return true
         }
     }
     private val left = RemoteButton(KeyEvent.KEYCODE_DPAD_LEFT)
@@ -29,6 +34,9 @@ class RemoteControlStoreTest {
 
     @Test fun discoveryDeduplicatesAliasesAndResetRetainsExtraButtonsWithUndo() = runTest {
         val memory = Memory(); val store = RemoteControlStore(memory, backgroundScope); runCurrent()
+        assertEquals(RemoteMutationResult.SAVED, store.addButton(RemoteButton(KeyEvent.KEYCODE_ENTER))); runCurrent()
+        assertTrue(store.state.value.configuration.extras.isEmpty())
+        assertEquals(listOf(RemoteButton(KeyEvent.KEYCODE_DPAD_CENTER)), store.state.value.configuration.confirmedButtons)
         assertEquals(RemoteMutationResult.UNCHANGED, store.addButton(RemoteButton(KeyEvent.KEYCODE_ENTER)))
         val yellow = RemoteButton(KeyEvent.KEYCODE_PROG_YELLOW)
         assertEquals(RemoteMutationResult.SAVED, store.addButton(yellow)); runCurrent()
@@ -37,6 +45,7 @@ class RemoteControlStoreTest {
         assertEquals(RemoteMutationResult.SAVED, store.reset()); runCurrent()
         assertTrue(store.state.value.configuration.bindings.isEmpty())
         assertEquals(listOf(RemoteExtraButton(yellow)), store.state.value.configuration.extras)
+        assertTrue(yellow in store.state.value.configuration.confirmedButtons)
         assertEquals(RemoteMutationResult.SAVED, store.undo()); runCurrent()
         assertEquals(RemoteAction.LAST_CHANNEL, store.state.value.configuration.bindings.single().action)
         assertFalse(store.state.value.canUndo)
@@ -79,5 +88,21 @@ class RemoteControlStoreTest {
         assertNull(store.state.value.error)
         assertFalse(store.state.value.canUndo)
         RemoteControlCodec.validate(memory.raw.value)
+    }
+
+    @Test fun cancellationAfterDurableCommitStillPublishesTheMappingAndUndo() = runTest {
+        val memory = Memory(); val store = RemoteControlStore(memory, backgroundScope); runCurrent()
+        val acknowledged = CompletableDeferred<Unit>(); memory.acknowledgment = acknowledged
+        val changed = mapped(RemoteAction.LAST_CHANNEL)
+        val save = launch { store.applyConfiguration(changed, store.state.value.revision) }
+        runCurrent()
+        assertEquals(changed, RemoteControlCodec.decode(memory.raw.value))
+        save.cancel() // The UI disappeared after storage committed, before the acknowledgement.
+        acknowledged.complete(Unit); runCurrent()
+        assertTrue(save.isCancelled)
+        assertEquals(changed, store.state.value.configuration)
+        assertTrue(store.state.value.canUndo)
+        assertEquals(RemoteMutationResult.SAVED, store.undo()); runCurrent()
+        assertTrue(store.state.value.configuration.bindings.isEmpty())
     }
 }

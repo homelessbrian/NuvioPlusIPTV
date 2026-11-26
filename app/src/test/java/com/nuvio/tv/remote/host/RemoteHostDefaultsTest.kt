@@ -52,6 +52,21 @@ class RemoteHostDefaultsTest {
         assertEquals(600L, live.first { it.button.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && it.press == RemotePress.HOLD }.holdMillis)
         assertEquals(RemoteAction.SEEK_FORWARD, replay.action(KeyEvent.KEYCODE_DPAD_RIGHT))
         assertEquals(RemoteAction.SEEK_FORWARD, replay.action(KeyEvent.KEYCODE_DPAD_RIGHT, RemotePress.HOLD))
+        assertEquals(true, replay.first { it.button.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && it.press == RemotePress.HOLD }.repeatable)
+        assertEquals(false, live.first { it.button.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && it.press == RemotePress.HOLD }.repeatable)
+    }
+
+    @Test fun `channel browsing accepts consecutive browse shortcuts without capturing unrelated navigation`() {
+        assertEquals(true, RemoteHostDefaults.canHandleLiveAction(RemoteAction.BROWSE_NEXT_CHANNEL, browsing = true))
+        assertEquals(true, RemoteHostDefaults.canHandleLiveAction(RemoteAction.BROWSE_PREVIOUS_CHANNEL, browsing = true))
+        assertEquals(false, RemoteHostDefaults.canHandleLiveAction(RemoteAction.SHOW_CONTROLS, browsing = true))
+        assertEquals(false, RemoteHostDefaults.canHandleLiveAction(RemoteAction.RETURN, browsing = true))
+        assertEquals(false, RemoteHostDefaults.canHandleLiveAction(RemoteAction.NEXT_CHANNEL, browsing = true))
+        assertEquals(true, RemoteHostDefaults.canHandleLiveAction(RemoteAction.NEXT_CHANNEL, browsing = false))
+        assertEquals(false, RemoteHostDefaults.canRemapLiveButton(RemoteButton(KeyEvent.KEYCODE_DPAD_CENTER), browsing = true))
+        assertEquals(false, RemoteHostDefaults.canRemapLiveButton(RemoteButton(KeyEvent.KEYCODE_ENTER), browsing = true))
+        assertEquals(true, RemoteHostDefaults.canRemapLiveButton(RemoteButton(KeyEvent.KEYCODE_DPAD_UP), browsing = true))
+        assertEquals(true, RemoteHostDefaults.canRemapLiveButton(RemoteButton(KeyEvent.KEYCODE_DPAD_CENTER), browsing = false))
     }
 
     @Test fun `compact info full controls and options are separate real live actions`() {

@@ -10,6 +10,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 @Singleton
 class RemoteControlStore internal constructor(private val persistence: RemoteControlPersistence, scope: CoroutineScope) {
@@ -76,9 +78,10 @@ class RemoteControlStore internal constructor(private val persistence: RemoteCon
         val current = mutableState.value
         if (current.loading) return@withLock RemoteMutationResult.STALE
         val canonical = button.canonical()
-        if (canonical in RemoteCatalog.standardButtons || current.configuration.extras.any { it.button.canonical() == canonical })
-            return@withLock RemoteMutationResult.UNCHANGED
-        write(current.configuration.copy(extras = current.configuration.extras + RemoteExtraButton(canonical, label.trim())), rememberUndo = true)
+        val confirmed = current.configuration.confirmButton(canonical)
+        val next = if (canonical in RemoteCatalog.standardButtons || confirmed.extras.any { it.button.canonical() == canonical }) confirmed
+            else confirmed.copy(extras = confirmed.extras + RemoteExtraButton(canonical, label.trim()))
+        write(next, rememberUndo = true)
     }
 
     suspend fun renameButton(button: RemoteButton, label: String): RemoteMutationResult = mutex.withLock {
@@ -119,7 +122,8 @@ class RemoteControlStore internal constructor(private val persistence: RemoteCon
         val configuration = RemoteControlCodec.canonicalize(requested)
         val current = mutableState.value
         if (configuration == current.configuration && current.error == null) return RemoteMutationResult.UNCHANGED
-        return try {
+        // Once the durable mutation starts, cancellation must not separate it from cached state/Undo.
+        return withContext(NonCancellable) { try {
             if (!persistence.compareAndSet(observedRaw, encoded)) {
                 val latest = persistence.raw.first()
                 observedRaw = latest
@@ -127,7 +131,7 @@ class RemoteControlStore internal constructor(private val persistence: RemoteCon
                 val decoded = runCatching { RemoteControlCodec.decode(latest) }
                 mutableState.value = RemoteControlState(decoded.getOrDefault(RemoteConfiguration()), loading = false,
                     error = if (decoded.isFailure) RemoteStoreError.LOAD_FAILED else null, revision = current.revision + 1)
-                return RemoteMutationResult.STALE
+                return@withContext RemoteMutationResult.STALE
             }
             observedRaw = encoded
             if (rememberUndo) undoConfiguration = current.configuration.takeUnless { current.error == RemoteStoreError.LOAD_FAILED }
@@ -138,7 +142,7 @@ class RemoteControlStore internal constructor(private val persistence: RemoteCon
         catch (_: Exception) {
             mutableState.value = current.copy(error = RemoteStoreError.SAVE_FAILED)
             RemoteMutationResult.FAILED
-        }
+        } }
     }
 }
 

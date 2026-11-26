@@ -34,7 +34,10 @@ class RemoteInputRouter(
         val screen: RemoteScreen,
         val active: () -> Boolean,
         val action: (RemoteAction) -> Boolean,
-        val defaults: () -> List<RemoteDefaultBinding>
+        val defaults: () -> List<RemoteDefaultBinding>,
+        val nativeCancel: () -> Unit,
+        val canHandleAction: (RemoteAction) -> Boolean,
+        val canRemapButton: (RemoteButton) -> Boolean
     )
     private data class PhysicalKey(val device: Int, val code: Int, val scan: Int, val downAt: Long) {
         companion object { fun of(event: KeyEvent) = PhysicalKey(event.deviceId, event.keyCode, event.scanCode, event.downTime) }
@@ -66,10 +69,13 @@ class RemoteInputRouter(
         screen: RemoteScreen,
         active: () -> Boolean,
         onAction: (RemoteAction) -> Boolean,
-        defaults: () -> List<RemoteDefaultBinding> = { RemoteCatalog.defaults(screen) }
+        defaults: () -> List<RemoteDefaultBinding> = { RemoteCatalog.defaults(screen) },
+        onNativeCancel: () -> Unit = { },
+        canHandleAction: (RemoteAction) -> Boolean = { true },
+        canRemapButton: (RemoteButton) -> Boolean = { true }
     ): AutoCloseable {
         if (closed) return AutoCloseable { }
-        val route = Route(screen, active, onAction, defaults)
+        val route = Route(screen, active, onAction, defaults, onNativeCancel, canHandleAction, canRemapButton)
         routes += route
         return AutoCloseable {
             routes.remove(route)
@@ -117,7 +123,7 @@ class RemoteInputRouter(
                             else { native(current.down); native(event) }
                         }
                     }
-                } else if (current.nativeHolding && valid(current)) native(event)
+                } else if (current.nativeHolding) cancelNative(current)
                 finish(current)
                 return true
             }
@@ -133,17 +139,18 @@ class RemoteInputRouter(
         if (suspensions > 0 || event.action != KeyEvent.ACTION_DOWN || event.repeatCount != 0) return false
         val route = activeRoute() ?: return false
         val button = RemoteButton.from(event) ?: return false
-        if (RemoteCatalog.isProtected(route.screen, button)) return false
+        if (RemoteCatalog.isProtected(route.screen, button) || !canRemap(route, button)) return false
         val config = configuration()
-        val once = config.bindings.firstOrNull { it.screen == route.screen && it.press == RemotePress.ONCE && it.button.canonical() == button }?.action
-        val hold = config.bindings.firstOrNull { it.screen == route.screen && it.press == RemotePress.HOLD && it.button.canonical() == button }?.action
+        val once = config.bindings.firstOrNull { it.screen == route.screen && it.press == RemotePress.ONCE && it.button.canonical() == button }?.action?.takeIf { canHandle(route, it) }
+        val hold = config.bindings.firstOrNull { it.screen == route.screen && it.press == RemotePress.HOLD && it.button.canonical() == button }?.action?.takeIf { canHandle(route, it) }
         if (once == null && hold == null) return false
         val nativeHold = if (hold == null) try { route.defaults().firstOrNull { it.button.canonical() == button && it.press == RemotePress.HOLD } }
             catch (_: Exception) { null } else null
         val threshold = if (hold == null && nativeHold != null && nativeHold.holdMillis > 0)
             nativeHold.holdMillis.coerceIn(1, 5000) else longPressTimeoutMillis
+        val semanticHold = nativeHold?.takeIf { !it.repeatable && canHandle(route, it.action) }?.action
         val next = Pending(physical, button, route, config, KeyEvent(event),
-            once, hold, nativeHold?.action, threshold)
+            once, hold, semanticHold, threshold)
         pending = next
         next.timer = scheduler.after(threshold) { if (pending === next && valid(next)) reachLong(next) else if (pending === next) cancelPending() }
         return true
@@ -155,7 +162,7 @@ class RemoteInputRouter(
         drain(current.physical)
         pending = null
         current.timer?.close()
-        current.down.recycle()
+        cancelNative(current)
     }
 
     /** Also usable by a dialog window: a release abandoned by learning must not activate its focused row. */
@@ -188,7 +195,7 @@ class RemoteInputRouter(
                     val repeated = KeyEvent(current.down.downTime, at, KeyEvent.ACTION_DOWN, current.down.keyCode, 1,
                         current.down.metaState, current.down.deviceId, current.down.scanCode,
                         current.down.flags or KeyEvent.FLAG_LONG_PRESS, current.down.source)
-                    try { native(repeated) } finally { repeated.recycle() }
+                    native(repeated)
                 }
             }
         }
@@ -209,11 +216,23 @@ class RemoteInputRouter(
         if (pending !== current) return
         pending = null
         current.timer?.close()
-        current.down.recycle()
     }
 
     private fun valid(current: Pending): Boolean = !closed && suspensions == 0 &&
-        routes.contains(current.route) && activeRoute() === current.route && configuration() == current.configuration
+        routes.contains(current.route) && activeRoute() === current.route && configuration() == current.configuration &&
+        canRemap(current.route, current.button) &&
+        (current.once == null || canHandle(current.route, current.once)) &&
+        (current.hold == null || canHandle(current.route, current.hold))
+
+    private fun cancelNative(current: Pending) {
+        if (!current.nativeHolding) return
+        current.nativeHolding = false
+        try { current.route.nativeCancel() }
+        catch (_: Exception) { Log.w("RemoteControls", "Native remote gesture cleanup failed: ${current.route.screen.name}") }
+    }
+
+    private fun canHandle(route: Route, action: RemoteAction): Boolean = try { route.canHandleAction(action) } catch (_: Exception) { false }
+    private fun canRemap(route: Route, button: RemoteButton): Boolean = try { route.canRemapButton(button) } catch (_: Exception) { false }
 
     private fun activeRoute(): Route? {
         for (index in routes.indices.reversed()) {

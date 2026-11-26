@@ -11,6 +11,13 @@ import com.nuvio.tv.remote.RemoteScreen
 
 /** The guide describes the host's effective defaults; it never changes those defaults. */
 object RemoteHostDefaults {
+    /** Browsing stays remappable for browse commands; its OK, Back and other navigation stay native. */
+    fun canHandleLiveAction(action: RemoteAction, browsing: Boolean): Boolean = !browsing ||
+        action == RemoteAction.BROWSE_NEXT_CHANNEL || action == RemoteAction.BROWSE_PREVIOUS_CHANNEL
+
+    fun canRemapLiveButton(button: RemoteButton, browsing: Boolean): Boolean =
+        !browsing || button.canonical().keyCode != KeyEvent.KEYCODE_DPAD_CENTER
+
     /** Both built-in movie engines use this same screen-level key handler. */
     fun movie(hasChapters: Boolean = true, isLive: Boolean = false): List<RemoteDefaultBinding> =
         RemoteCatalog.defaults(RemoteScreen.MOVIE).filterNot {
@@ -25,9 +32,10 @@ object RemoteHostDefaults {
         rightSeeks: Boolean = false
     ): List<RemoteDefaultBinding> {
         val defaults = RemoteCatalog.defaults(RemoteScreen.LIVE_TV).toMutableList()
-        fun set(code: Int, action: RemoteAction?, press: RemotePress = RemotePress.ONCE, holdMillis: Long = 0) {
+        fun set(code: Int, action: RemoteAction?, press: RemotePress = RemotePress.ONCE, holdMillis: Long = 0,
+            repeatable: Boolean = false) {
             defaults.removeAll { it.button.keyCode == code && it.press == press }
-            if (action != null) defaults += RemoteDefaultBinding(RemoteButton(code), press, action, holdMillis)
+            if (action != null) defaults += RemoteDefaultBinding(RemoteButton(code), press, action, holdMillis, repeatable)
         }
         val next = if (settings.channelSurf) RemoteAction.BROWSE_NEXT_CHANNEL else RemoteAction.NEXT_CHANNEL
         val previous = if (settings.channelSurf) RemoteAction.BROWSE_PREVIOUS_CHANNEL else RemoteAction.PREVIOUS_CHANNEL
@@ -45,7 +53,8 @@ object RemoteHostDefaults {
         })
         set(KeyEvent.KEYCODE_DPAD_RIGHT, if (replaying || rightSeeks) RemoteAction.SEEK_FORWARD else RemoteAction.SHOW_INFO)
         set(KeyEvent.KEYCODE_DPAD_RIGHT, if (replaying || rightSeeks) RemoteAction.SEEK_FORWARD else RemoteAction.LAST_CHANNEL,
-            RemotePress.HOLD, holdMillis = if (replaying || rightSeeks) 0L else 600L)
+            RemotePress.HOLD, holdMillis = if (replaying || rightSeeks) 0L else 600L,
+            repeatable = replaying || rightSeeks)
         // Guide is a useful custom action, but the original live handler does not handle that key.
         set(KeyEvent.KEYCODE_GUIDE, null)
         return defaults

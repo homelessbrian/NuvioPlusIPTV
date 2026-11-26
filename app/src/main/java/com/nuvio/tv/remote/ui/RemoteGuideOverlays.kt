@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -19,7 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.R
-import com.nuvio.tv.livetv.ui.TextInputDialog
+import com.nuvio.tv.livetv.ui.LiveTextField
 import com.nuvio.tv.remote.RemoteAction
 import com.nuvio.tv.remote.RemoteButton
 import com.nuvio.tv.remote.RemoteCatalog
@@ -57,7 +60,7 @@ internal fun RemoteGuideOverlays(
     if (pane == null) return
     val context = LocalContext.current
     val firstFocus = remember(pane) { FocusRequester() }
-    if (pane != GuidePane.RENAME) LaunchedEffect(pane) { delay(70); runCatching { firstFocus.requestFocus() } }
+    LaunchedEffect(pane) { delay(70); runCatching { firstFocus.requestFocus() } }
     when (pane) {
         GuidePane.SCREEN -> GuideSheet(stringResource(R.string.remote_guide_context), onDismiss, onKey) {
             RemoteScreen.entries.forEachIndexed { index, item ->
@@ -116,17 +119,23 @@ internal fun RemoteGuideOverlays(
             status, firstFocus, onKey, onDismiss, onCancelCapture, onButton, onReplacement)
         GuidePane.RESET -> GuideSheet(stringResource(R.string.remote_guide_reset_title), onDismiss, onKey) {
             GuideText(stringResource(R.string.remote_guide_reset_message), secondary = true)
+            if (status != null) GuideReadout(stringResource(R.string.remote_guide_reset_title), status, Modifier.testTag("remote_reset_status"))
             GuideRow(stringResource(R.string.remote_guide_cancel), onDismiss, Modifier.focusRequester(firstFocus))
             GuideRow(stringResource(R.string.remote_guide_reset), onReset, Modifier.testTag("remote_reset_confirm"), enabled = !busy)
         }
-        GuidePane.RENAME -> TextInputDialog(
-            title = stringResource(R.string.remote_guide_rename_title),
-            initial = remoteButtonName(context, selected, configuration),
-            hint = stringResource(R.string.remote_guide_rename_hint),
-            confirmLabel = stringResource(R.string.remote_guide_name_save),
-            onDismiss = onDismiss,
-            onConfirm = { if (it.trim().isNotEmpty()) onRename(it.trim().take(48)) }
-        )
+        GuidePane.RENAME -> {
+            var label by remember(selected.identity) { mutableStateOf(remoteButtonName(context, selected, configuration)) }
+            fun saveName() { if (!busy && label.trim().isNotEmpty()) onRename(label.trim().take(48)) }
+            GuideSheet(stringResource(R.string.remote_guide_rename_title), onDismiss, onKey) {
+                LiveTextField(label, { label = it.take(48) }, stringResource(R.string.remote_guide_rename_hint),
+                    focusRequester = firstFocus, onDone = ::saveName)
+                if (status != null) GuideReadout(stringResource(R.string.remote_guide_rename_title), status, Modifier.testTag("remote_rename_status"))
+                if (label.isBlank()) GuideText(stringResource(R.string.remote_guide_name_empty), secondary = true)
+                GuideRow(stringResource(if (busy) R.string.remote_guide_saving else R.string.remote_guide_name_save),
+                    ::saveName, enabled = !busy && label.isNotBlank())
+                GuideRow(stringResource(R.string.remote_guide_cancel), onDismiss)
+            }
+        }
     }
 }
 

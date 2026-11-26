@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -94,8 +96,8 @@ internal fun GuideRow(
         ),
         shape = CardDefaults.shape(shape),
         border = CardDefaults.border(
-            border = Border(BorderStroke(if (chosen) 2.dp else 1.dp, if (chosen) NuvioTheme.colors.Secondary else NuvioTheme.colors.Border), shape),
-            focusedBorder = Border(BorderStroke(2.dp, NuvioTheme.colors.FocusRing), shape)
+            border = Border(BorderStroke(if (chosen) 2.dp else 1.dp, if (chosen) NuvioTheme.colors.Secondary else NuvioTheme.colors.Border), shape = shape),
+            focusedBorder = Border(BorderStroke(2.dp, NuvioTheme.colors.FocusRing), shape = shape)
         ),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
@@ -145,6 +147,7 @@ internal fun GuideListSheet(
     title: String,
     onDismiss: () -> Unit,
     onKey: (KeyEvent) -> Boolean,
+    state: LazyListState = rememberLazyListState(),
     content: LazyListScope.() -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -158,7 +161,7 @@ internal fun GuideListSheet(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 GuideText(title, title = true)
-                LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+                LazyColumn(Modifier.weight(1f, fill = false), state = state, verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
             }
         }
     }

@@ -112,8 +112,8 @@ private fun RemoteKey(
         shape = CardDefaults.shape(shape),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         border = CardDefaults.border(
-            border = Border(BorderStroke(if (selected) 2.dp else 1.dp, if (selected) NuvioTheme.colors.Secondary else NuvioTheme.colors.Border), shape),
-            focusedBorder = Border(BorderStroke(2.dp, NuvioTheme.colors.FocusRing), shape)
+            border = Border(BorderStroke(if (selected) 2.dp else 1.dp, if (selected) NuvioTheme.colors.Secondary else NuvioTheme.colors.Border), shape = shape),
+            focusedBorder = Border(BorderStroke(2.dp, NuvioTheme.colors.FocusRing), shape = shape)
         )
     ) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 7.dp), contentAlignment = Alignment.Center) {

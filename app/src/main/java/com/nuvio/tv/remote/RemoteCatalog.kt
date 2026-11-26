@@ -16,6 +16,10 @@ object RemoteCatalog {
         KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_SELECT
     )
     private val backCodes = setOf(KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B)
+    private val requiredButtons = listOf(
+        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
+        KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_BACK
+    ).map(::RemoteButton)
     val standardButtons: List<RemoteButton> = listOf(
         KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
         KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_BACK,
@@ -148,9 +152,13 @@ object RemoteCatalog {
         (standardButtons + configuration.extras.map { it.button } + configuration.bindings.map { it.button } + defaults.map { it.button })
             .map { it.canonical() }.distinctBy { it.identity }
 
+    /** Generic diagrams and restored assignments must not invent physical keys that a remote lacks. */
+    fun confirmedButtons(configuration: RemoteConfiguration): List<RemoteButton> =
+        (requiredButtons + configuration.confirmedButtons).map { it.canonical() }.distinctBy { it.identity }
+
     fun lostActions(before: RemoteConfiguration, after: RemoteConfiguration, screen: RemoteScreen,
         defaults: List<RemoteDefaultBinding> = defaults(screen)): Set<RemoteAction> {
-        fun covered(configuration: RemoteConfiguration): Set<RemoteAction> = buttons(configuration, defaults).flatMap { button ->
+        fun covered(configuration: RemoteConfiguration): Set<RemoteAction> = confirmedButtons(configuration).flatMap { button ->
             RemotePress.entries.mapNotNull { effectiveAction(configuration, screen, it, button, defaults) }
         }.filter { it != RemoteAction.NONE }.toSet()
         return covered(before) - covered(after)

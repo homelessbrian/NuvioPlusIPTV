@@ -19,6 +19,7 @@ import com.nuvio.tv.remote.RemoteBinding
 import com.nuvio.tv.remote.RemoteButton
 import com.nuvio.tv.remote.RemoteConfiguration
 import com.nuvio.tv.remote.RemoteControlCodec
+import com.nuvio.tv.remote.RemoteExtraButton
 import com.nuvio.tv.remote.RemotePress
 import com.nuvio.tv.remote.RemoteScreen
 import com.nuvio.vpn.android.VpnBackup
@@ -166,6 +167,21 @@ class LiveTvSetupChangesTest {
         assertTrue(runCatching { preferences.importFromBackup(backup) }.exceptionOrNull() is IllegalArgumentException)
         assertEquals(saved, preferences.rawRemoteButtons.first())
         assertEquals(listOf("kept"), preferences.currentPlaylists().map { it.id })
+    }
+
+    @Test fun `manual restore keeps assignments and labels but rechecks physical buttons on the new TV`() = runBlocking {
+        val yellow = RemoteButton(android.view.KeyEvent.KEYCODE_PROG_YELLOW)
+        val configuration = RemoteConfiguration(
+            extras = listOf(RemoteExtraButton(yellow, "My yellow button")),
+            bindings = listOf(RemoteBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, yellow, RemoteAction.OPEN_GUIDE)),
+            confirmedButtons = listOf(yellow, RemoteButton(android.view.KeyEvent.KEYCODE_INFO))
+        )
+        preferences.setRawRemoteButtons(RemoteControlCodec.encode(configuration))
+        val backup = preferences.exportForBackup()
+        preferences.setRawRemoteButtons("")
+        preferences.importFromBackup(backup)
+        val restored = RemoteControlCodec.decode(preferences.rawRemoteButtons.first())
+        assertEquals(configuration.copy(confirmedButtons = emptyList()), restored)
     }
 
     @Test fun `a pending edit cannot overwrite a layout already replaced by restore`() = runBlocking {

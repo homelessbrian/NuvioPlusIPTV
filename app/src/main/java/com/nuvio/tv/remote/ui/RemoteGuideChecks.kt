@@ -1,8 +1,13 @@
 package com.nuvio.tv.remote.ui
 
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.KeyEvent
@@ -16,6 +21,8 @@ import com.nuvio.tv.remote.RemoteConfiguration
 import com.nuvio.tv.remote.RemoteDefaultBinding
 import com.nuvio.tv.remote.RemotePress
 import com.nuvio.tv.remote.RemoteScreen
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 internal fun RemoteGuideChecks(
@@ -33,7 +40,20 @@ internal fun RemoteGuideChecks(
     onReplacement: (RemoteAction) -> Unit
 ) {
     val context = LocalContext.current
-    val buttons = (RemoteCatalog.standardButtons + configuration.extras.map { it.button }).distinctBy { it.identity }
+    val listState = rememberLazyListState()
+    val cancelFocus = remember { FocusRequester() }
+    LaunchedEffect(captureAction) {
+        if (captureAction == null) return@LaunchedEffect
+        // A selected feature may be far down this list; keep learning and recovery visible.
+        listState.scrollToItem(2)
+        while (isActive) {
+            withFrameNanos { }
+            if (runCatching { cancelFocus.requestFocus(FocusDirection.Enter) }.getOrDefault(false)) break
+            delay(80)
+        }
+    }
+    // A picture or a restored binding does not prove that this TV's remote has that key.
+    val buttons = RemoteCatalog.confirmedButtons(configuration)
     val noAction = buttons.flatMap { button -> RemotePress.entries.mapNotNull { kind ->
         if (RemoteCatalog.effectiveAction(configuration, screen, kind, button, defaults) == RemoteAction.NONE) button to kind else null
     } }
@@ -41,17 +61,17 @@ internal fun RemoteGuideChecks(
     val unknown = buttons.flatMap { button -> RemotePress.entries.mapNotNull { kind ->
         if (RemoteCatalog.effectiveAction(configuration, screen, kind, button, defaults) == null && navigationTitle(screen, button) == null) button to kind else null
     } }
-    val covered = RemoteCatalog.buttons(configuration, defaults).flatMap { button -> RemotePress.entries.mapNotNull {
+    val covered = buttons.flatMap { button -> RemotePress.entries.mapNotNull {
         RemoteCatalog.effectiveAction(configuration, screen, it, button, defaults)
     } }.toSet()
     val missing = RemoteCatalog.supportedActions(screen).filter { it != RemoteAction.NONE && it !in covered }
-    GuideListSheet(stringResource(R.string.remote_guide_check_buttons), onDismiss, onKey) {
+    GuideListSheet(stringResource(R.string.remote_guide_check_buttons), onDismiss, onKey, state = listState) {
         item("context") { GuideText(context.getString(screen.titleRes()), secondary = true) }
         item("close_top") { GuideRow(context.getString(R.string.remote_guide_done), onDismiss, Modifier.focusRequester(firstFocus)) }
         if (captureAction != null) {
             item("capture_title") { GuideText(context.getString(R.string.remote_guide_replacement_prompt, context.getString(captureAction.titleRes(screen)))) }
             item("capture_help") { GuideText(context.getString(if (captureTimedOut) R.string.remote_guide_add_timeout else R.string.remote_guide_add_hint), secondary = true) }
-            item("capture_cancel") { GuideRow(context.getString(R.string.remote_guide_cancel), onCancelCapture) }
+            item("capture_cancel") { GuideRow(context.getString(R.string.remote_guide_cancel), onCancelCapture, Modifier.focusRequester(cancelFocus)) }
         }
         if (status != null) item("status") { GuideText(status, secondary = true) }
         item("unassigned_title") { GuideText(context.getString(R.string.remote_guide_unassigned_title), title = true) }

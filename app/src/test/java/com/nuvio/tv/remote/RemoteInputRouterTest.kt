@@ -77,17 +77,17 @@ class RemoteInputRouterTest {
         assertEquals(listOf(RemoteAction.LAST_CHANNEL), actions)
     }
 
-    @Test fun unknownOriginalHoldKeepsNativeRepeatAndCancelledReleaseWithoutCustomTap() {
-        val clock = Clock(); val native = mutableListOf<Native>(); val actions = mutableListOf<RemoteAction>()
+    @Test fun unknownOriginalHoldKeepsNativeRepeatsButCancellationCleansUpWithoutCommittingRelease() {
+        val clock = Clock(); val native = mutableListOf<Native>(); val actions = mutableListOf<RemoteAction>(); var cancelled = 0
         val config = RemoteConfiguration().withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, left, RemoteAction.OPEN_GUIDE)
         val router = RemoteInputRouter({ config }, { native += Native(it.action, it.keyCode, it.repeatCount, it.isCanceled); true }, 500, clock)
-        router.register(RemoteScreen.LIVE_TV, { true }, { actions += it; true }, { emptyList() })
+        router.register(RemoteScreen.LIVE_TV, { true }, { actions += it; true }, { emptyList() }, onNativeCancel = { cancelled++ })
         router.dispatch(event(KeyEvent.ACTION_DOWN, 0)); clock.advance(500)
         router.dispatch(event(KeyEvent.ACTION_DOWN, 700, repeat = 3))
         router.dispatch(event(KeyEvent.ACTION_UP, 800, flags = KeyEvent.FLAG_CANCELED))
-        assertEquals(listOf(0, 0, 0, 1), native.map { it.action })
-        assertEquals(listOf(0, 1, 3, 0), native.map { it.repeats })
-        assertTrue(native.last().cancelled); assertTrue(actions.isEmpty())
+        assertEquals(listOf(0, 0, 0), native.map { it.action })
+        assertEquals(listOf(0, 1, 3), native.map { it.repeats })
+        assertEquals(1, cancelled); assertTrue(actions.isEmpty())
     }
 
     @Test fun routeOrConfigurationChangeCancelsPendingGestureAndSwallowsRelease() {
@@ -167,6 +167,49 @@ class RemoteInputRouterTest {
         assertTrue(router.dispatch(event(KeyEvent.ACTION_UP, 1050)))
         assertTrue(router.dispatch(event(KeyEvent.ACTION_UP, 1100, downAt = 1000)))
         assertEquals(listOf(RemoteAction.OPEN_GUIDE), actions)
+    }
+
+    @Test fun repeatableDefaultHoldUsesNativeSeekAndCleansOnlyTheOriginalRouteOnContextLoss() {
+        val clock = Clock(); val native = mutableListOf<Int>(); val actions = mutableListOf<RemoteAction>()
+        var active = true; var oldCleanups = 0; var newCleanups = 0
+        val right = RemoteButton(KeyEvent.KEYCODE_DPAD_RIGHT)
+        val config = RemoteConfiguration().withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, right, RemoteAction.OPEN_GUIDE)
+        val router = RemoteInputRouter({ config }, { native += it.action; true }, 500, clock)
+        router.register(RemoteScreen.LIVE_TV, { active }, { actions += it; true }, {
+            listOf(RemoteDefaultBinding(right, RemotePress.HOLD, RemoteAction.SEEK_FORWARD, repeatable = true))
+        }, onNativeCancel = { oldCleanups++ })
+        router.dispatch(event(KeyEvent.ACTION_DOWN, 0, right.keyCode)); clock.advance(500)
+        router.dispatch(event(KeyEvent.ACTION_DOWN, 700, right.keyCode, repeat = 3))
+        assertEquals(listOf(0, 0, 0), native); assertTrue(actions.isEmpty())
+        active = false
+        router.register(RemoteScreen.MOVIE, { true }, { fail("Old release must not act on a new screen"); true }, onNativeCancel = { newCleanups++ })
+        assertTrue(router.dispatch(event(KeyEvent.ACTION_UP, 800, right.keyCode)))
+        assertEquals(1, oldCleanups); assertEquals(0, newCleanups)
+        assertEquals(listOf(0, 0, 0), native)
+    }
+
+    @Test fun browseEligibilityKeepsCustomBrowseWorkingWithoutStealingNativeOkOrOtherActions() {
+        val clock = Clock(); var browsing = false; val actions = mutableListOf<RemoteAction>()
+        val red = RemoteButton(KeyEvent.KEYCODE_PROG_RED)
+        val guide = RemoteButton(KeyEvent.KEYCODE_GUIDE)
+        val ok = RemoteButton(KeyEvent.KEYCODE_DPAD_CENTER)
+        val config = RemoteConfiguration().withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, red, RemoteAction.BROWSE_NEXT_CHANNEL)
+            .withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, guide, RemoteAction.OPTIONS)
+            .withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, ok, RemoteAction.BROWSE_NEXT_CHANNEL)
+        val router = RemoteInputRouter({ config }, { fail("Unexpected native replay"); true }, 500, clock)
+        router.register(RemoteScreen.LIVE_TV, { true }, { actions += it; browsing = true; true },
+            canHandleAction = { !browsing || it == RemoteAction.BROWSE_NEXT_CHANNEL },
+            canRemapButton = { !browsing || it != ok })
+        repeat(2) {
+            router.dispatch(event(KeyEvent.ACTION_DOWN, 0, red.keyCode)); router.dispatch(event(KeyEvent.ACTION_UP, 100, red.keyCode))
+        }
+        assertEquals(listOf(RemoteAction.BROWSE_NEXT_CHANNEL, RemoteAction.BROWSE_NEXT_CHANNEL), actions)
+        assertFalse(router.dispatch(event(KeyEvent.ACTION_DOWN, 0, ok.keyCode)))
+        assertFalse(router.dispatch(event(KeyEvent.ACTION_DOWN, 0, guide.keyCode)))
+        browsing = false
+        router.dispatch(event(KeyEvent.ACTION_DOWN, 0, guide.keyCode)); browsing = true
+        assertTrue(router.dispatch(event(KeyEvent.ACTION_UP, 100, guide.keyCode)))
+        assertEquals(2, actions.size)
     }
 
     @Test fun captureRejectsMixedKeyBurstThenAcceptsCleanPressWithoutRepeatsOrOrphanUp() {

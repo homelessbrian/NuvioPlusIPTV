@@ -43,11 +43,11 @@
     <string name="remote_guide_restore_done">Original actions restored for this button.</string>
     <string name="remote_guide_check_buttons">Check buttons and shortcuts</string>
     <string name="remote_guide_unassigned_title">Buttons with nothing set</string>
-    <string name="remote_guide_unassigned_hint">These presses have no action in this screen. They are optional.</string>
+    <string name="remote_guide_unassigned_hint">These presses on your checked buttons are set to do nothing in this screen.</string>
     <string name="remote_guide_missing_title">Features without a button shortcut</string>
-    <string name="remote_guide_missing_hint">No button press currently opens these features in this screen.</string>
-    <string name="remote_guide_none_unassigned">All described button presses have an action.</string>
-    <string name="remote_guide_none_missing">All described features have a button shortcut.</string>
+    <string name="remote_guide_missing_hint">These features have no shortcut on your checked buttons. Add another button to check more of your remote.</string>
+    <string name="remote_guide_none_unassigned">None of your checked button presses are set to do nothing.</string>
+    <string name="remote_guide_none_missing">All described features have a shortcut on your checked buttons.</string>
     <string name="remote_guide_check_unknown">Some extra buttons use their original behavior, which this guide cannot describe.</string>
     <string name="remote_guide_choose_action">What should %1$s do?</string>
     <string name="remote_guide_keep_original">Keep its original action</string>
@@ -133,6 +133,10 @@
     <string name="remote_action_channel_browser_help">See other channels while the current channel keeps playing. Use Up or Down to choose a channel, then OK to watch it.</string>
     <string name="remote_action_show_info">Show information</string>
     <string name="remote_action_show_info_help">Show information about what is playing and its playback controls.</string>
+    <string name="remote_action_stream_info">Show stream information</string>
+    <string name="remote_action_stream_info_help">Show technical details about the video, audio and codecs in Nuvio’s built-in player.</string>
+    <string name="remote_action_channel_info">Show channel information</string>
+    <string name="remote_action_channel_info_help">Show a small banner with the channel and current programme while Live TV keeps playing.</string>
     <string name="remote_action_next_channel">Next channel</string>
     <string name="remote_action_next_channel_help">Move to the next channel in the current channel list.</string>
     <string name="remote_action_previous_channel">Previous channel in the list</string>

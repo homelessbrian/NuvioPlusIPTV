@@ -311,6 +311,10 @@ class PlayerViewModel @Inject constructor(
         controller.onEvent(event)
     }
 
+    fun setRemotePaused(paused: Boolean) = controller.setRemotePaused(paused)
+
+    fun cancelRemoteNativeGesture() = controller.cancelRemoteNativeGesture()
+
     fun playerMediaInfo(): PlayerMediaInfo = controller.playerMediaInfo()
 
     fun playerStreamFilename(): String? = controller.currentFilename

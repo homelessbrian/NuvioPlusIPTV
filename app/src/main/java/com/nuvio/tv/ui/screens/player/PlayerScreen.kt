@@ -446,14 +446,15 @@ fun PlayerScreen(
             !uiState.showSubtitleStylePanel && !uiState.showSpeedDialog && !uiState.showDiscTitlesDialog &&
             !uiState.showSubtitleDelayOverlay && !uiState.showSubtitleTimingDialog &&
             !uiState.showMoreDialog && !uiState.showStreamInfoOverlay,
-        defaults = { RemoteHostDefaults.movie(hasChapters = uiState.chapters.isNotEmpty(), isLive = uiState.isLive) }
+        defaults = { RemoteHostDefaults.movie(hasChapters = uiState.chapters.isNotEmpty(), isLive = uiState.isLive) },
+        onNativeCancel = viewModel::cancelRemoteNativeGesture
     ) { action ->
         fun unavailable() = android.widget.Toast.makeText(
             context, com.nuvio.tv.R.string.remote_action_unavailable, android.widget.Toast.LENGTH_SHORT).show()
         when (action) {
             RemoteAction.PLAY_PAUSE -> { viewModel.onEvent(PlayerEvent.OnPlayPause); true }
-            RemoteAction.PLAY -> { if (!uiState.isPlaying) viewModel.onEvent(PlayerEvent.OnPlayPause); true }
-            RemoteAction.PAUSE -> { if (uiState.isPlaying) viewModel.onEvent(PlayerEvent.OnPlayPause); true }
+            RemoteAction.PLAY -> { viewModel.setRemotePaused(false); true }
+            RemoteAction.PAUSE -> { viewModel.setRemotePaused(true); true }
             RemoteAction.SEEK_BACK, RemoteAction.SEEK_FORWARD -> {
                 if (uiState.isLive) unavailable()
                 else viewModel.onEvent(PlayerEvent.OnSeekBy(if (action == RemoteAction.SEEK_FORWARD) 10_000L else -10_000L))
@@ -941,12 +942,12 @@ fun PlayerScreen(
                             KeyEvent.KEYCODE_DPAD_CENTER,
                             KeyEvent.KEYCODE_ENTER,
                             KeyEvent.KEYCODE_NUMPAD_ENTER,
-                            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-                            KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                                 // Resume directly from pause overlay in one click.
                                 viewModel.onEvent(PlayerEvent.OnPlayPause)
                             }
-                            KeyEvent.KEYCODE_MEDIA_PAUSE,
+                            KeyEvent.KEYCODE_MEDIA_PLAY -> viewModel.setRemotePaused(false)
+                            KeyEvent.KEYCODE_MEDIA_PAUSE -> viewModel.setRemotePaused(true)
                             KeyEvent.KEYCODE_MEDIA_STOP -> {
                             }
                             else -> {
@@ -1023,15 +1024,11 @@ fun PlayerScreen(
                             true
                         }
                         KeyEvent.KEYCODE_MEDIA_PLAY -> {
-                            if (!uiState.isPlaying) {
-                                viewModel.onEvent(PlayerEvent.OnPlayPause)
-                            }
+                            viewModel.setRemotePaused(false)
                             true
                         }
                         KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                            if (uiState.isPlaying) {
-                                viewModel.onEvent(PlayerEvent.OnPlayPause)
-                            }
+                            viewModel.setRemotePaused(true)
                             true
                         }
                         KeyEvent.KEYCODE_MEDIA_STOP -> {

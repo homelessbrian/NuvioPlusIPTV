@@ -35,11 +35,21 @@ data class RemoteButton(val keyCode: Int, val scanCode: Int = 0, val deviceDescr
 
 data class RemoteExtraButton(val button: RemoteButton, val label: String = "")
 data class RemoteBinding(val screen: RemoteScreen, val press: RemotePress, val button: RemoteButton, val action: RemoteAction)
-data class RemoteDefaultBinding(val button: RemoteButton, val press: RemotePress, val action: RemoteAction, val holdMillis: Long = 0)
+data class RemoteDefaultBinding(
+    val button: RemoteButton, val press: RemotePress, val action: RemoteAction,
+    val holdMillis: Long = 0, val repeatable: Boolean = false
+)
 data class RemoteConfiguration(
     val extras: List<RemoteExtraButton> = emptyList(),
-    val bindings: List<RemoteBinding> = emptyList()
+    val bindings: List<RemoteBinding> = emptyList(),
+    val confirmedButtons: List<RemoteButton> = emptyList()
 ) {
+    /** A physical observation, separate from an assignment or a generic remote illustration. */
+    fun confirmButton(button: RemoteButton): RemoteConfiguration {
+        val canonical = button.canonical()
+        return if (confirmedButtons.any { it.canonical() == canonical }) this
+        else copy(confirmedButtons = confirmedButtons + canonical)
+    }
     fun withBinding(screen: RemoteScreen, press: RemotePress, button: RemoteButton, action: RemoteAction?): RemoteConfiguration {
         val canonical = button.canonical()
         val remaining = bindings.filterNot { it.screen == screen && it.press == press && it.button.canonical() == canonical }

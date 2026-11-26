@@ -23,6 +23,7 @@ import com.nuvio.tv.livetv.model.ZapMode
 import com.nuvio.tv.livetv.sync.SetupSyncProjection
 import com.nuvio.tv.livetv.sync.UsenetBackup
 import com.nuvio.tv.livetv.sync.DeviceSettingsBackup
+import com.nuvio.tv.remote.RemoteControlCodec
 import com.nuvio.tv.livetv.sync.PlaybackSettingsBackup
 import com.nuvio.tv.livetv.sync.SyncPart
 import com.nuvio.tv.livetv.sync.SyncParts
@@ -1949,6 +1950,9 @@ class LiveTvPreferences @Inject constructor(
     suspend fun importFromBackup(data: JSONObject): Set<String> {
         val device = DeviceSettingsBackup.decode(data)
         device?.let { playbackBackup.validateDeviceSettings(it.getJSONObject("playback")) }
+        // A backup carries assignments, but cannot prove which physical keys this TV has.
+        val restoredRemote = device?.getJSONObject("liveTv")?.optJSONObject(RemoteControlCodec.KEY)
+            ?.getString("v")?.let(RemoteControlCodec::forRestoredDevice)
         usenetBackup.validate(data)
         playbackBackup.validate(data)
         // A settings-only backup must not empty the target's existing providers or VPN profiles.
@@ -1966,7 +1970,8 @@ class LiveTvPreferences @Inject constructor(
                         val entry = local.getJSONObject(name)
                         when (entry.getString("t")) {
                             "b" -> p[booleanPreferencesKey(name)] = entry.getBoolean("v")
-                            "str" -> p[stringPreferencesKey(name)] = entry.getString("v")
+                            "str" -> p[stringPreferencesKey(name)] = if (name == RemoteControlCodec.KEY)
+                                requireNotNull(restoredRemote) else entry.getString("v")
                         }
                     }
                 }

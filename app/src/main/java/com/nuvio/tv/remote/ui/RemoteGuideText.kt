@@ -22,6 +22,8 @@ internal fun RemoteScreen.titleRes(): Int = when (this) {
 internal fun RemoteAction.titleRes(screen: RemoteScreen? = null): Int = when {
     screen == RemoteScreen.SPORTS && this == RemoteAction.SHOW_INFO -> R.string.remote_action_game_details
     screen == RemoteScreen.SPORTS && this == RemoteAction.ACTIVATE -> R.string.remote_action_watch_game
+    screen == RemoteScreen.MOVIE && this == RemoteAction.SHOW_INFO -> R.string.remote_action_stream_info
+    screen == RemoteScreen.LIVE_TV && this == RemoteAction.SHOW_INFO -> R.string.remote_action_channel_info
     else -> when (this) {
     RemoteAction.OPEN_GUIDE -> R.string.remote_action_open_guide
     RemoteAction.CHANNEL_BROWSER -> R.string.remote_action_channel_browser
@@ -65,6 +67,8 @@ internal fun RemoteAction.titleRes(screen: RemoteScreen? = null): Int = when {
 internal fun RemoteAction.helpRes(screen: RemoteScreen? = null): Int = when {
     screen == RemoteScreen.SPORTS && this == RemoteAction.SHOW_INFO -> R.string.remote_action_game_details_help
     screen == RemoteScreen.SPORTS && this == RemoteAction.ACTIVATE -> R.string.remote_action_watch_game_help
+    screen == RemoteScreen.MOVIE && this == RemoteAction.SHOW_INFO -> R.string.remote_action_stream_info_help
+    screen == RemoteScreen.LIVE_TV && this == RemoteAction.SHOW_INFO -> R.string.remote_action_channel_info_help
     else -> when (this) {
     RemoteAction.OPEN_GUIDE -> R.string.remote_action_open_guide_help
     RemoteAction.CHANNEL_BROWSER -> R.string.remote_action_channel_browser_help

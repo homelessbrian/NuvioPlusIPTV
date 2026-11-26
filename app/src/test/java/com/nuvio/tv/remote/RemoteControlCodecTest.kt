@@ -62,7 +62,37 @@ class RemoteControlCodecTest {
         assertEquals(setOf(RemoteAction.CHANNEL_BROWSER), RemoteCatalog.lostActions(initial, changed, RemoteScreen.LIVE_TV))
         val moved = changed.withBinding(RemoteScreen.LIVE_TV, RemotePress.HOLD,
             RemoteButton(KeyEvent.KEYCODE_PROG_YELLOW), RemoteAction.CHANNEL_BROWSER)
-        assertTrue(RemoteCatalog.lostActions(initial, moved, RemoteScreen.LIVE_TV).isEmpty())
+        assertEquals(setOf(RemoteAction.CHANNEL_BROWSER), RemoteCatalog.lostActions(initial, moved, RemoteScreen.LIVE_TV))
+        assertTrue(RemoteCatalog.lostActions(initial, moved.confirmButton(RemoteButton(KeyEvent.KEYCODE_PROG_YELLOW)), RemoteScreen.LIVE_TV).isEmpty())
         assertNull(RemoteCatalog.defaultAction(RemoteScreen.LIVE_TV, RemotePress.ONCE, RemoteButton(KeyEvent.KEYCODE_PROG_YELLOW)))
+    }
+
+    @Test fun optionalInfoAndDedicatedMediaAliasesCannotInventShortcutCoverage() {
+        val initial = RemoteConfiguration()
+        val right = RemoteButton(KeyEvent.KEYCODE_DPAD_RIGHT)
+        val infoMoved = initial.withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, right, RemoteAction.OPEN_GUIDE)
+        assertEquals(setOf(RemoteAction.SHOW_INFO), RemoteCatalog.lostActions(initial, infoMoved, RemoteScreen.LIVE_TV))
+        val hasInfo = initial.confirmButton(RemoteButton(KeyEvent.KEYCODE_INFO))
+        assertTrue(RemoteCatalog.lostActions(hasInfo, infoMoved.confirmButton(RemoteButton(KeyEvent.KEYCODE_INFO)), RemoteScreen.LIVE_TV).isEmpty())
+        val ok = RemoteButton(KeyEvent.KEYCODE_DPAD_CENTER)
+        val pause = RemoteButton(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+        val hasPause = initial.confirmButton(pause)
+        val okMoved = hasPause.withBinding(RemoteScreen.MOVIE, RemotePress.ONCE, ok, RemoteAction.OPTIONS)
+        assertTrue(RemoteCatalog.lostActions(hasPause, okMoved, RemoteScreen.MOVIE).isEmpty())
+        val bothMoved = okMoved.withBinding(RemoteScreen.MOVIE, RemotePress.ONCE, pause, RemoteAction.OPTIONS)
+        assertEquals(setOf(RemoteAction.PLAY_PAUSE), RemoteCatalog.lostActions(hasPause, bothMoved, RemoteScreen.MOVIE))
+    }
+
+    @Test fun restoredDeviceKeepsChoicesButCannotClaimThatItsRemoteHasTheObservedKeys() {
+        val yellow = RemoteButton(KeyEvent.KEYCODE_PROG_YELLOW)
+        val configuration = RemoteConfiguration(extras = listOf(RemoteExtraButton(yellow, "Star")))
+            .withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, yellow, RemoteAction.CHANNEL_BROWSER).confirmButton(yellow)
+        val raw = RemoteControlCodec.encode(configuration)
+        val restored = RemoteControlCodec.decode(RemoteControlCodec.forRestoredDevice(raw))
+        assertEquals(configuration.bindings, restored.bindings)
+        assertEquals(configuration.extras, restored.extras)
+        assertTrue(restored.confirmedButtons.isEmpty())
+        val older = JSONObject(raw).apply { remove("confirmedButtons") }.toString()
+        assertEquals(restored, RemoteControlCodec.decode(older))
     }
 }

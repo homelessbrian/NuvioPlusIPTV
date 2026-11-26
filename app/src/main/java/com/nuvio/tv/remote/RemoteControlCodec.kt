@@ -10,13 +10,17 @@ object RemoteControlCodec {
     const val MAX_BYTES = 65_536
     const val MAX_EXTRAS = 96
     const val MAX_BINDINGS = 256
+    const val MAX_CONFIRMED = 128
 
     fun validate(raw: String) { decode(raw) }
     fun decodeOrDefault(raw: String): RemoteConfiguration = runCatching { decode(raw) }.getOrDefault(RemoteConfiguration())
     fun canonicalize(configuration: RemoteConfiguration): RemoteConfiguration = RemoteConfiguration(
         configuration.extras.map { it.copy(button = it.button.canonical()) },
-        configuration.bindings.map { it.copy(button = it.button.canonical()) }
+        configuration.bindings.map { it.copy(button = it.button.canonical()) },
+        configuration.confirmedButtons.map { it.canonical() }
     )
+    /** Backups preserve choices, but observing a key on one TV proves nothing about another remote. */
+    fun forRestoredDevice(raw: String): String = encode(decode(raw).copy(confirmedButtons = emptyList()))
 
     fun decode(raw: String): RemoteConfiguration {
         require(raw.toByteArray(Charsets.UTF_8).size <= MAX_BYTES) { "Remote configuration is too large" }
@@ -29,7 +33,9 @@ object RemoteControlCodec {
             require(integer(value, "version") == 1) { "Unsupported remote configuration" }
             val extras = value.getJSONArray("extras")
             val bindings = value.getJSONArray("bindings")
+            val confirmed = if (value.has("confirmedButtons")) value.getJSONArray("confirmedButtons") else JSONArray()
             require(extras.length() <= MAX_EXTRAS && bindings.length() <= MAX_BINDINGS) { "Remote configuration has too many entries" }
+            require(confirmed.length() <= MAX_CONFIRMED) { "Remote configuration has too many observations" }
             val configuration = RemoteConfiguration(
                 extras = (0 until extras.length()).map { index ->
                     val entry = extras.getJSONObject(index)
@@ -42,7 +48,8 @@ object RemoteControlCodec {
                         RemoteScreen.valueOf(entry.getString("screen")), RemotePress.valueOf(entry.getString("press")),
                         button(entry.getJSONObject("button")), RemoteAction.valueOf(entry.getString("action"))
                     )
-                }
+                },
+                confirmedButtons = (0 until confirmed.length()).map { button(confirmed.getJSONObject(it)) }
             )
             validate(configuration)
             return configuration
@@ -59,6 +66,7 @@ object RemoteControlCodec {
             .put("bindings", JSONArray().apply { canonical.bindings.forEach { put(JSONObject()
                 .put("screen", it.screen.name).put("press", it.press.name)
                 .put("button", encodeButton(it.button)).put("action", it.action.name)) } })
+            .put("confirmedButtons", JSONArray().apply { canonical.confirmedButtons.forEach { put(encodeButton(it)) } })
             .toString()
         require(value.toByteArray(Charsets.UTF_8).size <= MAX_BYTES) { "Remote configuration is too large" }
         return value
@@ -66,6 +74,9 @@ object RemoteControlCodec {
 
     fun validate(configuration: RemoteConfiguration) {
         require(configuration.extras.size <= MAX_EXTRAS && configuration.bindings.size <= MAX_BINDINGS)
+        require(configuration.confirmedButtons.size <= MAX_CONFIRMED)
+        require(configuration.confirmedButtons.map { it.canonical().identity }.distinct().size == configuration.confirmedButtons.size) { "Duplicate remote observation" }
+        configuration.confirmedButtons.forEach(::validateButton)
         require(configuration.extras.map { it.button.canonical().identity }.distinct().size == configuration.extras.size) { "Duplicate remote button" }
         configuration.extras.forEach {
             validateButton(it.button)

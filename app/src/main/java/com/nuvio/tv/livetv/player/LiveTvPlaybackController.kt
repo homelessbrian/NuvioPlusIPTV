@@ -1542,6 +1542,19 @@ class LiveTvPlaybackController @Inject constructor(
         }
     }
 
+    /** Explicit remote Play/Pause follows intent even while the decoder is buffering. */
+    fun setPaused(paused: Boolean) {
+        val p = _player ?: return
+        if (p.playWhenReady == !paused) return
+        if (paused) {
+            if (_shiftStartedAt.value != null || _recordingPlayback.value != null ||
+                _ownTimeline.value || _state.value.catchupTitle != null) p.pause()
+            else pauseLive()
+        } else {
+            if (_shiftStartedAt.value != null) resumeShift() else p.play()
+        }
+    }
+
     fun seekBy(ms: Long) {
         val p = _player ?: return
         p.seekTo((p.currentPosition + ms).coerceAtLeast(0))
