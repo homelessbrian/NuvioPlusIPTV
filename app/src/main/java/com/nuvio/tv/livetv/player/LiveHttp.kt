@@ -15,9 +15,12 @@ object LiveHttp {
         var current = url
         var secureContext = URL(url).protocol.equals("https", true)
         var hops = 0
+        // The DNS setting: Cloudflare/Google always, "System" only after the normal lookup can't find the server.
+        var ownLookup = LiveDns.chosen()
         while (true) {
             val requestHeaders = if (policy == null) headers else StalkerMediaPolicy.withoutPortalHeaders(headers) + policy.headersFor(current, secureContext)
-            val c = com.nuvio.vpn.android.VpnHttpClient.openConnection(URL(current))
+            val c = if (ownLookup) com.nuvio.vpn.android.VpnHttpClient.openConnectionWith(URL(current), LiveDns.client)
+                else com.nuvio.vpn.android.VpnHttpClient.openConnection(URL(current))
             policy?.observe(c)
             c.connectTimeout = 15_000
             c.readTimeout = readTimeoutMs
@@ -26,7 +29,14 @@ object LiveHttp {
             if (requestHeaders.keys.none { it.equals("User-Agent", true) }) {
                 c.setRequestProperty("User-Agent", com.nuvio.tv.livetv.data.LiveTvRepository.DEFAULT_UA)
             }
-            val code = c.responseCode
+            val code = try {
+                c.responseCode
+            } catch (notFound: java.net.UnknownHostException) {
+                if (ownLookup) throw notFound
+                c.disconnect()
+                ownLookup = true
+                continue
+            }
             if (code in setOf(301, 302, 303, 307, 308) && hops < 8) {
                 val location = c.getHeaderField("Location")
                 c.disconnect()

@@ -136,6 +136,17 @@ public final class VpnHttpClient implements Call.Factory {
             return new PlaybackHttpsURLConnection(address, wrap(baseline).client(settings));
         return new PlaybackHttpURLConnection(address, wrap(baseline).client(settings));
     }
+    /**
+     * Like {@link #openConnection(URL)}, but {@code client} carries the request in every VPN mode,
+     * so its own settings (e.g. its address lookup) apply with the VPN off too.
+     */
+    public static HttpURLConnection openConnectionWith(URL address, OkHttpClient client) throws IOException {
+        VpnPlaybackProtection.beforeRequest(address.toString());
+        OkHttpClient routed = wrap(client).client(VpnPlaybackProtection.settings());
+        if ("https".equalsIgnoreCase(address.getProtocol()))
+            return new PlaybackHttpsURLConnection(address, routed);
+        return new PlaybackHttpURLConnection(address, routed);
+    }
     private static final class Connections {
         static final OkHttpClient baseline = new OkHttpClient();
     }

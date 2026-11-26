@@ -9,6 +9,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 
 ## Live TV
 - Guide display menu (the guide's gear): Up, Down, Left and Right move the highlight again, and Left at the edge still doesn't open Nuvio's menu
+- DNS setting (Cloudflare/Google) now also applies when playing channels, Multiview, catch-up, rewind and recordings, not only to loading playlists and guides
 
 ## Rewind Anytime
 
