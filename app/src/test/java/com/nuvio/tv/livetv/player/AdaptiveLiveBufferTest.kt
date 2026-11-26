@@ -89,10 +89,41 @@ class AdaptiveLiveBufferTest {
         h.helper.release()
     }
 
+    @Test fun `a persistently empty live channel offers a backup once and continues when none is found`() = runTest {
+        val h = Harness(backgroundScope)
+        h.bufferedMs = 1_000
+        h.enablePcm()
+        for (sec in 0L..150L) h.tick(this, sec)
+        assertEquals(1, h.backupOffers)
+        assertEquals(.90f, h.parameters.speed, .000001f)
+        verify(exactly = 0) { h.player.prepare(); h.player.stop(); h.player.release() }
+        h.helper.sourceChanged(newChannel = true)
+        for (sec in 151L..250L) h.tick(this, sec)
+        assertEquals(2, h.backupOffers)
+        h.helper.release()
+    }
+
+    @Test fun `manual slow playback or an ineligible source never offers a backup`() = runTest {
+        val h = Harness(backgroundScope)
+        h.bufferedMs = 1_000
+        h.enablePcm()
+        h.external(PlaybackParameters(.90f))
+        for (sec in 0L..150L) h.tick(this, sec)
+        assertEquals(0, h.backupOffers)
+        h.helper.sourceChanged(newChannel = true)
+        h.external(PlaybackParameters.DEFAULT)
+        h.remoteLive = false
+        for (sec in 151L..300L) h.tick(this, sec)
+        assertEquals(0, h.backupOffers)
+        h.helper.release()
+    }
+
     private class Harness(scope: CoroutineScope) {
         var now = 0L
         var readCurrent = true
         var readTimeline = true
+        var remoteLive = true
+        var backupOffers = 0
         var bufferedMs = 8_000L
         var parameters = PlaybackParameters.DEFAULT
         val listeners = mutableListOf<Player.Listener>()
@@ -125,7 +156,7 @@ class AdaptiveLiveBufferTest {
             every { player.playWhenReady } returns true
             every { player.isPlaying } returns true
             every { delegateSink.getCurrentPositionUs(false) } answers { now * 1_000 }
-            helper = AdaptiveLiveBuffer(scope, { check(readCurrent && readTimeline); true }, clock)
+            helper = AdaptiveLiveBuffer(scope, { check(readCurrent && readTimeline); remoteLive }, clock) { backupOffers++ }
             sink = helper.wrapAudioSink(delegateSink, false)
             helper.attach(player)
         }

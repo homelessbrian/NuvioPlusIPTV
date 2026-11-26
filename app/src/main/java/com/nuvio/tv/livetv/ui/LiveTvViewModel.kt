@@ -222,7 +222,7 @@ class LiveTvViewModel @Inject constructor(
     private val backupIndex: Map<String, List<LiveChannel>>? get() = hooks.backupIndex
 
     /** A channel that won't play: another channel by the same name, if there is one. */
-    override fun onLiveFailure(channelKey: String): Boolean = switchToBackup(channelKey)
+    override fun onLiveFailure(channelKey: String, canTry: (LiveChannel) -> Boolean): Boolean = switchToBackup(channelKey, canTry)
 
     /** A replay that stopped: start it again from where it got to. */
     override fun onCatchupStalled(): Boolean {
@@ -362,33 +362,23 @@ class LiveTvViewModel @Inject constructor(
         searchReturnGroup = null
     }
 
-    /** Channels already tried in a row of backup switches (cleared when you change channel). */
-    private val backupTried = HashSet<String>()
-    private var switchingToBackup = false
-    /** The channel the last backup switch went to. */
-    private var lastBackupPick: String? = null
-
     /**
      * Switches from a channel that won't play to another one with the same name (a different
      * group or playlist: "US: ESPN HD" / "ESPN Backup"), other playlists first. Each one is tried
      * once; when none are left it stops and the channel shows its error as before.
      */
-    private fun switchToBackup(failedKey: String): Boolean {
+    private fun switchToBackup(failedKey: String, canTry: (LiveChannel) -> Boolean): Boolean {
         if (!settings.value.autoBackupChannel) return false
-        // A channel this screen didn't switch to (started here or from Home, Sports…): a new
-        // run of backups, so channels tried for an earlier one are tried again.
-        if (failedKey != lastBackupPick) backupTried.clear()
         // Not worked out yet (just started): no backup this time, rather than a long search here.
         val index = backupIndex ?: return false
         val failed = playback.playingChannel?.takeIf { it.key == failedKey }
             ?: repository.channels.value.firstOrNull { it.key == failedKey } ?: return false
-        backupTried += failedKey
         val name = backupName(failed.name)
         if (name.length < 2) return false
         val s = settings.value
         val user = userState.value
         val pick = index[name].orEmpty().asSequence()
-            .filter { it.key !in backupTried }
+            .filter(canTry)
             // Local stations: "FOX (WNYW)" isn't a backup for "FOX (KTTV)".
             .filter { c -> val a = stationNote(failed.name); val b = stationNote(c.name); a == null || b == null || a == b }
             .filter { !com.nuvio.tv.livetv.parental.ParentalControls.isLocked(it.groupId, it.group, s, user.lockedGroups) }
@@ -396,9 +386,7 @@ class LiveTvViewModel @Inject constructor(
             .firstOrNull() ?: return false
         com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Channel ${failed.name} won't play: switched to ${pick.name} (${pick.group})")
         com.nuvio.tv.livetv.record.LiveTvNotice.show("${failed.name} isn't working right now. Switched to ${pick.name} from ${pick.group}.")
-        lastBackupPick = pick.key
-        switchingToBackup = true
-        try { preview(pick) } finally { switchingToBackup = false }
+        preview(pick)
         return true
     }
 
@@ -431,7 +419,6 @@ class LiveTvViewModel @Inject constructor(
 
     /** [watchedIn]: the group it was picked from outside the guide (Quick Channels), saved as the group you watched in. */
     fun preview(channel: LiveChannel, watchedIn: String? = null) {
-        if (!switchingToBackup) backupTried.clear()
         _catchup.value = null
         // Another channel from a provider that's recording: the recording holds a connection.
         recorder.recordings.value.firstOrNull {

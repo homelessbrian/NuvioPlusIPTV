@@ -717,5 +717,5 @@
     <string name="iptv_settings_picture_sound_and_pausing">"Picture, sound and pausing"</string>
     <string name="iptv_settings_recordings_tab_subtitle">"Where recordings are saved, the network folder and how long they\'re kept"</string>
     <string name="iptv_settings_adaptive_live_buffer">Adaptive Live TV Buffer</string>
-    <string name="iptv_settings_adaptive_live_buffer_description">Builds toward 20 seconds of buffered video. Playback slows progressively below that target, down to 0.90× at 10 seconds or less. Voices keep their pitch, and you can still choose your own speed.</string>
+    <string name="iptv_settings_adaptive_live_buffer_description">Builds toward 20 seconds of buffered video. Playback slows progressively below that target, down to 0.90× at 10 seconds or less. Voices keep their pitch. Enable backup channels to switch feeds if the buffer stays low.</string>
 </resources>

@@ -554,7 +554,7 @@ class SportsRepository @Inject constructor(
         // A channel showing a live game won't play or keeps freezing: the player asks here for
         // the next one showing it (wherever the game was started from: here, the Calendar, a
         // reminder, the guide).
-        playback.gameFailover = { key, tried -> nextChannelForGame(key, tried) }
+        playback.gameFailover = ::nextChannelForGame
         watchDelayedScores()
     }
 
@@ -562,7 +562,7 @@ class SportsRepository @Inject constructor(
      * The next channel for the game [failedKey] is showing: its other copies (FHD, HD, SD) first,
      * then the other channels sure to be showing it, in the game page's order (your region first).
      */
-    private fun nextChannelForGame(failedKey: String, tried: Set<String>): LiveChannel? {
+    private fun nextChannelForGame(failedKey: String, canTry: (LiveChannel) -> Boolean): LiveChannel? {
         if (!backupOn.value) return null
         val now = System.currentTimeMillis()
         val evs = events.value.associateBy { it.id }
@@ -573,7 +573,7 @@ class SportsRepository @Inject constructor(
         }?.value ?: return null
         val failed = list.first { it.channel.key == failedKey }
         val copyKey = SportsMatcher.copyKey(failed.channel)
-        val left = list.filter { it.channel.key != failedKey && it.channel.key !in tried }
+        val left = list.filter { canTry(it.channel) }
         val copies = left.filter { SportsMatcher.copyKey(it.channel) == copyKey }
         val others = left.filter { (it.sure || it.score >= 150) && it !in copies }
         return (copies + others).firstOrNull()?.channel

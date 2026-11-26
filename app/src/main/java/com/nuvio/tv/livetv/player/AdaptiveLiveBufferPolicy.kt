@@ -86,10 +86,10 @@ internal class AdaptiveLiveBufferPolicy {
         private const val ENTRY_DELAY_MS = 1_000L
         private const val MILD_RESERVE_MS = 19_000L
         private const val LOW_RESERVE_MS = 15_000L
-        private const val CRITICAL_BUFFER_MS = 10_000L
+        const val CRITICAL_BUFFER_MS = 10_000L
         private const val MILD_SPEED = .97f
         private const val LOW_SPEED = .95f
-        private const val CRITICAL_SPEED = .90f
+        const val CRITICAL_SPEED = .90f
     }
 }
 
@@ -101,6 +101,8 @@ internal class AdaptiveLiveBufferSession {
     private var owned: AdaptiveLiveRate? = null
     private val expectedEvents = ArrayDeque<AdaptiveLiveRate>()
     private var manual = false
+
+    fun ownsFloor(rate: AdaptiveLiveRate): Boolean = owned == rate && rate.speed == AdaptiveLiveBufferPolicy.CRITICAL_SPEED
 
     fun byteCap(bufferedMs: Long) { policy.byteCap(bufferedMs) }
 

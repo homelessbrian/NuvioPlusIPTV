@@ -34,7 +34,7 @@ class LiveTvPlayerHooks @Inject constructor(
 ) {
     /** A Live TV screen that can switch to a backup channel and carry on a stalled replay. */
     interface Owner {
-        fun onLiveFailure(channelKey: String): Boolean
+        fun onLiveFailure(channelKey: String, canTry: (LiveChannel) -> Boolean): Boolean
         fun onCatchupStalled(): Boolean
     }
 
@@ -63,7 +63,7 @@ class LiveTvPlayerHooks @Inject constructor(
     private fun newestOwner(): Owner? = synchronized(owners) { owners.lastOrNull() }
 
     init {
-        playback.onLiveFailure = { key -> newestOwner()?.onLiveFailure(key) ?: false }
+        playback.onLiveFailure = { key, canTry -> newestOwner()?.onLiveFailure(key, canTry) ?: false }
         playback.dispatcharrSources = { dispatcharrIds.value }
         playback.onCatchupStalled = { newestOwner()?.onCatchupStalled() ?: false }
         // The audio track picked on each channel, remembered and used every time it plays.
