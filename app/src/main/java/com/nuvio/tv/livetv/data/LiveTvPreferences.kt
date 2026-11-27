@@ -192,6 +192,7 @@ class LiveTvPreferences @Inject constructor(
         val removedSources = stringSetPreferencesKey("removed_sources")
         val nameRemovals = stringPreferencesKey("name_removals")
         val cleanGroupNames = booleanPreferencesKey("clean_group_names")
+        val cleanVodGroupNames = booleanPreferencesKey("clean_vod_group_names")
         val developerTools = booleanPreferencesKey("developer_tools")
         val browseByChannelName = booleanPreferencesKey("browse_by_channel_name")
         val showPlaylistInInfo = booleanPreferencesKey("show_playlist_in_info")
@@ -709,6 +710,7 @@ class LiveTvPreferences @Inject constructor(
             groupPlaylistHeadings = p[Keys.groupPlaylistHeadings] ?: d.groupPlaylistHeadings,
             nameRemovals = p[Keys.nameRemovals] ?: d.nameRemovals,
             cleanGroupNames = p[Keys.cleanGroupNames] ?: d.cleanGroupNames,
+            cleanVodGroupNames = p[Keys.cleanVodGroupNames] ?: d.cleanVodGroupNames,
             developerTools = p[Keys.developerTools] ?: d.developerTools,
             browseByChannelName = p[Keys.browseByChannelName] ?: d.browseByChannelName,
             showPlaylistInInfo = p[Keys.showPlaylistInInfo] ?: d.showPlaylistInInfo,
@@ -1065,6 +1067,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.groupPlaylistHeadings] = s.groupPlaylistHeadings
         p[Keys.nameRemovals] = s.nameRemovals
         p[Keys.cleanGroupNames] = s.cleanGroupNames
+        p[Keys.cleanVodGroupNames] = s.cleanVodGroupNames
         p[Keys.developerTools] = s.developerTools
         p[Keys.browseByChannelName] = s.browseByChannelName
         p[Keys.showPlaylistInInfo] = s.showPlaylistInInfo
@@ -1911,6 +1914,11 @@ class LiveTvPreferences @Inject constructor(
                 else -> null
             } ?: return@forEach
             out.put(name, entry)
+        }
+        // Include the untouched opt-in default, so an explicit settings-only restore
+        // can turn cleanup back off on a device where it was previously enabled.
+        if (!out.has(Keys.cleanVodGroupNames.name)) {
+            out.put(Keys.cleanVodGroupNames.name, JSONObject().put("t", "b").put("v", false))
         }
         val vpnKey = stringPreferencesKey(com.nuvio.vpn.android.VpnBackup.KEY)
         val vpn = com.nuvio.vpn.android.VpnBackup.prepareExport(context, p[vpnKey])

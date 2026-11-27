@@ -4,6 +4,7 @@ import com.nuvio.tv.livetv.data.LiveTvChannelStore
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.ondemand.OnDemandRepository
 import com.nuvio.tv.livetv.ondemand.VodKind
+import com.nuvio.tv.livetv.ondemand.VodGroupNames
 import com.nuvio.tv.livetv.parental.ParentalControls
 import com.nuvio.tv.livetv.sports.SportsCatalog
 import com.nuvio.tv.livetv.sports.SportsRepository
@@ -19,7 +20,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** One On Demand group an On Demand row can show (with its playlist's name, when you have several). */
-data class VodRowChoice(val source: String, val name: String, val playlist: String?, val count: Int, val series: Boolean)
+data class VodRowChoice(val source: String, val name: String, val playlist: String?, val count: Int, val series: Boolean, val rawName: String = name)
 
 /** One sport or league a Sports row can show. */
 data class SportsRowChoice(val source: String, val name: String, val icon: String, val isLeague: Boolean)
@@ -55,27 +56,31 @@ class HomeRowChoices @Inject constructor(
      * On Demand: each playlist's movie groups, then its series groups (your names, your order;
      * hidden and locked groups aren't listed).
      */
+    private val vodCategories = onDemand.version.mapLatest {
+        onDemand.categories(VodKind.MOVIE) + onDemand.categories(VodKind.SERIES)
+    }.flowOn(Dispatchers.IO)
+
     val vodGroups: Flow<List<VodRowChoice>> =
-        combine(onDemand.version, prefs.userState, prefs.playlists, prefs.settings) { _, u, lists, s -> Triple(u, lists, s) }
-            .mapLatest { (u, lists, s) ->
-                val names = lists.associate { it.id to it.name }
-                val cats = onDemand.categories(VodKind.MOVIE) + onDemand.categories(VodKind.SERIES)
-                val multi = cats.map { it.playlistId }.distinct().size > 1
-                val order = u.vodGroupOrder.withIndex().associate { (i, uid) -> uid to i }
-                cats.withIndex()
-                    .filter { (_, c) ->
-                        !u.hidesVodCategory(c.uid) &&
-                            !ParentalControls.isLocked("vod:${c.uid}", c.name, s, u.lockedGroups)
-                    }
-                    .sortedWith(compareBy({ order[it.value.uid] ?: Int.MAX_VALUE }, { it.index }))
-                    .map { (_, c) ->
-                        VodRowChoice(
-                            source = HomeLiveRow.VOD_GROUP_PREFIX + c.uid,
-                            name = u.vodGroupNames[c.uid]?.takeIf { it.isNotBlank() } ?: c.name,
-                            playlist = if (multi) names[c.playlistId] else null,
-                            count = c.count,
-                            series = c.kind == VodKind.SERIES
-                        )
-                    }
-            }
+        combine(vodCategories, prefs.userState, prefs.playlists, prefs.settings) { cats, u, lists, s ->
+            val names = lists.associate { it.id to it.name }
+            val multi = cats.map { it.playlistId }.distinct().size > 1
+            val groupNames = VodGroupNames.from(s)
+            val order = u.vodGroupOrder.withIndex().associate { (i, uid) -> uid to i }
+            cats.withIndex()
+                .filter { (_, c) ->
+                    !u.hidesVodCategory(c.uid) &&
+                        !ParentalControls.isLocked("vod:${c.uid}", c.name, s, u.lockedGroups)
+                }
+                .sortedWith(compareBy({ order[it.value.uid] ?: Int.MAX_VALUE }, { it.index }))
+                .map { (_, c) ->
+                    VodRowChoice(
+                        source = HomeLiveRow.VOD_GROUP_PREFIX + c.uid,
+                        name = groupNames.display(c.name, u.vodGroupNames[c.uid]),
+                        playlist = if (multi) names[c.playlistId] else null,
+                        count = c.count,
+                        series = c.kind == VodKind.SERIES,
+                        rawName = c.name
+                    )
+                }
+        }.flowOn(Dispatchers.Default)
 }

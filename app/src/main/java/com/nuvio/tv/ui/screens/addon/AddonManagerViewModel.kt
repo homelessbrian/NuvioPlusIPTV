@@ -587,7 +587,7 @@ class AddonManagerViewModel @Inject constructor(
                     favorites = fav,
                     groups = groups.map { LiveRowGroupInfo(it.id, it.name, it.playlist, it.count) },
                     sports = sports.map { LiveRowSportInfo(it.source, it.name, it.icon, it.isLeague) },
-                    vodGroups = vod.map { LiveRowVodInfo(it.source, it.name, it.playlist, it.count, it.series) }
+                    vodGroups = vod.map { LiveRowVodInfo(it.source, it.name, it.playlist, it.count, it.series, it.rawName) }
                 )
             }.catch { }.collect { liveChoices = it }
         }

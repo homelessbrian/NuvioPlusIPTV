@@ -212,7 +212,7 @@ internal fun ManageVodGroupsPanel(
                             )
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                LiveText(g.name, size = 15.sp, maxLines = 1, color = if (g.visible) colors.TextPrimary else colors.TextSecondary)
+                                LiveText(g.displayName, size = 15.sp, maxLines = 1, color = if (g.visible) colors.TextPrimary else colors.TextSecondary)
                                 LiveText(if (g.kind == VodKind.SERIES) "Series" else "Movies", size = 11.sp, color = colors.TextTertiary)
                             }
                             SortChip(
@@ -275,7 +275,7 @@ internal fun ManageVodGroupsPanel(
     sorting?.let { i ->
         val g = edited.getOrNull(i)
         if (g == null) { sorting = null } else VodSortPicker(
-            title = "Sort " + g.name,
+            title = "Sort " + g.displayName,
             current = VodSort.parse(g.sort)?.first,
             useDefaultLabel = "Default ($defaultSortLabel)",
             onPick = { picked ->
@@ -291,12 +291,12 @@ internal fun ManageVodGroupsPanel(
         val g = edited.getOrNull(i)
         if (g == null) { renaming = null } else com.nuvio.tv.livetv.ui.TextInputDialog(
             title = "Rename group",
-            initial = g.name,
-            hint = g.defaultName,
+            initial = g.displayName,
+            hint = g.cleanedDefaultName,
             confirmLabel = "Save",
             onDismiss = { renaming = null; runCatching { keys.requestFocus() } },
             onConfirm = { name ->
-                edited[i] = g.copy(name = name.trim().ifBlank { g.defaultName })
+                edited[i] = g.copy(name = name.trim().ifBlank { g.defaultName }, manuallyNamed = name.isNotBlank())
                 renaming = null
                 runCatching { keys.requestFocus() }
             }
