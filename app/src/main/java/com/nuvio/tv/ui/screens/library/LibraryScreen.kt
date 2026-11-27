@@ -136,6 +136,7 @@ fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
     serversViewModel: LibraryServersViewModel = hiltViewModel(),
     showBuiltInHeader: Boolean = true,
+    onOpenDownloads: () -> Unit,
     onNavigateToDetail: (String, String, String?) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit = { _, _, _ -> },
     onCloudPlaybackResolved: (CloudLibraryPlaybackInfo) -> Unit = {}
@@ -347,6 +348,7 @@ fun LibraryScreen(
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.5.sp
                 )
+                Button(onClick = onOpenDownloads) { Text("Downloads") }
                 Text(
                     text = when {
                         viewMode == LibraryViewMode.Cloud -> stringResource(R.string.library_source_cloud).uppercase()

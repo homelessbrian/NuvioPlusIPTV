@@ -413,6 +413,7 @@ fun MetaDetailsScreen(
     heroBackdropUrl: String? = null,
     playOnLoad: Boolean = false,
     playOnLoadManually: Boolean = false,
+    onDownload: ((Int?, Int?) -> Unit)? = null,
     onBackPress: () -> Unit,
     onReturnFocusConsumed: () -> Unit = {},
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
@@ -972,6 +973,7 @@ fun MetaDetailsScreen(
                     onEpisodeClick = playEpisode,
                     onEpisodeManualPlayClick = playEpisodeManually,
                     onPlayClick = playTitle,
+                    onDownload = onDownload,
                     onPlayManuallyClick = playTitleManually,
                     onEpisodeStartFromBeginningClick = onEpisodeStartFromBeginningClick@{ video ->
                         if (!playbackAvailability.canStream(meta.apiType, video.id, meta.id, video)) {
@@ -1325,6 +1327,7 @@ private fun MetaDetailsContent(
     onEpisodeManualPlayClick: (Video) -> Unit,
     onEpisodeStartFromBeginningClick: (Video) -> Unit = {},
     onPlayClick: (String) -> Unit,
+    onDownload: ((Int?, Int?) -> Unit)?,
     onPlayManuallyClick: (String) -> Unit,
     onPlayStartFromBeginningClick: (String) -> Unit = {},
     showManualPlayOption: Boolean,
@@ -2576,6 +2579,7 @@ private fun MetaDetailsContent(
                         meta = meta,
                         nextEpisode = nextEpisode,
                         nextToWatch = nextToWatch,
+                        onDownloadMovie = if (isSeries) null else onDownload?.let { { it(null, null) } },
                         onPlayClick = { if (shufflePoolEmpty) showRandomEpisodeOverlay = true else heroPlayClick() },
                         isPlayEnabled = shufflePoolEmpty || isPlayEnabled,
                         onPlayLongPress = if (!shufflePoolEmpty && isPlayEnabled && (showManualPlayOption || nextToWatch?.isResume == true)) {
@@ -2686,6 +2690,7 @@ private fun MetaDetailsContent(
                             episodeOptionsOverlayStyle = episodeOptionsOverlayStyle,
                             posterCardCornerRadiusDp = posterCardCornerRadiusDp,
                             onEpisodeClick = episodeClick,
+                            onDownload = onDownload,
                             canPlayEpisode = canPlayEpisode,
                             onEpisodeManualPlayClick = episodeManualClick,
                             onEpisodeStartFromBeginningClick = { video ->

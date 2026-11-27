@@ -142,6 +142,9 @@ sealed class Screen(val route: String) {
     data object Search : Screen("search")
     data object Discover : Screen("discover")
     data object Library : Screen("library")
+    data object PlaylistDownloads : Screen("playlist_downloads") {
+        const val CONTENT_TYPE = "playlist_download"
+    }
     data object Settings : Screen("settings")
     data object LiveTv : Screen("live_tv")
     data object LiveTvPlayer : Screen("live_tv_player")

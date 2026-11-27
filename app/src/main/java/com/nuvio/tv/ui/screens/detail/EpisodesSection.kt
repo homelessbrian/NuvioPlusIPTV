@@ -501,6 +501,7 @@ fun EpisodesRow(
     onEpisodeClick: (Video) -> Unit,
     canPlayEpisode: (Video) -> Boolean = { true },
     onEpisodeManualPlayClick: (Video) -> Unit = onEpisodeClick,
+    onDownload: ((Int?, Int?) -> Unit)? = null,
     onEpisodeStartFromBeginningClick: (Video) -> Unit = onEpisodeClick,
     onToggleEpisodeWatched: (Video) -> Unit,
     onMarkEpisodeRewatched: (Video) -> Unit = {},
@@ -723,7 +724,15 @@ fun EpisodesRow(
                 adjacentEpisode(dedupedEpisodes, selectedEpisode, step)?.let { optionsEpisode = it }
             },
             isPlayEnabled = canPlayEpisode(selectedEpisode),
-            extraActions = liveTvLines.map { (label, act) -> label to { optionsEpisode = null; act() } },
+            extraActions = buildList {
+                if (onDownload != null && selectedEpisode.season != null && selectedEpisode.episode != null) {
+                    add("Download episode" to {
+                        optionsEpisode = null
+                        onDownload(selectedEpisode.season, selectedEpisode.episode)
+                    })
+                }
+                liveTvLines.forEach { (label, action) -> add(label to { optionsEpisode = null; action() }) }
+            },
             onPlay = {
                 onEpisodeClick(selectedEpisode)
                 optionsEpisode = null
