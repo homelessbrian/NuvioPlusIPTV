@@ -346,7 +346,7 @@ function openLivePick(what) {
 
 function addLiveGroup(i) { var g = liveChoices.groups[i]; if (g) addLiveRow('channels', g.id); }
 function addLiveSport(i) { var c = liveChoices.sports[i]; if (c) addLiveRow('sports', c.source); }
-function addLiveVod(i) { var c = liveChoices.vodGroups[i]; if (c) addLiveRow('ondemand', c.source, c.name); }
+function addLiveVod(i) { var c = liveChoices.vodGroups[i]; if (c) addLiveRow('ondemand', c.source, c.rawName); }
 
 function newLiveId() {
   return Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
@@ -443,7 +443,7 @@ function liveEditChanged() {
     r.source = source;
     if (r.kind === 'ondemand') {
       var v = liveChoices.vodGroups.filter(function(c) { return c.source === source; })[0];
-      r.label = v ? v.name : '';
+      r.label = v ? v.rawName : '';
     }
   }
   r.title = (liveVal('liveName') || '').trim();

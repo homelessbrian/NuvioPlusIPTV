@@ -436,9 +436,86 @@ class OnDemandHomeViewModelTest {
         }
     }
 
+    @Test fun `cleanup changes labels in place and Manage Done does not turn them into manual names`() = runBlocking {
+        val movie = category(VodKind.MOVIE, "m").copy(name = "[UK] Action [4K]")
+        val series = category(VodKind.SERIES, "s").copy(name = "[US] Action [4K]")
+        val fixture = fixture(listOf(movie, series))
+        fixture.settings.value = LiveTvSettings(nameRemovals = "UK, US, 4K", cleanVodGroupNames = true)
+        val reads = AtomicInteger()
+        coEvery { fixture.repository.items(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+            val group = secondArg<VodCategory?>() ?: return@coAnswers emptyList()
+            reads.incrementAndGet()
+            listOf(item(group, "card"))
+        }
+        val model = onMain { fixture.model() }
+        onMain { model.loadHome() }
+        val first = withTimeout(5_000) { model.home.first { it.rows.size == 2 } }
+        assertEquals(listOf("Action", "Action"), first.rows.map { it.catalogName })
+        assertEquals(2, first.rows.map { it.catalogId }.distinct().size)
+        assertEquals(listOf(movie.name, series.name), first.groups.map { it.name })
+        assertEquals(listOf("Action", "Action"), first.groups.map { it.displayName })
+        val initialReads = reads.get()
+        val cards = first.rows.associate { it.catalogId to it.items }
+
+        fixture.settings.value = fixture.settings.value.copy(cleanVodGroupNames = false)
+        val off = withTimeout(5_000) { model.home.first { it.rows.firstOrNull()?.catalogName == movie.name } }
+        off.rows.forEach { assertSame(cards[it.catalogId], it.items) }
+        fixture.settings.value = fixture.settings.value.copy(cleanVodGroupNames = true, nameRemovals = "UK, US")
+        withTimeout(5_000) { model.home.first { it.rows.all { row -> row.catalogName == "Action [4K]" } } }
+        assertEquals(initialReads, reads.get())
+        io.mockk.coVerify(exactly = 1) { fixture.repository.start() }
+
+        onMain { model.saveGroups(model.home.value.groups) }
+        io.mockk.coVerify(timeout = 5_000) { fixture.prefs.saveVodGroups(emptySet(), listOf(movie.uid, series.uid), emptyMap()) }
+    }
+
+    @Test fun `cleanup and rename edits during a suspended catalogue read apply to its first publication`() = runBlocking {
+        val movie = category(VodKind.MOVIE, "m").copy(name = "[UK] Action [4K]")
+        val series = category(VodKind.SERIES, "s").copy(name = "[UK] Drama [4K]")
+        val fixture = fixture(listOf(movie, series))
+        val reading = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        coEvery { fixture.repository.categories(any()) } coAnswers {
+            reading.complete(Unit)
+            release.await()
+            listOf(movie, series).filter { it.kind == firstArg<VodKind>() }
+        }
+        coEvery { fixture.repository.items(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+            val category = secondArg<VodCategory?>() ?: return@coAnswers emptyList()
+            listOf(item(category, "card"))
+        }
+        val model = onMain { fixture.model() }
+        onMain { model.loadHome() }
+        withTimeout(5_000) { reading.await() }
+        fixture.settings.value = LiveTvSettings(cleanVodGroupNames = true, nameRemovals = "UK, 4K")
+        fixture.user.value = LiveUserState(vodGroupNames = mapOf(movie.uid to "[UK] My Action [4K]"))
+        withTimeout(5_000) { model.settings.first { it.cleanVodGroupNames } }
+        withTimeout(5_000) { model.user.first { it.vodGroupNames.isNotEmpty() } }
+        release.complete(Unit)
+        val state = withTimeout(5_000) { model.home.first { it.rows.size == 2 } }
+        assertEquals(listOf("[UK] My Action [4K]", "Drama"), state.rows.map { it.catalogName })
+        assertEquals(listOf("[UK] My Action [4K]", "Drama"), state.groups.map { it.displayName })
+    }
+
+    @Test fun `manual group name equal to cleaned default remains a manual rename`() = runBlocking {
+        val category = category(VodKind.MOVIE, "m").copy(name = "[UK] Action [4K]")
+        val fixture = fixture(listOf(category))
+        fixture.settings.value = LiveTvSettings(nameRemovals = "UK, 4K", cleanVodGroupNames = true)
+        fixture.user.value = LiveUserState(vodGroupNames = mapOf(category.uid to "Action"))
+        coEvery { fixture.repository.items(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns listOf(item(category, "card"))
+        val model = onMain { fixture.model() }
+        onMain { model.loadHome() }
+        withTimeout(5_000) { model.home.first { it.rows.isNotEmpty() } }
+        fixture.settings.value = fixture.settings.value.copy(cleanVodGroupNames = false)
+        withTimeout(5_000) { model.settings.first { !it.cleanVodGroupNames } }
+        assertEquals("Action", model.home.value.groups.single().displayName)
+        onMain { model.saveGroups(model.home.value.groups) }
+        io.mockk.coVerify(timeout = 5_000) { fixture.prefs.saveVodGroups(emptySet(), listOf(category.uid), mapOf(category.uid to "Action")) }
+    }
+
     private suspend fun <T> onMain(block: () -> T): T = withContext(main) { block() }
 
-    private class Fixture(val repository: OnDemandRepository, val metadata: MetaRepository, val revision: MutableStateFlow<Int>, val create: () -> OnDemandViewModel) {
+    private class Fixture(val repository: OnDemandRepository, val metadata: MetaRepository, val revision: MutableStateFlow<Int>, val prefs: LiveTvPreferences, val settings: MutableStateFlow<LiveTvSettings>, val user: MutableStateFlow<LiveUserState>, val create: () -> OnDemandViewModel) {
         fun model() = create()
     }
 
@@ -455,9 +532,11 @@ class OnDemandHomeViewModelTest {
         coEvery { repository.savedMatches(any()) } coAnswers {
             firstArg<List<VodItem>>().associate { item -> item.uid to (LiveTvPosterResolver.Hit(preview(item), "https://fixture.invalid", "movie") to detailed) }
         }
+        val settingsFlow = MutableStateFlow(LiveTvSettings())
+        val userFlow = MutableStateFlow(LiveUserState())
         val prefs = mockk<LiveTvPreferences>(relaxed = true) {
-            every { settings } returns MutableStateFlow(LiveTvSettings())
-            every { userState } returns MutableStateFlow(LiveUserState())
+            every { settings } returns settingsFlow
+            every { userState } returns userFlow
             every { playlists } returns MutableStateFlow(emptyList())
         }
         val layout = mockk<LayoutPreferenceDataStore> {
@@ -476,7 +555,7 @@ class OnDemandHomeViewModelTest {
             every { fullyWatchedSeriesIds } returns MutableStateFlow(emptySet())
         }
         val metadata = mockk<MetaRepository>()
-        return Fixture(repository, metadata, revision) {
+        return Fixture(repository, metadata, revision, prefs, settingsFlow, userFlow) {
             OnDemandViewModel(repository, prefs, mockk(relaxed = true), mockk(), mockk(), metadata, mockk(), progress, watched,
                 RuntimeEnvironment.getApplication(), layout, matchFixes).also { models += it }
         }

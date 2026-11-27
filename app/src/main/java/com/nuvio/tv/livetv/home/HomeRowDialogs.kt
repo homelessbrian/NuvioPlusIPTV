@@ -162,7 +162,7 @@ fun AddHomeRowDialog(
                         groups = vodGroups,
                         first = requester("first"),
                         onFocused = { pos, count -> position = pos; total = count },
-                        onPick = { add(HomeLiveRow.vod(it.source, it.name)) }
+                        onPick = { add(HomeLiveRow.vod(it.source, it.rawName)) }
                     )
                     PickerOption.VOD_RECENT -> vodRecentChoices(
                         first = requester("first"),
@@ -609,7 +609,7 @@ fun HomeRowOptionsDialog(
                 choices = choices, current = row.source,
                 onPick = { picked ->
                     // A group's own name goes with it (shown until you rename the row).
-                    save(row.copy(source = picked, label = vodGroups.firstOrNull { it.source == picked }?.name.orEmpty()))
+                    save(row.copy(source = picked, label = vodGroups.firstOrNull { it.source == picked }?.rawName.orEmpty()))
                 }, onDismiss = { choosing = null }
             )
             return

@@ -718,4 +718,6 @@
     <string name="iptv_settings_recordings_tab_subtitle">"Where recordings are saved, the network folder and how long they\'re kept"</string>
     <string name="iptv_settings_adaptive_live_buffer">Adaptive Live TV Buffer</string>
     <string name="iptv_settings_adaptive_live_buffer_description">Builds toward a 20-second cushion on this TV by easing live playback down to 0.98× when needed. Keeps voices natural with compatible audio output and respects your playback speed.</string>
+    <string name="iptv_settings_clean_vod_group_names">Clean On Demand group names</string>
+    <string name="iptv_settings_clean_vod_group_names_description">Use the same cleanup words for movie and series groups. Your custom names stay as you set them.</string>
 </resources>

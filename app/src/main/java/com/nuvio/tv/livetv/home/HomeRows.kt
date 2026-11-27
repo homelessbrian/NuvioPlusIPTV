@@ -5,6 +5,9 @@ package com.nuvio.tv.livetv.home
 import androidx.compose.runtime.Immutable
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.model.ChannelGroup
+import com.nuvio.tv.livetv.ondemand.OnDemandRepository
+import com.nuvio.tv.livetv.ondemand.VodKind
+import com.nuvio.tv.livetv.ondemand.VodGroupNames
 import com.nuvio.tv.R
 import com.nuvio.tv.core.util.withAppLocale
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import org.json.JSONArray
 import org.json.JSONObject
@@ -161,7 +165,8 @@ class HomeLiveRows @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val prefs: LiveTvPreferences,
     private val channelStore: com.nuvio.tv.livetv.data.LiveTvChannelStore,
-    private val layoutPrefs: com.nuvio.tv.data.local.LayoutPreferenceDataStore
+    private val layoutPrefs: com.nuvio.tv.data.local.LayoutPreferenceDataStore,
+    private val onDemand: OnDemandRepository
 ) {
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Default)
 
@@ -177,14 +182,28 @@ class HomeLiveRows @Inject constructor(
         if (s.showInSidebar) r else emptyList()
     }.distinctUntilChanged()
 
+    // Resolve current provider labels, including rows added by an older client that saved a
+    // manual name as its fallback. The stored row and source identity never change.
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val vodNames = combine(
+        rows.map { list -> list.any { it.kind == HomeLiveRow.KIND_VOD && it.source.startsWith(HomeLiveRow.VOD_GROUP_PREFIX) } }.distinctUntilChanged(),
+        onDemand.version
+    ) { needed, _ -> needed }.mapLatest { needed ->
+        if (!needed) emptyMap() else
+            (onDemand.categories(VodKind.MOVIE) + onDemand.categories(VodKind.SERIES))
+                .associate { it.uid to it.name }
+    }.flowOn(Dispatchers.IO)
+
     /** Each row's name as shown on Home and in Reorder Home Catalogs, by row id. */
     val names: StateFlow<Map<String, String>> = combine(
         rows,
         prefs.userState.map { Triple(it.customGroups, it.groupNames, it.vodGroupNames) }.distinctUntilChanged(),
         channelStore.displayChannels,
         prefs.playlists.map { l -> l.associate { it.id to it.name } }.distinctUntilChanged(),
-        prefs.settings.map { it.homeRowPlaylistNames }.distinctUntilChanged()
-    ) { list, (custom, renamed, vodRenamed), channels, playlistNames, withPlaylist ->
+        combine(prefs.settings.map { it.homeRowPlaylistNames to VodGroupNames.from(it) }.distinctUntilChanged(), vodNames) { settings, names ->
+            Triple(settings.first, settings.second, names)
+        }
+    ) { list, (custom, renamed, vodRenamed), channels, playlistNames, (withPlaylist, groupNames, providerNames) ->
         if (list.isEmpty()) return@combine emptyMap()
         val wanted = list.filter { it.kind == HomeLiveRow.KIND_CHANNELS }.mapTo(HashSet()) { it.source }
         val found = HashMap<String, String>()
@@ -207,8 +226,10 @@ class HomeLiveRows @Inject constructor(
                         HomeLiveRow.VOD_CONTINUE -> ctx.getString(R.string.home_rows_vod_continue_title)
                         else -> {
                             val uid = row.source.removePrefix(HomeLiveRow.VOD_GROUP_PREFIX)
-                            val name = vodRenamed[uid]?.takeIf { it.isNotBlank() }
-                                ?: row.label.ifBlank { ctx.getString(R.string.home_rows_type_vod) }
+                            val name = groupNames.display(
+                                providerNames[uid] ?: row.label.ifBlank { ctx.getString(R.string.home_rows_type_vod) },
+                                vodRenamed[uid]
+                            )
                             // With the playlist's name ("NETFLIX MOVIES - HBStrong"); the category's
                             // uid is "<movie|series>:<playlist id>:<category id>".
                             val playlist = uid.split(':', limit = 3).getOrNull(1)?.let { playlistNames[it] }?.takeIf { it.isNotBlank() && withPlaylist }
