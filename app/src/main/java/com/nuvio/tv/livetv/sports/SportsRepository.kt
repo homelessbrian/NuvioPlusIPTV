@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -98,9 +99,9 @@ class SportsRepository @Inject constructor(
         .map { SportsSettings.fromJson(it) }
         .stateIn(scope, SharingStarted.Eagerly, SportsSettings())
 
-    val follows: StateFlow<SportsFollows> = prefs.sportsMineJson
-        .map { SportsFollows.fromJson(it) }
-        .stateIn(scope, SharingStarted.Eagerly, SportsFollows())
+    private val savedFollows = prefs.sportsMineJson.map { SportsFollows.fromJson(it) }
+        .shareIn(scope, SharingStarted.Eagerly, replay = 1)
+    val follows: StateFlow<SportsFollows> = savedFollows.stateIn(scope, SharingStarted.Eagerly, SportsFollows())
 
     /**
      * League Networks: the channels whose names say they're a league's own channel (NFL Network,
@@ -149,7 +150,15 @@ class SportsRepository @Inject constructor(
     /** Games of teams looked up on a table (their card), by team key: so their game pages open. */
     private val lookedUp = MutableStateFlow<Map<String, LeagueData>>(emptyMap())
     /** Shows found in the guide, by day (the day's start). */
-    private val guideData = MutableStateFlow<Map<Long, List<SportsEvent>>>(emptyMap())
+    private val guideListings = MutableStateFlow<SportsMatcher.GuideListings?>(null)
+    private val titleExclusions = savedFollows.map { it.excludedGuideTitles }
+        .distinctUntilChanged().map(::SportsGuideTitleExclusions)
+    private val guideData = combine(guideListings, titleExclusions) { listings, exclusions ->
+        if (listings == null) emptyMap()
+        else withContext(if (pageOnly()) Dispatchers.Default else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+            sportsCatching { listings.events(exclusions) }.getOrDefault(emptyMap())
+        }
+    }.distinctUntilChanged()
     /** TheSportsDB's live rugby (match minute), read while a rugby game is on: see [RugbyLive]. */
     private val rugbyLive = MutableStateFlow<RugbyLive.Snapshot?>(null)
     @Volatile private var rugbyLiveReadAt = 0L
@@ -434,12 +443,14 @@ class SportsRepository @Inject constructor(
      * channels moved up. That's done here, on what's already matched, so changing the region
      * never searches the guide again (with no region chosen this is the list as it was).
      */
+    private val visiblePlaylistMatches = combine(_matches, titleExclusions) { existing, exclusions -> exclusions.visibleMatches(existing) }
+        .stateIn(scope, SharingStarted.Eagerly, emptyMap())
     val matches: StateFlow<Map<String, List<ChannelMatch>>> = combine(
-        _matches,
+        visiblePlaylistMatches,
         settings.map { it.channelRegion }.distinctUntilChanged(),
         _addonLive
-    ) { m0, region, addon ->
-        val m = if (region.isBlank()) m0 else m0.mapValues { (_, list) -> ChannelRegions.regionFirst(list, region) }
+    ) { visible, region, addon ->
+        val m = if (region.isBlank()) visible else visible.mapValues { (_, list) -> ChannelRegions.regionFirst(list, region) }
         // Streams from your sports addons (HighFly…) go after your own channels.
         if (addon.isEmpty()) m else {
             val out = HashMap(m)
@@ -973,7 +984,7 @@ class SportsRepository @Inject constructor(
         val force = forceAll.also { forceAll = false }
         val data = leagueData.value
         val playingKey = playback.state.value.channelKey
-        val playingLeagues = if (playingKey == null) emptySet() else _matches.value
+        val playingLeagues = if (playingKey == null) emptySet() else visiblePlaylistMatches.value
             .filter { (_, list) -> list.any { it.channel.key == playingKey && it.sure } }
             .keys.mapNotNull { id -> events.value.firstOrNull { it.id == id && it.state == GameState.LIVE }?.leagueId }.toSet()
         // A league counts as "fast" when it needs to be right-up-to-date: one you follow, one
@@ -2038,7 +2049,7 @@ class SportsRepository @Inject constructor(
                 list.size to h
             }.distinctUntilChanged(),
             settings.map { listOf(it.networkChannels, it.eventChannels, it.teamChannels, it.leagueChannels, it.blocked, it.bestChannelFirst, it.hiddenLeagues, it.region, it.preferredGroups) }.distinctUntilChanged(),
-            follows.map { it.words to it.leagues }.distinctUntilChanged(),
+            follows.map { Triple(it.words, it.leagues, it.excludedGuideTitles) }.distinctUntilChanged(),
             // Live TV ready, and the guide really replaced (not every update check that found nothing new).
             combine(liveRepo.status.map { it.loadedOnce }, liveRepo.guideGeneration) { a, b -> a to b }.distinctUntilChanged()
         ) { a, b, c, d, e -> listOf(a, b, c, d, e) }
@@ -2281,7 +2292,8 @@ class SportsRepository @Inject constructor(
             val items = org.json.JSONArray()
             list.forEach { m ->
                 items.put(org.json.JSONObject().put("k", m.channel.key).put("s", m.score).put("h", m.how)
-                    .put("q", m.quality ?: org.json.JSONObject.NULL).put("c", m.catchup))
+                    .put("q", m.quality ?: org.json.JSONObject.NULL).put("c", m.catchup)
+                    .put("gt", m.program?.title ?: m.cachedGuideTitle))
             }
             arr.put(o.put("m", items))
         }
@@ -2298,7 +2310,8 @@ class SportsRepository @Inject constructor(
             for (j in 0 until items.length()) {
                 val it = items.getJSONObject(j)
                 val ch = chans[it.getString("k")] ?: continue
-                list += ChannelMatch(ch, it.getInt("s"), it.getString("h"), null, if (it.isNull("q")) null else it.getString("q"), it.optBoolean("c"))
+                list += ChannelMatch(ch, it.getInt("s"), it.getString("h"), null, if (it.isNull("q")) null else it.getString("q"),
+                    it.optBoolean("c"), it.optString("gt").takeIf(String::isNotEmpty))
             }
             if (list.isNotEmpty()) out[o.getString("id")] = list
         }
@@ -2354,19 +2367,18 @@ class SportsRepository @Inject constructor(
      */
     private suspend fun restoreSavedGuideEvents() = withContext(Dispatchers.Default) {
         channelStore.displayChannels.first { it.isNotEmpty() }
-        if (guideData.value.isNotEmpty()) return@withContext
+        if (guideListings.value != null) return@withContext
         val live = prefs.settings.first()
         val user = prefs.userState.first()
         val channels = matchChannels(live, user, SportsSettings.fromJson(prefs.sportsSettingsJson.first()))
         if (channels.isEmpty()) return@withContext
         val f = SportsFollows.fromJson(prefs.sportsMineJson.first())
         val now = System.currentTimeMillis()
-        val days = matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) },
+        val listings = matcher.guideListingsDays((-1..1).map { dayStart(it) to dayStart(it + 1) },
             SportsCatalog.all.filter { it.guideOnly }, f.words, channels.associateBy { it.key },
             live.epgOffsetMinutes * MINUTE, now, savedOnly = true)
-        if (days.values.any { it.isNotEmpty() } && guideData.value.isEmpty()) {
-            guideData.value = days
-            LiveTvLoadReport.add("Sports: ${days.values.sumOf { it.size }} guide-only events shown from the last search")
+        if (listings != null && guideListings.compareAndSet(null, listings)) {
+            LiveTvLoadReport.add("Sports: restored guide listings from the last search")
         }
     }
 
@@ -2393,7 +2405,8 @@ class SportsRepository @Inject constructor(
             val fresh = SportsMatcher(guideDb, checkpoint = { job.ensureActive() }).match(SportsMatcher.Input(
                 events = listOf(selected) + context.filterNot { it.id == selected.id }, channels = channels,
                 quality = user.channelQuality, shiftMs = live.epgOffsetMinutes * MINUTE,
-                settings = rules, now = now, requestedGames = setOf(event.id), onlyGame = event.id
+                settings = rules, now = now, requestedGames = setOf(event.id), onlyGame = event.id,
+                exclusions = SportsGuideTitleExclusions(follows.value.excludedGuideTitles)
             )).matches[event.id].orEmpty()
             // A profile or playlist switch must never publish channels from the old search.
             val latestLive = prefs.settings.first()
@@ -2437,6 +2450,7 @@ class SportsRepository @Inject constructor(
                 gameSearches.toMap()
             }
             val f = follows.value
+            val exclusions = SportsGuideTitleExclusions(f.excludedGuideTitles)
             // Sports ESPN doesn't cover, from the guide: yesterday to tomorrow, every one of
             // them, not just your region's (this is a local guide search, not an API call, so
             // there's no traffic reason to leave any of them out) — plus names you follow.
@@ -2454,7 +2468,7 @@ class SportsRepository @Inject constructor(
                     matcher.match(SportsMatcher.Input(
                         events = matchingEvents, channels = channels, quality = user.channelQuality,
                         shiftMs = shift, settings = s, now = now, readGuide = false,
-                        networksUntil = now + 3 * HOUR
+                        networksUntil = now + 3 * HOUR, exclusions = exclusions
                     ))
                 }.onSuccess { quick ->
                     if (quick.matches.isNotEmpty()) {
@@ -2474,12 +2488,11 @@ class SportsRepository @Inject constructor(
             }
             matcher.configureTable(matchingEvents, guideLeagues, f.words, now, gentle = !pageOnly())
             // All three days from one read of the guide (none at all when it hasn't changed).
-            val days = sportsCatching {
-                matcher.guideEventsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, f.words, keys, shift, now)
-            }.getOrDefault((-1..1).associate { dayStart(it) to emptyList() })
+            val listings = sportsCatching {
+                matcher.guideListingsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, f.words, keys, shift, now)
+            }.getOrNull()
             matchingCheckpoint()
-            // Only when something in it changed: everything built from the games is worked out again on a change.
-            if (days != guideData.value) guideData.value = days
+            guideListings.value = listings
             val result = matcher.match(
                 SportsMatcher.Input(
                     events = SportsMatchingEvents.select(events.value, known.value, s, now, requested.keys),
@@ -2488,7 +2501,8 @@ class SportsRepository @Inject constructor(
                     shiftMs = shift,
                     settings = s,
                     now = now,
-                    gentle = !pageOnly(), requestedGames = requested.keys
+                    gentle = !pageOnly(), requestedGames = requested.keys,
+                    exclusions = exclusions
                 ),
                 onUrgent = { early ->
                     matchingCheckpoint()
@@ -3123,7 +3137,7 @@ class SportsRepository @Inject constructor(
 
     /** The channel to tune for a reminder or "watch now": the best match, if any. */
     fun bestChannel(eventId: String): ChannelMatch? =
-        _matches.value[eventId]?.let { ChannelRegions.regionFirst(it, settings.value.channelRegion) }?.firstOrNull()
+        visiblePlaylistMatches.value[eventId]?.let { ChannelRegions.regionFirst(it, settings.value.channelRegion) }?.firstOrNull()
 
     fun channelsForPicker(): List<LiveChannel> = channelStore.displayChannels.value
 

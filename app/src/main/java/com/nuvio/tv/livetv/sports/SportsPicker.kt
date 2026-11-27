@@ -83,6 +83,7 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
     val league = leagues.firstOrNull { it.id == leagueId } ?: leagues.firstOrNull()
     var query by rememberSaveable { mutableStateOf("") }
     var askWord by remember { mutableStateOf(false) }
+    var showExclusions by rememberSaveable { mutableStateOf(false) }
     // Leagues and competitions whose name (or short name, or how guides name them) matches.
     val leagueResults = remember(query) {
         val q = SportsCatalog.norm(query).trim()
@@ -277,6 +278,7 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
                             if (league.guideOnly || league.kind == LeagueKind.EVENT) {
                                 SportsPill("＋  Follow a Name…", onClick = { askWord = true })
                             }
+                            SportsPill("Exclude titles…", onClick = { showExclusions = true })
                         }
                         Spacer(Modifier.height(10.dp))
                         when {
@@ -324,6 +326,10 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
         }
     }
     if (arrange) ArrangeDialog(follows, viewModel) { arrange = false }
+    if (showExclusions) ExcludedGuideTitlesDialog(follows.excludedGuideTitles,
+        onSave = { previous, title -> viewModel.repo.updateFollows { it.withExcludedGuideTitle(previous, title) } },
+        onRemove = { title -> viewModel.repo.updateFollows { it.withoutExcludedGuideTitle(title) } },
+        onDismiss = { showExclusions = false })
     if (askWord) {
         TextInputDialog(
             title = "Follow a name",
@@ -336,6 +342,50 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
                 viewModel.repo.addWord(w)
             }
         )
+    }
+}
+
+@Composable
+internal fun ExcludedGuideTitlesDialog(
+    titles: List<String>,
+    onSave: (String?, String) -> Unit,
+    onRemove: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var editing by rememberSaveable { mutableStateOf(false) }
+    val first = remember { FocusRequester() }
+    val title = selected
+    when {
+        editing -> TextInputDialog(
+            title = if (title == null) "Exclude a title" else "Edit excluded title",
+            initial = title.orEmpty(),
+            hint = "Programme title or phrase",
+            confirmLabel = "Save",
+            onDismiss = { editing = false },
+            onConfirm = { value ->
+                onSave(title, value)
+                selected = null
+                editing = false
+            }
+        )
+        title != null -> SportsDialog(onDismiss = { selected = null }) {
+            LiveText(title, size = 18.sp, weight = FontWeight.Bold, maxLines = 2)
+            SportsMenuRow("Edit", Modifier.focusRequester(first)) { editing = true }
+            SportsMenuRow("Remove") { onRemove(title); selected = null }
+            LaunchedEffect(Unit) { first.requestFocus() }
+        }
+        else -> SportsDialog(onDismiss = onDismiss) {
+            LiveText("Excluded guide titles", size = 18.sp, weight = FontWeight.Bold)
+            LiveText("Hide Sports Hub listings whose guide title contains one of these phrases.",
+                color = SportsLook.Dim, size = 13.sp, maxLines = 2)
+            Spacer(Modifier.height(8.dp))
+            SportsMenuRow("Add a title…", Modifier.focusRequester(first)) { editing = true }
+            LazyColumn(Modifier.heightIn(max = 300.dp)) {
+                items(titles) { word -> SportsMenuRow(word) { selected = word } }
+            }
+            LaunchedEffect(Unit) { first.requestFocus() }
+        }
     }
 }
 

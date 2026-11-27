@@ -57,7 +57,8 @@ internal class SportsMatcher(
         /** A requested game searches the guide even when it already has a channel link. */
         val requestedGames: Set<String> = emptySet(),
         /** Search just this game. Other events supply context to distinguish overlapping tournaments. */
-        val onlyGame: String? = null
+        val onlyGame: String? = null,
+        val exclusions: SportsGuideTitleExclusions = SportsGuideTitleExclusions.Empty
     )
 
     /** One guide find from step 1, kept to be used again while the guide and the half-hour's games stay the same. */
@@ -161,7 +162,7 @@ internal class SportsMatcher(
         val discIds = input.events.filter { isDiscGolf(it) }.mapTo(HashSet()) { it.id }
         val found = HashMap<String, HashMap<String, Found>>()
         fun add(eventId: String, key: String, score: Int, how: String, program: EpgProgram?) {
-            if (key !in byKey || score <= 0) return
+            if (key !in byKey || score <= 0 || (program != null && input.exclusions.matches(program.title))) return
             val m = found.getOrPut(eventId) { HashMap() }
             val cur = m[key]
             if (cur == null || score > cur.score) m[key] = Found(key, score, how, program ?: cur?.program)
@@ -537,12 +538,13 @@ internal class SportsMatcher(
                             val p = onNow[ch.key]
                             val showText = p?.let { norm(it.title + " " + (it.episode ?: "")) }
                             val score = when {
+                                p != null && input.exclusions.matches(p.title) -> 0
                                 ev.id !in discIds && showText != null && hasWord(showText, "disc golf") -> 0
                                 p == null -> if (keys.size < 400 && national) 45 else 0
                                 // The guide says it's a different game: not this one.
                                 terms[ev.id]?.otherGame(showText!!) == true -> 0
                                 titleOf(ch.key, p).let { t -> sporty.any { hasWord(t, it) } && SportsCatalog.NOT_LIVE_WORDS.none { hasWord(t, it) } } ->
-                                    if (national) 62 else 52
+                                    if (national) NATIONAL_GUIDE_SCORE else REGIONAL_GUIDE_SCORE
                                 else -> 0
                             }
                             Triple(ch, score, p)
@@ -646,9 +648,25 @@ internal class SportsMatcher(
         shiftMs: Long,
         now: Long,
         savedOnly: Boolean = false
-    ): Map<Long, List<SportsEvent>> {
+    ): Map<Long, List<SportsEvent>> =
+        guideListingsDays(days, leagues, followedWords, channels, shiftMs, now, savedOnly)?.events(SportsGuideTitleExclusions.Empty).orEmpty()
+
+    /** Raw guide hits can be regrouped when exclusions change, without searching the database again. */
+    fun interface GuideListings {
+        fun events(exclusions: SportsGuideTitleExclusions): Map<Long, List<SportsEvent>>
+    }
+
+    fun guideListingsDays(
+        days: List<Pair<Long, Long>>,
+        leagues: List<League>,
+        followedWords: List<String>,
+        channels: Map<String, LiveChannel>,
+        shiftMs: Long,
+        now: Long,
+        savedOnly: Boolean = false
+    ): GuideListings? {
         checkpoint()
-        if (days.isEmpty()) return emptyMap()
+        if (days.isEmpty()) return null
         val leagueWords = leagues.flatMap { l -> l.guideWords.map { it to l } }
         val titleWords = leagueWords.map { norm(it.first).trim() }.filter { it.length >= 3 }.toSet()
         val followed = followedWords.map { norm(it).trim() }.filter { it.length >= 3 }.toSet()
@@ -659,11 +677,14 @@ internal class SportsMatcher(
         for (w in titleWords.sorted()) key = key * 31 + w.hashCode()
         key = key * 17
         for (w in followed.sorted()) key = key * 31 + w.hashCode()
+        fun listings(hits: Map<Long, List<Pair<String, EpgProgram>>>) = GuideListings { exclusions ->
+            days.associate { (ds, _) -> ds to guideEventsFrom(hits[ds].orEmpty(), leagueWords, followedWords, channels, shiftMs, now, exclusions) }
+        }
         if (savedOnly) {
             // Doesn't use up the one disk read at start: the words may not all be known yet.
             if (rev != null && dayHits?.key != key) loadDays(key)?.let { dayHits = DayHits(key, it) }
-            val saved = dayHits?.takeIf { it.key == key }?.byDay ?: return emptyMap()
-            return days.associate { (ds, _) -> ds to guideEventsFrom(saved[ds].orEmpty(), leagueWords, followedWords, channels, shiftMs, now) }
+            val saved = dayHits?.takeIf { it.key == key }?.byDay ?: return null
+            return listings(saved)
         }
         if (!daysLoaded) {
             daysLoaded = true
@@ -746,7 +767,7 @@ internal class SportsMatcher(
             }
             read
         }
-        return days.associate { (ds, _) -> ds to guideEventsFrom(byDay[ds].orEmpty(), leagueWords, followedWords, channels, shiftMs, now) }
+        return listings(byDay)
     }
 
     private fun guideEventsFrom(
@@ -755,13 +776,15 @@ internal class SportsMatcher(
         followedWords: List<String>,
         channels: Map<String, LiveChannel>,
         shiftMs: Long,
-        now: Long
+        now: Long,
+        exclusions: SportsGuideTitleExclusions
     ): List<SportsEvent> {
         val groups = LinkedHashMap<String, MutableList<Pair<String, EpgProgram>>>()
         val meta = HashMap<String, Pair<League?, String?>>()
         val seen = HashSet<String>()
         for ((key, p0) in hits) {
             val ch = channels[key] ?: continue
+            if (exclusions.matches(p0.title)) continue
             if (!seen.add("$key|${p0.startMs}")) continue
             val p = if (shiftMs == 0L) p0 else p0.copy(startMs = p0.startMs + shiftMs, stopMs = p0.stopMs + shiftMs)
             val nt = norm(p.title)
@@ -1562,6 +1585,8 @@ internal class SportsMatcher(
         private val FIGHT_STUDIO_WORDS = listOf("weigh in", "weigh ins", "weighin", "countdown", "press conference")
         /** How far ahead games are looked for in your channels (most guides cover 2–3 days). */
         const val AHEAD_MS = 56 * HOUR
+        const val NATIONAL_GUIDE_SCORE = 62
+        const val REGIONAL_GUIDE_SCORE = 52
 
         /** What the guide gave each half-hour of games, and the guide-only sports by day (see [match], [guideEventsDays]). */
         // New names: a copy saved as one JSON document by an earlier version is never read
