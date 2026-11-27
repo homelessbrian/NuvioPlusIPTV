@@ -6,7 +6,7 @@ import java.net.ServerSocket
 import java.net.Socket
 
 /**
- * Shows a report as a small web page on the home network, so it can be opened (and copied) on a
+ * Shows a report as a small web page on the home network, so it can be copied or downloaded on a
  * phone on the same Wi-Fi. Nothing leaves the home network, there is no size limit (a QR code
  * holds very little), and it only runs while the report screen is open. The address includes a
  * random code, so only someone given the address can read it.
@@ -63,19 +63,23 @@ object ReportServer {
                 val reader = c.getInputStream().bufferedReader()
                 val request = reader.readLine().orEmpty()
                 while (true) { val l = reader.readLine() ?: break; if (l.isEmpty()) break }
-                val path = request.split(' ').getOrNull(1).orEmpty().substringBefore('?')
+                val path = request.split(' ').getOrNull(1).orEmpty().substringBefore('?').trim('/')
                 val out = c.getOutputStream()
-                if (path.trim('/') != token) {
-                    val body = "Not found".toByteArray()
-                    out.write("HTTP/1.1 404 Not Found\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray())
-                    out.write(body)
-                } else {
-                    val body = page(title, short?.invoke(), text()).toByteArray(Charsets.UTF_8)
+                fun send(status: String, type: String, content: String, extraHeaders: String = "") {
+                    val body = content.toByteArray(Charsets.UTF_8)
                     out.write(
-                        ("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\n" +
-                            "Cache-Control: no-store\r\nConnection: close\r\n\r\n").toByteArray()
+                        ("HTTP/1.1 $status\r\nContent-Type: $type; charset=utf-8\r\nContent-Length: ${body.size}\r\n" +
+                            "Cache-Control: no-store\r\n${extraHeaders}Connection: close\r\n\r\n").toByteArray()
                     )
                     out.write(body)
+                }
+                when {
+                    path == token -> send("200 OK", "text/html", page(token, title, short?.invoke(), text()))
+                    path == "$token/report.txt" && request.startsWith("GET ") -> send(
+                        "200 OK", "text/plain", text(),
+                        "Content-Disposition: attachment; filename=\"nuvio-iptv-report.txt\"\r\n"
+                    )
+                    else -> send("404 Not Found", "text/plain", "Not found")
                 }
                 out.flush()
             }
@@ -84,15 +88,16 @@ object ReportServer {
 
     private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    private fun page(title: String, short: String?, text: String): String = """<!doctype html>
+    private fun page(token: String, title: String, short: String?, text: String): String = """<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <style>
 body{font-family:-apple-system,Roboto,sans-serif;background:#111;color:#eee;margin:0;padding:16px}
 h1{font-size:20px;margin:0 0 6px}
 p{color:#aaa;font-size:14px;margin:6px 0 12px}
-button{font-size:17px;padding:13px 18px;border:0;border-radius:10px;background:#fff;color:#111;font-weight:600;margin:0 8px 8px 0}
-button.alt{background:#2a2d35;color:#eee}
+button,.download{font-size:17px;padding:13px 18px;border:0;border-radius:10px;background:#fff;color:#111;font-weight:600;margin:0 8px 8px 0}
+button.alt,.download{background:#2a2d35;color:#eee}
+.download{display:inline-block;text-decoration:none}
 a{color:#8cf;font-size:15px}
 textarea{width:100%;box-sizing:border-box;margin-top:10px;height:55vh;background:#1b1b1f;color:#ddd;border:1px solid #333;border-radius:8px;font-family:monospace;font-size:12px;padding:8px}
 #msg{color:#7f7;font-size:15px;min-height:20px}
@@ -101,7 +106,8 @@ textarea{width:100%;box-sizing:border-box;margin-top:10px;height:55vh;background
 <h1>${esc(title)}</h1>
 ${if (short != null) """<p><b>Copy short report</b> fits in one Discord message and keeps everything important. Send the full one only if you're asked for it.</p>
 <button onclick="copyIt('s')">Copy short report</button><button class="alt" onclick="copyIt('r')">Copy full report</button>""" else """<p>Tap <b>Copy report</b>, then paste it into your message to the developer.</p>
-<button onclick="copyIt('r')">Copy report</button>"""} <a href="">Reload</a>
+<button onclick="copyIt('r')">Copy report</button>"""}
+<a class="download" href="/$token/report.txt" download>Download full report (.txt)</a> <a href="">Reload</a>
 <div id="msg"></div>
 ${if (short != null) """<textarea id="s" readonly>${esc(short)}</textarea>
 <p><a href="#" onclick="document.getElementById('full').style.display='block';this.style.display='none';return false">Show the full report</a></p>
