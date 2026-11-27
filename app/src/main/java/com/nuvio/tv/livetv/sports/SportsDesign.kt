@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
@@ -130,14 +131,24 @@ internal fun Modifier.sportsFrame(
     playing: Boolean = false,
     accent: Color,
     radius: Dp = 14.dp,
-    background: Color = SportsLook.Card
+    background: Color = SportsLook.Card,
+    clipContent: Boolean = true
 ): Modifier {
-    val shape = RoundedCornerShape(radius)
+    val cardShape = RoundedCornerShape(radius)
     val ring = NuvioTheme.focusRing.brush()
-    return this
-        .graphicsLayer { val s = if (focused) 1.02f else 1f; scaleX = s; scaleY = s }
-        .clip(shape)
-        .background(background)
+    val focusScale = if (focused) 1.02f else 1f
+    val frame = if (clipContent) {
+        graphicsLayer {
+            scaleX = focusScale
+            scaleY = focusScale
+            shape = cardShape
+            clip = true
+        }.background(background)
+    } else {
+        // The schedule row insets all its children. Only its background needs rounded corners.
+        scale(focusScale).background(background, cardShape)
+    }
+    return frame
         // The border on top of everything inside (team bands reach the edges).
         .drawWithContent {
             drawContent()
@@ -213,8 +224,8 @@ internal fun TeamLogo(team: TeamInfo?, size: Dp) {
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         if (team?.logo != null) {
             Box(
-                Modifier.size(size * 0.86f).clip(CircleShape)
-                    .background(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.16f), Color.Transparent)))
+                Modifier.size(size * 0.86f)
+                    .background(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.16f), Color.Transparent)), CircleShape)
             )
             SportsLogoImage(team.logo, size, null)
         } else {
@@ -586,7 +597,7 @@ internal fun UpcomingRow(
         modifier
             .fillMaxWidth()
             .height(50.dp)
-            .sportsFrame(focused, false, accent, radius = 12.dp)
+            .sportsFrame(focused, false, accent, radius = 12.dp, clipContent = false)
             .onFocusChanged { focused = it.isFocused; if (it.isFocused) GameFocus.onGame?.invoke(ev) }
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -620,7 +631,7 @@ internal fun UpcomingRow(
         channel?.let {
             LiveText(
                 it,
-                modifier = Modifier.widthIn(max = 120.dp).clip(RoundedCornerShape(7.dp)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 8.dp, vertical = 3.dp),
+                modifier = Modifier.widthIn(max = 120.dp).background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(7.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
                 color = Color.White, size = 9.sp, weight = FontWeight.Black
             )
         }
