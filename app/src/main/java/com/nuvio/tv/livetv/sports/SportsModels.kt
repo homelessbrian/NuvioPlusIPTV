@@ -168,7 +168,9 @@ data class ChannelMatch(
     val how: String,
     val program: EpgProgram?,
     val quality: String?,
-    val catchup: Boolean
+    val catchup: Boolean,
+    /** Original guide title in the saved match list, which omits full programme details. */
+    val cachedGuideTitle: String? = null
 ) {
     val sure: Boolean get() = score >= 80
 }
@@ -322,7 +324,8 @@ data class SportsFollows(
      */
     val order: List<String> = emptyList(),
     /** Single games with score alerts on (Score alerts on the game page). */
-    val alertGames: List<GameAlertPick> = emptyList()
+    val alertGames: List<GameAlertPick> = emptyList(),
+    val excludedGuideTitles: List<String> = emptyList()
 ) {
     val isEmpty: Boolean get() = teams.isEmpty() && leagues.isEmpty() && words.isEmpty() && pins.isEmpty()
 
@@ -343,6 +346,16 @@ data class SportsFollows(
         return teams.firstOrNull { it.teamId == team.id && (it.leagueId == team.leagueId || SportsCatalog.teamFamily(it.leagueId) == family) }
     }
 
+    internal fun withExcludedGuideTitle(previous: String?, value: String): SportsFollows {
+        val title = value.trim()
+        val key = SportsGuideTitleExclusions.key(title)
+        if (key.isEmpty() || excludedGuideTitles.any { it != previous && SportsGuideTitleExclusions.key(it) == key }) return this
+        val titles = if (previous == null) excludedGuideTitles + title else excludedGuideTitles.map { if (it == previous) title else it }
+        return copy(excludedGuideTitles = titles)
+    }
+
+    internal fun withoutExcludedGuideTitle(title: String) = copy(excludedGuideTitles = excludedGuideTitles - title)
+
     fun toJson(): String = JSONObject()
         .put("teams", JSONArray().also { a ->
             teams.forEach { t ->
@@ -352,6 +365,7 @@ data class SportsFollows(
         })
         .put("leagues", JSONArray(leagues.toList()))
         .put("words", JSONArray(words))
+        .put("excludedGuideTitles", JSONArray(excludedGuideTitles))
         .put("reminders", JSONArray().also { a ->
             reminders.forEach { r -> a.put(JSONObject().put("e", r.eventId).put("t", r.title).put("s", r.startMs).also { o -> r.autoSwitch?.let { o.put("a", it) } }) }
         })
@@ -390,6 +404,7 @@ data class SportsFollows(
                     teams = teams,
                     leagues = emptySet(),
                     words = o.optJSONArray("words").strings(),
+                    excludedGuideTitles = SportsGuideTitleExclusions.unique(o.optJSONArray("excludedGuideTitles").strings()),
                     reminders = reminders,
                     setUp = o.optBoolean("setUp", false),
                     // "Every game" leagues (from before there was one Follow) are followed leagues now.
