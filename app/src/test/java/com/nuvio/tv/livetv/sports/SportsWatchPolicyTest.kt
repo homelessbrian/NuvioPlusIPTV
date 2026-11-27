@@ -294,6 +294,40 @@ class SportsWatchPolicyTest {
         assertEquals(0, viewers.get())
     }
 
+    @Test fun `finished game quick watch offers live tuning without catchup and keeps available replay`() {
+        val post = event("extra-time", GameState.POST)
+        val broadcast = match(channel("home"))
+        assertTrue(SportsWatchPolicy.needsEndedChannelPicker(post, broadcast))
+        assertTrue(SportsWatchPolicy.needsEndedChannelPicker(post, null))
+        assertFalse(SportsWatchPolicy.needsEndedChannelPicker(post, broadcast.copy(catchup = true)))
+        assertFalse(SportsWatchPolicy.needsEndedChannelPicker(post.copy(state = GameState.LIVE), broadcast))
+        assertFalse(SportsWatchPolicy.liveEvent(post, now))
+    }
+
+    @Test fun `ended game picker uses current allowed playlist records and only fresh live addon results`() {
+        val home = channel("home").copy(url = "https://fixture.invalid/current")
+        val other = channel("alternate")
+        val unrelatedAddon = channel("addon:other").copy(sourceId = SportsAddonSource.SOURCE_ID)
+        val liveAddon = unrelatedAddon.copy(key = "addon:actual", name = "Live broadcast")
+        val old = match(home.copy(url = "https://fixture.invalid/old"))
+        val matches = listOf(match(unrelatedAddon), old, old, match(channel("locked")))
+        val choices = SportsWatchPolicy.endedChannels(listOf(other, unrelatedAddon, home), matches, listOf(liveAddon))
+        assertEquals(listOf(home, liveAddon), choices.suggested)
+        assertEquals(listOf(other, home, liveAddon), choices.searchable)
+        val manual = SportsWatchPolicy.endedChannels(listOf(home), emptyList(), emptyList())
+        assertTrue(manual.suggested.isEmpty())
+        assertEquals(listOf(home), manual.searchable)
+    }
+
+    @Test fun `live addon lookup allows a recent final and long event overrun but leaves archived games alone`() {
+        val hour = 3_600_000L
+        val recent = event("finished", GameState.POST, now - 4 * hour)
+        assertTrue(SportsWatchPolicy.lookupOvertimeAddons(recent, now))
+        assertTrue(SportsWatchPolicy.lookupOvertimeAddons(recent.copy(startMs = now - 12 * hour, endMs = now - hour), now))
+        assertFalse(SportsWatchPolicy.lookupOvertimeAddons(recent.copy(startMs = now - 72 * hour), now))
+        assertFalse(SportsWatchPolicy.lookupOvertimeAddons(recent.copy(state = GameState.PRE), now))
+    }
+
     private fun rules(
         user: LiveUserState = LiveUserState(),
         live: LiveTvSettings = LiveTvSettings(),

@@ -69,7 +69,13 @@ class SportsAddonSource @Inject constructor(
      * Every add-on is asked at the same time. [onPart] gets what's found so far each time one of
      * them answers with something, so a slow add-on doesn't hold the others back.
      */
-    suspend fun find(ev: SportsEvent, onPart: ((Found) -> Unit)? = null): Found = coroutineScope {
+    suspend fun find(ev: SportsEvent, onPart: ((Found) -> Unit)? = null): Found =
+        find(ev, replays = ev.state == GameState.POST, onPart = onPart)
+
+    /** Query live catalogs even when this game's scheduled window has ended. */
+    internal suspend fun findLive(ev: SportsEvent): List<ChannelMatch> = find(ev, replays = false, onPart = null).live
+
+    private suspend fun find(ev: SportsEvent, replays: Boolean, onPart: ((Found) -> Unit)?): Found = coroutineScope {
         // null: couldn't read your add-ons (then nothing is recommended).
         val all = runCatching { addons.getInstalledAddons().first() }.getOrNull()
         val installed = all.orEmpty().enabledAddons()
@@ -85,7 +91,7 @@ class SportsAddonSource @Inject constructor(
         installed.mapIndexed { i, a ->
             async {
                 val f = try {
-                    forAddon(a, ev)
+                    forAddon(a, ev, replays)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Throwable) {
@@ -112,14 +118,14 @@ class SportsAddonSource @Inject constructor(
         }.map { it.displayName }.distinct()
     }
 
-    private suspend fun forAddon(a: Addon, ev: SportsEvent): Found {
+    private suspend fun forAddon(a: Addon, ev: SportsEvent, replays: Boolean): Found {
         val live = a.catalogs.filter { isLiveCatalog(it) }.let { strong ->
             if (strong.isNotEmpty()) strong
             else a.catalogs.filter { it.apiType.equals("sport", true) && !isVodCatalog(it) && !needsGenre(it) }
         }.let { forGame(it, ev, replay = false) }
         val vod = forGame(a.catalogs.filter { isVodCatalog(it) && usableForVod(it) }, ev, replay = true)
         if (live.isEmpty() && vod.isEmpty()) return NO_RESULT
-        return if (ev.state == GameState.POST) {
+        return if (replays) {
             Found(emptyList(), vodFor(a, vod, ev))
         } else {
             Found(liveFor(a, live, ev), emptyList())

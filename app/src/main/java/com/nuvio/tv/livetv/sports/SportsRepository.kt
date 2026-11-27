@@ -440,6 +440,11 @@ class SportsRepository @Inject constructor(
     /** Add-ons that give live game streams (Backups & Game Channels' order). */
     suspend fun liveStreamAddonNames(): List<String> = addonSource.liveStreamAddonNames()
 
+    /** An explicit live lookup for one game, independent of the replay cache. */
+    internal suspend fun liveAddonsForEndedGame(ev: SportsEvent): List<LiveChannel> = withContext(Dispatchers.IO) {
+        addonSource.findLive(ev).map { it.channel }
+    }
+
     // ---- games from the sports addons you have installed (see SportsAddonSource)
 
     private val _addonVod = MutableStateFlow<Map<String, List<ChannelMatch>>>(emptyMap())
