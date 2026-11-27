@@ -461,7 +461,7 @@ class OnDemandHomeViewModelTest {
         val off = withTimeout(5_000) { model.home.first { it.rows.firstOrNull()?.catalogName == movie.name } }
         off.rows.forEach { assertSame(cards[it.catalogId], it.items) }
         fixture.settings.value = fixture.settings.value.copy(cleanVodGroupNames = true, nameRemovals = "UK, US")
-        withTimeout(5_000) { model.home.first { it.rows.all { row -> row.catalogName == "Action [4K]" } } }
+        withTimeout(5_000) { model.home.first { it.rows.size == 2 && it.rows.all { row -> row.catalogName == "Action [4K]" } } }
         assertEquals(initialReads, reads.get())
         io.mockk.coVerify(exactly = 1) { fixture.repository.start() }
 
