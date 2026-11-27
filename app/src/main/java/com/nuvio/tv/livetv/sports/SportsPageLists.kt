@@ -76,6 +76,10 @@ internal object SportsPageLists {
         hasChannels: Boolean,
         now: Long
     ): SportsPageData {
+        val listings = SportsEventListings.forPage(
+            events, known, follows, repo.dayStart(-SportsRepository.DAYS_BACK - 1),
+            repo.dayStart(SportsRepository.DAYS_AHEAD + 2), now
+        )
         val dayStart = repo.dayStart(q.day)
         val dayEnd = repo.dayStart(q.day + 1)
         val active = repo.activeLeagues(settings, follows).map { it.id }.toSet() + SportsMatcher.OTHER_ID
@@ -104,9 +108,9 @@ internal object SportsPageLists {
         }
         val weekStart = repo.dayStart(-1)
         val weekEnd = repo.dayStart(SportsRepository.DAYS_AHEAD + 1)
-        val dayEvents = if (leagueView != null) events.filter { ev ->
+        val dayEvents = if (leagueView != null) listings.filter { ev ->
             ev.leagueId == leagueView && ev.startMs < weekEnd && (ev.endMs ?: ev.startMs) >= weekStart
-        } else events.filter { ev -> onDay(ev, dayStart, dayEnd) }
+        } else listings.filter { ev -> onDay(ev, dayStart, dayEnd) }
         // All Events only: narrow the day to one sport (the sport row under the days).
         val order = SportsCatalog.sportsOrder(settings)
         val allSports = dayEvents.mapNotNull { SportsCatalog.league(it.leagueId)?.sport }.distinct()
@@ -128,7 +132,7 @@ internal object SportsPageLists {
             for (d in (q.day + 1)..SportsRepository.DAYS_AHEAD) {
                 val s = repo.dayStart(d)
                 val e = repo.dayStart(d + 1)
-                val games = events.filter { it.leagueId == lid && onDay(it, s, e) }
+                val games = listings.filter { it.leagueId == lid && onDay(it, s, e) }
                 if (games.isNotEmpty()) { nextDay = d; return@let games }
             }
             emptyList()

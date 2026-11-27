@@ -322,9 +322,19 @@ data class SportsFollows(
      */
     val order: List<String> = emptyList(),
     /** Single games with score alerts on (Score alerts on the game page). */
-    val alertGames: List<GameAlertPick> = emptyList()
+    val alertGames: List<GameAlertPick> = emptyList(),
+    /** Which event cards a league shows; an absent choice keeps both sources. */
+    val listingSources: Map<String, SportsListingSource> = emptyMap()
 ) {
     val isEmpty: Boolean get() = teams.isEmpty() && leagues.isEmpty() && words.isEmpty() && pins.isEmpty()
+
+    fun listingSource(leagueId: String): SportsListingSource = listingSources[leagueId] ?: SportsListingSource.BOTH
+
+    fun withListingSource(leagueId: String, source: SportsListingSource): SportsFollows = when {
+        leagueId.isBlank() -> this
+        source == SportsListingSource.BOTH -> copy(listingSources = listingSources - leagueId)
+        else -> copy(listingSources = listingSources + (leagueId to source))
+    }
 
     /**
      * Following [teamId]: in its own league, and in every competition it plays in (a football
@@ -362,6 +372,11 @@ data class SportsFollows(
         .put("alertGames", JSONArray().also { a ->
             alertGames.forEach { g -> a.put(JSONObject().put("e", g.eventId).put("l", g.leagueId).put("s", g.startMs)) }
         })
+        .also { o ->
+            if (listingSources.isNotEmpty()) o.put("listingSources", JSONObject().also { sources ->
+                listingSources.forEach { (id, source) -> if (id.isNotBlank()) sources.put(id, source.name) }
+            })
+        }
         .toString()
 
     companion object {
@@ -401,6 +416,13 @@ data class SportsFollows(
                             val g = a.optJSONObject(i) ?: return@mapNotNull null
                             GameAlertPick(g.optString("e").ifBlank { return@mapNotNull null }, g.optString("l"), g.optLong("s"))
                         }
+                    }.orEmpty(),
+                    listingSources = o.optJSONObject("listingSources")?.let { sources ->
+                        sources.keys().asSequence().mapNotNull { id ->
+                            val value = sources.opt(id) as? String
+                            val source = SportsListingSource.entries.firstOrNull { it.name == value }
+                            if (id.isBlank() || source == null) null else id to source
+                        }.toMap()
                     }.orEmpty()
                 )
             }.getOrDefault(SportsFollows())
