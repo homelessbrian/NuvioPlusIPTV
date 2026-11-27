@@ -105,7 +105,7 @@ class VodHomeGroupNamesTest {
             assertEquals(listOf(raw, raw), choices.map { it.rawName })
             assertEquals(2, choices.map { it.source }.distinct().size)
             settingsFlow.value = settingsFlow.value.copy(nameRemovals = "UK, Adult")
-            withTimeout(5_000) { groups.first { it.all { c -> c.name == "Action [4K]" } } }
+            withTimeout(5_000) { groups.first { it.size == 2 && it.all { c -> c.name == "Action [4K]" } } }
             io.mockk.coVerify(exactly = 1) { repository.categories(VodKind.MOVIE) }
             io.mockk.coVerify(exactly = 1) { repository.categories(VodKind.SERIES) }
         } finally {
