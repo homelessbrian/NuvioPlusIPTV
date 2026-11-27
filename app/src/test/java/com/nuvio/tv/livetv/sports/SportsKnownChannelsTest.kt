@@ -116,8 +116,9 @@ class SportsKnownChannelsTest {
         assertEquals(listOf(fixture.imported.id), page.map { it.id })
 
         runQuickMatch()
-        assertEquals(listOf(fixture.channel.key), repository.matches.value[fixture.imported.id].orEmpty().map { it.channel.key })
-        assertTrue(repository.matches.value.getValue(fixture.imported.id).single().how.startsWith("Guide:"))
+        val published = awaitMatches(fixture.imported.id)
+        assertEquals(listOf(fixture.channel.key), published[fixture.imported.id].orEmpty().map { it.channel.key })
+        assertTrue(published.getValue(fixture.imported.id).single().how.startsWith("Guide:"))
     }
 
     @Test fun `legacy listing context is opt in and SportsDB arrival keeps its existing precedence`() = runBlocking {
@@ -160,7 +161,9 @@ class SportsKnownChannelsTest {
         assertTrue(SportsEventListings.visibleKnown(displayedKnown, fixture.follows, fixture.now).any { it.id == guide.id })
 
         runQuickMatch()
-        assertEquals(listOf(fixture.channel.key), repository.matches.value[guide.id].orEmpty().map { it.channel.key })
+        val published = awaitMatches(guide.id)
+        assertEquals(listOf(fixture.channel.key), published[guide.id].orEmpty().map { it.channel.key })
+        assertTrue(published.getValue(guide.id).single().how.startsWith("Guide:"))
     }
 
     @Test fun `resetting listing source retains an explicit legacy reminder and cached game lookup`() = runBlocking {
@@ -178,7 +181,11 @@ class SportsKnownChannelsTest {
         val matches = field("_matches").get(repository) as MutableStateFlow<Map<String, List<ChannelMatch>>>
         matches.value = emptyMap()
         runQuickMatch()
-        assertEquals(listOf(fixture.channel.key), repository.matches.value[fixture.imported.id].orEmpty().map { it.channel.key })
+        assertEquals("The completed quick matcher must produce the reminder's channels before publication",
+            listOf(fixture.channel.key), matches.value[fixture.imported.id].orEmpty().map { it.channel.key })
+        val published = awaitMatches(fixture.imported.id)
+        assertEquals(listOf(fixture.channel.key), published[fixture.imported.id].orEmpty().map { it.channel.key })
+        assertTrue(published.getValue(fixture.imported.id).single().how.startsWith("Guide:"))
         assertTrue(repository.switchesFor(fixture.imported))
         @Suppress("UNCHECKED_CAST")
         val reminderContext = field("reminderContext").get(repository) as StateFlow<List<SportsEvent>>
@@ -263,6 +270,10 @@ class SportsKnownChannelsTest {
             "runMatch", Boolean::class.javaPrimitiveType, Continuation::class.java
         ).apply { isAccessible = true }
         method.invoke(repository, true, continuation)
+    }
+
+    private suspend fun awaitMatches(eventId: String): Map<String, List<ChannelMatch>> = withTimeout(10_000) {
+        repository.matches.first { it[eventId].orEmpty().isNotEmpty() }
     }
 
     private fun field(name: String) = SportsRepository::class.java.getDeclaredField(name).apply { isAccessible = true }
