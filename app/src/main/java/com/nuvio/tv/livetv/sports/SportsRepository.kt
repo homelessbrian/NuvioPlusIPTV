@@ -19,6 +19,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -83,9 +85,18 @@ class SportsRepository @Inject constructor(
         if (com.nuvio.tv.livetv.data.BackgroundWork.onDemandPlaying.value) throw SportsMatchDeferred()
     }
 
-    private fun requiredDuringPlayback(): Set<String> = SportsPlaybackPolicy.requiredLeagues(
-        settings.value, follows.value, events.value, SportsLive.pins.value, System.currentTimeMillis()
-    )
+    private fun requiredDuringPlayback(): Set<String> {
+        val now = System.currentTimeMillis()
+        val f = follows.value
+        val current = events.value
+        val restored = reminderContext.value
+        val requiredEvents = if (restored.isEmpty()) current else object : AbstractList<SportsEvent>() {
+            override val size: Int get() = current.size + restored.size
+            override fun get(index: Int): SportsEvent =
+                if (index < current.size) current[index] else restored[index - current.size]
+        }
+        return SportsPlaybackPolicy.requiredLeagues(settings.value, f, requiredEvents, SportsLive.pins.value, now)
+    }
 
     private class ScoreRefreshDeferred : RuntimeException(null, null, false, false)
 
@@ -153,12 +164,105 @@ class SportsRepository @Inject constructor(
     private val guideListings = MutableStateFlow<SportsMatcher.GuideListings?>(null)
     private val titleExclusions = savedFollows.map { it.excludedGuideTitles }
         .distinctUntilChanged().map(::SportsGuideTitleExclusions)
-    private val guideData = combine(guideListings, titleExclusions) { listings, exclusions ->
-        if (listings == null) emptyMap()
-        else withContext(if (pageOnly()) Dispatchers.Default else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
-            sportsCatching { listings.events(exclusions) }.getOrDefault(emptyMap())
-        }
-    }.distinctUntilChanged()
+    /**
+     * The guide's sports with excluded titles left out. Set together with [guideListings], so a
+     * search round works with its own guide hits; excluded titles changing regroups the last hits.
+     */
+    private val guideData = MutableStateFlow<Map<Long, List<SportsEvent>>>(emptyMap())
+
+    private fun guideEvents(listings: SportsMatcher.GuideListings?, exclusions: SportsGuideTitleExclusions) =
+        if (listings == null) emptyMap() else sportsCatching { listings.events(exclusions) }.getOrDefault(emptyMap())
+
+    /** Only when something in it changed: everything built from the games is worked out again on a change. */
+    private fun publishGuide(listings: SportsMatcher.GuideListings?) {
+        val days = guideEvents(listings, SportsGuideTitleExclusions(follows.value.excludedGuideTitles))
+        guideListings.value = listings
+        if (days != guideData.value) guideData.value = days
+    }
+    /** Source choices are available offline, and also for leagues supplied by a later index. */
+    private val _listingSourceLeagues = MutableStateFlow(
+        SportsCatalog.all.filter(SportsEventListings::hasSourceChoice).mapTo(HashSet()) { it.id }.toSet()
+    )
+    val listingSourceLeagues: StateFlow<Set<String>> = _listingSourceLeagues.asStateFlow()
+
+    /**
+     * Some guide/fixture cards are replaced before `known`. Restore only an explicitly chosen
+     * source; keep the normal event/known projections and SportsDB precedence unchanged.
+     */
+    internal val listingContext: Flow<List<SportsEvent>> = combine(
+        fixtureData, tsdbData, guideData,
+        follows.map { f -> f.listingSources.filterValues { it != SportsListingSource.BOTH } }.distinctUntilChanged()
+    ) { fixtures, tsdb, guide, choices -> selectedListingContext(fixtures, tsdb, guide, choices) }
+        .distinctUntilChanged().flowOn(Dispatchers.Default)
+
+    private fun selectedListingContext(
+        fixtures: Map<String, LeagueData>, tsdb: Map<String, LeagueData>,
+        guide: Map<Long, List<SportsEvent>>, choices: Map<String, SportsListingSource>
+    ): List<SportsEvent> {
+        if (choices.isEmpty()) return emptyList()
+        val scheduled = choices.filterValues { it == SportsListingSource.SCHEDULE }.keys
+        val guideOnly = choices.filterValues { it == SportsListingSource.GUIDE }.keys
+        val fixturesChosen = selectedFixtureEvents(fixtures, tsdb, scheduled)
+        val guideChosen = if (guideOnly.isEmpty()) emptyList() else guide.values.asSequence().flatten()
+            .filter { it.leagueId in guideOnly }.toList()
+        return fixturesChosen + guideChosen
+    }
+
+    private fun selectedFixtureEvents(
+        fixtures: Map<String, LeagueData>, tsdb: Map<String, LeagueData>, leagues: Set<String>
+    ): List<SportsEvent> = if (leagues.isEmpty()) emptyList() else leagues.flatMap { id ->
+        if (tsdb[id]?.events.isNullOrEmpty()) fixtures[id]?.events.orEmpty() else emptyList()
+    }
+
+    private val reminderContext: StateFlow<List<SportsEvent>> = combine(
+        fixtureData, guideData, follows.map { it.reminders }.distinctUntilChanged()
+    ) { fixtures, guide, reminders -> reminderEvents(fixtures, guide, reminders, System.currentTimeMillis()) }
+        .distinctUntilChanged().flowOn(Dispatchers.Default)
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    private fun reminderEvents(
+        fixtures: Map<String, LeagueData>, guide: Map<Long, List<SportsEvent>>,
+        reminders: List<SportsReminder>, now: Long
+    ): List<SportsEvent> {
+        val ids = reminders.asSequence().filter { it.startMs in (now - 8 * HOUR)..(now + SportsMatcher.AHEAD_MS) }
+            .map { it.eventId }.toSet()
+        if (ids.isEmpty()) return emptyList()
+        return (fixtures.values.asSequence().flatMap { it.events.asSequence() } + guide.values.asSequence().flatten())
+            .filter { it.id in ids && SportsMatchingEvents.inWindow(it, now) }.distinctBy { it.id }.toList()
+    }
+
+    /** Resolve an explicitly opened cached card even after its source is hidden from listings. */
+    fun eventById(eventId: String): SportsEvent? {
+        events.value.firstOrNull { it.id == eventId }?.let { return it }
+        known.value.firstOrNull { it.id == eventId }?.let { return it }
+        val found = fixtureData.value.values.asSequence().flatMap { it.events.asSequence() }.firstOrNull { it.id == eventId }
+            ?: guideData.value.values.asSequence().flatten().firstOrNull { it.id == eventId }
+            ?: return null
+        return SportsEventListings.withContext(emptyList(), listOf(found), System.currentTimeMillis()).first()
+    }
+
+    private fun matchingInputEvents(now: Long, s: SportsSettings, requested: Set<String> = emptySet()): List<SportsEvent> {
+        val f = follows.value
+        val choices = f.listingSources.filterValues { it != SportsListingSource.BOTH }
+        val reminders = reminderEvents(fixtureData.value, guideData.value, f.reminders, now)
+        val opened = addonJobs.keys.filter { id -> events.value.none { it.id == id } && known.value.none { it.id == id } }
+            .mapNotNull(::eventById).filter { SportsMatchingEvents.inWindow(it, now) }
+        if (choices.isEmpty() && reminders.isEmpty() && opened.isEmpty())
+            return SportsMatchingEvents.select(events.value, known.value, s, now, requested)
+        val context = selectedListingContext(fixtureData.value, tsdbData.value, guideData.value, choices)
+        val guideLeagues = choices.filterValues { it == SportsListingSource.SCHEDULE }.keys +
+            (reminders + opened).filter { it.source != EventSource.GUIDE }.map { it.leagueId }
+        fun chosenGuide(event: SportsEvent) = event.source == EventSource.GUIDE &&
+            (event.leagueId in choices || event.leagueId in guideLeagues)
+        val all = SportsEventListings.withContext(known.value.filterNot(::chosenGuide), context + reminders + opened, now)
+        // plainEvents is debounced. Use this scan's guide hits now, not the previous published
+        // copies, so a newly restored schedule card gets channels in this same matching round.
+        val guide = guideData.value.values.asSequence().flatten().filter { event ->
+            event.source == EventSource.GUIDE && event.leagueId in guideLeagues
+        }.toList()
+        return SportsMatchingEvents.select(events.value.filterNot(::chosenGuide), all + guide, s, now, requested)
+    }
+
     /** TheSportsDB's live rugby (match minute), read while a rugby game is on: see [RugbyLive]. */
     private val rugbyLive = MutableStateFlow<RugbyLive.Snapshot?>(null)
     @Volatile private var rugbyLiveReadAt = 0L
@@ -624,6 +728,13 @@ class SportsRepository @Inject constructor(
         // reminder, the guide).
         playback.gameFailover = ::nextChannelForGame
         watchDelayedScores()
+        // Excluded titles changed: regroup the last guide hits without searching the guide again.
+        scope.launch(com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
+            titleExclusions.drop(1).collect { exclusions ->
+                val days = guideEvents(guideListings.value, exclusions)
+                if (days != guideData.value) guideData.value = days
+            }
+        }
     }
 
     /**
@@ -1666,6 +1777,8 @@ class SportsRepository @Inject constructor(
         if (list.isEmpty()) return false
         list.forEach { if (!it.alias) tsdbTeams[it.league.id] = it.teams }
         tsdbAlias = list.filter { it.alias }.associate { it.league.id to it.tsdbId }
+        _listingSourceLeagues.value = SportsCatalog.all.filter(SportsEventListings::hasSourceChoice)
+            .mapTo(HashSet()) { it.id }.apply { addAll(tsdbAlias.keys) }
         SportsCatalog.setExtra(list.filterNot { it.alias }.map { it.league })
         return true
     }
@@ -2028,8 +2141,9 @@ class SportsRepository @Inject constructor(
             // a list of ~1000 strings each time the feed updates: which games there are, and their
             // details (start times, how many networks listed). The details move often while games
             // are on (a network added, a time nudged), so on their own they only get a quick match.
-            combine(events, known, settings) { current, all, s ->
-                SportsMatchingEvents.select(current, all, s, System.currentTimeMillis())
+            combine(events, known, settings, listingContext, reminderContext) { current, all, s, context, reminders ->
+                val now = System.currentTimeMillis()
+                SportsMatchingEvents.select(current, SportsEventListings.withContext(all, context + reminders, now), s, now)
             }.map { list ->
                 var games = 17L
                 var details = 17L
@@ -2378,6 +2492,9 @@ class SportsRepository @Inject constructor(
             SportsCatalog.all.filter { it.guideOnly }, f.words, channels.associateBy { it.key },
             live.epgOffsetMinutes * MINUTE, now, savedOnly = true)
         if (listings != null && guideListings.compareAndSet(null, listings)) {
+            val days = guideEvents(listings, SportsGuideTitleExclusions(f.excludedGuideTitles))
+            // A search round that finished meanwhile has newer hits: keep those.
+            if (guideListings.value === listings) guideData.value = days
             LiveTvLoadReport.add("Sports: restored guide listings from the last search")
         }
     }
@@ -2444,11 +2561,11 @@ class SportsRepository @Inject constructor(
             val s = SportsPickedChannels.resolve(saved, channelStore.displayChannels.value)
             // My Sports also shows saved cards that plainEvents replaced with a guide card.
             // They need the same channel search and saved choices, within the existing horizon.
-            val matchingEvents = SportsMatchingEvents.select(events.value, known.value, s, now)
             val requested = synchronized(gameSearches) {
                 gameSearches.entries.removeAll { it.value.expiresAt < now }
                 gameSearches.toMap()
             }
+            val matchingEvents = matchingInputEvents(now, s, requested.keys)
             val f = follows.value
             val exclusions = SportsGuideTitleExclusions(f.excludedGuideTitles)
             // Sports ESPN doesn't cover, from the guide: yesterday to tomorrow, every one of
@@ -2492,10 +2609,10 @@ class SportsRepository @Inject constructor(
                 matcher.guideListingsDays((-1..1).map { dayStart(it) to dayStart(it + 1) }, guideLeagues, f.words, keys, shift, now)
             }.getOrNull()
             matchingCheckpoint()
-            guideListings.value = listings
+            publishGuide(listings)
             val result = matcher.match(
                 SportsMatcher.Input(
-                    events = SportsMatchingEvents.select(events.value, known.value, s, now, requested.keys),
+                    events = matchingInputEvents(now, s, requested.keys),
                     channels = channels,
                     quality = user.channelQuality,
                     shiftMs = shift,

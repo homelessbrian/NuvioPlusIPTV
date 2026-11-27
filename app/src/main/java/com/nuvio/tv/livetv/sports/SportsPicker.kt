@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +50,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,7 +77,10 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     val follows by viewModel.follows.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val listingSourceLeagues by viewModel.listingSourceLeagues.collectAsStateWithLifecycle()
     val colors = NuvioTheme.colors
+    fun hasListingChoice(l: League): Boolean = SportsEventListings.hasSourceChoice(l) ||
+        (l.guideOnly && l.id in listingSourceLeagues) || l.id in follows.listingSources
     val sports = remember(settings) { SportsCatalog.sportsOrder(settings) }
     var sport by rememberSaveable { mutableStateOf(sports.firstOrNull()?.name ?: Sport.FOOTBALL.name) }
     val leagues = remember(sport, settings) {
@@ -206,6 +214,7 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
                                         modifier = (if (i == 0) Modifier.focusRequester(resultFirst) else Modifier)
                                             .focusUp(if (hasFollows) followFirst else searchReq),
                                         league = l,
+                                        hasListingChoice = hasListingChoice(l),
                                         selected = false,
                                         followed = l.id in follows.pins,
                                         teamsFollowed = follows.teams.count { it.leagueId == l.id },
@@ -255,6 +264,7 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
                                     .focusUp(if (hasFollows) followFirst else null)
                                     .steadyRowKeys(leagueRowState, i, leagues.size) { j -> leagueReq(leagues[j].id) },
                                 league = l,
+                                hasListingChoice = hasListingChoice(l),
                                 selected = l.id == league?.id,
                                 followed = l.id in follows.pins,
                                 teamsFollowed = follows.teams.count { it.leagueId == l.id },
@@ -267,6 +277,11 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
                     Spacer(Modifier.height(10.dp))
                     if (league != null) {
                         val followed = league.id in follows.pins
+                        val sourceAvailable = hasListingChoice(league)
+                        var sourceChoiceSeen by remember(league.id) { mutableStateOf(sourceAvailable) }
+                        LaunchedEffect(sourceAvailable) { if (sourceAvailable) sourceChoiceSeen = true }
+                        // Resetting a saved choice must not remove the button that has focus.
+                        val listingChoice = sourceAvailable || sourceChoiceSeen
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             // Following a league: its row on My Sports. A league with teams is
                             // there to browse; an event sport's events (UFC, F1…) count as yours.
@@ -281,13 +296,14 @@ fun SportsPicker(viewModel: SportsViewModel, onClose: () -> Unit) {
                             SportsPill("Exclude titles…", onClick = { showExclusions = true })
                         }
                         Spacer(Modifier.height(10.dp))
+                        if (listingChoice) {
+                            SportsListingSourceChoices(follows.listingSource(league.id)) { source ->
+                                viewModel.repo.updateFollows { it.withListingSource(league.id, source) }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                        }
                         when {
-                            league.sport == Sport.WRESTLING || league.id == "guide/boxing" -> LiveText(
-                                "${league.name}'s schedule (" + (if (league.id == "guide/boxing") "fight cards" else "weekly shows and big events") +
-                                    ", with times and venues) comes from TheSportsDB, updated every day. " +
-                                    "Your own TV guide is checked too, to find the channel it's on. Follow it to see every show on My Sports.",
-                                color = colors.TextSecondary, size = 13.sp, maxLines = 4
-                            )
+                            listingChoice && league.guideOnly -> Unit
                             league.guideOnly -> LiveText(
                                 "${league.name} comes from your own TV guide: live shows with \"${league.guideWords.first()}\" in the title. " +
                                     "Follow it to see them on My Sports. Follow a name (a player, a team) to catch shows that mention it.",
@@ -386,6 +402,38 @@ internal fun ExcludedGuideTitlesDialog(
             }
             LaunchedEffect(Unit) { first.requestFocus() }
         }
+    }
+}
+
+/** The league's card sources; it remains one followed league with one row on My Sports. */
+@Composable
+internal fun SportsListingSourceChoices(
+    source: SportsListingSource,
+    modifier: Modifier = Modifier,
+    onSelect: (SportsListingSource) -> Unit
+) {
+    Column(modifier) {
+        LiveText("Event listings", color = NuvioTheme.colors.TextSecondary, size = 12.sp, weight = FontWeight.Bold)
+        Spacer(Modifier.height(5.dp))
+        Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                SportsListingSource.SCHEDULE to "Scheduled events",
+                SportsListingSource.GUIDE to "TV guide listings",
+                SportsListingSource.BOTH to "Both"
+            ).forEach { (choice, label) ->
+                SportsPill(label, modifier = Modifier.semantics {
+                    role = Role.RadioButton
+                    selected = source == choice
+                }, selected = source == choice) { onSelect(choice) }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        LiveText(
+            "Choose the event cards shown for this league. Scheduled events come from the sports feeds; " +
+                "TV guide listings are extra events found in your guide. Your guide still helps find channels for scheduled events. " +
+                "Names you follow remain included.",
+            color = NuvioTheme.colors.TextSecondary, size = 13.sp, maxLines = 4
+        )
     }
 }
 
@@ -509,6 +557,7 @@ private fun SportRow(sport: Sport, selected: Boolean, count: Int, modifier: Modi
 private fun LeagueCard(
     modifier: Modifier = Modifier,
     league: League,
+    hasListingChoice: Boolean,
     selected: Boolean,
     followed: Boolean,
     teamsFollowed: Int,
@@ -536,7 +585,7 @@ private fun LeagueCard(
             LiveText(
                 listOfNotNull(
                     if (teamsFollowed > 0) "$teamsFollowed followed" else null,
-                    if (league.sport == Sport.WRESTLING || league.id == "guide/boxing") "Schedule + your guide" else if (league.guideOnly) "From your guide" else null,
+                    if (hasListingChoice) "Schedule + TV guide" else if (league.guideOnly) "From your guide" else null,
                     // "inRegion" is really "shown on the Hub by default" (your region, or your
                     // own choice from the Leagues dialog) — the old wording implied a broadcast
                     // restriction that was never real, and games and scores are fetched for

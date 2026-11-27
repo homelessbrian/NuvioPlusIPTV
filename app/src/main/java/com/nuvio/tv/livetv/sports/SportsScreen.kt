@@ -470,7 +470,7 @@ fun SportsScreen(
     ) {
         // The same soft glow in the theme colour as the top of the guide.
         ThemeGlow(backdrop, Modifier.fillMaxWidth().height(SPORTS_GLOW_HEIGHT))
-        val opened = openId?.let { id -> known.firstOrNull { it.id == id } }
+        val opened = openId?.let { id -> known.firstOrNull { it.id == id } ?: viewModel.eventById(id) }
         if (openId != null && opened == null && known.isNotEmpty()) { openId = null; fromRoute = null; fromLabel = null }
         when {
             picker -> SportsPicker(viewModel = viewModel, onClose = { picker = false; returnTo = null; rowsReturning = false; viewModel.repo.markSetUp() })
