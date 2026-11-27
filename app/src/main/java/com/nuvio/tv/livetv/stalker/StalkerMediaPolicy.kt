@@ -79,6 +79,13 @@ class StalkerMediaPolicy internal constructor(
         return StalkerMimeProbe.probe(url, VpnHttpClient.wrap(checkNotNull(client)))
     }
 
+    /** Direct file transfers use the same credential and redirect boundary as playback. */
+    @Synchronized
+    internal fun mediaCalls(): Call.Factory {
+        httpFactory()
+        return VpnHttpClient.wrap(checkNotNull(client))
+    }
+
     @Synchronized
     fun observe(connection: HttpURLConnection) {
         if (retired) { connection.disconnect(); throw IOException("The Stalker source changed. Retry playback.") }
