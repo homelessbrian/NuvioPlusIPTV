@@ -16,8 +16,10 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
+import android.util.AtomicFile
 import android.util.Log
 import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.core.player.MovieStartupTrace
 import java.io.File
 import java.lang.ref.WeakReference
 import kotlin.system.exitProcess
@@ -38,6 +40,11 @@ object CrashCatcher {
     private const val FILE_NAME = "last_crash.txt"
     private const val FREEZE_FILE = "pending_freeze.txt"
     private const val BUSY_FILE = "busy_report.txt"
+    private const val SLOW_START_FILE = "slow_movie_startup.txt"
+    private const val RECOVERED_FILE = "recovered_movie_freeze.txt"
+    internal const val SLOW_START_HEADING = "SAVED SLOW MOVIE START"
+    internal const val RECOVERED_HEADING = "RECOVERED MOVIE STARTUP FREEZE"
+    private val startupFileLock = Any()
     private const val PREFS = "livetv_crash_catcher"
     private const val KEY_EXIT_SEEN = "exit_seen_at"
     private const val KEY_SELF_KILL = "self_kill_at"
@@ -150,7 +157,15 @@ object CrashCatcher {
     }
 
     fun lastReport(context: Context): String? {
-        val crash = runCatching { File(context.filesDir, FILE_NAME).takeIf { it.exists() }?.readText() }.getOrNull()
+        val crashFile = File(context.filesDir, FILE_NAME)
+        val crash = runCatching { crashFile.takeIf { it.exists() }?.readText()?.trimEnd()?.ifBlank { null } }.getOrNull()
+        val slowFile = File(context.filesDir, SLOW_START_FILE)
+        val recoveredFile = File(context.filesDir, RECOVERED_FILE)
+        fun storedStartup(file: File): String? = runCatching {
+            synchronized(startupFileLock) { AtomicFile(file).openRead().bufferedReader().use { it.readText() }.trimEnd().ifBlank { null } }
+        }.getOrNull()
+        val slow = storedStartup(slowFile)
+        val recovered = storedStartup(recoveredFile)
         val busy = runCatching {
             val file = File(context.filesDir, BUSY_FILE).takeIf { it.exists() } ?: return@runCatching null
             val report = file.readText().trimEnd().ifBlank { return@runCatching null }
@@ -160,8 +175,37 @@ object CrashCatcher {
             "SAVED CPU SNAPSHOT (file last saved: $savedAt)\n" +
                 "This snapshot may be from a different app run than any crash or freeze report.\n\n$report"
         }.getOrNull()
-        return listOfNotNull(crash?.trimEnd()?.ifBlank { null }, busy?.trimEnd()?.ifBlank { null })
+        // The latest movie incident may be the one the viewer reopened this report to share.
+        val incidents = listOfNotNull(crash?.let { crashFile to it }, recovered?.let { recoveredFile to it }, slow?.let { slowFile to it })
+            .sortedByDescending { it.first.lastModified() }
+            .mapIndexed { index, (file, report) ->
+                if (index > 0 && file == crashFile) "PREVIOUS SAVED CRASH OR FREEZE\n$report" else report
+            }
+        return (incidents + listOfNotNull(busy))
             .joinToString("\n\n────────\n\n").ifBlank { null }
+    }
+
+    private fun saveSlowStart(app: Context, snapshot: String) {
+        val description = "The UI answered at least ${MovieStartupTrace.SLOW_STARTUP_MS / 1000}s into player startup with no first picture reported. " +
+            "This sample is separate from any saved crash."
+        saveStartupIncident(app, SLOW_START_FILE, SLOW_START_HEADING, "$description\n$snapshot")
+    }
+
+    private fun saveStartupIncident(app: Context, name: String, heading: String, snapshot: String) {
+        val text = "$heading (observed: ${reportTime(System.currentTimeMillis())})\n" +
+            "Nuvio + IPTV ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · kit ${com.nuvio.tv.livetv.model.LiveTvLoadReport.KIT_STAMP}\n" +
+            "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}\n$snapshot"
+        synchronized(startupFileLock) {
+            val file = AtomicFile(File(app.filesDir, name))
+            val stream = file.startWrite()
+            try {
+                stream.write(text.toByteArray(Charsets.UTF_8))
+                file.finishWrite(stream)
+            } catch (failure: Throwable) {
+                file.failWrite(stream)
+                throw failure
+            }
+        }
     }
 
     // ------------------------------------------------------------------ busy processor
@@ -420,6 +464,9 @@ object CrashCatcher {
             var looks = 0
             var nextLookAt = 0L
             var lastWriteAt = 0L
+            val playbackSamples = PlaybackFreezeSamples()
+            var nextSlowCheck = 0L
+            var savedSlowSnapshot: String? = null
             while (true) {
                 try { Thread.sleep(500) } catch (_: InterruptedException) { return@Thread }
                 // This checker must never be what closes the app. When memory is completely full,
@@ -431,11 +478,35 @@ object CrashCatcher {
                 // The whole app was paused (in the background, device asleep): start over.
                 if (now - lastLoop > 3_000) { answeredAt.set(now); askedAt = 0L }
                 lastLoop = now
-                if (askedAt == 0L || answeredAt.get() >= askedAt) {
-                    if (written) { runCatching { File(app.filesDir, FREEZE_FILE).delete() }; written = false }
+                val responseAt = answeredAt.get()
+                val heartbeatAnswered = askedAt != 0L && responseAt >= askedAt
+                if (askedAt == 0L || heartbeatAnswered) {
+                    if (written) {
+                        if (heartbeatAnswered && !memoryNearlyFull()) {
+                            playbackSamples.recovered(responseAt - askedAt, samples)?.let {
+                                runCatching {
+                                    saveStartupIncident(app, RECOVERED_FILE, RECOVERED_HEADING, it)
+                                    // This heartbeat already has a more informative record. A later
+                                    // startup milestone can still update the separate slow-start file.
+                                    savedSlowSnapshot = MovieStartupTrace.slowSnapshot()
+                                }
+                            }
+                        }
+                        runCatching { File(app.filesDir, FREEZE_FILE).delete() }
+                        written = false
+                    }
+                    if (looks > 0) playbackSamples.reset()
                     ownLines.clear(); samples.clear(); looks = 0; nextLookAt = 0L; lastWriteAt = 0L
                     askedAt = now
                     main.post { answeredAt.set(SystemClock.uptimeMillis()) }
+                    if (heartbeatAnswered && now >= nextSlowCheck) {
+                        nextSlowCheck = now + 1_000
+                        val snapshot = MovieStartupTrace.slowSnapshot()
+                        if (snapshot != null && snapshot != savedSlowSnapshot && !memoryNearlyFull()) {
+                            saveSlowStart(app, snapshot)
+                            savedSlowSnapshot = snapshot
+                        }
+                    }
                 } else if (now - askedAt > 1_500 && now >= nextLookAt && looks < 60) {
                     // Looks start after 1.5 s (well before Android or the user gives up).
                     nextLookAt = now + 500
@@ -446,6 +517,7 @@ object CrashCatcher {
                         .distinct()
                         .forEach { ownLines[it] = (ownLines[it] ?: 0) + 1 }
                     val tight = memoryNearlyFull()
+                    if (!tight) playbackSamples.observe(now - askedAt, stack, MovieStartupTrace.snapshot())
                     // A few full looks, spread out, for reading by hand (left out when memory is
                     // nearly full: they're the biggest part of the note).
                     if (!tight && (looks == 1 || looks == 5 || looks == 10 || looks == 20)) {
@@ -465,6 +537,7 @@ object CrashCatcher {
                             appendLine(situation(app))
                             appendLine()
                             appendLine("APP FROZE (stopped responding for ${(now - askedAt) / 1000}s and was closed)")
+                            if (!tight) playbackSamples.appendTo(this)
                             appendLine("The app's own code seen in $looks looks (most often first):")
                             if (ownLines.isEmpty()) appendLine("    (none: only Android or library code)")
                             ownLines.entries.sortedByDescending { it.value }.take(if (tight) 10 else 25)
@@ -529,6 +602,7 @@ object CrashCatcher {
             appendLine("Thread: ${thread.name}")
             appendLine()
             appendLine("ROOT CAUSE: $root")
+            if (root !is OutOfMemoryError && !memoryNearlyFull()) MovieStartupTrace.snapshot()?.let { appendLine(it) }
             root.stackTrace.take(12).forEach { appendLine("    at $it") }
             appendLine()
             appendLine("FULL TRACE:")

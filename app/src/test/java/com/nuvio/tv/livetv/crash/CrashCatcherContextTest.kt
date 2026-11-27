@@ -4,6 +4,9 @@ import android.app.ActivityManager
 import android.app.Application
 import android.app.ApplicationExitInfo
 import android.content.Context
+import androidx.media3.common.Player
+import com.nuvio.tv.core.player.MovieStartupStep
+import com.nuvio.tv.core.player.MovieStartupTrace
 import io.mockk.every
 import io.mockk.mockk
 import java.io.File
@@ -118,6 +121,31 @@ class CrashCatcherContextTest {
         assertTrue(report.endsWith("Legacy CPU sample"))
     }
 
+    @Test fun `slow movie startup is readable without a crash and stays separate from other runs`() {
+        val save = CrashCatcher::class.java.getDeclaredMethod("saveSlowStart", Context::class.java, String::class.java)
+            .apply { isAccessible = true }
+        save.invoke(CrashCatcher, context, "Movie startup attempt 1: prepare returned")
+        val slowOnly = requireNotNull(CrashCatcher.lastReport(context))
+        assertTrue(slowOnly.startsWith(CrashCatcher.SLOW_START_HEADING))
+        assertTrue(slowOnly.contains("Movie startup attempt 1: prepare returned"))
+        assertFalse(File(directory, "last_crash.txt").exists())
+
+        val slowFile = File(directory, "slow_movie_startup.txt")
+        val saved = slowFile.lastModified()
+        val crash = File(directory, "last_crash.txt").apply { writeText("Older freeze report") }
+        assertTrue(crash.setLastModified(saved - 60_000))
+        val both = requireNotNull(CrashCatcher.lastReport(context))
+        assertTrue(both.startsWith(slowOnly))
+        assertTrue(both.contains("PREVIOUS SAVED CRASH OR FREEZE\nOlder freeze report"))
+        assertTrue(shortCrash(both).contains("Movie startup attempt 1"))
+        assertEquals("Older freeze report", crash.readText())
+
+        assertTrue(crash.setLastModified(saved + 60_000))
+        val latestCrash = requireNotNull(CrashCatcher.lastReport(context))
+        assertTrue(latestCrash.startsWith("Older freeze report"))
+        assertTrue(latestCrash.endsWith(slowOnly))
+    }
+
     @Test fun `current memory snapshot explicitly identifies Java heap usage and maximum`() {
         val method = CrashCatcher::class.java.getDeclaredMethod("situation", Context::class.java).apply {
             isAccessible = true
@@ -125,6 +153,45 @@ class CrashCatcherContextTest {
         val report = method.invoke(CrashCatcher, context) as String
 
         assertTrue(report, Regex("Java heap \\d+/\\d+ MiB used/max").containsMatchIn(report))
+    }
+
+    @Test fun `a recovered startup freeze is retained without overwriting the actual crash`() {
+        val prior = File(directory, "last_crash.txt").apply { writeText("Prior crash") }
+        val method = CrashCatcher::class.java.getDeclaredMethod(
+            "saveStartupIncident", Context::class.java, String::class.java, String::class.java, String::class.java
+        ).apply { isAccessible = true }
+        method.invoke(CrashCatcher, context, "recovered_movie_freeze.txt", CrashCatcher.RECOVERED_HEADING,
+            "The UI heartbeat returned after 16300ms.\nMovie startup #3")
+        assertTrue(prior.setLastModified(timestamp - 60_000L))
+        val report = requireNotNull(CrashCatcher.lastReport(context))
+        assertTrue(report.startsWith(CrashCatcher.RECOVERED_HEADING))
+        assertTrue(shortCrash(report).contains("heartbeat returned after 16300ms"))
+        assertTrue(report.endsWith("PREVIOUS SAVED CRASH OR FREEZE\nPrior crash"))
+        assertEquals("Prior crash", prior.readText())
+    }
+
+    @Test fun `short report keeps session timing Binder evidence and the last milestone of a long timeline`() {
+        var time = 0L
+        val trace = MovieStartupTrace.Recorder { time }
+        val attempt = trace.begin()
+        attempt.sessionStateTiming.measure(Player.STATE_BUFFERING) { time += 8_000 }
+        attempt.mark(MovieStartupStep.UPSTREAM_READ)
+        val timeline = requireNotNull(trace.snapshot()).replace("+0 start · ", "+0 start · " + "+1 earlier step · ".repeat(120))
+        val samples = PlaybackFreezeSamples()
+        samples.observe(10_200, arrayOf(StackTraceElement("android.os.BinderProxy", "transactNative", null, -2),
+            StackTraceElement("android.media.session.MediaSession", "setPlaybackState", null, 444)), timeline)
+        val full = buildString {
+            appendLine("APP FROZE (stopped responding for 16s and was closed)")
+            samples.appendTo(this)
+            appendLine("PREVIOUS SAVED CRASH OR FREEZE")
+        }
+        assertTrue(full.length > 1_900)
+        val short = shortCrash(full)
+        assertTrue(short.length <= 1_900)
+        assertTrue(short.contains("1/1 main-thread samples (at +10200ms)"))
+        assertTrue(short.contains("longest BUFFERING at +0ms took 8000ms"))
+        assertTrue(short.contains("+8000 waiting for first progressive read"))
+        assertFalse(short.contains("PREVIOUS SAVED"))
     }
 
     private fun exitReport(): String? {

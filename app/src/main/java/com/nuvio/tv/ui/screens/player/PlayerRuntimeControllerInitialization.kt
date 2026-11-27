@@ -69,6 +69,8 @@ import com.nuvio.tv.core.player.DolbyVisionConversionStats
 import com.nuvio.tv.core.player.DolbyVisionExtractorsFactory
 import com.nuvio.tv.core.player.DoviBridge
 import com.nuvio.tv.core.player.LastPlaybackDiagnostics
+import com.nuvio.tv.core.player.MovieStartupStep
+import com.nuvio.tv.core.player.MovieStartupTrace
 import com.nuvio.tv.core.tracking.TrackingScrobbleAction
 import com.nuvio.tv.core.util.findCause
 import com.nuvio.tv.ui.screens.settings.MemoryBudget
@@ -157,6 +159,9 @@ private suspend fun PlayerRuntimeController.resolveClipPlaylist(
 
 private const val CLIP_PLAYLIST_TIMEOUT_MS = 8_000L
 
+private fun MediaLoadData.isStartupMediaLoad(): Boolean =
+    dataType == C.DATA_TYPE_MANIFEST || (dataType == C.DATA_TYPE_MEDIA && trackType != C.TRACK_TYPE_TEXT)
+
 private fun PlayerRuntimeController.disposeExoPlayerBeforeRebuild() {
     notifyAudioSessionUpdate(false)
     releaseMediaSession()
@@ -206,6 +211,11 @@ internal fun PlayerRuntimeController.initializePlayer(
     val requestedUrl = url
     val requestedHeaders = headers
     val isStalker = requestedUrl.startsWith("stalker:", ignoreCase = true)
+    movieStartupAttempt?.retire()
+    val startupTrace = if (!isStalker && !LivePlaybackUiPolicy.isLiveContentType(contentType) &&
+        overrideInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER
+    ) MovieStartupTrace.begin() else null
+    movieStartupAttempt = startupTrace
 
     scope.launch {
         val prepared = try {
@@ -242,6 +252,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             throw cancelled
         } catch (failure: Exception) {
             if (!afrPreflightGate.isCurrent(afrPreflightToken)) return@launch
+            startupTrace?.mark(MovieStartupStep.ERROR)
             _uiState.update {
                 it.copy(error = if (isStalker) "VPN protection could not be verified for this Stalker stream."
                     else failure.message ?: "VPN connection could not be verified.", showLoadingOverlay = false)
@@ -286,6 +297,10 @@ internal fun PlayerRuntimeController.initializePlayer(
             configuredBackBufferMs = 0
 
             val playerSettings = playerSettingsDataStore.playerSettings.first()
+            startupTrace?.requestedVideoOptions(
+                removeHdr10Plus = playerSettings.stripHdr10PlusSei,
+                tunneling = playerSettings.tunnelingEnabled
+            )
             currentPlayerSettingsForReport = playerSettings
             rememberAudioDelayPerDeviceEnabled = playerSettings.rememberAudioDelayPerDevice
             // Always watch output-device changes so Bluetooth connect/disconnect can switch
@@ -333,6 +348,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                 resolvedAutoPlayerEngine = null
             }
             currentInternalPlayerEngine = effectiveInternalPlayerEngine
+            if (effectiveInternalPlayerEngine == InternalPlayerEngine.MVP_PLAYER) startupTrace?.retire()
             playbackAnalyticsDiagnostics.setTraceContext(
                 host = diagnosticHost,
                 engine = effectiveInternalPlayerEngine.name
@@ -364,6 +380,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                 message = context.getString(R.string.player_loading_detecting_format)
             )
 
+            startupTrace?.mark(MovieStartupStep.SOURCE_PROBE)
             resolveCurrentStreamMimeType(
                 url = url,
                 headers = headers
@@ -720,6 +737,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             isAudioDisabledForCurrentPlayback = audioDisabledForStream
             isVc1TrackSelectionBypassActiveForCurrentPlayback = vc1TrackSelectionBypassActive
 
+            startupTrace?.mark(MovieStartupStep.SUBTITLES_AND_DISPLAY)
             val startupSubtitlePreparation = prepareStreamStartSubtitles(playerSettings)
             val awaitedAfr = withTimeoutOrNull(AFR_PREFLIGHT_TOTAL_TIMEOUT_MS) {
                 afrJob.await()
@@ -994,6 +1012,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             // ── Renderers Factory (Combining Libass offsets + Audio Gain + Video Fallback) ──
             val renderersFactory = SubtitleOffsetRenderersFactory(
                 context = context,
+                startupTrace = startupTrace,
                 subtitleDelayUsProvider = { subtitleDelayUs.get() + streamSubtitleDelayUs.get() },
                 audioDelayUsProvider = audioDelayUs::get,
                 shouldNormalizeCuePositionProvider = { true },
@@ -1116,9 +1135,11 @@ internal fun PlayerRuntimeController.initializePlayer(
             // the foreground app may need. The resume rebuild uses currentStreamUrl.
             if (releaseDecoderOnBackground && isInBackground && requestedUrl == currentStreamUrl) {
                 pendingBackgroundCrashRecovery = true
+                startupTrace?.retire()
                 return@launch
             }
 
+            startupTrace?.mark(MovieStartupStep.ENGINE_BUILD)
             _exoPlayer = if (useLibass) {
                 // Set libass render scale before building the player - this controls
                 // the rasterization resolution of the atlas pipeline.
@@ -1189,8 +1210,25 @@ internal fun PlayerRuntimeController.initializePlayer(
                 if (playerSettings.skipSilence) skipSilenceEnabled = true
                 setHandleAudioBecomingNoisy(true)
 
+                // prepare() can notify listeners synchronously. Observe the first transition even
+                // when publishing it to the media session delays the regular UI listener.
+                if (startupTrace != null) {
+                    addListener(object : Player.Listener {
+                        override fun onPlaybackStateChanged(playbackState: Int) {
+                            when (playbackState) {
+                                Player.STATE_BUFFERING -> startupTrace.mark(MovieStartupStep.BUFFERING)
+                                Player.STATE_READY -> startupTrace.mark(MovieStartupStep.READY)
+                            }
+                        }
+                    })
+                }
+                startupTrace?.mark(MovieStartupStep.SESSION_ENTER)
                 runCatching { installExoMediaSession(this) }
-                    .onFailure { it.printStackTrace() }
+                    .onSuccess { startupTrace?.mark(MovieStartupStep.SESSION_RETURNED) }
+                    .onFailure {
+                        startupTrace?.mark(MovieStartupStep.SESSION_FAILED)
+                        it.printStackTrace()
+                    }
 
                 applyAudioAmplification(_uiState.value.audioAmplificationDb)
                 applyCenterMixLevel(_uiState.value.centerMixLevelDb)
@@ -1223,7 +1261,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                     audioDelayUsProvider = audioDelayUs::get,
                     mediaMetadata = buildMediaSessionMetadata(),
                     cacheKey = currentStreamCacheKey,
-                    bluray = currentStreamBluray
+                    bluray = currentStreamBluray,
+                    startupTrace = startupTrace
                 )
 
                 if (initialResumePosition > 0L) {
@@ -1248,7 +1287,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                 playWhenReady = false
                 com.nuvio.tv.core.usenet.UsenetStartupDiagnostics.attach(this, context)
                 com.nuvio.tv.core.usenet.UsenetStartupDiagnostics.mark(currentStreamUrl, "prepare")
+                startupTrace?.mark(MovieStartupStep.PREPARE_ENTER)
                 prepare()
+                startupTrace?.mark(MovieStartupStep.PREPARE_RETURNED)
 
                 addListener(object : Player.Listener {
                     override fun onPositionDiscontinuity(
@@ -1402,6 +1443,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                             }
                             when (val action = readyTransition.action) {
                                 is PlayerStartupPlaybackPolicy.ReadyAction.TunneledFirstReady -> {
+                                    startupTrace?.mark(MovieStartupStep.TUNNELED_READY)
                                     mediaSourceFactory.unlockStartupPrefetch()
                                     playbackAnalyticsDiagnostics.onSyntheticFirstFrame(this@apply)
                                     if (_uiState.value.postPlayDismissedForCurrentEpisode) {
@@ -1551,6 +1593,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     }
 
                     override fun onRenderedFirstFrame() {
+                        startupTrace?.mark(MovieStartupStep.FIRST_FRAME)
                         val isFirstFrame = !hasRenderedFirstFrame  // capture BEFORE flipping
                         hasRenderedFirstFrame = true
                         if (isFirstFrame) recordPlayedRelease()
@@ -1587,6 +1630,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        startupTrace?.mark(MovieStartupStep.ERROR, error.errorCode)
                         if (!afrPreflightGate.isCurrent(afrPreflightToken)) return
                         if (streamFallbackSession != null &&
                             (_exoPlayer !== this@apply || streamFallbackJob?.isActive == true)) return
@@ -1897,6 +1941,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         initializedTimestampMs: Long,
                         initializationDurationMs: Long
                     ) {
+                        startupTrace?.mark(MovieStartupStep.DECODER_READY)
                         currentDiagnostics = currentDiagnostics.copy(dv81DecoderName = decoderName)
                         playbackAnalyticsDiagnostics.onVideoDecoderInitialized(
                             eventTime = eventTime,
@@ -1920,6 +1965,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         format: Format,
                         decoderReuseEvaluation: DecoderReuseEvaluation?
                     ) {
+                        startupTrace?.mark(MovieStartupStep.VIDEO_FORMAT)
                         playbackAnalyticsDiagnostics.onVideoInputFormatChanged(
                             eventTime = eventTime,
                             format = format,
@@ -2018,6 +2064,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                         loadEventInfo: LoadEventInfo,
                         mediaLoadData: MediaLoadData
                     ) {
+                        if (mediaLoadData.isStartupMediaLoad()) {
+                            startupTrace?.mark(MovieStartupStep.LOAD_STARTED)
+                        }
                         playbackAnalyticsDiagnostics.onLoadStarted(eventTime, loadEventInfo, mediaLoadData)
                     }
 
@@ -2026,6 +2075,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                         loadEventInfo: LoadEventInfo,
                         mediaLoadData: MediaLoadData
                     ) {
+                        if (mediaLoadData.isStartupMediaLoad()) {
+                            startupTrace?.mark(MovieStartupStep.LOAD_COMPLETED)
+                        }
                         playbackAnalyticsDiagnostics.onLoadCompleted(eventTime, loadEventInfo, mediaLoadData)
                     }
 
@@ -2044,6 +2096,9 @@ internal fun PlayerRuntimeController.initializePlayer(
                         error: java.io.IOException,
                         wasCanceled: Boolean
                     ) {
+                        if (mediaLoadData.isStartupMediaLoad()) {
+                            startupTrace?.mark(MovieStartupStep.LOAD_ERROR, error.findHttpStatus())
+                        }
                         playbackAnalyticsDiagnostics.onLoadError(
                             eventTime = eventTime,
                             loadEventInfo = loadEventInfo,
@@ -2061,6 +2116,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             throw cancelled
         } catch (e: Exception) {
             if (!afrPreflightGate.isCurrent(afrPreflightToken)) return@launch
+            startupTrace?.mark(MovieStartupStep.ERROR, (e as? PlaybackException)?.errorCode)
             if (returnToFeatureAfterExtraFailure(e.message ?: e.javaClass.simpleName)) {
                 return@launch
             }
@@ -2102,6 +2158,10 @@ internal fun PlayerRuntimeController.initializePlayer(
                 )
             }
         }
+    }.invokeOnCompletion { failure ->
+        if (movieStartupAttempt === startupTrace &&
+            (failure != null || !afrPreflightGate.isCurrent(afrPreflightToken))
+        ) startupTrace?.retire()
     }
 }
 
@@ -2316,6 +2376,7 @@ private const val SEEK_SOURCE_SETTLE_MS = 800L
 
 private class SubtitleOffsetRenderersFactory(
     context: Context,
+    private val startupTrace: MovieStartupTrace.Attempt?,
     private val subtitleDelayUsProvider: () -> Long,
     private val audioDelayUsProvider: () -> Long,
     private val shouldNormalizeCuePositionProvider: () -> Boolean,
@@ -2375,7 +2436,7 @@ private class SubtitleOffsetRenderersFactory(
         for (renderer in built) {
             if (renderer::class.java == MediaCodecVideoRenderer::class.java) {
                 val builder = MediaCodecVideoRenderer.Builder(context)
-                    .setCodecAdapterFactory(getCodecAdapterFactory())
+                    .setCodecAdapterFactory(observeStartupVideoCodecFactory(getCodecAdapterFactory(), startupTrace))
                     .setMediaCodecSelector(mediaCodecSelector)
                     .setAllowedJoiningTimeMs(allowedVideoJoiningTimeMs)
                     .setEnableDecoderFallback(enableDecoderFallback)
@@ -2383,7 +2444,7 @@ private class SubtitleOffsetRenderersFactory(
                     .setEventListener(eventListener)
                     .setMaxDroppedFramesToNotify(DefaultRenderersFactory.MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY)
                     .setMapDV7ToHevc(mapDv7ToHevc)
-                out.add(HardwareFirstVideoRenderer(builder))
+                out.add(HardwareFirstVideoRenderer(builder, startupTrace))
             } else {
                 out.add(renderer)
             }

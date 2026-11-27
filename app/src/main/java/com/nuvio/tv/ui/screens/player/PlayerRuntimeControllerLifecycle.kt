@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.player
 
 import android.content.Intent
 import android.media.audiofx.AudioEffect
+import com.nuvio.tv.core.player.MovieStartupStep
 import kotlinx.coroutines.flow.update
 
 internal fun PlayerRuntimeController.releasePlayer() {
@@ -14,6 +15,8 @@ internal fun PlayerRuntimeController.releasePlayer(
     flushPlaybackState: Boolean,
     keepTorrentStream: Boolean = false
 ) {
+    movieStartupAttempt?.mark(MovieStartupStep.STOP)
+    movieStartupAttempt = null
     if (flushPlaybackState) cancelStreamFallback()
     logScrobbleDiagnostic("release_player", "flushPlaybackState=$flushPlaybackState")
 

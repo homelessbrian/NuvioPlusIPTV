@@ -37,7 +37,11 @@ class CrashReportActivity : Activity() {
         fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
         val title = TextView(this).apply {
-            text = "Nuvio + IPTV stopped"
+            text = when {
+                report.startsWith(CrashCatcher.RECOVERED_HEADING) -> "Movie startup freeze recovered"
+                report.startsWith(CrashCatcher.SLOW_START_HEADING) -> "Slow movie startup"
+                else -> "Nuvio + IPTV stopped"
+            }
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
             typeface = Typeface.DEFAULT_BOLD
@@ -172,6 +176,21 @@ internal fun shortCrash(report: String, limit: Int = 1_900): String {
     }
     flushFold()
     var text = out.joinToString("\n").trim()
-    if (text.length > limit) text = text.take(limit - 3) + "..."
+    if (text.length > limit) {
+        val cutoff = limit - 3
+        // If the cutoff falls inside the movie timeline, keep the last observed milestone as
+        // well as the start. This is often where the spinner stopped making progress.
+        val lineStart = text.lastIndexOf('\n', cutoff) + 1
+        if (text.startsWith("+0 start · ", lineStart)) {
+            val lineEnd = text.indexOf('\n', cutoff).let { if (it < 0) text.length else it }
+            val lastStep = text.lastIndexOf(" · ", lineEnd - 1)
+            if (lastStep in lineStart until lineEnd) {
+                val tail = " …" + text.substring(lastStep, lineEnd)
+                val keepThrough = text.lastIndexOf(" · ", cutoff - tail.length)
+                if (keepThrough > lineStart) return text.take(keepThrough) + tail + "..."
+            }
+        }
+        text = text.take(cutoff) + "..."
+    }
     return text
 }
