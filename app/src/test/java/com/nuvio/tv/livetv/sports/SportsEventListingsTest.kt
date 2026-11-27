@@ -27,6 +27,27 @@ class SportsEventListingsTest {
         }
     }
 
+    @Test fun `source projection preserves the score delay state and published event identity`() {
+        for ((source, selection) in listOf(EventSource.FIXTURES to SportsListingSource.SCHEDULE,
+            EventSource.GUIDE to SportsListingSource.GUIDE)) {
+            val delay = SportsScoreDelay()
+            val pre = event("delayed-$source", source, at = now).copy(state = GameState.PRE)
+            delay.apply(listOf(pre), 60_000, now - 1_000)
+            val live = pre.copy(state = GameState.LIVE)
+            val clock = now + 1_000
+            val held = delay.apply(listOf(live), 60_000, clock).single()
+            assertEquals(GameState.PRE, held.state)
+            val follows = choice(selection)
+            assertSame(held, SportsEventListings.visibleKnown(listOf(held), follows, clock).single())
+            assertSame(held, SportsEventListings.forPage(listOf(held), listOf(live), follows, today, today + day, clock).single())
+            assertSame(held, SportsEventListings.forPage(emptyList(), listOf(held), follows, today, today + day, clock).single())
+
+            val released = delay.apply(listOf(live), 60_000, now + 61_000).single()
+            assertSame(live, released)
+            assertSame(released, SportsEventListings.visibleKnown(listOf(released), follows, now + 61_000).single())
+        }
+    }
+
     @Test fun `schedule-only restores clean cards to hub sections across event sports`() {
         for (league in listOf(moto, "guide/wwe", "guide/boxing", "guide/darts")) {
             val guide = event("guide-$league", EventSource.GUIDE, league)

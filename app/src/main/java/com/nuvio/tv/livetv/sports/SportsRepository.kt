@@ -211,9 +211,9 @@ class SportsRepository @Inject constructor(
 
     /** Resolve an explicitly opened cached card even after its source is hidden from listings. */
     fun eventById(eventId: String): SportsEvent? {
-        val found = events.value.firstOrNull { it.id == eventId }
-            ?: known.value.firstOrNull { it.id == eventId }
-            ?: fixtureData.value.values.asSequence().flatMap { it.events.asSequence() }.firstOrNull { it.id == eventId }
+        events.value.firstOrNull { it.id == eventId }?.let { return it }
+        known.value.firstOrNull { it.id == eventId }?.let { return it }
+        val found = fixtureData.value.values.asSequence().flatMap { it.events.asSequence() }.firstOrNull { it.id == eventId }
             ?: guideData.value.values.asSequence().flatten().firstOrNull { it.id == eventId }
             ?: return null
         return SportsEventListings.withContext(emptyList(), listOf(found), System.currentTimeMillis()).first()
