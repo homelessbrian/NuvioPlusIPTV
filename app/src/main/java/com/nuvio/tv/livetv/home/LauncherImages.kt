@@ -45,8 +45,11 @@ object LauncherImages {
         if (!file.exists() || file.length() == 0L) {
             val bmp = LauncherCards.draw(spec, shape) { url -> logo(context, url) }
             val tmp = File(file.parentFile, file.name + ".tmp")
-            tmp.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            bmp.recycle()
+            try {
+                tmp.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            } finally {
+                bmp.recycle()
+            }
             if (!tmp.renameTo(file)) { tmp.copyTo(file, overwrite = true); tmp.delete() }
         } else {
             file.setLastModified(System.currentTimeMillis())
@@ -76,8 +79,7 @@ object LauncherImages {
         return runCatching {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.path, bounds)
-            var sample = 1
-            while (bounds.outWidth / (sample * 2) >= 512 && bounds.outHeight / (sample * 2) >= 256) sample *= 2
+            val sample = LauncherImageLimits.sampleSize(bounds.outWidth, bounds.outHeight) ?: return null
             BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
         }.getOrNull()
     }
@@ -88,26 +90,24 @@ object LauncherImages {
             var result: ByteArray? = null
             for (hop in 0 until 4) {
                 val c = URL(address).openConnection() as HttpURLConnection
-                c.connectTimeout = 6_000
-                c.readTimeout = 8_000
-                c.instanceFollowRedirects = false
-                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36")
-                val code = c.responseCode
-                if (code in 300..399) {
-                    val next = c.getHeaderField("Location")
+                try {
+                    c.connectTimeout = 6_000
+                    c.readTimeout = 8_000
+                    c.instanceFollowRedirects = false
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36")
+                    val code = c.responseCode
+                    if (code in 300..399) {
+                        val next = c.getHeaderField("Location") ?: break
+                        address = URL(URL(address), next).toString()
+                        continue
+                    }
+                    if (code == 200 && c.contentLengthLong <= LauncherImageLimits.MAX_BYTES) {
+                        result = c.inputStream.use { LauncherImageLimits.read(it, c.contentLengthLong) }
+                    }
+                    break
+                } finally {
                     c.disconnect()
-                    if (next == null) break
-                    address = URL(URL(address), next).toString()
-                    continue
                 }
-                if (code == 200) {
-                    val bytes = c.inputStream.use { it.readBytes() }
-                    c.disconnect()
-                    if (bytes.size <= 3_000_000) result = bytes
-                } else {
-                    c.disconnect()
-                }
-                break
             }
             result
         } catch (e: Exception) {
