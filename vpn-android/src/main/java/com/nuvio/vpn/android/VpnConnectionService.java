@@ -156,6 +156,7 @@ public final class VpnConnectionService extends android.net.VpnService {
     /** The connection was working and then stopped (or dropped); its next success counts as a recovery. */
     private boolean lostAfterWorking;
     private long verifiedSession;
+    private VpnVerificationReport verificationReport = new VpnVerificationReport();
     private boolean demandFailed;
     private String egress;
 
@@ -253,6 +254,7 @@ public final class VpnConnectionService extends android.net.VpnService {
             bypassKey = VpnHomeBypass.key(this);
             started = SystemClock.elapsedRealtime();
             VpnPlaybackDiagnostics.INSTANCE.resetConnection();
+            verificationReport = new VpnVerificationReport();
             lastProbe = lastEgressProbe = 0;
             probeVerified = false;
             unverifiedSince = started;
@@ -351,7 +353,7 @@ public final class VpnConnectionService extends android.net.VpnService {
                 checkSoon = false;
                 lastProbe = now;
                 verifiedSession = stats.session;
-                probeVerified = engine.probe();
+                probeVerified = runProbe();
                 stats = engine.statistics();
                 lastReceived = stats.received; // the check's own reply is not stream traffic
             }
@@ -370,7 +372,7 @@ public final class VpnConnectionService extends android.net.VpnService {
             } else if (probeVerified && !stallPassed && receivedGrewAt > 0 && now - receivedGrewAt >= STALL_CHECK_MS
                     && (stallFailures == 0 || now - lastStallCheck >= STALL_RETRY_MS)) {
                 lastStallCheck = now;
-                boolean working = engine.probe();
+                boolean working = runProbe();
                 stats = engine.statistics();
                 lastReceived = stats.received; // the check's own reply is not stream traffic
                 if (working) {
@@ -398,6 +400,7 @@ public final class VpnConnectionService extends android.net.VpnService {
             }
             if (destroyed || generation.get() != token || !engine.isUp()) return;
             Phase phase = verified ? Phase.CONNECTED : now - started > 30000 ? Phase.WAITING : Phase.CONNECTING;
+            boolean enteredWaiting = phase == Phase.WAITING && current.phase != phase;
             if (phase != current.phase) event(verified ? "vpn_handshake_and_tunneled_probe_verified" : "vpn_waiting_for_verified_connection");
             if (current.phase == Phase.CONNECTED && phase != Phase.CONNECTED) lostAfterWorking = true;
             if (verified && current.phase != Phase.CONNECTED && lostAfterWorking) {
@@ -415,7 +418,7 @@ public final class VpnConnectionService extends android.net.VpnService {
                 lastEgressProbe = now;
                 loadEgress(token, engine, verifiedSession);
             }
-            reportTraffic(stats, phase, now);
+            reportTraffic(stats, phase, now, enteredWaiting);
             updateNotification();
         } catch (Exception | LinkageError failure) {
             if (destroyed) return;
@@ -424,7 +427,13 @@ public final class VpnConnectionService extends android.net.VpnService {
             updateNotification();
         }
     }
-    private void reportTraffic(TunnelTraffic stats, Phase phase, long now) {
+    private boolean runProbe() {
+        long start = SystemClock.elapsedRealtime();
+        boolean passed = engine.probe();
+        verificationReport.probeFinished(passed, start, SystemClock.elapsedRealtime());
+        return passed;
+    }
+    private void reportTraffic(TunnelTraffic stats, Phase phase, long now, boolean enteredWaiting) {
         try {
             String type = engine instanceof HttpStreamTunnel ? ((HttpStreamTunnel) engine).diagnosticEngine()
                     : engine instanceof OpenVpn2Session ? "openvpn2" : engine instanceof OpenVpnEngine ? "openvpn3"
@@ -432,6 +441,9 @@ public final class VpnConnectionService extends android.net.VpnService {
             String line = VpnPlaybackDiagnostics.INSTANCE.sample(stats.received, stats.sent, stats.session,
                     scope.name(), type, phase.name(), now - started);
             if (line != null) event(line);
+            String waiting = verificationReport.sample(phase, enteredWaiting, SystemClock.elapsedRealtime(), stats,
+                    verifiedSession, probeVerified, () -> engine instanceof HttpStreamTunnel ? ((HttpStreamTunnel) engine).lastProbeDetail() : null);
+            if (waiting != null) event(waiting + "; scope=" + scope.name() + "; engine=" + type);
         } catch (RuntimeException | LinkageError ignored) { /* A diagnostic failure never changes protection. */ }
     }
     private void loadEgress(long token, TunnelEngine connection, long session) {

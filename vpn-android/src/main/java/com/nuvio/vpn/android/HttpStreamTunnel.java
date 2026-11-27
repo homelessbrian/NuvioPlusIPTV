@@ -84,7 +84,14 @@ final class HttpStreamTunnel implements TunnelEngine {
         if (stats == null || stats.length != 3) throw new IOException("WireGuard statistics are unavailable.");
         return new TunnelTraffic(stats[0], stats[1], stats[2], health);
     }
-    @Override public boolean probe() { return handle != 0 && probeNative(handle); }
+    private volatile String lastProbeDetail = "unavailable";
+    String lastProbeDetail() { return handle == 0 ? "unavailable" : lastProbeDetail; }
+    @Override public boolean probe() {
+        long current = handle;
+        String detail = current == 0 ? "unavailable" : probeDetailNative(current);
+        lastProbeDetail = detail;
+        return "ok".equals(detail);
+    }
     @Override public String egress() { return handle == 0 ? null : egressNative(handle); }
     @Override public void close() {
         if (openVpn != null) { openVpn.close(); openVpn = null; }
@@ -98,7 +105,7 @@ final class HttpStreamTunnel implements TunnelEngine {
     private static native boolean configureNative(long handle, String configuration);
     private static native int portNative(long handle);
     private static native long[] statsNative(long handle);
-    private static native boolean probeNative(long handle);
+    private static native String probeDetailNative(long handle);
     private static native String egressNative(long handle);
     private static native boolean requestCancelledNative(long request);
 }

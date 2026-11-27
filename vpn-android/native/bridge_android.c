@@ -78,8 +78,11 @@ JNIEXPORT jlongArray JNICALL Java_com_nuvio_vpn_android_HttpStreamTunnel_statsNa
     return array;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_nuvio_vpn_android_HttpStreamTunnel_probeNative(JNIEnv *env, jclass type, jlong handle) {
-    return nuvioProbe((long long)handle) ? JNI_TRUE : JNI_FALSE;
+JNIEXPORT jstring JNICALL Java_com_nuvio_vpn_android_HttpStreamTunnel_probeDetailNative(JNIEnv *env, jclass type, jlong handle) {
+    char *detail = nuvioProbe((long long)handle);
+    jstring result = (*env)->NewStringUTF(env, detail);
+    free(detail);
+    return result;
 }
 
 JNIEXPORT jstring JNICALL Java_com_nuvio_vpn_android_HttpStreamTunnel_egressNative(JNIEnv *env, jclass type, jlong handle) {

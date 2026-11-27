@@ -19,6 +19,7 @@ final class OpenVpn2Management {
     private boolean authenticated, authRejected, ended, protectedTransport, tunEstablished;
     private long received, sent, generation;
     private int mtu = 1500;
+    private String lastState = "STARTING";
 
     OpenVpn2Management(Callbacks callbacks) { this.callbacks = callbacks; }
 
@@ -49,12 +50,14 @@ final class OpenVpn2Management {
             } else if (fields[1].equals("EXITING")) {
                 ended = true;
             }
+            lastState = reportableState(fields[1]);
         } else if (line.startsWith(">BYTECOUNT:")) {
             String[] fields = line.substring(11).split(",", -1);
             if (fields.length != 2) throw new IOException("Invalid OpenVPN byte count.");
             received = positiveLong(fields[0]); sent = positiveLong(fields[1]);
         } else if (line.startsWith(">HOLD:")) {
             authenticated = false;
+            lastState = "HOLD";
             addresses.clear(); dns.clear(); mtu = 1500; tunEstablished = false;
             callbacks.command("state on\nbytecount 1\nhold release\n");
         } else if (line.startsWith(">PASSWORD:")) {
@@ -63,10 +66,12 @@ final class OpenVpn2Management {
             authenticated = false;
             if (request.startsWith("Verification Failed:")) {
                 authRejected = true;
+                lastState = "AUTH_FAILED";
                 throw new IOException("The OpenVPN service credentials were rejected.");
             }
             if (!request.equals("Need 'Auth' username/password"))
                 throw new IOException("This OpenVPN profile requires unsupported interactive authentication.");
+            lastState = "AUTH";
             callbacks.credentials();
         } else if (line.startsWith(">NEED-OK:")) {
             need(line.substring(9));
@@ -171,7 +176,21 @@ final class OpenVpn2Management {
         catch (NumberFormatException invalid) { throw new IOException("Invalid VPN byte count."); }
     }
 
-    synchronized TunnelTraffic statistics() { return new TunnelTraffic(received, sent, authenticated && !ended, authenticated ? generation : 0); }
+    /** Only the standard management state name is shareable. Other fields can contain private connection details. */
+    private static String reportableState(String state) {
+        switch (state) {
+            case "CONNECTING": case "RESOLVE": case "TCP_CONNECT": case "WAIT": case "AUTH":
+            case "AUTH_PENDING": case "GET_CONFIG": case "ASSIGN_IP": case "ADD_ROUTES":
+            case "CONNECTED": case "RECONNECTING": case "EXITING":
+                return state;
+            default:
+                return "OTHER";
+        }
+    }
+
+    synchronized TunnelTraffic statistics() {
+        return new TunnelTraffic(received, sent, authenticated && !ended, authenticated ? generation : 0, lastState);
+    }
     synchronized boolean ended() { return ended; }
     synchronized boolean authRejected() { return authRejected; }
     synchronized void end() { authenticated = false; ended = true; }
