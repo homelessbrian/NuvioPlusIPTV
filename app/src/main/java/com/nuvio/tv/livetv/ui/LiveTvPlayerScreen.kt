@@ -70,6 +70,10 @@ import com.nuvio.tv.livetv.player.LiveTrackOption
 import com.nuvio.tv.livetv.player.LiveFrameRateStabilizer
 import com.nuvio.tv.livetv.player.liveFrameRateForSession
 import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.remote.RemoteAction
+import com.nuvio.tv.remote.RemoteScreen
+import com.nuvio.tv.remote.host.RemoteActionHost
+import com.nuvio.tv.remote.host.RemoteHostDefaults
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -579,6 +583,86 @@ fun LiveTvPlayerScreen(
             // A 24/7 channel with no guide: the show's poster, by the channel's name.
             ?: current?.takeIf { playback.catchupTitle == null }?.let { viewModel.channelPoster(it, hintProgram) }
             ?: hintProgram?.takeIf { !LiveTvRepository.isPlaceholderTitle(it.title) }?.icon
+    }
+
+    RemoteActionHost(
+        screen = if (playingRecording) RemoteScreen.MOVIE else RemoteScreen.LIVE_TV,
+        enabled = current != null && playback.error == null && upNext == null &&
+            !sportsGamesOpen && !listVisible && dialog == PlayerDialog.NONE &&
+            !panelFull && controlFocus == null,
+        canHandleAction = { RemoteHostDefaults.canHandleLiveAction(it, browsing = browseKey != null) },
+        canRemapButton = { RemoteHostDefaults.canRemapLiveButton(it, browsing = browseKey != null) },
+        onNativeCancel = {
+            okHoldJob?.cancel()
+            okHoldJob = null
+            longPressFired = false
+            rightDownAt = 0L
+            rightHoldDone = false
+        },
+        defaults = {
+            if (playingRecording) RemoteHostDefaults.recording()
+            else {
+                val shifting = shiftStartedAt != null || ownTimeline
+                val behind = shifting && viewModel.playback.shiftCanSeek() && viewModel.playback.shiftIsBehind()
+                RemoteHostDefaults.live(settings, replaying = playback.catchupTitle != null,
+                    leftSeeks = shifting && viewModel.playback.shiftCanSeek() && (bannerVisible || behind),
+                    rightSeeks = behind)
+            }
+        }
+    ) { action ->
+        fun unavailable() {
+            toast = context.getString(com.nuvio.tv.R.string.remote_action_unavailable)
+        }
+        fun changeChannel(next: Boolean, browse: Boolean) {
+            if (playingRecording) { unavailable(); return }
+            // Semantic next/previous is independent of the physical Up/Down reversal preference.
+            val direction = (if (next) 1 else -1) * if (viewModel.settings.value.reverseZap) -1 else 1
+            val channel = viewModel.zap(if (browse) browseKey ?: playback.channelKey else playback.channelKey, direction)
+            if (channel == null) unavailable()
+            else {
+                if (browse) browseKey = channel.key else viewModel.preview(channel)
+                showBanner()
+            }
+        }
+        when (action) {
+            RemoteAction.OPEN_GUIDE -> { closeFull(); bannerVisible = false; onOpenGuide(); true }
+            RemoteAction.CHANNEL_BROWSER -> { closeFull(); listVisible = true; true }
+            RemoteAction.SHOW_INFO -> { showBanner(); true }
+            RemoteAction.SHOW_CONTROLS -> { panelFull = true; controlFocus = PanelControl.PLAY; showBanner(); true }
+            RemoteAction.NEXT_CHANNEL -> { changeChannel(next = true, browse = false); true }
+            RemoteAction.PREVIOUS_CHANNEL -> { changeChannel(next = false, browse = false); true }
+            RemoteAction.BROWSE_NEXT_CHANNEL -> { changeChannel(next = true, browse = true); true }
+            RemoteAction.BROWSE_PREVIOUS_CHANNEL -> { changeChannel(next = false, browse = true); true }
+            RemoteAction.LAST_CHANNEL -> {
+                val previous = viewModel.previousChannel()?.takeIf { it.key != playback.channelKey }
+                if (previous == null) toast = context.getString(com.nuvio.tv.R.string.remote_no_previous_channel)
+                else { viewModel.preview(previous); showBanner() }
+                true
+            }
+            RemoteAction.PLAY_PAUSE -> { viewModel.playback.togglePause(); true }
+            RemoteAction.PLAY -> { viewModel.playback.setPaused(false); true }
+            RemoteAction.PAUSE -> { viewModel.playback.setPaused(true); true }
+            RemoteAction.NEXT_CHAPTER, RemoteAction.PREVIOUS_CHAPTER -> { unavailable(); true }
+            RemoteAction.OPTIONS -> { openGear(); true }
+            RemoteAction.AUDIO -> { openGear("audio"); true }
+            RemoteAction.SUBTITLES -> { openGear("subs"); true }
+            RemoteAction.MULTIVIEW -> { if (multiviewEligible) openMultiview() else unavailable(); true }
+            RemoteAction.SEEK_BACK, RemoteAction.SEEK_FORWARD -> {
+                val forward = action == RemoteAction.SEEK_FORWARD
+                when {
+                    catchupSession != null -> scrub(forward = forward, repeat = 0)
+                    viewModel.playback.shiftCanSeek() -> {
+                        viewModel.playback.shiftSeekBy(if (forward) 10_000L else -10_000L)
+                        showBanner()
+                    }
+                    else -> unavailable()
+                }
+                true
+            }
+            RemoteAction.RETURN -> { closeFull(); bannerVisible = false; onBack(); true }
+            RemoteAction.NONE -> true
+            else -> false
+        }
     }
 
     BackHandler(enabled = listVisible) { listVisible = false }

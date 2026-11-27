@@ -2,6 +2,33 @@
 
 How to get around Nuvio + IPTV with your TV remote. [Back to the README](README.md)
 
+### Your remote
+
+Open **Settings → Playback → Your remote** to learn what each button does. Choose
+the screen you use it on, then a button and **Press once** or **Press and hold**.
+Press **OK** to open its explanation and options. The button's name and selected
+press stay visible as you scroll. After a change, the guide also shows its original action.
+
+Choose **Find a button** to identify a button by pressing it on your remote.
+A recognized button opens its explanation with **Press once** selected; nothing is
+saved. A new button asks you to **Add to your guide** or **Cancel** first.
+**Back** cancels finding a button; **Press and hold** remains available in the guide.
+
+For a button not shown in the picture, choose **Add another button** and press it
+once on your remote. This only identifies the button; it does not change its action.
+Buttons already recognized are highlighted instead of being added twice.
+
+Choose **Change what this button does** to select an action. Review the change
+before saving; the review identifies actions that would lose their last button
+shortcut. You can also check unused buttons and features without shortcuts separately.
+**Undo last change**, restoring one press, and **Put all buttons back to normal**
+provide a way back.
+
+Custom controls apply only to the selected screen. Navigation in settings,
+menus and pickers stays unchanged. This TV keeps its own layout across app profiles;
+automatic setup sync does not replace another TV's remote. A deliberate file or
+Drive backup includes the layout for an explicit restore.
+
 ### In the guide
 | Button | Action |
 |---|---|

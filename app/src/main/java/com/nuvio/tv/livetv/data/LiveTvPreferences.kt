@@ -23,6 +23,7 @@ import com.nuvio.tv.livetv.model.ZapMode
 import com.nuvio.tv.livetv.sync.SetupSyncProjection
 import com.nuvio.tv.livetv.sync.UsenetBackup
 import com.nuvio.tv.livetv.sync.DeviceSettingsBackup
+import com.nuvio.tv.remote.RemoteControlCodec
 import com.nuvio.tv.livetv.sync.PlaybackSettingsBackup
 import com.nuvio.tv.livetv.sync.SyncPart
 import com.nuvio.tv.livetv.sync.SyncParts
@@ -81,6 +82,7 @@ class LiveTvPreferences @Inject constructor(
     )
 
     private object Keys {
+        val remoteButtons = stringPreferencesKey("remote_buttons_v1")
         val playlists = stringPreferencesKey("playlists")
         val epgs = stringPreferencesKey("epg_sources")
 
@@ -559,6 +561,27 @@ class LiveTvPreferences @Inject constructor(
     private val epgsMemo = SnapshotMemo<List<EpgSource>>()
     private val settingsMemo = SnapshotMemo<LiveTvSettings>()
     private val userStateMemo = SnapshotMemo<LiveUserState>()
+
+    /** Remote layouts belong to this TV; explicit backups can carry them to a chosen device. */
+    val rawRemoteButtons: Flow<String> = store.data.map { it[Keys.remoteButtons].orEmpty() }.distinctUntilChanged()
+
+    suspend fun setRawRemoteButtons(raw: String) {
+        com.nuvio.tv.remote.RemoteControlCodec.validate(raw)
+        store.edit { if (raw.isEmpty()) it.remove(Keys.remoteButtons) else it[Keys.remoteButtons] = raw }
+    }
+
+    /** Reject an edit based on a layout replaced by an explicit backup restore. */
+    suspend fun compareAndSetRawRemoteButtons(expectedRaw: String, raw: String): Boolean {
+        com.nuvio.tv.remote.RemoteControlCodec.validate(raw)
+        var updated = false
+        store.edit { p ->
+            updated = p[Keys.remoteButtons].orEmpty() == expectedRaw
+            if (updated) {
+                if (raw.isEmpty()) p.remove(Keys.remoteButtons) else p[Keys.remoteButtons] = raw
+            }
+        }
+        return updated
+    }
 
     /** The network folder for recordings as JSON: null when never set up here or synced, "" once removed. */
     val networkFolderJson: Flow<String?> = store.data.map { it[Keys.networkFolder] }.distinctUntilChanged()
@@ -1927,6 +1950,9 @@ class LiveTvPreferences @Inject constructor(
     suspend fun importFromBackup(data: JSONObject): Set<String> {
         val device = DeviceSettingsBackup.decode(data)
         device?.let { playbackBackup.validateDeviceSettings(it.getJSONObject("playback")) }
+        // A backup carries assignments, but cannot prove which physical keys this TV has.
+        val restoredRemote = device?.getJSONObject("liveTv")?.optJSONObject(RemoteControlCodec.KEY)
+            ?.getString("v")?.let(RemoteControlCodec::forRestoredDevice)
         usenetBackup.validate(data)
         playbackBackup.validate(data)
         // A settings-only backup must not empty the target's existing providers or VPN profiles.
@@ -1944,7 +1970,8 @@ class LiveTvPreferences @Inject constructor(
                         val entry = local.getJSONObject(name)
                         when (entry.getString("t")) {
                             "b" -> p[booleanPreferencesKey(name)] = entry.getBoolean("v")
-                            "str" -> p[stringPreferencesKey(name)] = entry.getString("v")
+                            "str" -> p[stringPreferencesKey(name)] = if (name == RemoteControlCodec.KEY)
+                                requireNotNull(restoredRemote) else entry.getString("v")
                         }
                     }
                 }
@@ -2176,7 +2203,7 @@ class LiveTvPreferences @Inject constructor(
          */
         private val SYNC_EXCLUDED_BASE = setOf(
             "last_channel", "previous_channel", "last_group", "recent", "on_demand_imports", "channel_quality", "developer_tools", "recording_storage",
-            "audio_passthrough", "buffer_size", "adaptive_live_buffer", "match_frame_rate", "frame_rate_mode", "aspect_mode"
+            "audio_passthrough", "buffer_size", "adaptive_live_buffer", "match_frame_rate", "frame_rate_mode", "aspect_mode", "remote_buttons_v1"
         )
         private val PROFILE_SUFFIX = Regex("""_p\d+$""")
         /** A playlist id (they are random UUIDs). */

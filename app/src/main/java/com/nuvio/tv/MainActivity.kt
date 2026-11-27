@@ -308,7 +308,18 @@ private data class MainUiPrefs(
 )
 
 @AndroidEntryPoint
-open class MainActivity : ComponentActivity() {
+open class MainActivity : ComponentActivity(), com.nuvio.tv.remote.RemoteInputOwner {
+
+    @Inject
+    lateinit var remoteControlStore: com.nuvio.tv.remote.RemoteControlStore
+
+    override val remoteInputRouter by lazy {
+        com.nuvio.tv.remote.RemoteInputRouter(
+            configuration = { remoteControlStore.state.value.configuration },
+            // Replay bypasses our override, so an unchanged half of a custom gesture cannot loop.
+            replay = { super.dispatchKeyEvent(it) }
+        )
+    }
 
     @Inject
     lateinit var themeDataStore: ThemeDataStore
@@ -1614,6 +1625,7 @@ open class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        remoteInputRouter.cancelPending()
         super.onPause()
         if (::jankStats.isInitialized) jankStats.isTrackingEnabled = false
     }
@@ -1654,7 +1666,13 @@ open class MainActivity : ComponentActivity() {
             }
             return true
         }
+        if (remoteInputRouter.dispatch(event)) return true
         return super.dispatchKeyEvent(event)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        if (!hasFocus) remoteInputRouter.cancelPending()
+        super.onWindowFocusChanged(hasFocus)
     }
 
     override fun onStart() {
@@ -1678,6 +1696,7 @@ open class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        remoteInputRouter.close()
         super.onDestroy()
         PluginRuntimeHooks.onActivityDestroy()
     }

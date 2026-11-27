@@ -2,6 +2,10 @@
 
 package com.nuvio.tv.livetv.sports
 
+import com.nuvio.tv.remote.RemoteAction
+import com.nuvio.tv.remote.RemoteScreen
+import com.nuvio.tv.remote.host.RemoteActionHost
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -237,6 +241,8 @@ fun SportsScreen(
     // while nothing plays in the window). State, read only by that panel, so moving the highlight
     // doesn't redraw the list.
     val hubFocus = remember { mutableStateOf<String?>(null) }
+    val gameCardFocus = remember { GameCardFocus() }
+    var focusedGameId by remember { mutableStateOf<String?>(null) }
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     // The page the open game came from (the Calendar): Back goes back there, not to the hub.
     var fromRoute by rememberSaveable { mutableStateOf<String?>(null) }
@@ -431,12 +437,49 @@ fun SportsScreen(
         SportsLaunch.openedFromSports(playingEventId(key, events, matches, System.currentTimeMillis()))
         onOpenLive()
     }
+    val remoteContext = androidx.compose.ui.platform.LocalContext.current
+    RemoteActionHost(
+        screen = RemoteScreen.SPORTS,
+        enabled = focusedGameId != null && !picker && fixFor == null && tableReq == null &&
+            openId == null && !topBarFocused
+    ) { action ->
+        fun unavailable() = LiveTvNotice.show(remoteContext.getString(com.nuvio.tv.R.string.remote_action_unavailable))
+        val focusedGame = focusedGameId?.let { id -> known.firstOrNull { it.id == id } }
+        when (action) {
+            RemoteAction.RETURN_FULLSCREEN -> {
+                if (videoOn && playingKey != null && playingNow) backToFullscreen() else unavailable()
+                true
+            }
+            RemoteAction.PLAY_PAUSE -> {
+                if (videoOn && playingKey != null) viewModel.togglePreviewPause() else unavailable()
+                true
+            }
+            RemoteAction.SHOW_INFO -> {
+                if (focusedGame == null) unavailable()
+                else { fromRoute = null; fromLabel = null; openId = focusedGame.id }
+                true
+            }
+            RemoteAction.ACTIVATE -> {
+                if (focusedGame == null) unavailable() else quickWatch(focusedGame)
+                true
+            }
+            RemoteAction.NONE -> true
+            else -> false
+        }
+    }
     com.nuvio.tv.livetv.ui.FrameMeter("Sports")
     // A finished game's replays are looked for as soon as its card is highlighted.
     DisposableEffect(viewModel) {
         val warm: (SportsEvent) -> Unit = { hubFocus.value = it.id; viewModel.repo.warmGame(it) }
+        val focus: (Any, SportsEvent, Boolean) -> Unit = { owner, event, focused ->
+            focusedGameId = gameCardFocus.update(owner, event.id, focused)
+        }
         GameFocus.onGame = warm
-        onDispose { if (GameFocus.onGame === warm) GameFocus.onGame = null }
+        GameFocus.onFocusChanged = focus
+        onDispose {
+            if (GameFocus.onGame === warm) GameFocus.onGame = null
+            if (GameFocus.onFocusChanged === focus) GameFocus.onFocusChanged = null
+        }
     }
     Box(
         Modifier

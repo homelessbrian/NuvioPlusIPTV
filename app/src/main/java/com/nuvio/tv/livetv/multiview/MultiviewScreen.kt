@@ -1,5 +1,9 @@
 package com.nuvio.tv.livetv.multiview
 
+import com.nuvio.tv.remote.RemoteAction
+import com.nuvio.tv.remote.RemoteScreen
+import com.nuvio.tv.remote.host.RemoteActionHost
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -410,6 +414,37 @@ fun MultiviewScreen(
             session.focusPane(paneId)
             editedPane = paneId
             editorOpen = true
+        }
+    }
+    RemoteActionHost(
+        screen = RemoteScreen.MULTIVIEW,
+        enabled = !editorOpen && !layoutOpen && !barFocused && state.isForeground && !profileExitRequested[0]
+    ) { action ->
+        when (action) {
+            RemoteAction.CHANGE_PANE -> { paneClick(state.focusedPane); true }
+            RemoteAction.EXPAND_PANE -> {
+                if (fullPane != null || paneHasVideo(state.focusedPane)) {
+                    showFullScreen(if (fullPane != null) null else state.focusedPane)
+                } else com.nuvio.tv.livetv.record.LiveTvNotice.show(
+                    context.getString(com.nuvio.tv.R.string.remote_action_unavailable))
+                true
+            }
+            RemoteAction.NEXT_AUDIO_PANE -> {
+                val playingPanes = state.panes.filter { it.channelKey != null }.map { it.id }
+                if (playingPanes.isEmpty()) com.nuvio.tv.livetv.record.LiveTvNotice.show(
+                    context.getString(com.nuvio.tv.R.string.remote_action_unavailable))
+                else {
+                    val at = playingPanes.indexOf(state.focusedPane)
+                    val next = playingPanes[(at + 1).mod(playingPanes.size)]
+                    session.focusPane(next)
+                    if (fullPane != null) showFullScreen(next)
+                    else runCatching { paneFocus[next].requestFocus() }
+                }
+                true
+            }
+            RemoteAction.OPTIONS -> { layoutOpen = true; true }
+            RemoteAction.NONE -> true
+            else -> false
         }
     }
     val barAlpha by animateFloatAsState(if (overlaysShown) 1f else 0f, tween(450), label = "multiviewBar")

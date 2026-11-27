@@ -6,7 +6,7 @@ import org.json.JSONObject
 internal object DeviceSettingsBackup {
     const val KEY = "device_settings_v1"
     private val booleanKeys = setOf("audio_passthrough", "adaptive_live_buffer", "match_frame_rate")
-    private val stringKeys = setOf("buffer_size", "frame_rate_mode", "aspect_mode")
+    private val stringKeys = setOf("buffer_size", "frame_rate_mode", "aspect_mode", "remote_buttons_v1")
     private val profileSuffix = Regex("""_p\d+$""")
 
     fun includes(name: String): Boolean = name.replace(profileSuffix, "") in booleanKeys + stringKeys
@@ -31,6 +31,9 @@ internal object DeviceSettingsBackup {
                 val setting = liveTv.getJSONObject(name)
                 require(setting.getString("t") == if (base in booleanKeys) "b" else "str")
                 require(if (base in booleanKeys) setting.get("v") is Boolean else setting.get("v") is String)
+                if (base == "remote_buttons_v1") {
+                    com.nuvio.tv.remote.RemoteControlCodec.validate(setting.getString("v"))
+                }
             }
         }
         return value

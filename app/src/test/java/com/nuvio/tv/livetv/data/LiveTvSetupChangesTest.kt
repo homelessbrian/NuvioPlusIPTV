@@ -12,6 +12,16 @@ import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.domain.model.UserProfile
 import com.nuvio.tv.livetv.model.EpgSource
 import com.nuvio.tv.livetv.model.PlaylistSource
+import com.nuvio.tv.livetv.sync.DeviceSettingsBackup
+import com.nuvio.tv.livetv.sync.PlaybackSettingsBackup
+import com.nuvio.tv.remote.RemoteAction
+import com.nuvio.tv.remote.RemoteBinding
+import com.nuvio.tv.remote.RemoteButton
+import com.nuvio.tv.remote.RemoteConfiguration
+import com.nuvio.tv.remote.RemoteControlCodec
+import com.nuvio.tv.remote.RemoteExtraButton
+import com.nuvio.tv.remote.RemotePress
+import com.nuvio.tv.remote.RemoteScreen
 import com.nuvio.vpn.android.VpnBackup
 import com.nuvio.vpn.android.VpnPlaybackProtection
 import io.mockk.every
@@ -70,7 +80,9 @@ class LiveTvSetupChangesTest {
             listeners += listener
             AutoCloseable { listeners -= listener }
         }
-        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), mockk(relaxed = true))
+        val playback = mockk<PlaybackSettingsBackup>(relaxed = true)
+        every { playback.exportDeviceSettings() } returns JSONObject()
+        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), playback)
         val field = LiveTvPreferences::class.java.getDeclaredField("store").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         store = field.get(preferences) as DataStore<Preferences>
@@ -106,6 +118,83 @@ class LiveTvSetupChangesTest {
     }
 
     private suspend fun Channel<JSONObject>.next(): JSONObject = withTimeout(5_000) { receive() }
+
+    private fun remoteConfiguration(action: RemoteAction): String = RemoteControlCodec.encode(
+        RemoteConfiguration(bindings = listOf(RemoteBinding(
+            RemoteScreen.LIVE_TV, RemotePress.ONCE,
+            RemoteButton(android.view.KeyEvent.KEYCODE_DPAD_LEFT), action
+        )))
+    )
+
+    @Test fun `remote layouts stay on this TV and do not trigger account sync`() = runBlocking {
+        val raw = remoteConfiguration(RemoteAction.LAST_CHANNEL)
+        observe { snapshots ->
+            preferences.setRawRemoteButtons(raw)
+            assertNull(withTimeoutOrNull(200) { snapshots.receive() })
+            assertEquals(0, exports.get())
+            assertFalse(preferences.exportForSync().has(RemoteControlCodec.KEY))
+            val backup = preferences.exportForBackup()
+            val device = DeviceSettingsBackup.decode(backup)!!
+            assertEquals(raw, device.getJSONObject("liveTv").getJSONObject(RemoteControlCodec.KEY).getString("v"))
+        }
+    }
+
+    @Test fun `explicit backup restores remote layout but automatic and older restores preserve this TV`() = runBlocking {
+        val saved = remoteConfiguration(RemoteAction.LAST_CHANNEL)
+        val local = remoteConfiguration(RemoteAction.OPEN_GUIDE)
+        preferences.setRawRemoteButtons(saved)
+        val backup = preferences.exportForBackup()
+        preferences.setRawRemoteButtons(local)
+        preferences.importFromSync(backup)
+        assertEquals(local, preferences.rawRemoteButtons.first())
+        preferences.importFromBackup(backup)
+        assertEquals(saved, preferences.rawRemoteButtons.first())
+        preferences.importFromBackup(preferences.exportForSync())
+        assertEquals(saved, preferences.rawRemoteButtons.first())
+    }
+
+    @Test fun `malformed remote backup is rejected before replacing any setup`() = runBlocking {
+        val saved = remoteConfiguration(RemoteAction.LAST_CHANNEL)
+        preferences.setRawRemoteButtons(saved)
+        preferences.updatePlaylists { listOf(PlaylistSource("kept", "Kept", "https://fixture.invalid/kept.m3u")) }
+        val backup = preferences.exportForBackup()
+        val device = DeviceSettingsBackup.decode(backup)!!
+        device.getJSONObject("liveTv").put(RemoteControlCodec.KEY,
+            JSONObject().put("t", "str").put("v", "{\"version\":99}"))
+        backup.put(DeviceSettingsBackup.KEY,
+            DeviceSettingsBackup.encode(device.getJSONObject("liveTv"), device.getJSONObject("playback")))
+        backup.put("playlists", JSONObject().put("t", "str").put("v", "[]"))
+        assertTrue(runCatching { preferences.importFromBackup(backup) }.exceptionOrNull() is IllegalArgumentException)
+        assertEquals(saved, preferences.rawRemoteButtons.first())
+        assertEquals(listOf("kept"), preferences.currentPlaylists().map { it.id })
+    }
+
+    @Test fun `manual restore keeps assignments and labels but rechecks physical buttons on the new TV`() = runBlocking {
+        val yellow = RemoteButton(android.view.KeyEvent.KEYCODE_PROG_YELLOW)
+        val configuration = RemoteConfiguration(
+            extras = listOf(RemoteExtraButton(yellow, "My yellow button")),
+            bindings = listOf(RemoteBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, yellow, RemoteAction.OPEN_GUIDE)),
+            confirmedButtons = listOf(yellow, RemoteButton(android.view.KeyEvent.KEYCODE_INFO))
+        )
+        preferences.setRawRemoteButtons(RemoteControlCodec.encode(configuration))
+        val backup = preferences.exportForBackup()
+        preferences.setRawRemoteButtons("")
+        preferences.importFromBackup(backup)
+        val restored = RemoteControlCodec.decode(preferences.rawRemoteButtons.first())
+        assertEquals(configuration.copy(confirmedButtons = emptyList()), restored)
+    }
+
+    @Test fun `a pending edit cannot overwrite a layout already replaced by restore`() = runBlocking {
+        val original = remoteConfiguration(RemoteAction.LAST_CHANNEL)
+        val restored = remoteConfiguration(RemoteAction.OPEN_GUIDE)
+        val edit = remoteConfiguration(RemoteAction.SHOW_INFO)
+        preferences.setRawRemoteButtons(original)
+        preferences.setRawRemoteButtons(restored)
+        assertFalse(preferences.compareAndSetRawRemoteButtons(original, edit))
+        assertEquals(restored, preferences.rawRemoteButtons.first())
+        assertTrue(preferences.compareAndSetRawRemoteButtons(restored, edit))
+        assertEquals(edit, preferences.rawRemoteButtons.first())
+    }
 
     @Test fun `watching and per-TV changes never invoke portable VPN export`() = runBlocking {
         observe { snapshots ->
