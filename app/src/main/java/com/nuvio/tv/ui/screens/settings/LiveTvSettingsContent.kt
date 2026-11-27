@@ -692,6 +692,12 @@ internal fun LiveTvSettingsContent(
                         s.cleanGroupNames,
                         { update { it.copy(cleanGroupNames = !it.cleanGroupNames) } }
                     )
+                    SettingsToggleRow(
+                        context.getString(R.string.iptv_settings_clean_vod_group_names),
+                        context.getString(R.string.iptv_settings_clean_vod_group_names_description),
+                        s.cleanVodGroupNames,
+                        { update { it.copy(cleanVodGroupNames = !it.cleanVodGroupNames) } }
+                    )
                     if (s.nameRemovals.isBlank()) {
                         SettingsActionRow(
                             context.getString(R.string.iptv_settings_add_common_prefixes_suffixes),

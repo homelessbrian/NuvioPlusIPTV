@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
@@ -255,6 +256,8 @@ class OnDemandViewModel @Inject constructor(
         id?.let { names[it] }?.takeIf { it.isNotBlank() }?.let { "On Demand - $it" } ?: "On Demand"
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "On Demand")
 
+    private var groupLabels: Pair<VodGroupNames, Map<String, String>>? = null
+
     private var loadJob: Job? = null
     /** Hidden and locked categories as of the last reload (the settings flow can lag behind). */
     @Volatile private var excludedNow: Set<String> = emptySet()
@@ -284,6 +287,21 @@ class OnDemandViewModel @Inject constructor(
                 .collect { reload(keepSelection = true) }
         }
         viewModelScope.launch { ParentalControls.unlocked.drop(1).collect { reload(keepSelection = true) } }
+        // Names change without rereading catalog pages or restarting metadata enrichment.
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                prefs.settings.map { VodGroupNames.from(it) }.distinctUntilChanged(),
+                prefs.userState.map { it.vodGroupNames }.distinctUntilChanged()
+            ) { policy, renamed -> policy to renamed }
+                .onEach { groupLabels = it }
+                .drop(1)
+                .collect { (policy, renamed) ->
+                    // Invalidate an older asynchronous card build, then change only labels.
+                    homePublishVersion.incrementAndGet()
+                    homeGroups = homeGroups.map { (c, _) -> c to policy.display(c.name, renamed[c.uid]) }
+                    _home.value = withGroupLabels(_home.value)
+                }
+        }
     }
 
     fun selectKind(kind: VodKind) {
@@ -712,6 +730,22 @@ class OnDemandViewModel @Inject constructor(
         revision
     }
 
+    /** Apply the latest display policy at publication, even if a catalogue read was in flight. */
+    private fun withGroupLabels(state: VodHomeState, labels: Pair<VodGroupNames, Map<String, String>>? = groupLabels): VodHomeState {
+        val (policy, renamed) = labels ?: return state
+        val groups = state.groups.map { g ->
+            g.copy(name = renamed[g.uid]?.takeIf { it.isNotBlank() } ?: g.defaultName,
+                cleanedDefaultName = policy.display(g.defaultName),
+                manuallyNamed = !renamed[g.uid].isNullOrBlank())
+        }
+        val names = groups.associate { it.uid to it.displayName }
+        val rows = state.rows.map { row ->
+            val name = names[row.catalogId]
+            if (name == null || name == row.catalogName) row else row.copy(catalogName = name)
+        }
+        return state.copy(groups = groups, rows = rows)
+    }
+
     /** Builds the page: every group in your order, hidden and locked ones left out. */
     fun loadHome() {
         homeLoadJob?.cancel()
@@ -727,13 +761,15 @@ class OnDemandViewModel @Inject constructor(
         homeActive = true
         homeLoadJob = viewModelScope.launch {
           try {
+            val cats = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
+            val labelsBeforeRead = groupLabels
             val user = prefs.userState.first()
             val s = prefs.settings.first()
-            val cats = repository.categories(VodKind.MOVIE) + repository.categories(VodKind.SERIES)
             val orderIndex = user.vodGroupOrder.withIndex().associate { (i, uid) -> uid to i }
             val ordered = cats.withIndex()
                 .sortedWith(compareBy({ orderIndex[it.value.uid] ?: Int.MAX_VALUE }, { it.index }))
                 .map { it.value }
+            val groupNames = VodGroupNames.from(s)
             // Groups of a playlist this profile doesn't show aren't listed at all.
             val entries = ordered.filter { it.playlistId !in user.hiddenPlaylists }.map { c ->
                 VodGroupEntry(
@@ -742,14 +778,16 @@ class OnDemandViewModel @Inject constructor(
                     name = user.vodGroupNames[c.uid]?.takeIf { it.isNotBlank() } ?: c.name,
                     visible = c.uid !in user.vodHiddenCategories,
                     kind = c.kind,
-                    sort = user.vodSorts[c.uid]
+                    sort = user.vodSorts[c.uid],
+                    cleanedDefaultName = groupNames.display(c.name),
+                    manuallyNamed = !user.vodGroupNames[c.uid].isNullOrBlank()
                 )
             }
             val visible = ordered.filter { c ->
                 !user.hidesVodCategory(c.uid) &&
                     !ParentalControls.isLocked("vod:${c.uid}", c.name, settings.value, user.lockedGroups)
             }
-            homeGroups = visible.map { it to (user.vodGroupNames[it.uid]?.takeIf { n -> n.isNotBlank() } ?: it.name) }
+            homeGroups = visible.map { it to groupNames.display(it.name, user.vodGroupNames[it.uid]) }
             // Before anything is highlighted, the header names the first group's playlist.
             if (focusedPlaylist.value == null) focusedPlaylist.value = homeGroups.firstOrNull()?.first?.playlistId
             // Keep usable rows while refreshing. Removed, hidden and locked groups are
@@ -783,7 +821,9 @@ class OnDemandViewModel @Inject constructor(
             homeSorts = user.vodSorts
             val rows = buildHomeRows()
             val pending = pendingHomeKinds(rows)
-            _home.value = VodHomeState(rows = rows, groups = entries, loading = rows.isEmpty() && pending.isNotEmpty(), pendingKinds = pending)
+            val labels = groupLabels?.takeIf { it !== labelsBeforeRead } ?: (groupNames to user.vodGroupNames)
+            homeGroups = homeGroups.map { (c, _) -> c to labels.first.display(c.name, labels.second[c.uid]) }
+            _home.value = withGroupLabels(VodHomeState(rows = rows, groups = entries, loading = rows.isEmpty() && pending.isNotEmpty(), pendingKinds = pending), labels)
             if (generation != homeGeneration) return@launch
             // Only a screenful per tab initially. Each completed row is published; more
             // groups follow the focused row instead of loading hundreds before first paint.
@@ -1443,8 +1483,14 @@ class OnDemandViewModel @Inject constructor(
         val pattern = posterPattern
         val hasMore = c.uid !in homeEnded
         val cached = homeRowCache[c.uid]
-        if (cached != null && cached.items === items && cached.metadataVersion == stamp && cached.name == name &&
-            cached.pattern == pattern && cached.hasMore == hasMore) return@mapNotNull cached.row
+        if (cached != null && cached.items === items && cached.metadataVersion == stamp &&
+            cached.pattern == pattern && cached.hasMore == hasMore) {
+            if (cached.name == name) return@mapNotNull cached.row
+            // A label edit retains the cards, focus keys and metadata already on screen.
+            val renamed = cached.row.copy(catalogName = name)
+            homeRowCache[c.uid] = cached.copy(name = name, row = renamed)
+            return@mapNotNull renamed
+        }
         val row = VodHomeIds.row(
             uid = c.uid,
             name = name,
@@ -1792,7 +1838,7 @@ class OnDemandViewModel @Inject constructor(
             prefs.saveVodGroups(
                 hidden = entries.filter { !it.visible }.map { it.uid }.toSet(),
                 order = entries.map { it.uid },
-                names = entries.filter { it.name.isNotBlank() && it.name != it.defaultName }.associate { it.uid to it.name }
+                names = entries.filter { it.name.isNotBlank() && (it.manuallyNamed || it.name != it.defaultName) }.associate { it.uid to it.name }
             )
             prefs.setVodSorts(entries.mapNotNull { e -> e.sort?.let { e.uid to it } }.toMap())
             loadHome()

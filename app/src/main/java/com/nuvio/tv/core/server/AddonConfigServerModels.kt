@@ -177,7 +177,7 @@ data class LiveRowGroupInfo(val id: String, val name: String, val playlist: Stri
 
 data class LiveRowSportInfo(val source: String, val name: String, val icon: String, val isLeague: Boolean)
 
-data class LiveRowVodInfo(val source: String, val name: String, val playlist: String?, val count: Int, val series: Boolean)
+data class LiveRowVodInfo(val source: String, val name: String, val playlist: String?, val count: Int, val series: Boolean, val rawName: String = name)
 
 /** What a new Live TV, Sports or On Demand row can show. */
 data class LiveRowChoicesInfo(

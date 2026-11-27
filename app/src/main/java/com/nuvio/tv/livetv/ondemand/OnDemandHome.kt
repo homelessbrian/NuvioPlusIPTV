@@ -27,8 +27,13 @@ data class VodGroupEntry(
     val visible: Boolean,
     val kind: VodKind,
     /** The sort picked for this group (VodSort name), or null to follow the default sort. */
-    val sort: String? = null
-)
+    val sort: String? = null,
+    /** Automatic display only; [name] and [defaultName] stay raw for saving manual renames. */
+    val cleanedDefaultName: String = defaultName,
+    val manuallyNamed: Boolean = false
+) {
+    val displayName: String get() = if (manuallyNamed || name != defaultName) name else cleanedDefaultName
+}
 
 /** Ids and markers that tie Nuvio's rows and cards back to On Demand. */
 object VodHomeIds {
