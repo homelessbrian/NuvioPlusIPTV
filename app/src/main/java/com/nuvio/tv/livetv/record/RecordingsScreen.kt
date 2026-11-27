@@ -233,6 +233,8 @@ class RecordingsViewModel @Inject constructor(
     private var lastRecordings: List<LiveTvRecording> = emptyList()
 
     fun loadPosters(list: List<LiveTvRecording>) {
+        val previous = lastRecordings.associateBy { it.id }
+        invalidateRecordingArt(list.filter { r -> previous[r.id]?.let { it.title != r.title } == true })
         lastRecordings = list
         val todo = list.filter { tried.add(it.id) }
         if (todo.isEmpty()) return
@@ -240,7 +242,7 @@ class RecordingsViewModel @Inject constructor(
             for (r in todo) {
                 // Sports recordings: the channel's logo (game titles found random films).
                 val poster = runCatching { posterOf(askOf(r)) }.getOrNull()
-                if (poster != null) _posters.value = _posters.value + (r.id to poster)
+                if (poster != null && currentTitle(r)) _posters.value = _posters.value + (r.id to poster)
             }
         }
     }
@@ -291,6 +293,7 @@ class RecordingsViewModel @Inject constructor(
                 // Sports: no guessed artwork (the card shows the channel's logo).
                 if (com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(r.channelName, r.title)) continue
                 val found = runCatching { findArt(askOf(r)) }.getOrNull() ?: continue
+                if (!currentTitle(r)) continue
                 _art.value = _art.value + (r.id to found)
                 runCatching { artPrefs.edit().putString(r.id, (found.backdrop ?: "") + "\n" + (found.logo ?: "")).apply() }
             }
@@ -341,6 +344,7 @@ class RecordingsViewModel @Inject constructor(
                 if (r.id in saved) continue
                 if (com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(r.channelName, r.title)) continue
                 val text = runCatching { findAbout(r) }.getOrNull()?.trim()?.takeIf { it.isNotBlank() } ?: continue
+                if (!currentTitle(r)) continue
                 _about.value = _about.value + (r.id to text)
                 runCatching { aboutPrefs.edit().putString(r.id, text).apply() }
             }
@@ -405,6 +409,20 @@ class RecordingsViewModel @Inject constructor(
     private fun redo(keys: Set<String>) {
         fun hit(title: String) = com.nuvio.tv.livetv.data.TitleMatchFixes.recordingKey(title) in keys
         val recs = lastRecordings.filter { hit(it.title) }
+        invalidateRecordingArt(recs)
+        val titles = lastTitles.filter { hit(it.title) }
+        titles.forEach { triedTitles.remove(posterKey(it.title)) }
+        _titlePosters.value = _titlePosters.value - titles.map { posterKey(it.title) }.toSet()
+        if (recs.isNotEmpty()) { loadPosters(lastRecordings); loadArt(lastRecordings); loadAbout(lastRecordings) }
+        if (titles.isNotEmpty()) loadTitlePosters(lastTitles)
+    }
+
+    private fun currentTitle(rec: LiveTvRecording) = lastRecordings.any {
+        it.id == rec.id && it.dir == rec.dir && it.title == rec.title
+    }
+
+    private fun invalidateRecordingArt(recs: List<LiveTvRecording>) {
+        if (recs.isEmpty()) return
         recs.forEach { r ->
             tried.remove(r.id); triedArt.remove(r.id); triedAbout.remove(r.id)
             runCatching { artPrefs.edit().remove(r.id).apply() }
@@ -413,11 +431,6 @@ class RecordingsViewModel @Inject constructor(
         _posters.value = _posters.value - recs.map { it.id }.toSet()
         _art.value = _art.value - recs.map { it.id }.toSet()
         _about.value = _about.value - recs.map { it.id }.toSet()
-        val titles = lastTitles.filter { hit(it.title) }
-        titles.forEach { triedTitles.remove(posterKey(it.title)) }
-        _titlePosters.value = _titlePosters.value - titles.map { posterKey(it.title) }.toSet()
-        if (recs.isNotEmpty()) { loadPosters(lastRecordings); loadArt(lastRecordings); loadAbout(lastRecordings) }
-        if (titles.isNotEmpty()) loadTitlePosters(lastTitles)
     }
 
     fun playUrl(rec: LiveTvRecording): String = recorder.playUrl(rec)
@@ -430,6 +443,8 @@ class RecordingsViewModel @Inject constructor(
         runCatching { aboutPrefs.edit().remove(rec.id).apply() }
     }
     fun setKeepForever(rec: LiveTvRecording, keep: Boolean) = recorder.setKeepForever(rec.id, keep)
+    suspend fun rename(rec: LiveTvRecording, title: String): String? = recorder.rename(rec, title)
+    suspend fun refreshRecordingTitles() = recorder.refreshRecordingTitles()
     fun isWatched(rec: LiveTvRecording): Boolean = RecordingResume.isWatched(recorder.appContext, rec.id)
     fun markWatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.markWatched(recorder.appContext, it.id) }
     fun markUnwatched(recs: List<LiveTvRecording>) = recs.forEach { RecordingResume.clear(recorder.appContext, it.id) }
@@ -492,6 +507,8 @@ fun RecordingsScreen(
         if (showPlaylist) listOfNotNull(channelName, playlistOf(sourceId)).joinToString(" · ") else channelName
     LaunchedEffect(recordings) { viewModel.loadPosters(recordings); viewModel.loadArt(recordings); viewModel.loadAbout(recordings) }
     var menuFor by remember { mutableStateOf<LiveTvRecording?>(null) }
+    var renameFor by remember { mutableStateOf<LiveTvRecording?>(null) }
+    LaunchedEffect(Unit) { viewModel.refreshRecordingTitles() }
     // Fix match: the show's name, and whether it's surely a show (null = don't know).
     var fixMatchFor by remember { mutableStateOf<Pair<String, Boolean?>?>(null) }
     var confirmDelete by remember { mutableStateOf<LiveTvRecording?>(null) }
@@ -905,6 +922,7 @@ fun RecordingsScreen(
     }
 
     menuFor?.let { rec ->
+        val renameLabel = androidx.compose.ui.res.stringResource(R.string.iptv_rec_rename)
         val actions = buildList<Pair<String, () -> Unit>> {
             if (rec.status != RecordingStatus.FAILED) {
                 val resumeAt = viewModel.resume(rec)
@@ -923,6 +941,7 @@ fun RecordingsScreen(
                 })
             }
             add("Information" to { menuFor = null; infoFor = rec })
+            if (!rec.isRecording) add(renameLabel to { menuFor = null; renameFor = rec })
             // Wrong poster or artwork (a film instead of the show, the US version of a UK show):
             // pick the right one; it's used for every recording of this show.
             if (!com.nuvio.tv.livetv.data.LiveTvPosterResolver.isSportsRecording(rec.channelName, rec.title))
@@ -945,6 +964,10 @@ fun RecordingsScreen(
             onReset = { fixMatchFor = null; viewModel.setMatch(title, null) },
             onDismiss = { fixMatchFor = null }
         )
+    }
+
+    renameFor?.let { rec ->
+        RecordingRenameDialog(rec, onDismiss = { renameFor = null }, onSave = { viewModel.rename(rec, it) })
     }
     // Move To while a move is going on: stop it, or let it carry on.
     if (movePick != null && moving != null) {
