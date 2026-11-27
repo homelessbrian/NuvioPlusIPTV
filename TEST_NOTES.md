@@ -15,6 +15,9 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 - Guide day labels (Today, Tomorrow, weekdays) follow the app language
 - Adaptive Live TV Buffer slows down more gently or more strongly depending on how little video is left
 - Large Stalker portals that were too big to load in one go now load page by page
+- Settings → Playback → Your remote: picture of the remote, Find a button, and optional button changes for Live TV, the guide, Sports, Multiview and the movie player (each change is reviewed and saved by hand)
+- On Demand: optional switch to clean movie and series group names with the same cleanup words as channels
+- Setup Sync: a new TV now gets seek preview choices (on/off, when, storage limit) and more player and app choices; Include 4K and anything tied to the TV's screen, sound or memory stays on each TV
 
 ## Rewind Anytime
 
@@ -35,6 +38,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 - Follow Teams & Leagues: Exclude titles… hides guide shows like radio or paddock shows
 - Follow Teams & Leagues: per-league Event listings (Scheduled events / TV guide listings / Both)
 - My Sports preview no longer flickers through leagues while moving fast
+- Sports settings → Watching → Channel checks: checks a game's feeds in the background (off by default); with Best Channel First, working and higher quality feeds come first, with a quality badge
 
 ## Other
 - Low-memory TVs: a channel downloads less ahead while memory is nearly full, and the freeze checker can no longer be what closes the app (crash while watching Live TV on a 224 MB Xiaomi TV)
