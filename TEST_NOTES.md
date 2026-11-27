@@ -20,6 +20,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 - Setup Sync: a new TV now gets seek preview choices (on/off, when, storage limit) and more player and app choices; Include 4K and anything tied to the TV's screen, sound or memory stays on each TV
 
 ## Rewind Anytime
+- Test builds only: with Rewind Anytime on, channels (plain MPEG-TS links) should show a picture right away instead of waiting about 8 seconds while rewind history saves; check channel start speed, pausing and rewinding right after starting, and changing channels quickly
 
 ## Recordings
 - Rename a finished recording (hold OK → Rename)
