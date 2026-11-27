@@ -200,7 +200,8 @@ Protect what you watch without installing a separate VPN app. **Settings → VPN
 - **A new TV in minutes:** sign in with the QR code and everything comes back by itself.
 - **Encrypted:** your saved setup, including your IPTV logins, is encrypted before it's stored. Nothing is written to Nuvio's own servers.
 - **In your control:** **Settings → Live TV → Setup Sync** has Sync Now, Restore Earlier Copy, Turn Off and Delete Saved Setup.
-- **Per TV:** audio passthrough, buffer size, match frame rate and aspect ratio stay on each TV, since they depend on its screen and sound.
+- **Seek preview:** Setup Sync remembers whether previews are on, when to make them and the storage limit. A new TV or Android phone can restore these choices even without a playlist. **Include 4K** stays on each device, and each device makes its own preview pictures.
+- **Per TV:** audio passthrough, buffer size, match frame rate, aspect ratio, decoder and Dolby Vision options, and other choices that depend on a TV's screen, sound or memory stay on each TV. A backup file you restore yourself still carries them.
 - **Combined, not overwritten:** favorites, hidden channels and your own groups are combined between devices item by item, and your channel and guide order stays the way you set it.
 - **Profiles:** **Copy Settings** copies a profile's Live TV favorites, groups, channel order, hidden items, Sports and Calendar choices to another profile. **Keep Matched** keeps profiles the same, so a change on one applies to all (turn it off with **Stop Matching** in Profile Options).
 - **Coming from Google Drive sync?** **Import from Google Drive** moves your Drive backup over in one step. Drive sync keeps working too.

@@ -297,7 +297,12 @@ class LiveTvDriveSync @Inject constructor(
             // without the playlists they had added (which then vanished from every TV).
             remoteCopy(token)?.let { remote ->
                 val remoteData = remote.optJSONObject("data")
-                if (!force && remoteData != null) DeviceSettingsBackup.keepSaved(data, remoteData)
+                if (remoteData != null) {
+                    if (!force) DeviceSettingsBackup.keepSaved(data, remoteData)
+                    remoteData.keys().forEach { key ->
+                        if (TvSharedSettingsSync.isFamily(key) && !data.has(key)) data.put(key, remoteData.get(key))
+                    }
+                }
                 // An unreadable comparison cache uses the same merge as a first sync.
                 val base = readBase()
                 if (remoteData != null && remoteData.toString() != base?.toString()) {
@@ -497,7 +502,7 @@ class LiveTvDriveSync @Inject constructor(
             // Older backups and devices can lack newer external settings. An absent family
             // must not erase the copy held by the other device on the first reconciliation.
             second.keys().forEach { key ->
-                if (!out.has(key) && (UsenetBackup.isKey(key) || PlaybackSettingsBackup.isKey(key) || key == DeviceSettingsBackup.KEY)) {
+                if (!out.has(key) && (UsenetBackup.isKey(key) || PlaybackSettingsBackup.isKey(key) || TvSharedSettingsSync.isFamily(key) || key == DeviceSettingsBackup.KEY)) {
                     out.put(key, second.get(key))
                 }
             }
@@ -516,12 +521,15 @@ class LiveTvDriveSync @Inject constructor(
             base.keys().forEach { add(it) }
         }
         keys.forEach { k ->
-            if (UsenetBackup.isKey(k) || PlaybackSettingsBackup.isKey(k) || k == DeviceSettingsBackup.KEY) {
+            if (UsenetBackup.isKey(k) || PlaybackSettingsBackup.isKey(k) || TvSharedSettingsSync.isFamily(k) || k == DeviceSettingsBackup.KEY) {
                 // An older app omits settings it cannot store. Explicit empty source
                 // configurations reset them; absence alone is never a credential deletion.
                 if (!local.has(k)) return@forEach
                 if (!remote.has(k)) { out.put(k, local.get(k)); return@forEach }
             }
+            // On an upgrade both peers can have settings unknown to the common base. Prefer the
+            // saved setting until this TV has observed it, just as it would on a new installation.
+            if (TvSharedSettingsSync.isFamily(k) && !base.has(k) && remote.has(k)) return@forEach
             val l = local.opt(k)?.toString()
             val b = base.opt(k)?.toString()
             if (l != b) {

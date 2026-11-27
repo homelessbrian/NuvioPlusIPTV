@@ -16,8 +16,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Device-local player preferences that are NOT tied to any profile.
- * These values stay on the device and are never synced across devices or profiles.
+ * Player preferences shared by the profiles on a TV.
+ * Setup Sync copies only the plain display choices; hardware-dependent ones stay on this TV.
  *
  * Currently stores:
  *  - aspectMode  (player aspect ratio mode)
@@ -31,7 +31,7 @@ import javax.inject.Singleton
 class DeviceLocalPlayerPreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(
+    internal val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(
         corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler {
             androidx.datastore.preferences.core.emptyPreferences()
         }

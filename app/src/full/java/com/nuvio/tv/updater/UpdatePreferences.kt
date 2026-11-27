@@ -25,6 +25,8 @@ private val Context.updateDataStore: DataStore<Preferences> by preferencesDataSt
     }
 )
 
+internal fun Context.updateStoreForSetupSync(): DataStore<Preferences>? = updateDataStore
+
 @Singleton
 class UpdatePreferences @Inject constructor(
     @ApplicationContext private val context: Context

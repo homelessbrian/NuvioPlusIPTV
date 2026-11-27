@@ -82,7 +82,8 @@ class LiveTvSetupChangesTest {
         }
         val playback = mockk<PlaybackSettingsBackup>(relaxed = true)
         every { playback.exportDeviceSettings() } returns JSONObject()
-        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), playback)
+        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), playback,
+            mockk(relaxed = true), mockk(relaxed = true) { every { changes } returns kotlinx.coroutines.flow.flowOf(Unit) })
         val field = LiveTvPreferences::class.java.getDeclaredField("store").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         store = field.get(preferences) as DataStore<Preferences>
