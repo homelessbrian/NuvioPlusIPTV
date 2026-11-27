@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -61,8 +62,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -981,6 +984,9 @@ private fun SportsHub(
             }
         }
     }
+    // Make room for the clock beside Follow Teams & Leagues on standard 960dp TV layouts.
+    val compactHeader = rowsPage && LocalConfiguration.current.screenWidthDp < 1080
+    val labelPadding = if (compactHeader) 5.dp else 12.dp
     val filters: @Composable (Modifier) -> Unit = { m ->
         // Switching pages swaps one top bar for another while it has the highlight, and the old
         // one never hears it lost it: without this, Back thought the highlight was still up here
@@ -988,21 +994,21 @@ private fun SportsHub(
         DisposableEffect(Unit) { onDispose { onTopBarFocus(false) } }
         // The button of the page you're on (Back brings the highlight up to it).
         fun on(c: String): Modifier = if (effectiveChip == c) Modifier.focusRequester(pageChip) else Modifier
-        LazyRow(m.keepFocusWhileHeld(vertical = false).onFocusChanged { onTopBarFocus(it.hasFocus) }, state = topBarState, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)) {
+        LazyRow(m.keepFocusWhileHeld(vertical = false).onFocusChanged { onTopBarFocus(it.hasFocus) }, state = topBarState, horizontalArrangement = Arrangement.spacedBy(if (compactHeader) 5.dp else 7.dp), verticalAlignment = Alignment.CenterVertically, contentPadding = PaddingValues(horizontal = 4.dp, vertical = SportsSpace.RowPad)) {
             val upTo: Modifier = Modifier
-            item(key = CHIP_MINE) { FilterIcon("★", "My Sports", effectiveChip == CHIP_MINE, Modifier.focusRequester(firstChip).then(on(CHIP_MINE)).then(upTo), withLabel = true) { pickChip(CHIP_MINE) } }
+            item(key = CHIP_MINE) { FilterIcon("★", "My Sports", effectiveChip == CHIP_MINE, Modifier.focusRequester(firstChip).then(on(CHIP_MINE)).then(upTo), withLabel = true, labelPadding = labelPadding) { pickChip(CHIP_MINE) } }
             // Everything on, day by day (live games first), with how many are on now.
             item(key = CHIP_ALL) {
                 FilterIcon(
                     "▦", if (sections.liveCount > 0) "All Events · ${sections.liveCount} live" else "All Events",
-                    effectiveChip == CHIP_ALL, on(CHIP_ALL).then(upTo), withLabel = true
+                    effectiveChip == CHIP_ALL, on(CHIP_ALL).then(upTo), withLabel = true, labelPadding = labelPadding
                 ) { pickChip(CHIP_ALL) }
             }
             // Your leagues' tables.
-            item(key = CHIP_TABLES) { FilterIcon("🏆", "Tables", effectiveChip == CHIP_TABLES, on(CHIP_TABLES).then(upTo), withLabel = true) { pickChip(CHIP_TABLES) } }
+            item(key = CHIP_TABLES) { FilterIcon("🏆", "Tables", effectiveChip == CHIP_TABLES, on(CHIP_TABLES).then(upTo), withLabel = true, labelPadding = labelPadding) { pickChip(CHIP_TABLES) } }
             // Each league's own channel (NFL Network, NBA TV…).
-            item(key = CHIP_NETWORKS) { FilterIcon("📡", "League Networks", effectiveChip == CHIP_NETWORKS, on(CHIP_NETWORKS).then(upTo), withLabel = true) { pickChip(CHIP_NETWORKS) } }
-            item(key = "multiview") { FilterIcon("▦", "Multiview", false, upTo, withLabel = true, onClick = onOpenMultiview) }
+            item(key = CHIP_NETWORKS) { FilterIcon("📡", "League Networks", effectiveChip == CHIP_NETWORKS, on(CHIP_NETWORKS).then(upTo), withLabel = true, labelPadding = labelPadding) { pickChip(CHIP_NETWORKS) } }
+            item(key = "multiview") { FilterIcon("▦", "Multiview", false, upTo, withLabel = true, labelPadding = labelPadding, onClick = onOpenMultiview) }
             // Sports you follow: My Teams for that sport only.
             if (followedSports.size > 1) {
                 item(key = "sep1") { ChipGap() }
@@ -1074,13 +1080,7 @@ private fun SportsHub(
             use24h = use24h,
             videoOn = videoOn,
             videoSlot = videoSlot,
-            header = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
-                    Spacer(Modifier.width(14.dp))
-                    filters(Modifier.weight(1f))
-                }
-            },
+            header = { SportsHubHeader(now, use24h, filters) },
             request = null,
             focusTable = false,
             onOpen = onOpen,
@@ -1099,7 +1099,7 @@ private fun SportsHub(
             videoOn = videoOn,
             videoSlot = videoSlot,
             playingKey = playingKey,
-            filters = filters,
+            header = { SportsHubHeader(now, use24h, filters) },
             onWatchFull = onWatchChannel
         )
         return
@@ -1125,14 +1125,7 @@ private fun SportsHub(
                 videoSlot = videoSlot,
                 windowInUse = windowInUse,
                 viewModel = viewModel,
-                header = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
-                        Spacer(Modifier.width(14.dp))
-                        filters(Modifier.weight(1f))
-                        FilterIcon("✎", "Follow Teams & Leagues", selected = false, withLabel = true) { onPick() }
-                    }
-                },
+                header = { SportsHubHeader(now, use24h, filters, onPick, labelPadding) },
                 columnState = rowsState,
                 rowState = rowState,
                 requesterFor = requesterFor,
@@ -1161,11 +1154,7 @@ private fun SportsHub(
         // The same top bar as every Sports page, then the list with the video window beside it.
         // Stops above the hint line at the bottom, so no game sits behind it.
         Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = SportsSpace.Bottom)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
-                Spacer(Modifier.width(14.dp))
-                filters(Modifier.weight(1f))
-            }
+            SportsHubHeader(now, use24h, filters)
             Spacer(Modifier.height(SportsSpace.RowGap))
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.width(LIST_WIDTH).fillMaxHeight()) {
@@ -1199,11 +1188,7 @@ private fun SportsHub(
         }
     } else {
         Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = SportsSpace.Bottom)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
-                Spacer(Modifier.width(14.dp))
-                filters(Modifier.weight(1f))
-            }
+            SportsHubHeader(now, use24h, filters)
             Spacer(Modifier.height(SportsSpace.RowGap))
             dayBar(Modifier.fillMaxWidth())
             sportBar()
@@ -1225,6 +1210,33 @@ private fun SportsHub(
             onDismiss = { leaguesOpen = false; leaguesClosed++ }
         )
     }
+    }
+}
+
+@Composable
+internal fun SportsHubHeader(
+    now: Long,
+    use24h: Boolean,
+    filters: @Composable (Modifier) -> Unit,
+    onPick: (() -> Unit)? = null,
+    labelPadding: Dp = 12.dp
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
+        Spacer(Modifier.width(14.dp))
+        filters(Modifier.weight(1f))
+        if (onPick != null) {
+            FilterIcon("✎", "Follow Teams & Leagues", selected = false, withLabel = true, labelPadding = labelPadding, onClick = onPick)
+        }
+        Box(
+            modifier = Modifier.padding(start = 8.dp)
+                .widthIn(min = if (use24h) 58.dp else 78.dp)
+                .border(1.dp, SportsLook.Border, RoundedCornerShape(50))
+                .padding(horizontal = 9.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            LiveText(formatClock(now, use24h), size = 14.sp, weight = FontWeight.SemiBold)
+        }
     }
 }
 

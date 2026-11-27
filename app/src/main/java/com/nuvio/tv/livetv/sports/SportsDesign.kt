@@ -720,7 +720,16 @@ internal fun DayTab(text: String, selected: Boolean, modifier: Modifier = Modifi
  * to the icon ([withLabel]); a sport is just its symbol. The one switched on is filled white.
  */
 @Composable
-internal fun FilterIcon(icon: String, label: String, selected: Boolean, modifier: Modifier = Modifier, iconColor: Color? = null, withLabel: Boolean = false, onClick: () -> Unit) {
+internal fun FilterIcon(
+    icon: String,
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    iconColor: Color? = null,
+    withLabel: Boolean = false,
+    labelPadding: Dp = 12.dp,
+    onClick: () -> Unit
+) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(50)
     Row(
@@ -738,7 +747,7 @@ internal fun FilterIcon(icon: String, label: String, selected: Boolean, modifier
             .border(if (focused) NuvioTheme.focusRing.border(2.dp) else androidx.compose.foundation.BorderStroke(1.dp, SportsLook.Border), shape)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(horizontal = if (withLabel) 12.dp else 0.dp),
+            .padding(horizontal = if (withLabel) labelPadding else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {

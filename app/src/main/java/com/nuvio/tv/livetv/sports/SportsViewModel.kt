@@ -98,8 +98,10 @@ class SportsViewModel @Inject constructor(
         repo.start()
         viewModelScope.launch {
             while (true) {
-                delay(15_000)
-                _now.value = System.currentTimeMillis()
+                val now = System.currentTimeMillis()
+                _now.value = now
+                // Keep the existing refresh cadence aligned with the header clock's minute changes.
+                delay(15_000L - now % 15_000L)
             }
         }
     }
