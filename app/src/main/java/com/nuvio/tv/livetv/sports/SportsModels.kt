@@ -105,8 +105,12 @@ data class Side(
     val winner: Boolean,
     val home: Boolean,
     /** Score per quarter / period / inning / half. */
-    val periods: List<String> = emptyList()
-)
+    val periods: List<String> = emptyList(),
+    val collegeRank: Int? = null,
+    val onOffense: Boolean = false
+) {
+    fun rankedName(name: String = team.name): String = collegeRank?.let { "#$it $name" } ?: name
+}
 
 enum class GameState { PRE, LIVE, POST, OFF }
 

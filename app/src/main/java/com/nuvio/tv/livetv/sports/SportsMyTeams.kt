@@ -485,7 +485,9 @@ internal fun RowCard(
                     dim = showScore && !tied && side != lead,
                     followed = follows.followsTeam(ev.leagueId, side.team.id),
                     modifier = Modifier.height(24.dp),
-                    logo = 18.dp, name = 11.sp, score = 14.sp, extra = null
+                    logo = 18.dp, name = 11.sp, score = 14.sp, extra = null,
+                    offenseSport = sport.takeIf { ev.state == GameState.LIVE && !hideScores },
+                    inlineRecord = sport == Sport.AMERICAN_FOOTBALL && !hideScores
                 )
             }
         } else if (look != null) {
@@ -638,7 +640,7 @@ private fun HeroCard(
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                         TeamLogo(sides[0].team, 50.dp)
                         Spacer(Modifier.width(10.dp))
-                        LiveText(sides[0].team.name, color = Color.White, size = 19.sp, weight = FontWeight.Black, maxLines = 1)
+                        HeroTeamName(sides[0], sport, ev.state == GameState.LIVE, hideScores, Alignment.Start, Modifier.weight(1f, fill = false))
                     }
                     Box(
                         Modifier.clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 12.dp, vertical = 4.dp),
@@ -648,7 +650,7 @@ private fun HeroCard(
                         else LiveText(if (sport.homeFirst) "VS" else "AT", color = Color.White, size = 14.sp, weight = FontWeight.Black)
                     }
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-                        LiveText(sides[1].team.name, color = Color.White, size = 19.sp, weight = FontWeight.Black, maxLines = 1)
+                        HeroTeamName(sides[1], sport, ev.state == GameState.LIVE, hideScores, Alignment.End, Modifier.weight(1f, fill = false))
                         Spacer(Modifier.width(10.dp))
                         TeamLogo(sides[1].team, 50.dp)
                     }

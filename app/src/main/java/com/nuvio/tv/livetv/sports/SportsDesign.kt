@@ -47,6 +47,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -316,6 +318,31 @@ internal fun ScoreLabel(score: String, dim: Boolean, size: TextUnit) {
 
 // ------------------------------------------------------------------ team bands and status
 
+/** Identifies the team with possession or at bat. */
+@Composable
+internal fun OffensiveMarker(sport: Sport?, side: Side, size: TextUnit) {
+    val label = when (sport) {
+        Sport.AMERICAN_FOOTBALL -> "${side.team.name} has possession"
+        Sport.BASEBALL, Sport.CRICKET -> "${side.team.name} batting"
+        else -> return
+    }
+    LiveText(sport.icon, size = size, modifier = Modifier.padding(horizontal = 3.dp)
+        .clearAndSetSemantics { contentDescription = label })
+}
+
+@Composable
+internal fun HeroTeamName(side: Side, sport: Sport, live: Boolean, hideScores: Boolean, align: Alignment.Horizontal, modifier: Modifier = Modifier) {
+    Column(modifier, horizontalAlignment = align) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LiveText(side.rankedName(), modifier = Modifier.weight(1f, fill = false), color = Color.White, size = 19.sp, weight = FontWeight.Black)
+            if (side.onOffense && live && !hideScores) OffensiveMarker(sport, side, 19.sp)
+        }
+        if (sport == Sport.AMERICAN_FOOTBALL && !hideScores) {
+            side.record?.let { LiveText(it, color = Color.White.copy(alpha = 0.75f), size = 11.sp) }
+        }
+    }
+}
+
 /** One team on its own band in its colour: logo, name (★ when followed), record, and the score. */
 @Composable
 internal fun TeamBand(
@@ -328,6 +355,8 @@ internal fun TeamBand(
     name: TextUnit = 13.sp,
     score: TextUnit = 22.sp,
     extra: String? = side.record,
+    offenseSport: Sport? = null,
+    inlineRecord: Boolean = false,
     /** Before the game: this team's place, form and chances, where the score goes later. */
     trailing: (@Composable () -> Unit)? = null
 ) {
@@ -343,11 +372,13 @@ internal fun TeamBand(
         Spacer(Modifier.width(9.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                LiveText(side.team.name, color = if (dim) Color.White.copy(alpha = 0.75f) else Color.White, size = name, weight = FontWeight.ExtraBold)
+                LiveText(side.rankedName(), modifier = Modifier.weight(1f, fill = false), color = if (dim) Color.White.copy(alpha = 0.75f) else Color.White, size = name, weight = FontWeight.ExtraBold)
                 if (followed) LiveText(" ★", color = Color(0xFFF5C400), size = name * 0.8f)
+                if (inlineRecord) side.record?.let { LiveText("  $it", color = Color.White.copy(alpha = 0.7f), size = name * 0.82f) }
             }
             extra?.takeIf { it.isNotBlank() }?.let { LiveText(it, color = Color.White.copy(alpha = 0.6f), size = name * 0.68f, weight = FontWeight.SemiBold) }
         }
+        if (side.onOffense) OffensiveMarker(offenseSport, side, name)
         if (showScore) ScoreLabel(side.score.orEmpty(), dim, score)
         else trailing?.invoke()
     }
@@ -471,6 +502,7 @@ internal fun GameCard(
                             showScore = showScore,
                             dim = showScore && !tied && side != lead,
                             followed = follows.followsTeam(ev.leagueId, side.team.id),
+                            offenseSport = sport.takeIf { ev.state == GameState.LIVE && !hideScores },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -645,7 +677,7 @@ private fun UpcomingTeam(side: Side, followed: Boolean, modifier: Modifier) {
         TeamLogo(side.team, 26.dp)
         Spacer(Modifier.width(7.dp))
         Column {
-            LiveText(side.team.name + if (followed) " ★" else "", color = Color.White, size = 11.sp, weight = FontWeight.ExtraBold)
+            LiveText(side.rankedName() + if (followed) " ★" else "", color = Color.White, size = 11.sp, weight = FontWeight.ExtraBold)
             side.record?.let { LiveText(it, color = SportsLook.Dim, size = 8.sp) }
         }
     }
@@ -880,7 +912,8 @@ internal fun GameHeaderBands(ev: SportsEvent, hideScores: Boolean) {
         val tied = showScore && sides[0].score == sides[1].score
         Column(Modifier.fillMaxWidth()) {
             sides.forEach { s ->
-                TeamBand(s, showScore, showScore && !tied && s != lead, followed = false, modifier = Modifier.height(46.dp), logo = 32.dp, name = 15.sp, score = 22.sp)
+                TeamBand(s, showScore, showScore && !tied && s != lead, followed = false, modifier = Modifier.height(46.dp), logo = 32.dp, name = 15.sp, score = 22.sp,
+                    offenseSport = sport.takeIf { ev.state == GameState.LIVE && !hideScores })
             }
         }
     } else {
