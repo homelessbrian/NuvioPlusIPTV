@@ -40,7 +40,7 @@ class SportsListingBackupTest {
             every { filesDir } returns directory
         }
         val profileManager = mockk<ProfileManager> {
-            every { activeProfileId } returns activeProfile
+            every { activeProfileId } returns this@SportsListingBackupTest.activeProfile
             every { profiles } returns MutableStateFlow(listOf(
                 UserProfile(1, "Primary", "#1E88E5"), UserProfile(2, "Second", "#1E88E5")
             ))
