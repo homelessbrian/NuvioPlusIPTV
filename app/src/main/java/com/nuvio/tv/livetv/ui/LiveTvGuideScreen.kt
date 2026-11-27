@@ -1145,7 +1145,7 @@ private fun LiveTvGuideScreenBody(
         // A soft glow in the theme color behind the info panel and preview (fades into the guide).
         if (settings.showProgramDetails || settings.showPreview) {
             // Stops before the channel rows, so the guide itself keeps the theme's own colors.
-            ThemeGlow(Modifier.fillMaxWidth().height(if (settings.smallHeader) 150.dp else 220.dp))
+            ThemeGlow(settings.guideBackdrop, Modifier.fillMaxWidth().height(if (settings.smallHeader) 150.dp else 220.dp))
         }
         Column(
             modifier = Modifier
@@ -1843,7 +1843,7 @@ private fun LiveTvGuideScreenBody(
                     // Exactly what's behind the window: the guide's freeform backdrop.
                     translate(-left, -top) {
                         drawGuideBackdrop(backdropResolved, rootW, rb.height)
-                        if (showGlow) drawThemeGlow(accent, glowTop, rootW, glowH)
+                        if (showGlow) drawThemeGlow(accent, glowTop, rootW, glowH, backdropResolved)
                         // The preview sits on the header's glass panel; paint that too.
                         val gb = headerGlassBounds
                         if (gb != null) {

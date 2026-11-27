@@ -572,7 +572,7 @@ fun RecordingsScreen(
             .guideBackdrop(look.guideBackdrop)
     ) {
         // The guide's background: the theme's glow behind the top of the screen.
-        com.nuvio.tv.livetv.ui.ThemeGlow(Modifier.fillMaxWidth().height(260.dp))
+        com.nuvio.tv.livetv.ui.ThemeGlow(look.guideBackdrop, Modifier.fillMaxWidth().height(260.dp))
         Column(
             modifier = Modifier
                 .fillMaxSize()
