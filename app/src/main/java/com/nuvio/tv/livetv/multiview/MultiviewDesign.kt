@@ -5,9 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import com.nuvio.tv.livetv.ui.GuideColors
-import com.nuvio.tv.livetv.ui.drawThemeGlow
-import com.nuvio.tv.livetv.ui.resolveBackdrop
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,10 +59,13 @@ import com.nuvio.tv.livetv.sports.SportsBadge
 import com.nuvio.tv.livetv.sports.SportsLook
 import com.nuvio.tv.livetv.sports.sportsFrame
 import com.nuvio.tv.livetv.ui.ChannelLogo
+import com.nuvio.tv.livetv.ui.GuideColors
 import com.nuvio.tv.livetv.ui.LiveText
+import com.nuvio.tv.livetv.ui.drawThemeGlow
 import com.nuvio.tv.livetv.ui.formatClock
 import com.nuvio.tv.livetv.ui.glass
 import com.nuvio.tv.livetv.ui.glassColor
+import com.nuvio.tv.livetv.ui.resolveBackdrop
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 /*
