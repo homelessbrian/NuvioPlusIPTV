@@ -9,6 +9,7 @@ import com.nuvio.tv.livetv.data.LiveTvStatus
 import com.nuvio.tv.livetv.model.ChannelGroup
 import com.nuvio.tv.livetv.model.ChannelSort
 import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.record.withRecordingGuideDetails
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.LiveUserState
@@ -1523,7 +1524,8 @@ class LiveTvViewModel @Inject constructor(
         // watching it). With catch-up, the whole show is saved from catch-up after it ends.
         val now = System.currentTimeMillis()
         if (channel.catchup == null && now >= program.startMs && now < program.stopMs && recorder.activeFor(channel.key) == null) {
-            toggleRecording(channel, onResult)
+            if (LiveTvRepository.isPlaceholderTitle(program.title)) toggleRecording(channel, onResult)
+            else startRecording(channel, program.stopMs + settings.value.recordPostMinutes.coerceAtLeast(0) * 60_000L, program, onResult)
             return
         }
         onResult(scheduler.add(channel, program))
@@ -1575,10 +1577,15 @@ class LiveTvViewModel @Inject constructor(
     private val startingRecordings = HashSet<String>()
 
     fun startRecording(channel: LiveChannel, stopAtMs: Long?, onResult: (String) -> Unit) {
+        val show = currentProgram(channel.key, System.currentTimeMillis())?.takeIf { !LiveTvRepository.isPlaceholderTitle(it.title) }
+        startRecording(channel, stopAtMs, show, onResult)
+    }
+
+    private fun startRecording(channel: LiveChannel, stopAtMs: Long?, show: EpgProgram?, onResult: (String) -> Unit) {
         recorder.activeFor(channel.key)?.let { onResult("This channel is already recording"); return }
         if (!startingRecordings.add(channel.key)) { onResult("This recording is starting"); return }
         val now = System.currentTimeMillis()
-        val show = currentProgram(channel.key, now)?.takeIf { !LiveTvRepository.isPlaceholderTitle(it.title) }
+        val guideOffsetMs = settings.value.epgOffsetMinutes * 60_000L
         val untilStopped = stopAtMs == null
         val stopAt = (stopAtMs ?: (now + UNTIL_STOPPED_MAX_MS)).coerceAtLeast(now + 60_000L)
         val title = show?.title?.let { titleMarks(it).title } ?: channel.name
@@ -1590,6 +1597,7 @@ class LiveTvViewModel @Inject constructor(
             var prepared: com.nuvio.tv.livetv.record.LiveTvRecorder.PreparedStorage? = null
             var handedOver = false
             try {
+                val full = show?.withRecordingGuideDetails(guideOffsetMs) { repository.recordingProgramDetails(channel.key, it) }
                 var freeBytes = Long.MAX_VALUE
                 withContext(Dispatchers.IO) {
                     // Keep the preparation reference even if cancellation happens on dispatch back.
@@ -1608,7 +1616,7 @@ class LiveTvViewModel @Inject constructor(
                     val rec = withContext(Dispatchers.IO) {
                         recorder.start(
                             channel = channel, url = url, title = title,
-                            episode = show?.episode, description = show?.description,
+                            episode = full?.episode, description = full?.description,
                             programStartMs = show?.startMs ?: 0L, programStopMs = show?.stopMs ?: 0L,
                             stopAtMs = stopAt, startDelayMs = if (watching) 1_500L else 0L,
                             preparedStorage = storage,

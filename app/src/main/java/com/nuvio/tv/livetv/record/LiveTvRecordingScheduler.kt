@@ -13,6 +13,7 @@ import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.CatchupInfo
 import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.model.guideDescriptionText
 import com.nuvio.stalker.StalkerContentKind
 import com.nuvio.stalker.StalkerStreamRef
 import dagger.hilt.EntryPoint
@@ -109,6 +110,8 @@ data class RecordingSchedule(
     val providerSourceIdentity: String? = null,
     /** The guide marked it as new (null: not known, set before this was saved). */
     val isNew: Boolean? = null,
+    /** Stored listing time, before the user's display offset. Used if its synopsis arrives later. */
+    val guideStartMs: Long? = null,
 ) {
     val pre: Long get() = if (preMs >= 0) preMs else LiveTvRecordingScheduler.PRE_MS
     val post: Long get() = if (postMs >= 0) postMs else LiveTvRecordingScheduler.POST_MS
@@ -122,6 +125,7 @@ data class RecordingSchedule(
         providerProgramId?.let { put("providerProgramId", it) }
         providerSourceIdentity?.let { put("providerSourceIdentity", it) }
         isNew?.let { put("isNew", it) }
+        guideStartMs?.let { put("guideStartMs", it) }
     }
 
     companion object {
@@ -142,6 +146,7 @@ data class RecordingSchedule(
             providerProgramId = o.optString("providerProgramId").ifBlank { null },
             providerSourceIdentity = o.optString("providerSourceIdentity").ifBlank { null },
             isNew = if (o.has("isNew")) o.optBoolean("isNew") else null,
+            guideStartMs = o.optLong("guideStartMs").takeIf { it > 0 },
         )
     }
 }
@@ -359,8 +364,24 @@ class LiveTvRecordingScheduler @Inject constructor(
         return message
     }
 
+    private suspend fun currentGuideOffset(): Long? = try {
+        prefs.currentSettings().epgOffsetMinutes * 60_000L
+    } catch (_: java.io.IOException) {
+        null
+    }
+
+    private suspend fun RecordingSchedule.withGuideDetails(guideOffsetMs: Long? = null): RecordingSchedule {
+        if (!guideDescriptionText(description).isNullOrBlank()) return this
+        val offset = guideStartMs?.let { startMs - it } ?: guideOffsetMs ?: currentGuideOffset() ?: return this
+        val listing = EpgProgram(startMs, stopMs, title, description, episode = episode,
+            providerProgramId = providerProgramId, providerSourceIdentity = providerSourceIdentity)
+        val full = listing.withRecordingGuideDetails(offset) { repository.recordingProgramDetails(channel.key, it) }
+        return copy(episode = full.episode, description = full.description, guideStartMs = startMs - offset)
+    }
+
     /** Puts a show in the list (unless that airing is already in it) and sets its alarm. */
-    private suspend fun insert(s: RecordingSchedule) {
+    private suspend fun insert(schedule: RecordingSchedule, guideOffsetMs: Long? = null) {
+        val s = schedule.withGuideDetails(guideOffsetMs)
         mutex.withLock {
             if (_schedules.value.none { it.channel.key == s.channel.key && it.startMs == s.startMs }) {
                 _schedules.value = (_schedules.value + s).sortedBy { it.startMs }
@@ -381,19 +402,6 @@ class LiveTvRecordingScheduler @Inject constructor(
                 program.providerSourceIdentity == channel.stalkerRef.sourceIdentity))
         val title = cleanTitle(program.title)
         val (padPre, padPost) = paddingFor(seriesId)
-        if (!useCatchup && now >= program.startMs && now < program.stopMs) {
-            // On now, no catch-up: record from now.
-            if (recorder.activeFor(channel.key) == null) {
-                scope.launch {
-                    runCatching {
-                        recorder.start(channel, channel.url, title, program.episode, program.description,
-                            program.startMs, program.stopMs, program.stopMs + padPost,
-                            onFinished = { seriesId?.let { keepOnlyNewest(it) } }, seriesId = seriesId)
-                    }.onFailure { LiveTvNotice.show("Couldn't start recording \"$title\": ${it.message ?: "storage unavailable"}") }
-                }
-            }
-            return null to "Starting recording \"$title\" now"
-        }
         if (program.stopMs <= now && !useCatchup) return null to "That show has already been on"
         val s = RecordingSchedule(
             id = "s" + System.nanoTime(),
@@ -411,6 +419,20 @@ class LiveTvRecordingScheduler @Inject constructor(
             providerSourceIdentity = program.providerSourceIdentity,
             isNew = isNew(program),
         )
+        if (!useCatchup && now >= program.startMs) {
+            // On now, no catch-up: record from now.
+            if (recorder.activeFor(channel.key) == null) {
+                scope.launch {
+                    val full = s.withGuideDetails()
+                    runCatching {
+                        recorder.start(channel, channel.url, title, full.episode, full.description,
+                            program.startMs, program.stopMs, program.stopMs + padPost,
+                            onFinished = { seriesId?.let { keepOnlyNewest(it) } }, seriesId = seriesId)
+                    }.onFailure { LiveTvNotice.show("Couldn't start recording \"$title\": ${it.message ?: "storage unavailable"}") }
+                }
+            }
+            return null to "Starting recording \"$title\" now"
+        }
         val clash = clashWith(s)
         val whenText = timeLabel(program.startMs)
         return s to when {
@@ -623,7 +645,8 @@ class LiveTvRecordingScheduler @Inject constructor(
                         }))
                 if (already || p.startMs <= now) return@forEach
                 ep?.let { setNow.add(it) }
-                prepare(channel, p, rule.id).first?.let { insert(it) }
+                // upcomingListings returns the guide's stored times, before the UI offset.
+                prepare(channel, p, rule.id).first?.let { insert(it, guideOffsetMs = 0L) }
             }
         }
     }
@@ -714,7 +737,10 @@ class LiveTvRecordingScheduler @Inject constructor(
     fun fire(id: String) {
         scope.launch {
             if (!started) { load() }
-            val s = _schedules.value.firstOrNull { it.id == id } ?: run { recorder.stopServiceIfIdle(); return@launch }
+            val pending = _schedules.value.firstOrNull { it.id == id } ?: run { recorder.stopServiceIfIdle(); return@launch }
+            // Older queued recordings may only have a guide-grid title and time.
+            val s = pending.withGuideDetails()
+            if (_schedules.value.none { it == pending }) return@launch
             val now = System.currentTimeMillis()
             if (!s.useCatchup) {
                 if (now >= s.stopMs) { drop(s, "\"${s.title}\" was missed"); return@launch }

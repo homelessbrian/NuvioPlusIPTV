@@ -1452,6 +1452,12 @@ class LiveTvRepository @Inject constructor(
         if (!guideInDb) null else runCatching { guideDb.program(channelKey, startMs) }.getOrNull()
     }
 
+    /** A calendar recording can have just the title and times, including with an in-memory guide. */
+    internal suspend fun recordingProgramDetails(channelKey: String, startMs: Long): EpgProgram? =
+        if (guideInDb) programDetails(channelKey, startMs) else withContext(Dispatchers.Default) {
+            _programs.value[channelKey]?.firstOrNull { it.startMs == startMs }
+        }
+
     /** Search reads its full requested window from SQLite, independent of the browsing cache. */
     suspend fun searchListings(query: String, channelKeys: Collection<String>, fromMs: Long, toMs: Long): Map<String, EpgProgram> =
         withContext(Dispatchers.IO) {
