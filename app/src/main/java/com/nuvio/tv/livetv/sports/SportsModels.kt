@@ -223,7 +223,9 @@ data class SportsSettings(
     /** A finished game's page lists highlights, recaps and single plays (off: replays only). */
     val showHighlights: Boolean = true,
     /** A finished game's page lists condensed games. */
-    val showCondensed: Boolean = true
+    val showCondensed: Boolean = true,
+    /** Check the open game's channels when playback is idle. Checks consume provider connections. */
+    val autoCheckChannels: Boolean = false
 ) {
     fun toJson(): String = JSONObject()
         .put("showInSidebar", showInSidebar)
@@ -233,6 +235,7 @@ data class SportsSettings(
         .put("scoreOnInfoBar", scoreOnInfoBar)
         .put("pinnedScores", pinnedScores)
         .put("bestChannelFirst", bestChannelFirst)
+        .put("autoCheckChannels", autoCheckChannels)
         .put("remindMyTeams", remindMyTeams)
         .put("remindMinutes", remindMinutes)
         .put("autoSwitch", autoSwitch)
@@ -266,6 +269,7 @@ data class SportsSettings(
                     scoreOnInfoBar = o.optBoolean("scoreOnInfoBar", d.scoreOnInfoBar),
                     pinnedScores = o.optBoolean("pinnedScores", d.pinnedScores),
                     bestChannelFirst = o.optBoolean("bestChannelFirst", d.bestChannelFirst),
+                    autoCheckChannels = o.optBoolean("autoCheckChannels", d.autoCheckChannels),
                     remindMyTeams = o.optBoolean("remindMyTeams", d.remindMyTeams),
                     remindMinutes = o.optInt("remindMinutes", d.remindMinutes),
                     autoSwitch = o.optBoolean("autoSwitch", d.autoSwitch),

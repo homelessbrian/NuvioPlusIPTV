@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.model.BackupOrder
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.player.LiveTvPlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,18 +33,35 @@ class SportsViewModel @Inject constructor(
     private val recordings: com.nuvio.tv.livetv.record.LiveTvRecordingScheduler,
     private val watchSelection: SportsWatchSelection,
     private val profiles: com.nuvio.tv.core.profile.ProfileManager,
+    probeHost: SportsProbeHost,
 ) : ViewModel() {
+    private val channelProbeHost = probeHost.bind(viewModelScope)
+    internal val channelChecks get() = channelProbeHost.results
+    internal val probeBlockedByPlayback get() = channelProbeHost.blockedByPlayback
+    internal fun openChannelChecks(eventId: String, channels: List<LiveChannel>, automatic: Boolean) = channelProbeHost.open(eventId, channels, automatic)
+    internal fun closeChannelChecks(eventId: String) = channelProbeHost.close(eventId)
+    internal fun prioritizeChannelChecks(keys: List<String>) = channelProbeHost.prioritize(keys)
+    internal suspend fun stopChannelChecksForPlayback() = channelProbeHost.stopAndJoin()
     internal val previewReturn = SportsPreviewReturn()
     internal val hasPlaybackSelection: Boolean get() = playback.playingChannel != null
+    private var playbackRequest = 0L
+    private var playbackJob: kotlinx.coroutines.Job? = null
 
     /** Save only a live preview's selection before Multiview releases its shared player. */
     internal fun prepareMultiview(): String? {
+        cancelPendingPlayback()
+        channelProbeHost.stop()
         val channelKey = playback.state.value.takeIf { it.catchupTitle == null }?.channelKey
         previewReturn.prepare(profiles.activeProfileId.value, channelKey, SportsLaunch.pickedGame(channelKey))
         return channelKey
     }
 
     val settings = repo.settings
+    internal val liveSettings = livePrefs.settings
+    internal val playlists = livePrefs.playlists
+    internal fun saveGameSourceOrder(order: List<String>) {
+        viewModelScope.launch { livePrefs.updateSettings { BackupOrder.withGameSourceOrder(it, order) } }
+    }
     val follows = repo.follows
     val events = repo.events
     private val _now = MutableStateFlow(System.currentTimeMillis())
@@ -115,7 +134,26 @@ class SportsViewModel @Inject constructor(
     /** Tunes Live TV to the channel (the screen then opens it full screen). */
     fun watch(m: ChannelMatch) {
         previewReturn.cancel()
-        playback.play(m.channel)
+        playAfterChecks(m, rememberWatched = false)
+    }
+
+    private fun cancelPendingPlayback() {
+        playbackRequest++
+        playbackJob?.cancel()
+        videoJob?.cancel()
+    }
+
+    private fun playAfterChecks(m: ChannelMatch, rememberWatched: Boolean, replay: Boolean = false, onStarted: () -> Unit = {}) {
+        cancelPendingPlayback()
+        val request = playbackRequest
+        val stillAllowed = channelProbeHost.playbackGuard(m.channel, replay)
+        playbackJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            channelProbeHost.stopAndJoin()
+            if (request != playbackRequest || !stillAllowed()) return@launch
+            playback.play(m.channel)
+            onStarted()
+            if (rememberWatched) runCatching { livePrefs.recordWatched(m.channel.key) }
+        }
     }
 
     private var videoJob: kotlinx.coroutines.Job? = null
@@ -125,20 +163,26 @@ class SportsViewModel @Inject constructor(
      * Live TV). NHL's and YouTube's videos are worked out first (a moment).
      */
     fun playReplay(m: ChannelMatch, onReady: () -> Unit) {
+        cancelPendingPlayback()
+        channelProbeHost.stop()
         previewReturn.cancel()
         videoJob?.cancel()
         if (!SportsVideos.needsResolving(m.channel)) {
-            watch(m)
-            onReady()
+            playAfterChecks(m, rememberWatched = false, replay = true, onStarted = onReady)
             return
         }
+        val request = playbackRequest
+        val stillAllowed = channelProbeHost.playbackGuard(m.channel, replay = true)
         videoJob = viewModelScope.launch {
+            channelProbeHost.stopAndJoin()
+            if (request != playbackRequest || !stillAllowed()) return@launch
             com.nuvio.tv.livetv.record.LiveTvNotice.show("Opening the video…")
             val ch = runCatching { repo.playableVideo(m.channel) }.getOrNull()
             if (ch == null) {
                 com.nuvio.tv.livetv.record.LiveTvNotice.show("That video can't be played right now. Try another one.")
                 return@launch
             }
+            if (request != playbackRequest || !stillAllowed()) return@launch
             playback.play(ch)
             onReady()
         }
@@ -179,9 +223,12 @@ class SportsViewModel @Inject constructor(
     /** Plays the channel in the Sports page's window (no full screen), remembered as last watched. */
     fun playHere(m: ChannelMatch) {
         previewReturn.cancel()
-        if (playback.playingChannel?.key == m.channel.key && playingKey.value != null) return
-        playback.play(m.channel)
-        viewModelScope.launch { runCatching { livePrefs.recordWatched(m.channel.key) } }
+        if (playback.playingChannel?.key == m.channel.key && playingKey.value != null) {
+            cancelPendingPlayback()
+            channelProbeHost.stop()
+            return
+        }
+        playAfterChecks(m, rememberWatched = true)
     }
 
     /**
@@ -190,6 +237,8 @@ class SportsViewModel @Inject constructor(
      */
     fun watchFromStart(ev: SportsEvent, m: ChannelMatch): Boolean {
         if (!m.catchup) return false
+        cancelPendingPlayback()
+        channelProbeHost.stop()
         previewReturn.cancel()
         val league = SportsCatalog.league(ev.leagueId)
         val program = m.program?.takeIf { it.startMs <= ev.startMs + 30 * 60_000L }
@@ -223,6 +272,8 @@ class SportsViewModel @Inject constructor(
      * Returns the message to show.
      */
     fun record(ev: SportsEvent, m: ChannelMatch, minutes: Int): String {
+        cancelPendingPlayback()
+        channelProbeHost.stop()
         val pre = recordPadding.value.first * 60_000L
         val extraEarly = (SportsRecordings.EARLY_MS - pre).coerceAtLeast(0L)
         val league = SportsCatalog.league(ev.leagueId)

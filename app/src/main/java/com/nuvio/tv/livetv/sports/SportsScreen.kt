@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -80,6 +81,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.model.BackupOrder
+import com.nuvio.tv.ui.screens.settings.SportsSourceOrderDialog
+import com.nuvio.tv.livetv.sports.probe.sportsGameChannelRows
 import com.nuvio.tv.livetv.record.LiveTvNotice
 import com.nuvio.tv.livetv.ui.ChannelLogo
 import com.nuvio.tv.livetv.ui.LivePlayerSurface
@@ -92,10 +96,12 @@ import com.nuvio.tv.livetv.ui.drawThemeGlow
 import com.nuvio.tv.livetv.ui.formatClock
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -1686,15 +1692,35 @@ private fun GamePage(
     onStripFocused: () -> Unit = {},
     onOpenFromStrip: (SportsEvent) -> Unit = {}
 ) {
-    BackHandler(onBack = onClose)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val playScope = androidx.compose.runtime.rememberCoroutineScope()
+    val latestEventId = androidx.compose.runtime.rememberUpdatedState(ev.id)
+    val gameIsClosing = remember(ev.id) { mutableStateOf(false) }
+    var pendingPlay by remember(ev.id) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    fun leaveGame(action: () -> Unit) {
+        gameIsClosing.value = true
+        pendingPlay?.cancel()
+        viewModel.closeChannelChecks(ev.id)
+        action()
+    }
+    BackHandler { leaveGame(onClose) }
+    fun playAfterChecks(action: () -> Unit) {
+        pendingPlay?.cancel()
+        pendingPlay = playScope.launch {
+            viewModel.stopChannelChecksForPlayback()
+            coroutineContext.ensureActive()
+            if (!gameIsClosing.value && latestEventId.value == ev.id &&
+                lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) action()
+        }
+    }
     // A team's card: Up to the teams at the top, OK on one.
     var cardTeam by remember(ev.id) { mutableStateOf<TeamInfo?>(null) }
     cardTeam?.let { t ->
         TeamCard(
             team = t, row = null, table = null, viewModel = viewModel, follows = follows, settings = settings,
             now = now, use24h = use24h,
-            onOpen = { g -> cardTeam = null; if (g.id != ev.id) onOpenGame(g) },
-            onWatch = { g -> cardTeam = null; onQuickWatch(g) },
+            onOpen = { g -> cardTeam = null; if (g.id != ev.id) leaveGame { onOpenGame(g) } },
+            onWatch = { g -> cardTeam = null; playAfterChecks { onQuickWatch(g) } },
             onDismiss = { cardTeam = null }
         )
     }
@@ -1710,7 +1736,10 @@ private fun GamePage(
         val pad by viewModel.recordPadding.collectAsStateWithLifecycle()
         RecordDialog(
             ev = ev, matches = ownChannels, padding = pad, use24h = use24h, hideScores = settings.hideScores,
-            onRecord = { m, minutes -> askRecord = false; LiveTvNotice.show(viewModel.record(ev, m, minutes)) },
+            onRecord = { m, minutes ->
+                askRecord = false
+                playAfterChecks { LiveTvNotice.show(viewModel.record(ev, m, minutes)) }
+            },
             onDismiss = { askRecord = false }
         )
     }
@@ -1718,7 +1747,7 @@ private fun GamePage(
     // Your sports addons (HighFly, StremVerse…): streams for this game, or replays once it's over.
     DisposableEffect(ev.id) {
         viewModel.repo.openGame(ev)
-        onDispose { viewModel.repo.closeGame(ev.id) }
+        onDispose { gameIsClosing.value = true; pendingPlay?.cancel(); viewModel.repo.closeGame(ev.id) }
     }
     val vodLooked = viewModel.repo.vodMatches.collectAsStateWithLifecycle().value[ev.id]
     // Official highlights and condensed games (ESPN, NHL, MLB, YouTube) go in the same list.
@@ -1750,7 +1779,7 @@ private fun GamePage(
         }
     }
     val plays = rememberScoringPlays(ev, settings.hideScores, viewModel)
-    LaunchedEffect(ev.id) {
+    LaunchedEffect(ev.id, settings.autoCheckChannels) {
         delay(120)
         runCatching { if (matches.isNotEmpty() && ev.state != GameState.POST) first.requestFocus() else firstAction.requestFocus() }
     }
@@ -1778,8 +1807,64 @@ private fun GamePage(
     // None of them from that region: show them all (with a line saying so) rather than nothing.
     val noneInRegion = regionChoice.isNotBlank() && matches.isNotEmpty() && inRegion.isEmpty()
     val shown = if (regionChoice.isBlank() || otherRegions || noneInRegion) matches else inRegion
-    // One row per channel: its FHD/HD/SD copies folded in (the one playing leads).
-    val shownRows = remember(shown, playingKey) { SportsMatcher.groupCopies(shown, playingKey) }
+    val liveSettings by viewModel.liveSettings.collectAsStateWithLifecycle(initialValue = null)
+    val playlists by viewModel.playlists.collectAsStateWithLifecycle(initialValue = null)
+    val addonNames = remember(matches) {
+        matches.map { it.channel }.filter(BackupOrder::isAddon).map { it.sourceName }.distinct()
+    }
+    val playlistIds = remember(playlists, matches) {
+        (playlists.orEmpty().map { it.id } + matches.map { it.channel }.filterNot(BackupOrder::isAddon).map { it.sourceId }).distinct()
+    }
+    val sourceOrder = remember(liveSettings?.backupGroupBy, liveSettings?.backupSourceOrder, playlistIds, addonNames) {
+        liveSettings?.let { BackupOrder.gameSourceOrder(it, playlistIds, addonNames) }.orEmpty()
+    }
+    val shownRows = remember(shown, playingKey, sourceOrder.isNotEmpty()) {
+        if (sourceOrder.isNotEmpty()) shown.map { listOf(it) } else SportsMatcher.groupCopies(shown, playingKey)
+    }
+    val channelChecks by viewModel.channelChecks.collectAsStateWithLifecycle()
+    // Each actual provider/copy is playable. Verified working sources lead, unavailable ones trail.
+    val displayRows = remember(shownRows, settings.autoCheckChannels, settings.bestChannelFirst, channelChecks, sourceOrder) {
+        sportsGameChannelRows(shownRows, channelChecks, settings.autoCheckChannels, settings.bestChannelFirst, sourceOrder)
+    }
+    val probeChannels = remember(shownRows) { shownRows.flatten().map { it.channel }.distinctBy { it.key } }
+    val latestProbeChannels = androidx.compose.runtime.rememberUpdatedState(probeChannels)
+    val channelListState = remember(ev.id) { LazyListState() }
+    DisposableEffect(lifecycleOwner, ev.id, settings.autoCheckChannels, ev.state) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> if (!gameIsClosing.value && ev.state != GameState.POST && settings.autoCheckChannels) {
+                    viewModel.openChannelChecks(ev.id, latestProbeChannels.value, settings.autoCheckChannels)
+                }
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP, Lifecycle.Event.ON_DESTROY -> {
+                    pendingPlay?.cancel()
+                    viewModel.closeChannelChecks(ev.id)
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.closeChannelChecks(ev.id)
+        }
+    }
+    // Candidate changes update the same lease; they must not undo a playback handoff's stop.
+    LaunchedEffect(lifecycleOwner, ev.id, probeChannels, settings.autoCheckChannels, ev.state) {
+        if (!gameIsClosing.value && settings.autoCheckChannels && ev.state != GameState.POST &&
+            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            viewModel.openChannelChecks(ev.id, probeChannels, settings.autoCheckChannels)
+        }
+    }
+    LaunchedEffect(lifecycleOwner, ev.id, displayRows, settings.autoCheckChannels, channelListState) {
+        if (!settings.autoCheckChannels || ev.state == GameState.POST) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            snapshotFlow {
+                channelListState.layoutInfo.visibleItemsInfo.flatMap { item ->
+                    displayRows.getOrNull(item.index).orEmpty().map { it.channel.key }
+                }
+            }.distinctUntilChanged().collect { viewModel.prioritizeChannelChecks(it) }
+        }
+    }
     val elsewhere = remember(matches, inRegion) {
         if (inRegion === matches) 0 else {
             val keep = inRegion.mapTo(HashSet()) { it.channel.key }
@@ -1791,6 +1876,32 @@ private fun GamePage(
     // Up from the first channel and Down from the lower team go to it (it sits off to the right,
     // so the TV would otherwise jump past it).
     val regionFocus = remember(ev.id) { FocusRequester() }
+    val sortFocus = remember(ev.id) { FocusRequester() }
+    var sortSources by remember(ev.id) { mutableStateOf(false) }
+    var restoreSortFocus by remember(ev.id) { mutableStateOf(false) }
+    val sortButton = liveSettings != null && playlists != null
+    fun dismissSort() {
+        sortSources = false
+        restoreSortFocus = true
+    }
+    LaunchedEffect(sortSources, restoreSortFocus) {
+        if (!sortSources && restoreSortFocus && sortButton && ev.state != GameState.POST) {
+            androidx.compose.runtime.withFrameNanos { }
+            sortFocus.requestFocus()
+            restoreSortFocus = false
+        }
+    }
+    if (sortSources && sortButton && ev.state != GameState.POST) {
+        val installedAddons by androidx.compose.runtime.produceState<List<String>?>(initialValue = null) {
+            value = viewModel.repo.liveStreamAddonNames()
+        }
+        SportsSourceOrderDialog(
+            settings = checkNotNull(liveSettings), playlists = playlists.orEmpty(),
+            addonNames = (installedAddons.orEmpty() + addonNames).distinct(), loading = installedAddons == null,
+            onSave = { order -> viewModel.saveGameSourceOrder(order); dismissSort() },
+            onReset = { viewModel.saveGameSourceOrder(emptyList()); dismissSort() }, onDismiss = ::dismissSort,
+        )
+    }
     // What each channel's guide says now (the "Watch on" list's coloured lines), checked every minute.
     var guideNow by remember(ev.id) { mutableStateOf<Map<String, com.nuvio.tv.livetv.model.EpgProgram?>>(emptyMap()) }
     val guideKeys = remember(matches) { matches.filter { it.channel.sourceId != SportsAddonSource.SOURCE_ID }.map { it.channel.key }.distinct() }
@@ -1837,7 +1948,7 @@ private fun GamePage(
                         m.channel.key == backReplayKey -> Modifier.focusRequester(backReplay)
                         else -> Modifier
                     },
-                        onClick = { onPlayReplay(m) })
+                        onClick = { playAfterChecks { onPlayReplay(m) } })
                 }
             }
             vodLooked == null || official == null -> LiveText("Looking for replays and highlights…", color = SportsLook.Dim, size = 12.sp,
@@ -1864,6 +1975,12 @@ private fun GamePage(
             if (ev.state == GameState.POST) { replaysBlock(); return@Column }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectionHeader("WATCH ON YOUR CHANNELS", modifier = Modifier.weight(1f))
+                if (sortButton) SportsAction(
+                    androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_sports_sort_sources),
+                    modifier = Modifier.padding(end = 4.dp).focusRequester(sortFocus).focusProperties {
+                        if (displayRows.isNotEmpty()) down = first
+                    },
+                ) { sortSources = true }
                 if (regionButton) RegionButton(
                     regionChoice,
                     Modifier.padding(top = 6.dp, end = 6.dp).focusRequester(regionFocus).focusProperties { down = first }
@@ -1878,10 +1995,11 @@ private fun GamePage(
                     // The whole column (the rest scroll). Target the group: row 0 can be recycled after
                     // scrolling or returning from playback.
                     Modifier.weight(1f, fill = false).focusRequester(first).keepFocusWhileHeld(horizontal = false),
+                    state = channelListState,
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                 ) {
-                    itemsIndexed(shownRows, key = { _, g -> SportsMatcher.copyKey(g[0].channel).ifBlank { g[0].channel.key } }) { i, g ->
+                    itemsIndexed(displayRows, key = { _, g -> g.first().channel.key }) { i, g ->
                         val m = g[0]
                         SportsChannelRow(
                             m = m,
@@ -1891,10 +2009,14 @@ private fun GamePage(
                             eventStartMs = ev.startMs,
                             use24h = use24h,
                             copies = g.drop(1),
+                            probe = channelChecks[m.channel.key],
+                            showProbe = settings.autoCheckChannels,
+                            probePosition = i.takeIf { settings.autoCheckChannels },
                             guide = if (ev.state == GameState.POST || m.channel.sourceId == SportsAddonSource.SOURCE_ID) null
                                 else guideLine(ev, m, guideNow[m.channel.key], now, use24h),
-                            modifier = if (i == 0 && regionButton) Modifier.focusProperties { up = regionFocus } else Modifier,
-                            onClick = { onChoose(m) }
+                            modifier = if (i == 0 && (regionButton || sortButton))
+                                Modifier.focusProperties { up = if (sortButton) sortFocus else regionFocus } else Modifier,
+                            onClick = { playAfterChecks { onChoose(m) } }
                         )
                     }
                     if (regionChoice.isNotBlank() && !noneInRegion && elsewhere > 0) item(key = "other-regions") {
@@ -1938,7 +2060,7 @@ private fun GamePage(
             val replay = matches.firstOrNull { it.catchup }
             if (replay != null && (ev.state == GameState.LIVE || ev.state == GameState.POST)) {
                 val m = f()
-                item { SportsAction("⏮  From start", modifier = m, onClick = { onFromStart(replay) }) }
+                item { SportsAction("⏮  From start", modifier = m, onClick = { playAfterChecks { onFromStart(replay) } }) }
             }
             if (ev.state == GameState.PRE && ev.hasTime) {
                 val m = f()
@@ -2083,7 +2205,7 @@ private fun GamePage(
                     GameTabButton(
                         label, tabKey == panel.key,
                         onSelect = { tab = panel.key },
-                        onClick = { if (panel.key == "table") onTable() }
+                        onClick = { if (panel.key == "table") leaveGame(onTable) }
                     )
                 }
             }
@@ -2106,7 +2228,8 @@ private fun GamePage(
     if (showVideo && sides.size == 2) TeamColourWash(sides, Modifier.fillMaxWidth().height(TEAM_WASH_HEIGHT))
     Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 14.dp)) {
         if (others.size > 1) {
-            GamesStrip(others, ev.id, settings.hideScores, use24h, openReq = stripReq, onOpen = onOpenFromStrip)
+            GamesStrip(others, ev.id, settings.hideScores, use24h, openReq = stripReq,
+                onOpen = { game -> leaveGame { onOpenFromStrip(game) } })
             Spacer(Modifier.height(6.dp))
         }
         top()

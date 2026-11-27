@@ -32,6 +32,12 @@ internal class LiveTvMediaSourceBuilder(
     private val stalkerPolicy: StalkerMediaPolicy? = null,
     /** Explicit channel intent: the shared Live TV player also opens finite Sports replays. */
     private val continuousTs: Boolean = false,
+    /** Optional request-local accounting; ordinary playback keeps its existing transport. */
+    private val httpDecorator: ((androidx.media3.datasource.HttpDataSource.Factory) -> androidx.media3.datasource.HttpDataSource.Factory)? = null,
+    /** A check must read media, rather than accepting tracks advertised by an HLS manifest. */
+    private val requireMediaPreparation: Boolean = false,
+    /** A request-scoped, cancellable transport for short checks; playback uses its normal factory. */
+    private val httpFactoryOverride: androidx.media3.datasource.HttpDataSource.Factory? = null,
 ) {
     private fun captionExtractor(factory: DefaultHlsExtractorFactory): HlsExtractorFactory =
         if (observeCaptions) LiveCaptions.Hls(factory) else factory
@@ -49,19 +55,21 @@ internal class LiveTvMediaSourceBuilder(
             buildDrmMediaSource(url, headers, isLive, protection)?.let { return it }
             check(!strictDrm) { "Protected stream could not be prepared" }
         }
-        val http = stalkerPolicy?.httpFactory() ?: com.nuvio.tv.core.vpn.protectHttpFactory(LiveDns.httpFactory(DefaultHttpDataSource.Factory()
+        val baseHttp = stalkerPolicy?.httpFactory() ?: httpFactoryOverride ?: com.nuvio.tv.core.vpn.protectHttpFactory(LiveDns.httpFactory(DefaultHttpDataSource.Factory()
             .setUserAgent(headers["User-Agent"] ?: LiveTvRepository.DEFAULT_UA)
             .setDefaultRequestProperties(headers.filterKeys { it != "User-Agent" })
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(20_000), headers, headers["User-Agent"] ?: LiveTvRepository.DEFAULT_UA),
             headers, headers["User-Agent"] ?: LiveTvRepository.DEFAULT_UA)
+        val http = httpDecorator?.invoke(baseHttp) ?: baseHttp
         val item = buildMediaItem(url, isLive)
         // Closed captions: TV channels usually carry them inside the video (CEA-608/708) without
         // announcing them, so the player never offered them and Subtitles only showed "Off".
         // Look for them anyway, the way TV apps do.
         if (item.localConfiguration?.mimeType == MimeTypes.APPLICATION_M3U8) {
             return androidx.media3.exoplayer.hls.HlsMediaSource.Factory(http)
+                .apply { if (requireMediaPreparation) setAllowChunklessPreparation(false) }
                 .setPlaylistParserFactory(LenientHlsPlaylistParserFactory())
                 .setExtractorFactory(
                     captionExtractor(
@@ -80,7 +88,11 @@ internal class LiveTvMediaSourceBuilder(
             )
             // CC1–CC4 and the digital (708) captions; the menu only offers those with text.
             .setTsSubtitleFormats(LiveCaptions.formats)
-        val continuousTransport = continuousTs && isLive && item.localConfiguration?.mimeType == MimeTypes.VIDEO_MP2T &&
+        // A short live check does not need file-duration seeks even before an extensionless
+        // stream's format is known. Ordinary playback retains its narrower TS-only boundary.
+        val continuousTransport = continuousTs && isLive &&
+            (item.localConfiguration?.mimeType == MimeTypes.VIDEO_MP2T ||
+                (requireMediaPreparation && item.localConfiguration?.mimeType == null)) &&
             item.localConfiguration?.uri?.scheme?.lowercase() in setOf("http", "https")
         val progressiveHttp = if (continuousTransport) ContinuousTsDataSourceFactory(http) else http
         return DefaultMediaSourceFactory(progressiveHttp, if (observeCaptions) LiveCaptions.Extractors(extractors) else extractors).createMediaSource(item)

@@ -164,9 +164,16 @@ fun SportsSettingsContent(
                     )
                     SettingsToggleRow(
                         "Best Channel First",
-                        "Puts 4K and FHD channels at the top of each game's list, then the rest",
+                        "Lists each feed by resolution, then frame rate. With channel checks on, working feeds come first.",
                         s.bestChannelFirst,
                         { update { it.copy(bestChannelFirst = !it.bestChannelFirst) } }
+                    )
+                    SettingsActionRow(
+                        title = "Channel checks",
+                        subtitle = "Checks availability, resolution and frame rate when you open a game. Back or Play stops the checks.",
+                        value = if (s.autoCheckChannels) "Automatic" else "Off",
+                        leadingIcon = Icons.Default.Tune,
+                        onClick = { dialog = "channelChecks" }
                     )
                 }
             }
@@ -271,6 +278,13 @@ fun SportsSettingsContent(
 
     val close: () -> Unit = { dialog = null }
     when (dialog) {
+        "channelChecks" -> SettingsSingleChoiceDialog(
+            title = "Channel checks",
+            options = listOf(SettingsPickerOption("off", "Off"), SettingsPickerOption("automatic", "Automatic")),
+            selectedValue = if (s.autoCheckChannels) "automatic" else "off",
+            onOptionSelected = { value -> update { it.copy(autoCheckChannels = value == "automatic") }; close() },
+            onDismiss = close
+        )
         "region" -> SettingsSingleChoiceDialog(
             title = "Your region",
             options = listOf(SettingsPickerOption("", "Same as this TV (${SportsCatalog.regionName(SportsCatalog.deviceRegion())})")) +

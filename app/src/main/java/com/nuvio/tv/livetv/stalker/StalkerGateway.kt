@@ -33,6 +33,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.Call
@@ -41,6 +44,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.io.Closeable
 import java.net.URI
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -189,12 +193,16 @@ class StalkerGateway @Inject constructor(
         profiles.activeProfileId.first { it == savedId }
     }
 
-    suspend fun prepare(channel: LiveChannel): StalkerPlayback {
+    suspend fun prepare(channel: LiveChannel): StalkerPlayback = prepare(channel, probeMimeType = true)
+
+    suspend fun prepare(channel: LiveChannel, probeMimeType: Boolean): StalkerPlayback {
         val ref = channel.stalkerRef ?: throw StalkerException(StalkerError.INVALID_CONFIG)
-        return prepare(channel.sourceId, ref)
+        return prepare(channel.sourceId, ref, probeMimeType)
     }
 
-    suspend fun prepare(sourceId: String, ref: StalkerStreamRef): StalkerPlayback {
+    suspend fun prepare(sourceId: String, ref: StalkerStreamRef): StalkerPlayback = prepare(sourceId, ref, probeMimeType = true)
+
+    suspend fun prepare(sourceId: String, ref: StalkerStreamRef, probeMimeType: Boolean): StalkerPlayback {
         val stream = resolve(sourceId, ref)
         val source = prefs.currentPlaylists().firstOrNull { it.id == sourceId && it.isStalker && it.enabled }
             ?: throw StalkerException(StalkerError.STALE_SESSION)
@@ -219,7 +227,7 @@ class StalkerGateway @Inject constructor(
             owned += OwnedPolicy(source, WeakReference(policy))
         }
         try {
-            val mimeType = StalkerMimeProbe.mimeFromUrl(stream.url) ?: policy.probeMimeType(stream.url)
+            val mimeType = StalkerMimeProbe.mimeFromUrl(stream.url) ?: if (probeMimeType) policy.probeMimeType(stream.url) else null
             assertCurrent(source)
             if (withContext(Dispatchers.IO) { VpnPlaybackProtection.requireUniformHttpRouting() } != routing)
                 throw StalkerException(StalkerError.STALE_SESSION)
@@ -232,37 +240,49 @@ class StalkerGateway @Inject constructor(
 
     private suspend fun request(url: String, headers: Map<String, String>, routing: String): StalkerHttpResponse =
         withContext(Dispatchers.IO) {
-            val (response, address) = open(url, headers, routing)
-            response.use {
-                val body = response.body ?: throw StalkerException(StalkerError.INVALID_RESPONSE)
-                val text = StringBuilder()
-                body.charStream().use { reader ->
-                    val buffer = CharArray(8 * 1024)
-                    while (true) {
-                        coroutineContext.ensureActive()
-                        val count = reader.read(buffer)
-                        if (count < 0) break
-                        if (text.length + count > MAX_RESPONSE_CHARS) throw StalkerException(StalkerError.TOO_LARGE)
-                        text.append(buffer, 0, count)
+            try {
+                open(url, headers, routing).use { opened ->
+                    val response = opened.response
+                    val body = response.body ?: throw StalkerException(StalkerError.INVALID_RESPONSE)
+                    val text = StringBuilder()
+                    body.charStream().use { reader ->
+                        val buffer = CharArray(8 * 1024)
+                        while (true) {
+                            coroutineContext.ensureActive()
+                            val count = reader.read(buffer)
+                            if (count < 0) break
+                            if (text.length + count > MAX_RESPONSE_CHARS) throw StalkerException(StalkerError.TOO_LARGE)
+                            text.append(buffer, 0, count)
+                        }
                     }
+                    checkRouting(routing)
+                    StalkerHttpResponse(response.code, text.toString(), finalUrl = opened.address)
                 }
-                checkRouting(routing)
-                StalkerHttpResponse(response.code, text.toString(), finalUrl = address)
+            } catch (failure: Exception) {
+                // Cancelling the owned socket may interrupt read() with IOException.
+                // Preserve coroutine cancellation instead of reporting a provider failure.
+                coroutineContext.ensureActive()
+                throw failure
             }
         }
 
     private suspend fun guideRequest(url: String, headers: Map<String, String>, routing: String,
         onRow: (String?, StalkerGuideRow) -> Unit): StalkerGuideHttpResponse = withContext(Dispatchers.IO) {
-        val (response, address) = open(url, headers, routing)
-        response.use {
-            val body = response.body ?: throw StalkerException(StalkerError.INVALID_RESPONSE)
-            val context = coroutineContext
-            val error = body.charStream().use { reader -> StalkerGuideReader.read(reader) { id, row ->
-                context.ensureActive()
-                onRow(id, row)
-            } }
-            checkRouting(routing)
-            StalkerGuideHttpResponse(response.code, error, finalUrl = address)
+        try {
+            open(url, headers, routing).use { opened ->
+                val response = opened.response
+                val body = response.body ?: throw StalkerException(StalkerError.INVALID_RESPONSE)
+                val context = coroutineContext
+                val error = body.charStream().use { reader -> StalkerGuideReader.read(reader) { id, row ->
+                    context.ensureActive()
+                    onRow(id, row)
+                } }
+                checkRouting(routing)
+                StalkerGuideHttpResponse(response.code, error, finalUrl = opened.address)
+            }
+        } catch (failure: Exception) {
+            coroutineContext.ensureActive()
+            throw failure
         }
     }
 
@@ -270,49 +290,70 @@ class StalkerGateway @Inject constructor(
         if (VpnPlaybackProtection.requireUniformHttpRouting() != routing) throw StalkerException(StalkerError.STALE_SESSION)
     }
 
-    private suspend fun open(url: String, headers: Map<String, String>, routing: String): Pair<Response, String> =
-        withContext(Dispatchers.IO) {
+    private class PortalResponse(
+        val response: Response,
+        val address: String,
+        private val call: Call,
+        private val cancellation: DisposableHandle?,
+    ) : Closeable {
+        override fun close() {
+            // Cancel this request before closing its body, including unread redirect/error bodies.
+            // The client and connection pool may also belong to unrelated requests.
+            try { call.cancel() } finally {
+                try { response.close() } finally { cancellation?.dispose() }
+            }
+        }
+    }
+
+    /** The caller's IO job owns the Call until its JSON/guide body has been fully consumed. */
+    @kotlin.OptIn(InternalCoroutinesApi::class)
+    private suspend fun open(url: String, headers: Map<String, String>, routing: String): PortalResponse {
+        checkRouting(routing)
+        val origin = URI(url)
+        var address = url
+        repeat(6) { hop ->
+            coroutineContext.ensureActive()
             checkRouting(routing)
-            val origin = URI(url)
-            var address = url
-            repeat(6) { hop ->
+            val request = Request.Builder().url(address).apply { headers.forEach { (name, value) -> header(name, value) } }.build()
+            val call = VpnHttpClient.wrap(http).newCall(request)
+            // Completion-only handlers are too late for a blocking body read. The
+            // cancelling phase must close its socket while the IO job is still running.
+            val cancellation = coroutineContext[Job]?.invokeOnCompletion(onCancelling = true, invokeImmediately = true) {
+                if (it != null) call.cancel()
+            }
+            var response: Response? = null
+            var handedOff = false
+            try {
+                val received = call.await().also { response = it }
                 coroutineContext.ensureActive()
-                checkRouting(routing)
-                val request = Request.Builder().url(address).apply { headers.forEach { (name, value) -> header(name, value) } }.build()
-                val call = VpnHttpClient.wrap(http).newCall(request)
-                val response = call.await()
-                try {
-                    val location = response.header("Location")
-                    if (response.code in setOf(301, 302, 303, 307, 308)) {
-                        if (location.isNullOrBlank()) throw StalkerException(StalkerError.INVALID_RESPONSE)
-                        if (hop == 5) throw StalkerException(StalkerError.TOO_MANY_REDIRECTS)
-                        val target = try { URI(address).resolve(location) } catch (_: Exception) {
-                            throw StalkerException(StalkerError.INVALID_RESPONSE)
-                        }
-                        // Many portals hand the box on to another server (load balancing, a new domain);
-                        // MAG boxes follow, so do we. Never to a non-web address, a login-in-the-link
-                        // address, or from https down to http.
-                        if (!sameOrigin(origin, target) && !portalHandOff(URI(address), target)) {
-                            throw StalkerException(StalkerError.INVALID_RESPONSE)
-                        }
-                        address = target.toString()
-                    } else {
-                        checkRouting(routing)
-                        return@withContext response to address
+                val location = received.header("Location")
+                if (received.code in setOf(301, 302, 303, 307, 308)) {
+                    if (location.isNullOrBlank()) throw StalkerException(StalkerError.INVALID_RESPONSE)
+                    if (hop == 5) throw StalkerException(StalkerError.TOO_MANY_REDIRECTS)
+                    val target = try { URI(address).resolve(location) } catch (_: Exception) {
+                        throw StalkerException(StalkerError.INVALID_RESPONSE)
                     }
-                } catch (cancelled: CancellationException) {
-                    call.cancel()
-                    throw cancelled
-                } catch (failure: Exception) {
-                    response.close()
-                    throw failure
+                    // Many portals hand the box on to another server (load balancing, a new domain);
+                    // MAG boxes follow, so do we. Never to a non-web address, a login-in-the-link
+                    // address, or from https down to http.
+                    if (!sameOrigin(origin, target) && !portalHandOff(URI(address), target)) {
+                        throw StalkerException(StalkerError.INVALID_RESPONSE)
+                    }
+                    address = target.toString()
+                } else {
+                    checkRouting(routing)
+                    return PortalResponse(received, address, call, cancellation).also { handedOff = true }
                 }
-                run {
-                    response.close()
+            } finally {
+                if (!handedOff) {
+                    try { call.cancel() } finally {
+                        try { response?.close() } finally { cancellation?.dispose() }
+                    }
                 }
             }
-            throw StalkerException(StalkerError.NETWORK)
         }
+        throw StalkerException(StalkerError.NETWORK)
+    }
 
     private suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
         continuation.invokeOnCancellation { cancel() }

@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -67,6 +69,9 @@ import coil3.compose.AsyncImage
 import com.nuvio.tv.livetv.ui.ChannelLogo
 import com.nuvio.tv.livetv.ui.LiveText
 import com.nuvio.tv.livetv.ui.formatClock
+import com.nuvio.tv.livetv.sports.probe.SportsProbeResult
+import com.nuvio.tv.livetv.sports.probe.SportsProbeStatusLine
+import com.nuvio.tv.livetv.sports.probe.sportsRowQuality
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -975,17 +980,30 @@ internal fun SportsChannelRow(
     copies: List<ChannelMatch> = emptyList(),
     /** What the channel's guide says (on now, later, something else on): a coloured line of its own. */
     guide: GuideLine? = null,
+    /** Observed stream health for this exact source; copies never inherit the leading result. */
+    probe: SportsProbeResult? = null,
+    showProbe: Boolean = false,
+    /** A reordered, keyed row keeps its focus and scrolls with its channel rather than its old slot. */
+    probePosition: Int? = null,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(showProbe, probePosition, focused) {
+        if (showProbe && probePosition != null && focused) {
+            androidx.compose.runtime.withFrameNanos { }
+            bringIntoView.bringIntoView()
+        }
+    }
     val accent = NuvioTheme.colors.Secondary
     val ink = Color.White
     val sub = SportsLook.Dim
     val withGuide = guide != null && !finished
     Box(
         modifier
+            .bringIntoViewRequester(bringIntoView)
             .fillMaxWidth()
-            .height(if (withGuide) 66.dp else 56.dp)
+            .height((if (withGuide) 66.dp else 56.dp) + if (showProbe) 18.dp else 0.dp)
             .sportsFrame(focused, false, accent, radius = 12.dp)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
@@ -1025,6 +1043,7 @@ internal fun SportsChannelRow(
                     GuideLineText(guide, modifier = Modifier.padding(vertical = 1.dp))
                     LiveText(if (focused && !m.sure) line else guide.detail ?: line, color = sub, size = 10.sp, maxLines = 1)
                 } else LiveText(line, color = sub, size = 10.sp, maxLines = 1)
+                if (showProbe) SportsProbeStatusLine(probe, now)
             }
             Spacer(Modifier.width(8.dp))
             when {
@@ -1039,13 +1058,16 @@ internal fun SportsChannelRow(
                     color = Color(0xFFC9CCD6), size = 9.sp, weight = FontWeight.Black
                 )
             }
-            m.quality?.let { q ->
+            val quality = remember(m.channel.name, m.channel.sourceId, m.quality, showProbe, probe) {
+                sportsRowQuality(m, probe.takeIf { showProbe })
+            }
+            quality?.let { q ->
                 Spacer(Modifier.width(6.dp))
-                LiveText(
-                    q,
-                    modifier = Modifier.border(1.dp, accent.copy(alpha = 0.7f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
-                    color = accent, size = 9.sp, weight = FontWeight.Black
-                )
+                Column(Modifier.border(1.dp, accent.copy(alpha = 0.7f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    LiveText(q.label, color = accent, size = 9.sp, weight = FontWeight.Black)
+                    LiveText(q.source, color = sub, size = 9.sp, weight = FontWeight.Medium)
+                }
             }
             // Its other copies: their qualities ("+ HD SD"), or how many when they don't say.
             if (copies.isNotEmpty()) {
