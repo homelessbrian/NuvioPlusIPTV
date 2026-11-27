@@ -18,6 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +37,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -417,6 +420,14 @@ class SportsRepository @Inject constructor(
     private fun dedupeKey(ev: SportsEvent): String = ev.espnId?.let { "e:$it" } ?: ev.id
 
     private val _matches = MutableStateFlow<Map<String, List<ChannelMatch>>>(emptyMap())
+    // The normal round honours these requests too (notably prelims and games with a saved link).
+    // A pass that was already underway cannot replace a newer explicit result.
+    private class GameSearch(val expiresAt: Long)
+    private val gameSearches = mutableMapOf<String, GameSearch>()
+    private val gameSearchLock = Mutex()
+    private val matchSaveLock = Mutex()
+    @Volatile private var initialMatchesRead = false
+    private var channelEdits = 0L
     private val _addonLive = MutableStateFlow<Map<String, List<ChannelMatch>>>(emptyMap())
     /**
      * Event id -> the channels showing it, best first, with your "Channels from" region's
@@ -2071,8 +2082,10 @@ class SportsRepository @Inject constructor(
             val saved = withContext(Dispatchers.IO) { runCatching { File(dir, "matches.json").takeIf { it.exists() }?.readText() }.getOrNull() }
             if (saved != null) {
                 val chans = channelStore.displayChannels.first { it.isNotEmpty() }.associateBy { it.key }
-                if (_matches.value.isEmpty()) runCatching { restoreMatches(saved, chans) }
+                if (_matches.value.isEmpty() || synchronized(gameSearches) { gameSearches.isNotEmpty() }) runCatching { restoreMatches(saved, chans) }
             }
+            val searchedDuringRestore = synchronized(gameSearches) { initialMatchesRead = true; gameSearches.isNotEmpty() }
+            if (searchedDuringRestore) sportsCatching { saveMatches() }
             // The guide-only sports those matches belong to, from the last search of this guide.
             runCatching { restoreSavedGuideEvents() }.onFailure {
                 if (it is kotlinx.coroutines.CancellationException) throw it
@@ -2254,7 +2267,9 @@ class SportsRepository @Inject constructor(
     }
 
     /** Saves which channels were matched to which games, to show right away next time. */
-    private suspend fun saveMatches() = withContext(Dispatchers.IO) {
+    private suspend fun saveMatches() = withContext(Dispatchers.IO) { matchSaveLock.withLock { writeMatches() } }
+
+    private fun writeMatches() {
         val arr = org.json.JSONArray()
         for ((id, list) in _matches.value) {
             val o = org.json.JSONObject().put("id", id)
@@ -2282,9 +2297,13 @@ class SportsRepository @Inject constructor(
             }
             if (list.isNotEmpty()) out[o.getString("id")] = list
         }
-        if (out.isNotEmpty() && _matches.value.isEmpty()) {
-            _matches.value = out
-            LiveTvLoadReport.add("Sports: showing last time's channels for ${out.size} games while matching again")
+        if (out.isNotEmpty()) synchronized(gameSearches) {
+            // A manual lookup can finish during startup, including a valid empty result.
+            // Restore the other games without replacing what was just searched.
+            _matches.update { current ->
+                if (current.keys.any { it !in gameSearches }) current else (out - gameSearches.keys) + current
+            }
+            LiveTvLoadReport.add("Sports: read last time's channels for ${out.size} games while matching again")
         }
     }
     @Volatile private var pickPending = false
@@ -2349,6 +2368,49 @@ class SportsRepository @Inject constructor(
     /** The Sports page is open and nothing is playing: searches may use the full processor. */
     private fun pageOnly(): Boolean = viewers.value > 0 && !watching()
 
+    /** Read the loaded guide for one event and immediately publish its playlist channels. */
+    suspend fun findChannelsForGame(event: SportsEvent): Int = withContext(Dispatchers.IO) {
+        gameSearchLock.withLock {
+            val job = coroutineContext
+            val profile = prefs.currentProfile
+            val edits = synchronized(gameSearches) { channelEdits }
+            val live = prefs.settings.first()
+            val user = prefs.userState.first()
+            val saved = settings.value
+            val all = channelStore.displayChannels.value
+            val channels = matchChannels(live, user, saved)
+            val rules = SportsPickedChannels.resolve(saved, all)
+            val now = System.currentTimeMillis()
+            val selected = events.value.firstOrNull { it.id == event.id } ?: event
+            val context = SportsMatchingEvents.select(events.value, known.value, rules, now)
+            val guideVersion = guideDb.changes
+            // A dedicated reader has no slot cache or optional index to reuse or evict.
+            val fresh = SportsMatcher(guideDb, checkpoint = { job.ensureActive() }).match(SportsMatcher.Input(
+                events = listOf(selected) + context.filterNot { it.id == selected.id }, channels = channels,
+                quality = user.channelQuality, shiftMs = live.epgOffsetMinutes * MINUTE,
+                settings = rules, now = now, requestedGames = setOf(event.id), onlyGame = event.id
+            )).matches[event.id].orEmpty()
+            // A profile or playlist switch must never publish channels from the old search.
+            val latestLive = prefs.settings.first()
+            check(live.epgOffsetMinutes == latestLive.epgOffsetMinutes &&
+                channels == matchChannels(latestLive, prefs.userState.first())) {
+                "The guide or channel settings changed during the search"
+            }
+            job.ensureActive()
+            synchronized(gameSearches) {
+                check(all === channelStore.displayChannels.value && guideVersion == guideDb.changes &&
+                    saved == settings.value && edits == channelEdits && profile == prefs.currentProfile) {
+                    "The guide or channel settings changed during the search"
+                }
+                gameSearches[event.id] = GameSearch(maxOf(now, selected.endMs ?: selected.startMs) + 8 * HOUR)
+                _matches.update { if (fresh.isEmpty()) it - event.id else it + (event.id to fresh) }
+            }
+            rebuildLiveScores()
+            if (initialMatchesRead) sportsCatching { saveMatches() }.onFailure { Log.w(TAG, "Could not save game channel matches", it) }
+            fresh.size
+        }
+    }
+
     private suspend fun runMatch(quickOnly: Boolean = false) = withContext(if (pageOnly()) Dispatchers.Default else com.nuvio.tv.livetv.data.BackgroundWork.quiet) {
         matchingCheckpoint()
         val live = prefs.settings.first()
@@ -2365,6 +2427,10 @@ class SportsRepository @Inject constructor(
             // My Sports also shows saved cards that plainEvents replaced with a guide card.
             // They need the same channel search and saved choices, within the existing horizon.
             val matchingEvents = SportsMatchingEvents.select(events.value, known.value, s, now)
+            val requested = synchronized(gameSearches) {
+                gameSearches.entries.removeAll { it.value.expiresAt < now }
+                gameSearches.toMap()
+            }
             val f = follows.value
             // Sports ESPN doesn't cover, from the guide: yesterday to tomorrow, every one of
             // them, not just your region's (this is a local guide search, not an API call, so
@@ -2411,13 +2477,13 @@ class SportsRepository @Inject constructor(
             if (days != guideData.value) guideData.value = days
             val result = matcher.match(
                 SportsMatcher.Input(
-                    events = SportsMatchingEvents.select(events.value, known.value, s, now),
+                    events = SportsMatchingEvents.select(events.value, known.value, s, now, requested.keys),
                     channels = channels,
                     quality = user.channelQuality,
                     shiftMs = shift,
                     settings = s,
                     now = now,
-                    gentle = !pageOnly()
+                    gentle = !pageOnly(), requestedGames = requested.keys
                 ),
                 onUrgent = { early ->
                     matchingCheckpoint()
@@ -2428,7 +2494,19 @@ class SportsRepository @Inject constructor(
                 }
             )
             matchingCheckpoint()
-            _matches.value = keepPicksMadeMeanwhile(result.matches, saved)
+            synchronized(gameSearches) {
+                val updatedDuringRound = gameSearches.filter { (id, version) -> requested[id] != version }.keys
+                val found = keepPicksMadeMeanwhile(result.matches, saved)
+                _matches.update { previous ->
+                    if (updatedDuringRound.isEmpty()) found
+                    else (found - updatedDuringRound) + previous.filterKeys { it in updatedDuringRound }
+                }
+                // Once the schedule drops a game, normal rounds can forget its manual request.
+                if (requested.isNotEmpty()) {
+                    val scheduled = (events.value.asSequence() + known.value.asSequence()).map { it.id }.toHashSet()
+                    gameSearches.keys.removeAll { it !in scheduled && it !in updatedDuringRound }
+                }
+            }
             if (result.summary != lastSummary) {
                 lastSummary = result.summary
                 LiveTvLoadReport.add(result.summary)
@@ -2440,11 +2518,13 @@ class SportsRepository @Inject constructor(
     }
 
     /** [found] added to the channels already shown for each game (a channel already there keeps the higher score). */
-    private fun addMatches(found: Map<String, List<ChannelMatch>>, s: SportsSettings) {
+    private fun addMatches(found: Map<String, List<ChannelMatch>>, s: SportsSettings) = synchronized(gameSearches) {
         val rank = SportsMatcher.preferenceRank(s)
         _matches.update { prev ->
             val next = prev.toMutableMap()
             for ((id, list) in found) {
+                // A complete on-demand result is already visible until the full round publishes.
+                if (id in gameSearches) continue
                 val byChannel = prev[id].orEmpty().associateByTo(LinkedHashMap()) { it.channel.key }
                 for (m in list) {
                     val old = byChannel[m.channel.key]
@@ -2961,7 +3041,10 @@ class SportsRepository @Inject constructor(
         // search again now rather than waiting for the guide to finish loading.
         channelStore.displayChannels.value.firstOrNull { it.key == channelKey }?.let { ch ->
             val mine = ChannelMatch(ch, 200, "Your pick", null, SportsMatcher.nameQuality(ch.name), false)
-            _matches.value = _matches.value + (ev.id to (listOf(mine) + _matches.value[ev.id].orEmpty().filter { it.channel.key != channelKey }))
+            synchronized(gameSearches) {
+                channelEdits++
+                _matches.update { prev -> prev + (ev.id to (listOf(mine) + prev[ev.id].orEmpty().filter { it.channel.key != channelKey })) }
+            }
         }
         pickPending = true
         kickMatch("a channel pick")
@@ -2977,7 +3060,10 @@ class SportsRepository @Inject constructor(
             leagueChannels = s.leagueChannels.filterNot { (l, key) -> key == channelKey && l == ev.leagueId }
         )
     }.also {
-        _matches.value[ev.id]?.let { l -> _matches.value = _matches.value + (ev.id to l.filter { it.channel.key != channelKey }) }
+        synchronized(gameSearches) {
+            channelEdits++
+            _matches.update { prev -> prev[ev.id]?.let { prev + (ev.id to it.filter { m -> m.channel.key != channelKey }) } ?: prev }
+        }
         pickPending = true
         kickMatch("a channel pick")
     }
@@ -2991,8 +3077,11 @@ class SportsRepository @Inject constructor(
             ChannelLink.Kind.GAME -> s.copy(eventChannels = s.eventChannels - link.key)
         }
     }.also {
-        _matches.value[link.key]?.let { l ->
-            if (link.kind == ChannelLink.Kind.GAME) _matches.value = _matches.value + (link.key to l.filter { it.score < 150 })
+        synchronized(gameSearches) {
+            channelEdits++
+            if (link.kind == ChannelLink.Kind.GAME) _matches.update { prev ->
+                prev[link.key]?.let { prev + (link.key to it.filter { m -> m.score < 150 }) } ?: prev
+            }
         }
         pickPending = true
         kickMatch("a channel pick")

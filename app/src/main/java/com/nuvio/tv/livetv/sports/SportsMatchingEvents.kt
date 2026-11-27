@@ -5,10 +5,11 @@ internal object SportsMatchingEvents {
     private const val HOUR = 3_600_000L
 
     fun select(
-        current: List<SportsEvent>, known: List<SportsEvent>, settings: SportsSettings, now: Long
+        current: List<SportsEvent>, known: List<SportsEvent>, settings: SportsSettings, now: Long,
+        requestedGames: Set<String> = emptySet()
     ): List<SportsEvent> {
         val seen = current.mapTo(HashSet()) { it.id }
-        val extra = known.filter { it.id !in seen && eligible(it, settings, now) && seen.add(it.id) }
+        val extra = known.filter { it.id !in seen && (eligible(it, settings, now) || it.id in requestedGames) && seen.add(it.id) }
         if (extra.isEmpty()) return current
         // Season files may change order without changing their games. Keep the match trigger stable.
         return current + extra.sortedBy { it.id }
