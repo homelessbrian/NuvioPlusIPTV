@@ -1,5 +1,10 @@
 package com.nuvio.tv.ui.screens.player.autosync
 
+import com.nuvio.vpn.android.VpnHttpClient
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -9,20 +14,48 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.SocketPolicy
 import okio.Buffer
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 class EmbeddedSubtitleTimelineLoaderTest {
+    @Before
+    fun useLoopbackTransportWithoutAppVpnLifecycle() {
+        // These host tests exercise real HTTP ranges, cancellation and container parsing.
+        // Android's VPN initialization provider is absent here; isolate only its wrapper.
+        mockkStatic(VpnHttpClient::class)
+        every { VpnHttpClient.wrap(any()) } answers {
+            val client = firstArg<OkHttpClient>()
+            mockk<VpnHttpClient> {
+                every { newCall(any()) } answers {
+                    val request = firstArg<Request>()
+                    check(request.url.scheme == "http" && request.url.host in setOf("localhost", "127.0.0.1", "::1")) {
+                        "Subtitle timeline fixtures must use loopback HTTP"
+                    }
+                    client.newCall(request)
+                }
+            }
+        }
+    }
+
+    @After
+    fun restoreAppVpnWrapper() {
+        unmockkStatic(VpnHttpClient::class)
+    }
+
     @Test
     fun concurrentIndexLoadsShareOneDownload(): Unit = runBlocking {
         MockWebServer().use { server ->

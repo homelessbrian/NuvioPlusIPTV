@@ -141,6 +141,14 @@ internal object AutomaticSubtitleSync {
 
     private suspend fun prepareIndexedReferences(
         indexedTimeline: IndexedEmbeddedTimeline,
+    ): PreparedIndexedReferences = withContext(autoSyncDispatcher) {
+        // Prefetch resumes in the player's Main scope after loading the index. Profiling,
+        // copying and deduplicating a movie's tracks must stay on the bounded CPU dispatcher too.
+        prepareIndexedReferencesOnWorker(indexedTimeline)
+    }
+
+    private suspend fun prepareIndexedReferencesOnWorker(
+        indexedTimeline: IndexedEmbeddedTimeline,
     ): PreparedIndexedReferences {
         val owned = kotlinx.coroutines.CompletableDeferred<PreparedIndexedReferences>()
         val existing: kotlinx.coroutines.CompletableDeferred<PreparedIndexedReferences>? =
