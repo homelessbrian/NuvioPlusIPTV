@@ -11,10 +11,16 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 - Guide display menu (the guide's gear): Up, Down, Left and Right move the highlight again, and Left at the edge still doesn't open Nuvio's menu
 - DNS setting (Cloudflare/Google) now also applies when playing channels, Multiview, catch-up, rewind and recordings, not only to loading playlists and guides
 - "Keep Lists Open When Changing Channel" now also keeps the Backups lists and the Multiview channel picker open while you switch, and the switch shows even when overlay mode is off
+- Guide follows AMOLED Mode / Pure Black Surfaces (black guide, tiles and info panel)
+- Guide day labels (Today, Tomorrow, weekdays) follow the app language
+- Adaptive Live TV Buffer slows down more gently or more strongly depending on how little video is left
+- Large Stalker portals that were too big to load in one go now load page by page
 
 ## Rewind Anytime
 
 ## Recordings
+- Rename a finished recording (hold OK → Rename)
+- Recordings keep the episode's guide description even after the guide moves on
 
 ## Sports
 - Low-memory TVs: Sports does less in the background while a channel plays, so it no longer runs the app out of memory
@@ -22,6 +28,16 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 - Finding channels for games is much faster on big playlists: the networks step reads only what's on each channel at the time, and later rounds only read the guide around new or changed games
 - A game's page reads only what's on now and next for its channels, not a week of listings every minute
 - Sports no longer redoes its pages and channel search every minute when nothing changed (team colours on season games were being copied again each minute)
+- Clock in the Sports header
+- Possession / batting icons, NFL and college records, college football Top 25 ranks
+- Fix channel → Find Channels searches the guide for just that game
+- Watch live channel on a game marked Final (for overtime)
+- Follow Teams & Leagues: Exclude titles… hides guide shows like radio or paddock shows
+- Follow Teams & Leagues: per-league Event listings (Scheduled events / TV guide listings / Both)
+- My Sports preview no longer flickers through leagues while moving fast
 
 ## Other
 - Low-memory TVs: a channel downloads less ahead while memory is nearly full, and the freeze checker can no longer be what closes the app (crash while watching Live TV on a 224 MB Xiaomi TV)
+- Download playlist movies and episodes to a folder, TV storage, SD card or USB drive (Downloads in Library / On Demand)
+- Lighter subtitles and artwork on low-memory TVs; custom movie buffer sizes are respected
+- Startup/crash report: download as a .txt from the phone page, plus more detail on movie startup freezes, source searches and VPN waits
