@@ -63,6 +63,27 @@ internal object SportsWatchPolicy {
         GameState.POST, GameState.OFF -> false
     }
 
+    fun needsEndedChannelPicker(event: SportsEvent, match: ChannelMatch?) =
+        event.state == GameState.POST && match?.catchup != true
+
+    /** Ask live add-on catalogs only near this game's scheduled broadcast. */
+    fun lookupOvertimeAddons(event: SportsEvent, now: Long): Boolean {
+        if (event.state != GameState.POST || !event.hasTime || event.startMs > now) return false
+        return now - event.startMs <= 8 * 60 * MINUTE || now - endEstimate(event) <= 2 * 60 * MINUTE
+    }
+
+    /** Search the allowed playlists. Blank searches suggest this game's current broadcasts in match order. */
+    data class EndedChannels(val searchable: List<LiveChannel>, val suggested: List<LiveChannel>)
+    fun endedChannels(
+        allowed: List<LiveChannel>, matches: List<ChannelMatch>, freshAddons: List<LiveChannel>,
+    ): EndedChannels {
+        val playlists = allowed.filter { it.sourceId != SportsAddonSource.SOURCE_ID }
+        val byKey = playlists.associateBy { it.key }
+        val addons = freshAddons.distinctBy { it.key }
+        val suggested = matches.mapNotNull { byKey[it.channel.key] } + addons
+        return EndedChannels(playlists + addons, suggested.distinctBy { it.key })
+    }
+
     fun sameProfile(opening: Int, current: Int): Boolean = opening == current
 
     fun pageQuery(selection: SportsWatchPageSelection?, profile: Int, follows: SportsFollows): SportsPageQuery =

@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -160,6 +162,27 @@ class SportsWatchViewModel @Inject constructor(
             profileStillCurrent() && repo.matches.value[eventId].orEmpty()
                 .any { current -> current.channel.key == match.channel.key } && mayPlay(match.channel)
         }
+    }
+
+    /** Only the open picker owns these live add-on results. They expire when it closes. */
+    internal fun liveAddonsForEndedGame(ev: SportsEvent) = flow {
+        val current = rules.first { it != null }
+        if (!profileStillCurrent() || current == null || !current.sports.showInSidebar ||
+            ev.leagueId in current.sports.hiddenLeagues || !SportsWatchPolicy.lookupOvertimeAddons(ev, System.currentTimeMillis())) {
+            emit(emptyList())
+            return@flow
+        }
+        val found = repo.liveAddonsForEndedGame(ev)
+        emitAll(combine(rules, currentProfile, profiles.activeProfileReady) { _, _, _ ->
+            found.filter { mayPlayEndedGameAddon(ev, it) }
+        })
+    }.flowOn(Dispatchers.Default)
+
+    internal fun mayPlayEndedGameAddon(ev: SportsEvent, channel: LiveChannel): Boolean {
+        val sports = settings.value
+        val current = rules.value ?: return false
+        return profileStillCurrent() && ev.leagueId !in sports.hiddenLeagues && "${ev.id}|${channel.key}" !in sports.blocked &&
+            current.copy(sports = sports, unlockedGroups = ParentalControls.unlocked.value).permitsAddon(channel)
     }
 
     /** Also used inside native focus/resume callbacks, before the next Compose snapshot. */

@@ -1,5 +1,6 @@
 package com.nuvio.tv.livetv.sports
 
+import com.nuvio.tv.livetv.model.EpgProgram
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,6 +25,18 @@ class SportsLaunchTest {
         assertEquals("game-a", SportsLaunch.takeFocusEvent())
         assertNull(SportsLaunch.takeFocusEvent())
         assertFalse(SportsLaunch.takeReturnToSports())
+    }
+
+    @Test fun `tuning the live channel from an ended game returns focus without claiming the game is playing`() {
+        SportsLaunch.pickGame("previous", "channel")
+        SportsLaunch.catchup(SportsLaunch.Catchup("channel", EpgProgram(100, 200, "Replay")))
+        SportsLaunch.openedLiveChannelFromEndedGame("overtime")
+        assertNull(SportsLaunch.pickedGame("channel"))
+        assertNull(SportsLaunch.takeCatchup())
+        assertTrue(SportsLaunch.isWatchingFromSports)
+        assertNull(SportsLaunch.watchingEventId)
+        assertTrue(SportsLaunch.takeReturnToSports())
+        assertEquals("overtime", SportsLaunch.takeFocusEvent())
     }
 
     @Test fun `network channel returns to Sports without inventing a game`() {
