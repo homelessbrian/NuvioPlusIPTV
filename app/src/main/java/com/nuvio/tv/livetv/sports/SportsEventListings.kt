@@ -25,10 +25,7 @@ internal object SportsEventListings {
 
     fun visibleKnown(known: List<SportsEvent>, follows: SportsFollows, now: Long): List<SportsEvent> {
         if (!hasChoices(follows)) return known
-        return known.filter { allows(it, follows) }.map { event ->
-            if (event.source != EventSource.GUIDE && follows.listingSources[event.leagueId] == SportsListingSource.SCHEDULE)
-                at(event, now) else event
-        }
+        return known.filter { allows(it, follows) }
     }
 
     /**
@@ -40,16 +37,13 @@ internal object SportsEventListings {
         from: Long, to: Long, now: Long
     ): List<SportsEvent> {
         if (!hasChoices(follows)) return current
-        val out = current.filter { allows(it, follows) }.mapTo(ArrayList()) { event ->
-            if (event.source != EventSource.GUIDE && follows.listingSources[event.leagueId] == SportsListingSource.SCHEDULE)
-                at(event, now) else event
-        }
+        val out = current.filterTo(ArrayList()) { allows(it, follows) }
         val seen = out.mapTo(HashSet()) { it.id }
         for (event in known) {
             val source = follows.listingSources[event.leagueId] ?: continue
             if (source == SportsListingSource.BOTH || !allows(event, follows) ||
                 event.startMs !in from until to || !seen.add(event.id)) continue
-            out += at(event, now)
+            out += event
         }
         return out
     }
