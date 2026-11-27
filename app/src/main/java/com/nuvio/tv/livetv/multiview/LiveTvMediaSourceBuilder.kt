@@ -6,9 +6,13 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory
 import androidx.media3.exoplayer.hls.HlsExtractorFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.DrmInfo
 import com.nuvio.tv.livetv.player.LiveCaptions
@@ -16,6 +20,15 @@ import com.nuvio.tv.livetv.player.ContinuousTsDataSourceFactory
 import com.nuvio.tv.livetv.player.LenientHlsPlaylistParserFactory
 import com.nuvio.tv.livetv.player.LiveDns
 import com.nuvio.tv.livetv.stalker.StalkerMediaPolicy
+
+@OptIn(UnstableApi::class)
+internal fun liveTsExtractors(observeCaptions: Boolean = true): ExtractorsFactory {
+    val extractors = DefaultExtractorsFactory()
+        .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
+            DefaultTsPayloadReaderFactory.FLAG_OVERRIDE_CAPTION_DESCRIPTORS)
+        .setTsSubtitleFormats(LiveCaptions.formats)
+    return if (observeCaptions) LiveCaptions.Extractors(extractors) else extractors
+}
 
 /**
  * Immutable source configuration shared with single-channel Live TV. Each request explicitly
@@ -38,6 +51,8 @@ internal class LiveTvMediaSourceBuilder(
     private val requireMediaPreparation: Boolean = false,
     /** A request-scoped, cancellable transport for short checks; playback uses its normal factory. */
     private val httpFactoryOverride: androidx.media3.datasource.HttpDataSource.Factory? = null,
+    private val mediaId: String? = null,
+    private val trackProgressiveHttp: ((HttpDataSource.Factory) -> HttpDataSource.Factory)? = null,
 ) {
     private fun captionExtractor(factory: DefaultHlsExtractorFactory): HlsExtractorFactory =
         if (observeCaptions) LiveCaptions.Hls(factory) else factory
@@ -81,13 +96,6 @@ internal class LiveTvMediaSourceBuilder(
                 )
                 .createMediaSource(item)
         }
-        val extractors = androidx.media3.extractor.DefaultExtractorsFactory()
-            .setTsExtractorFlags(
-                androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
-                    androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_OVERRIDE_CAPTION_DESCRIPTORS
-            )
-            // CC1–CC4 and the digital (708) captions; the menu only offers those with text.
-            .setTsSubtitleFormats(LiveCaptions.formats)
         // A short live check does not need file-duration seeks even before an extensionless
         // stream's format is known. Ordinary playback retains its narrower TS-only boundary.
         val continuousTransport = continuousTs && isLive &&
@@ -95,7 +103,8 @@ internal class LiveTvMediaSourceBuilder(
                 (requireMediaPreparation && item.localConfiguration?.mimeType == null)) &&
             item.localConfiguration?.uri?.scheme?.lowercase() in setOf("http", "https")
         val progressiveHttp = if (continuousTransport) ContinuousTsDataSourceFactory(http) else http
-        return DefaultMediaSourceFactory(progressiveHttp, if (observeCaptions) LiveCaptions.Extractors(extractors) else extractors).createMediaSource(item)
+        val transport = trackProgressiveHttp?.invoke(progressiveHttp) ?: progressiveHttp
+        return DefaultMediaSourceFactory(transport, liveTsExtractors(observeCaptions)).createMediaSource(item)
     }
 
     /**
@@ -210,6 +219,7 @@ internal class LiveTvMediaSourceBuilder(
 
     private fun buildMediaItem(url: String, isLive: Boolean): MediaItem {
         val builder = MediaItem.Builder().setUri(Uri.parse(url))
+        mediaId?.let(builder::setMediaId)
         val lower = url.lowercase().substringBefore('?')
         when {
             forcedMime != null -> builder.setMimeType(forcedMime)

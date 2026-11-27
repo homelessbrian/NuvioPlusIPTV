@@ -143,6 +143,12 @@ android {
         targetSdk = 36
         versionCode = 1083
         versionName = "1.2.0-beta.4"
+        // Faster Rewind Anytime start (picture first, rewind history saved alongside): on in test
+        // builds (-PlivetvTestBuild=true) and with -PfastTsRewind=true; off in builds for users.
+        buildConfigField("boolean", "FAST_TS_REWIND", (
+            (findProperty("livetvTestBuild") as String?)?.toBoolean() == true ||
+                providers.gradleProperty("fastTsRewind").orNull.toBoolean()
+            ).toString())
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -233,6 +239,7 @@ android {
 
     buildTypes {
         debug {
+            buildConfigField("boolean", "FAST_TS_REWIND", providers.gradleProperty("fastTsRewind").orNull.toBoolean().toString())
             signingConfig = signingConfigs.getByName("release")
             isDebuggable = parseBooleanProperty(providers.gradleProperty("debuggable").orNull)
             isMinifyEnabled = false
