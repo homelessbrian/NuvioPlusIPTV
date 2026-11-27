@@ -130,6 +130,13 @@ object SportsLaunch {
     @Volatile private var focusEvent: String? = null
     @Volatile private var returnSetAt = 0L
     fun openedFromSports(eventId: String? = null) { returnTo = SportsReturn(eventId); focusEvent = eventId; returnSetAt = System.currentTimeMillis() }
+    /** Back goes to the game, even when this live channel has already moved on to another show. */
+    fun openedLiveChannelFromEndedGame(eventId: String) {
+        openedFromSports()
+        focusEvent = eventId
+        pickGame(null, null)
+        catchup = null
+    }
     fun takeReturnToSports(): Boolean = (returnTo != null).also { returnTo = null }
     val isWatchingFromSports: Boolean get() = returnTo != null
     val watchingEventId: String? get() = returnTo?.eventId
@@ -248,6 +255,7 @@ fun SportsScreen(
         true
     }
     var fixFor by remember { mutableStateOf<SportsEvent?>(null) }
+    var overtimeFor by remember { mutableStateOf<SportsEvent?>(null) }
     // A game opened from the row of games across the top of a game page (the highlight stays there).
     var openedFromStrip by remember { mutableStateOf(false) }
     val windowInUse by viewModel.windowInUse.collectAsStateWithLifecycle()
@@ -356,18 +364,17 @@ fun SportsScreen(
 
     /** Full screen in Live TV (from the start when the game is over). */
     fun watch(ev: SportsEvent, m: ChannelMatch?) {
+        if (SportsWatchPolicy.needsEndedChannelPicker(ev, m)) {
+            overtimeFor = ev
+            return
+        }
         if (m == null) {
             LiveTvNotice.show("No channel found for ${ev.title}. Open it and use Fix Channel to pick one.")
             return
         }
         SportsLaunch.openedFromSports(ev.id)
         SportsLaunch.pickGame(ev.id, m.channel.key)
-        if (ev.state == GameState.POST) {
-            if (viewModel.watchFromStart(ev, m)) onOpenLive()
-            else LiveTvNotice.show("${ev.title} has finished, and ${m.channel.name} can't replay it")
-            return
-        }
-        viewModel.watch(m)
+        if (ev.state == GameState.POST) viewModel.watchFromStart(ev, m) else viewModel.watch(m)
         onOpenLive()
     }
     fun fromStart(ev: SportsEvent, m: ChannelMatch) {
@@ -388,8 +395,9 @@ fun SportsScreen(
     fun quickWatch(ev: SportsEvent) {
         val m = matches[ev.id]?.firstOrNull()
         when {
+            ev.state == GameState.POST -> watch(ev, m)
             m == null -> LiveTvNotice.show("No channel found for ${ev.title}. Open it and use Fix Channel to pick one.")
-            videoOn && ev.state != GameState.POST -> { SportsLaunch.pickGame(ev.id, m.channel.key); viewModel.playHere(m) }
+            videoOn -> { SportsLaunch.pickGame(ev.id, m.channel.key); viewModel.playHere(m) }
             else -> watch(ev, m)
         }
     }
@@ -497,6 +505,7 @@ fun SportsScreen(
                 videoSlot = videoSlot,
                 viewModel = viewModel,
                 onChoose = { m -> choose(opened, m) },
+                onWatchLiveChannel = { overtimeFor = opened },
                 onPlayReplay = { m -> viewModel.playReplay(m) { SportsLaunch.openedFromSports(opened.id); SportsLaunch.watchedReplay(m.channel.key); onOpenLive() } },
                 onFromStart = { m -> fromStart(opened, m) },
                 onFix = { fixFor = opened },
@@ -596,6 +605,14 @@ fun SportsScreen(
             onAttached = { viewModel.onSurfaceAttached() },
             onHidden = { viewModel.setPictureHidden(it) }
         )
+    }
+    overtimeFor?.let { ev ->
+        EndedGameChannelsDialog(ev, matches[ev.id].orEmpty(), viewModel, onDismiss = { overtimeFor = null }) { channel ->
+            overtimeFor = null
+            SportsLaunch.openedLiveChannelFromEndedGame(ev.id)
+            viewModel.watchChannel(channel)
+            onOpenLive()
+        }
     }
     fixFor?.let { ev -> FixChannelDialog(ev, matches[ev.id].orEmpty(), settings.hideScores, viewModel) { fixFor = null } }
 }
@@ -1588,6 +1605,7 @@ private fun GamePage(
     videoSlot: @Composable (Modifier) -> Unit,
     viewModel: SportsViewModel,
     onChoose: (ChannelMatch) -> Unit,
+    onWatchLiveChannel: () -> Unit,
     /** A replay or highlights video from a sports addon (finished games). */
     onPlayReplay: (ChannelMatch) -> Unit,
     onFromStart: (ChannelMatch) -> Unit,
@@ -1855,6 +1873,10 @@ private fun GamePage(
         ) {
             var firstSet = false
             fun f(): Modifier = if (!firstSet) { firstSet = true; Modifier.focusRequester(firstAction) } else Modifier
+            if (ev.state == GameState.POST) {
+                val m = f()
+                item { SportsAction("Watch live channel", modifier = m, onClick = onWatchLiveChannel) }
+            }
             val replay = matches.firstOrNull { it.catchup }
             if (replay != null && (ev.state == GameState.LIVE || ev.state == GameState.POST)) {
                 val m = f()
@@ -2405,6 +2427,52 @@ internal fun ChannelLine(
     }
 }
 
+/** The user can tune a broadcaster after the game clock ends, including a manual one-off selection. */
+@Composable
+private fun EndedGameChannelsDialog(
+    event: SportsEvent,
+    matches: List<ChannelMatch>,
+    viewModel: SportsViewModel,
+    onDismiss: () -> Unit,
+    onTune: (LiveChannel) -> Unit,
+) {
+    val access = hiltViewModel<SportsWatchViewModel>()
+    val allowed by access.allowedChannels.collectAsStateWithLifecycle()
+    var addons by remember(event.id) { mutableStateOf<List<LiveChannel>?>(null) }
+    LaunchedEffect(event.id, access) {
+        sportsCatching { access.liveAddonsForEndedGame(event).collect { addons = it } }
+            .onFailure { addons = emptyList() }
+    }
+    val sources by androidx.compose.runtime.produceState(
+        SportsWatchPolicy.EndedChannels(emptyList(), emptyList()), allowed, matches, addons,
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            SportsWatchPolicy.endedChannels(allowed, matches, addons.orEmpty())
+        }
+    }
+    val hint = when {
+        sources.suggested.isNotEmpty() -> "Tune the current broadcast. Coverage may have moved on."
+        addons == null -> "Looking for live broadcasts. You can also search your playlist channels."
+        sources.searchable.isEmpty() -> "No live channels available."
+        else -> "No matching broadcast found. Search for a channel to watch it live."
+    }
+    ChannelPickerDialog(
+        title = "Watch live channel",
+        initial = "",
+        viewModel = viewModel,
+        channels = sources.searchable,
+        suggested = sources.suggested,
+        hint = hint,
+        onPick = { channel ->
+            val playable = if (channel.sourceId == SportsAddonSource.SOURCE_ID) {
+                channel in addons.orEmpty() && access.mayPlayEndedGameAddon(event, channel)
+            } else access.mayPlay(channel)
+            if (playable) onTune(channel) else LiveTvNotice.show("That channel is no longer available")
+        },
+        onDismiss = onDismiss,
+    )
+}
+
 /** Type part of a channel's name; OK on one picks it. */
 @Composable
 internal fun ChannelPickerDialog(
@@ -2412,15 +2480,18 @@ internal fun ChannelPickerDialog(
     initial: String,
     viewModel: SportsViewModel,
     onPick: (LiveChannel) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    channels: List<LiveChannel>? = null,
+    suggested: List<LiveChannel> = emptyList(),
+    hint: String? = null,
 ) {
     var q by remember { mutableStateOf(initial) }
-    val all = remember(viewModel.repo) { viewModel.repo.channelsForPicker() }
+    val all = channels ?: remember(viewModel.repo) { viewModel.repo.channelsForPicker() }
     var result by remember(all) { mutableStateOf<ChannelPickerSearchResult<LiveChannel>?>(null) }
     LaunchedEffect(all) {
         channelPickerSearchResults(all, snapshotFlow { q }) { it.name }.collect { result = it }
     }
-    val list = result?.forQuery(q).orEmpty()
+    val list = if (q.isBlank()) suggested else result?.forQuery(q).orEmpty()
     val searching = result?.query != q
     var focusResultsFor by remember { mutableStateOf<String?>(null) }
     val field = remember { FocusRequester() }
@@ -2428,6 +2499,7 @@ internal fun ChannelPickerDialog(
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     SportsDialog(onDismiss = onDismiss, width = 640.dp) {
         LiveText(title, size = 18.sp, weight = FontWeight.Bold, maxLines = 2)
+        if (hint != null) LiveText(hint, color = SportsLook.Dim, size = 12.sp, maxLines = 3)
         Spacer(Modifier.height(10.dp))
         // ✓ on the keyboard: down to the channels found (no need to press Back first).
         LiveTextField(
@@ -2454,7 +2526,11 @@ internal fun ChannelPickerDialog(
             if (list.isNotEmpty()) runCatching { firstResult.requestFocus() }
         }
     }
-    LaunchedEffect(Unit) { delay(80); runCatching { field.requestFocus() } }
+    val hasSuggestions = androidx.compose.runtime.rememberUpdatedState(suggested.isNotEmpty())
+    LaunchedEffect(Unit) {
+        delay(80)
+        runCatching { if (q.isBlank() && hasSuggestions.value) firstResult.requestFocus() else field.requestFocus() }
+    }
 }
 
 /** "1:00 PM" etc., also used by the picker and host. */
