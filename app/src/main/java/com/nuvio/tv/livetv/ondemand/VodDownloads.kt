@@ -128,7 +128,7 @@ class VodDownloads @Inject constructor(
         playlist !in user.hiddenPlaylists && category !in user.vodHiddenCategories &&
             !(pinEnabled && "vod:$category" in user.lockedGroups)
 
-    private suspend fun canSave(item: VodItem) =
+    internal suspend fun canSave(item: VodItem) =
         visible(item.playlistId, category(item), prefs.userState.first(), ParentalControls.enabled(prefs.settings.first())) &&
             !repository.isAdult(item)
 

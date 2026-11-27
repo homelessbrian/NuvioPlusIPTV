@@ -42,6 +42,7 @@ internal fun DriveFolderDialog(
     onChosen: (String) -> Unit,
     /** Open straight into this drive ([DriveFolders.idOf]) instead of the list of drives. */
     startDrive: String? = null,
+    forDownloads: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -75,7 +76,7 @@ internal fun DriveFolderDialog(
         if (startDrive != null && drive == null) drives.firstOrNull { it.id == startDrive }?.let { goTo(it, it.root) }
     }
 
-    val suggested = context.getString(R.string.iptv_drive_folder_default_name)
+    val suggested = if (forDownloads) "Nuvio Downloads" else context.getString(R.string.iptv_drive_folder_default_name)
     val actions: List<Pair<String, () -> Unit>> = if (drive == null || here == null) {
         drives.map { d ->
             val free = RecordingStorage.sizeLabel(runCatching { d.root.usableSpace }.getOrDefault(0L), locale)
@@ -84,7 +85,8 @@ internal fun DriveFolderDialog(
         }
     } else buildList<Pair<String, () -> Unit>> {
         val d = drive!!
-        add(context.getString(R.string.iptv_drive_folder_save_here) to {
+        val saveHere = if (forDownloads) "Save downloads here" else context.getString(R.string.iptv_drive_folder_save_here)
+        add(saveHere to {
             if (!busy) {
                 busy = true
                 scope.launch {
@@ -94,7 +96,7 @@ internal fun DriveFolderDialog(
                     if (!ok || path == null) problem = context.getString(R.string.iptv_drive_folder_cant_write)
                     else {
                         val saved = DriveFolders.Saved(d.id, path)
-                        DriveFolders.add(context, saved)
+                        if (!forDownloads) DriveFolders.add(context, saved)
                         onChosen(saved.id)
                     }
                 }
@@ -116,6 +118,7 @@ internal fun DriveFolderDialog(
         ?: context.getString(R.string.iptv_drive_folder_title)
     val subtitle = problem ?: when {
         drive == null && drives.isEmpty() -> context.getString(R.string.iptv_drive_folder_no_drives)
+        drive == null && forDownloads -> "Choose a drive and folder for downloads."
         drive == null -> context.getString(R.string.iptv_drive_folder_pick_drive)
         else -> {
             val path = here?.let { DriveFolders.pathOn(drive!!, it) }.orEmpty()

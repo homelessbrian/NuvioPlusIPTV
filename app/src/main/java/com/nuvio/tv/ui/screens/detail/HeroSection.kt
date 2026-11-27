@@ -81,6 +81,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Stop
@@ -108,6 +109,7 @@ fun HeroContentSection(
     onPlayClick: () -> Unit,
     isPlayEnabled: Boolean = true,
     onPlayLongPress: (() -> Unit)? = null,
+    onDownloadMovie: (() -> Unit)? = null,
     isInLibrary: Boolean,
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
@@ -276,6 +278,15 @@ fun HeroContentSection(
                                 onPlayFocusRestored()
                             }
                         )
+
+                        onDownloadMovie?.let {
+                            ActionIconButton(
+                                icon = Icons.Default.GetApp,
+                                contentDescription = "Download movie",
+                                onClick = it,
+                                onFocused = onHeroActionFocused
+                            )
+                        }
 
                         ActionIconButton(
                             icon = if (isInLibrary) Icons.Default.Check else null,

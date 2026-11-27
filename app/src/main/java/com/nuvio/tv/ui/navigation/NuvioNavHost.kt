@@ -526,8 +526,15 @@ private fun PlaybackNavHost(
                     onDismiss = { onDemandVersions = null }
                 )
             }
+            val playlistUid by savedState.getStateFlow<String?>(
+                com.nuvio.tv.livetv.ondemand.OnDemandPlay.KEY, null
+            ).collectAsState()
+            val download = playlistUid?.let { uid ->
+                com.nuvio.tv.livetv.ondemand.rememberMatchedDownloadAction(uid)
+            }
             DetailChildHost(parentNavController = navController) { childNav ->
             MetaDetailsScreen(
+                onDownload = download,
                 returnFocusSeason = returnFocusSeason,
                 returnFocusEpisode = returnFocusEpisode,
                 heroRestoreToken = heroRestoreToken,
@@ -1503,8 +1510,17 @@ private fun PlaybackNavHost(
             )
         }
 
+        composable(Screen.PlaylistDownloads.route) {
+            com.nuvio.tv.livetv.ondemand.PlaylistDownloadsScreen { uri, title ->
+                navController.navigate(Screen.Player.createRoute(
+                    streamUrl = uri.toString(), title = title, contentType = Screen.PlaylistDownloads.CONTENT_TYPE
+                ))
+            }
+        }
+
         rootComposable(Screen.Library.route) {
             LibraryScreen(
+                onOpenDownloads = { navController.navigate(Screen.PlaylistDownloads.route) },
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
@@ -1730,6 +1746,7 @@ private fun PlaybackNavHost(
                 ?.also { com.nuvio.tv.livetv.ondemand.OnDemandHomeSettings.last = it }
                 ?: com.nuvio.tv.livetv.ondemand.OnDemandHomeSettings.last?.settingsOnly()
             com.nuvio.tv.livetv.ondemand.OnDemandHomeScreen(
+                onOpenDownloads = { navController.navigate(Screen.PlaylistDownloads.route) },
                 homeSettings = homeSettings,
                 onOpenDetail = { itemId, itemType, addonBaseUrl, onDemandUid ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))

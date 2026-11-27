@@ -50,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -59,6 +60,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,6 +92,11 @@ internal fun ProviderDetailDialog(
     onFixMatch: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val canDownload by produceState(false, item.uid) {
+        value = runCatching { vodDownloads(context).canSave(item) }.getOrDefault(false)
+    }
+    val download = rememberPlaylistDownloadAction()
     val info by produceState<VodInfo?>(initialValue = null, item.uid) { value = viewModel.info(item) }
     val poster by produceState<String?>(initialValue = item.icon, item.uid) { viewModel.posterFor(item)?.let { value = it } }
     var season by remember { mutableStateOf<Int?>(null) }
@@ -129,15 +136,20 @@ internal fun ProviderDetailDialog(
                         Spacer(Modifier.height(4.dp))
                         LazyColumn(modifier = Modifier.heightIn(max = 220.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             items(versions, key = { it.item.uid }) { v ->
-                                MenuItem(
-                                    "Play · ${v.label}" + if (v.detail.isNotBlank()) "  —  ${v.detail}" else "",
-                                    if (v == versions.first()) Modifier.focusRequester(first) else Modifier
+                                ProviderPlayRow(
+                                    download = if (canDownload) ({ download(PlaylistDownloadPick(v.item.uid)) }) else null,
+                                    label = "Play · ${v.label}" + if (v.detail.isNotBlank()) "  —  ${v.detail}" else "",
+                                    playModifier = if (v == versions.first()) Modifier.focusRequester(first) else Modifier
                                 ) {
                                     scope.launch { val adult = viewModel.isAdult(item); viewModel.movieUrl(v.item)?.let { onPlay(it, item.name, poster, null, null, null, adult) } }
                                 }
                             }
                         }
-                    } else MenuItem("Play", Modifier.focusRequester(first)) {
+                    } else ProviderPlayRow(
+                        label = "Play",
+                        playModifier = Modifier.focusRequester(first),
+                        download = if (canDownload) ({ download(PlaylistDownloadPick(item.uid)) }) else null
+                    ) {
                         scope.launch { val adult = viewModel.isAdult(item); viewModel.movieUrl(item)?.let { onPlay(it, item.name, poster, null, null, null, adult) } }
                     }
                 } else {
@@ -153,9 +165,12 @@ internal fun ProviderDetailDialog(
                         Spacer(Modifier.height(8.dp))
                         LazyColumn(modifier = Modifier.heightIn(max = 220.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             items(episodes.filter { it.season == current }, key = { it.id }) { ep ->
-                                MenuItem(
-                                    "${ep.episode}.  ${ep.title}",
-                                    if (ep == episodes.firstOrNull { it.season == current }) Modifier.focusRequester(first) else Modifier
+                                ProviderPlayRow(
+                                    label = "${ep.episode}.  ${ep.title}",
+                                    playModifier = if (ep == episodes.firstOrNull { it.season == current }) Modifier.focusRequester(first) else Modifier,
+                                    download = if (canDownload) ({
+                                        download(PlaylistDownloadPick(item.uid, ep.season, ep.episode, ep.id))
+                                    }) else null
                                 ) {
                                     scope.launch { onPlay(ep.url, "${item.name} · S${ep.season}E${ep.episode}", poster, ep.season, ep.episode, ep.title, viewModel.isAdult(item)) }
                                 }
@@ -171,14 +186,28 @@ internal fun ProviderDetailDialog(
     LaunchedEffect(info) { delay(80); runCatching { first.requestFocus() } }
 }
 
+@Composable
+private fun ProviderPlayRow(label: String, playModifier: Modifier, download: (() -> Unit)?, play: () -> Unit) {
+    val playFocus = remember { FocusRequester() }
+    val downloadFocus = remember { FocusRequester() }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        MenuItem(label, Modifier.weight(1f).then(playModifier).focusRequester(playFocus)
+            .focusProperties { if (download != null) right = downloadFocus }, onClick = play)
+        if (download != null) {
+            DialogPill("Download", selected = false, focusRequester = downloadFocus,
+                modifier = Modifier.focusProperties { left = playFocus }, onClick = download)
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DialogPill(label: String, selected: Boolean, icon: Boolean = false, focusRequester: FocusRequester? = null, onClick: () -> Unit) {
+private fun DialogPill(label: String, selected: Boolean, icon: Boolean = false, focusRequester: FocusRequester? = null, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val colors = liveCellColors(focused = focused, idle = if (selected) guideSurfaceVariant() else Color.Transparent)
     val shape = RoundedCornerShape(50)
     Row(
-        modifier = (if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+        modifier = (if (focusRequester != null) modifier.focusRequester(focusRequester) else modifier)
             .clip(shape)
             .background(colors.background)
             .border(1.dp, if (focused) colors.border else NuvioTheme.colors.Border, shape)
