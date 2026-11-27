@@ -432,7 +432,7 @@ fun MultiviewScreen(
     }
 
     Box(
-        Modifier.fillMaxSize().guideBackdrop(backdrop).multiviewBackdrop().onPreviewKeyEvent { event ->
+        Modifier.fillMaxSize().guideBackdrop(backdrop).multiviewBackdrop(backdrop).onPreviewKeyEvent { event ->
             if (okLeftover[0] >= 0 && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
                 val native = event.nativeKeyEvent
                 val newPress = event.type == KeyEventType.KeyDown && native.repeatCount == 0 &&

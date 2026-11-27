@@ -466,7 +466,7 @@ fun SportsScreen(
             }
     ) {
         // The same soft glow in the theme colour as the top of the guide.
-        ThemeGlow(Modifier.fillMaxWidth().height(SPORTS_GLOW_HEIGHT))
+        ThemeGlow(backdrop, Modifier.fillMaxWidth().height(SPORTS_GLOW_HEIGHT))
         val opened = openId?.let { id -> known.firstOrNull { it.id == id } }
         if (openId != null && opened == null && known.isNotEmpty()) { openId = null; fromRoute = null; fromLabel = null }
         when {
@@ -681,7 +681,7 @@ private fun VideoLayer(
                 val dy = slot.top - root.top
                 translate(-dx, -dy) {
                     drawGuideBackdrop(backdropResolved, root.width, root.height)
-                    drawThemeGlow(accent, glowTop, root.width, SPORTS_GLOW_HEIGHT.toPx())
+                    drawThemeGlow(accent, glowTop, root.width, SPORTS_GLOW_HEIGHT.toPx(), backdropResolved)
                 }
                 drawRoundRect(
                     color = Color.Black,

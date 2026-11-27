@@ -42,7 +42,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -258,6 +257,7 @@ internal object GuideBackdrops {
 
     /** Settings saved by earlier versions: Midnight Blue is now Arctic Blue, Dark Red is Rose Gold. */
     fun normalize(key: String): String = when {
+        key == GuideColors.BLACK_BACKDROP -> key
         key.startsWith("auto:") -> key // already resolved to the theme's colors
         // "oled" was the default, so it follows the theme until someone picks Onyx themselves.
         key == "oled" -> "auto"
@@ -321,21 +321,17 @@ private fun backdropBlobs(styleKey: String): List<Blob> {
     )
 }
 
-/** "Match Theme" becomes the current theme's two accent colors (so the picture follows the theme); other choices stay as they are. */
+/** Resolve the current theme/AMOLED background without changing the saved backdrop choice. */
 @Composable
 internal fun resolveBackdrop(style: String): String {
-    val key = GuideBackdrops.normalize(style)
-    if (key != "auto") return key
-    val c = NuvioTheme.colors
-    val a = androidx.compose.ui.graphics.lerp(c.Secondary, Color.Black, 0.25f)
-    val b = androidx.compose.ui.graphics.lerp(c.SecondaryVariant, Color.Black, 0.25f)
-    return "auto:${a.toArgb().toLong() and 0xFFFFFFFFL}:${b.toArgb().toLong() and 0xFFFFFFFFL}"
+    return GuideColors.backdrop(style, NuvioTheme.colors)
 }
 
 /** Paints the backdrop; scales with the screen (fixed-pixel sizes looked tiny on 4K, huge at 720p). */
 @Composable
 internal fun Modifier.guideBackdrop(styleKey: String): Modifier {
     val style = resolveBackdrop(styleKey)
+    if (style == GuideColors.BLACK_BACKDROP) return this.background(Color.Black)
     // One modifier per style, kept across redraws. Built fresh on every pass, its picture was
     // painted again (by the processor, five full-screen gradients) each time anything on the
     // screen changed: that was the guide's freezing.
@@ -375,14 +371,17 @@ private fun backdropBrushes(style: String, w: Float, h: Float): List<Brush> {
  * rounded corners are painted over the video's square corners with exactly what's behind them.
  */
 internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGuideBackdrop(style: String, w: Float, h: Float) {
+    if (style == GuideColors.BLACK_BACKDROP) {
+        drawRect(Color.Black, size = androidx.compose.ui.geometry.Size(w, h))
+        return
+    }
     drawRect(backdropBase(style), size = androidx.compose.ui.geometry.Size(w, h))
     backdropBrushes(style, w, h).forEach { drawRect(it, size = androidx.compose.ui.geometry.Size(w, h)) }
 }
 
 /**
- * Guide tiles. The theme's raised and card surfaces, which carry its tint (warm for Amber, cool
- * for Ocean…), instead of its plain neutral greys, which looked flat. When "pure black surfaces"
- * makes them black, fixed dark greys keep the tiles visible.
+ * Guide tiles use the theme's glass background, including its pure-black surface option.
+ * Faint edges and the focus highlight keep black tiles distinct without lifting their fill.
  */
 @Composable
 internal fun guideSurface(): Color {
@@ -390,18 +389,13 @@ internal fun guideSurface(): Color {
     // background, not its lighter "elevated" grey, which read as a different, flatter material
     // next to it. The tiles also get a soft white edge (see ProgramBlock/channel cell) — the
     // alpha alone barely shows, the edge is what reads as "glass".
-    val c = NuvioTheme.colors.Background
-    val alpha = when (LocalGuideDarkness.current) { "solid" -> 0.94f; "standard" -> 0.50f; else -> 0.66f }
-    return (if (c.luminance() < 0.003f) Color(0xFF0E0E12) else c).copy(alpha = alpha)
+    return GuideColors.surface(NuvioTheme.colors, LocalGuideDarkness.current)
 }
 
-/** Shows on now, and the group on screen: a step lighter than [guideSurface] (same glass, lifted with white). */
+/** Shows on now, and the group on screen: raised glass unless pure-black surfaces are enabled. */
 @Composable
 internal fun guideSurfaceVariant(): Color {
-    val c = NuvioTheme.colors.Background
-    val base = if (c.luminance() < 0.003f) Color(0xFF0E0E12) else c
-    val alpha = when (LocalGuideDarkness.current) { "solid" -> 0.96f; "standard" -> 0.58f; else -> 0.72f }
-    return androidx.compose.ui.graphics.lerp(base, Color.White, 0.10f).copy(alpha = alpha)
+    return GuideColors.surfaceVariant(NuvioTheme.colors, LocalGuideDarkness.current)
 }
 
 /** The faint edge every glass surface in the guide shares (tiles, groups, the info panel). */
@@ -525,17 +519,20 @@ internal object DeadLogos {
  * the theme, kept fainter for the white theme (a white glow looks like grey haze).
  */
 @Composable
-internal fun ThemeGlow(modifier: Modifier = Modifier) {
+internal fun ThemeGlow(backdrop: String, modifier: Modifier = Modifier) {
+    val style = resolveBackdrop(backdrop)
+    if (style == GuideColors.BLACK_BACKDROP) return
     val accent = NuvioTheme.colors.Secondary
     val top = NuvioTheme.colors.BackgroundElevated
-    Box(modifier = modifier.drawBehind { drawThemeGlow(accent, top, size.width, size.height) })
+    Box(modifier = modifier.drawBehind { drawThemeGlow(accent, top, size.width, size.height, style) })
 }
 
 /**
  * The glow itself, for an area [w] x [h] from the top left. Also used to paint the preview's
  * rounded corners in exactly the colors behind them.
  */
-internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawThemeGlow(accent: Color, top: Color, w: Float, h: Float) {
+internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawThemeGlow(accent: Color, top: Color, w: Float, h: Float, backdrop: String) {
+    if (backdrop == GuideColors.BLACK_BACKDROP) return
     val strength = if (accent.luminance() > 0.8f) 0.08f else 0.16f
     drawRect(
         Brush.verticalGradient(listOf(top.copy(alpha = 0.85f), Color.Transparent), startY = 0f, endY = h),

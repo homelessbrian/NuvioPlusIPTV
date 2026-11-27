@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import com.nuvio.tv.livetv.ui.drawThemeGlow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,10 +59,13 @@ import com.nuvio.tv.livetv.sports.SportsBadge
 import com.nuvio.tv.livetv.sports.SportsLook
 import com.nuvio.tv.livetv.sports.sportsFrame
 import com.nuvio.tv.livetv.ui.ChannelLogo
+import com.nuvio.tv.livetv.ui.GuideColors
 import com.nuvio.tv.livetv.ui.LiveText
+import com.nuvio.tv.livetv.ui.drawThemeGlow
 import com.nuvio.tv.livetv.ui.formatClock
 import com.nuvio.tv.livetv.ui.glass
 import com.nuvio.tv.livetv.ui.glassColor
+import com.nuvio.tv.livetv.ui.resolveBackdrop
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 /*
@@ -79,10 +81,12 @@ internal val MultiviewNeutralTag = Color.White.copy(alpha = 0.14f)
 
 /** The same soft glow in the theme colour as the top of the Guide and Sports. */
 @Composable
-internal fun Modifier.multiviewBackdrop(): Modifier {
+internal fun Modifier.multiviewBackdrop(backdrop: String): Modifier {
+    val style = resolveBackdrop(backdrop)
+    if (style == GuideColors.BLACK_BACKDROP) return this
     val accent = NuvioTheme.colors.Secondary
     val top = NuvioTheme.colors.BackgroundElevated
-    return this.drawBehind { drawThemeGlow(accent, top, size.width, 220.dp.toPx()) }
+    return this.drawBehind { drawThemeGlow(accent, top, size.width, 220.dp.toPx(), style) }
 }
 
 /** The floating glass card the pickers and the top bar sit in: as dark as the play bar ("Bar darkness"). */
