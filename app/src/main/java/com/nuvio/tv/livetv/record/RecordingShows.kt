@@ -259,7 +259,7 @@ internal fun RecordedShowPage(
             }
             .focusGroup()
     ) {
-        com.nuvio.tv.livetv.ui.ThemeGlow(Modifier.fillMaxWidth().height(260.dp))
+        com.nuvio.tv.livetv.ui.ThemeGlow(backdrop, Modifier.fillMaxWidth().height(260.dp))
         Row(
             Modifier.fillMaxSize().padding(start = 56.dp, end = 48.dp, top = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(40.dp)
