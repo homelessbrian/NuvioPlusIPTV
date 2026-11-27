@@ -3,6 +3,7 @@ package com.nuvio.tv.data.repository
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
+import com.nuvio.tv.livetv.model.SourceLookupReport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -172,7 +173,12 @@ internal class StreamSearchSessionCache(
                 sessions[key]?.let { existing ->
                     val failedWithoutResults = existing.state.value.isComplete && existing.requestFailed &&
                         existing.lastSuccessfulResult == null
-                    if (!failedWithoutResults && !existing.needsRecovery()) return@withLock existing
+                    if (!failedWithoutResults && !existing.needsRecovery()) {
+                        val label = SourceLookupReport.label(key.type, key.season, key.episode)
+                        val reuse = if (existing.state.value.isComplete) "used cached results" else "joined an active search"
+                        SourceLookupReport.record(label, reuse)
+                        return@withLock existing
+                    }
                     retained = existing.lastSuccessfulResult
                     if (retained != null) retainedCompletedAtMs = existing.completedAtMs
                     if (!existing.retryAll) retryTargets = existing.failedTargets.toSet()

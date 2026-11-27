@@ -20,6 +20,7 @@ import com.nuvio.tv.core.usenet.UsenetRelease
 import com.nuvio.tv.data.mediaserver.ServerStreamSource
 import com.nuvio.tv.data.local.DebridSettingsDataStore
 import com.nuvio.tv.data.remote.api.AddonApi
+import com.nuvio.tv.data.remote.dto.MetaResponseDto
 import com.nuvio.tv.data.remote.dto.StreamDto
 import com.nuvio.tv.data.remote.dto.StreamResponseDto
 import com.nuvio.tv.domain.model.Addon
@@ -33,6 +34,7 @@ import com.nuvio.tv.domain.model.RepositoryType
 import com.nuvio.tv.domain.model.ScraperInfo
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.repository.AddonRepository
+import com.nuvio.tv.livetv.model.LiveTvLoadReport
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -48,12 +50,60 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
 
 class StreamRepositoryPluginIsolationTest {
+    @Test fun `episode report distinguishes empty and failed requests without exposing source details`() = runTest {
+        val slots = listOf("good", "empty", "missing", "unavailable", "timeout", "meta-failure")
+        val addons = slots.map { slot ->
+            compatibleAddon().copy(
+                id = slot, displayName = "private name $slot", baseUrl = "https://$slot.example/private-key",
+                resources = listOf(AddonResource("stream", listOf("series"), listOf("tt")))
+            )
+        }
+        val harness = newHarness(emptyList(), addons = addons)
+        val stream = StreamDto(name = "private title", url = "https://stream.example/private-key")
+        coEvery { harness.api.getStreams(any()) } answers {
+            when (firstArg<String>().substringAfter("https://").substringBefore('.')) {
+                "good" -> Response.success(StreamResponseDto(streams = listOf(stream)))
+                "missing" -> Response.error(404, "private body".toResponseBody())
+                "unavailable" -> Response.error(503, "private body".toResponseBody())
+                "timeout" -> throw java.net.SocketTimeoutException("timed out accessing private-host.example")
+                else -> Response.success(StreamResponseDto(streams = emptyList()))
+            }
+        }
+        coEvery { harness.api.getMeta(any()) } answers {
+            if (firstArg<String>().startsWith("https://meta-failure.example")) {
+                Response.error(502, "private body".toResponseBody())
+            } else Response.success(MetaResponseDto())
+        }
+        suspend fun search(refresh: Boolean) = harness.repository.getStreamsFromAllAddons(
+            "series", "tt732526:7:91", 7, 91, forceRefresh = refresh
+        ).toList().last()
+        fun summary() = LiveTvLoadReport.lines.value.last {
+            it.contains("(S7E91)") && it.contains("with sources,")
+        }
+
+        val first = search(false) as NetworkResult.Success
+        assertEquals(1, first.data.size)
+        val report = summary()
+        assertTrue(report, "1 with sources, 2 empty, 3 failed/incomplete" in report)
+        for (detail in listOf("#1 stream 1", "#2 empty", "#3 HTTP 404", "#4 HTTP 503", "#5 timeout", "#6 empty stream, meta HTTP 502")) {
+            assertTrue(report, detail in report)
+        }
+        for (line in LiveTvLoadReport.lines.value.filter { it.contains("(S7E91)") }) {
+            assertTrue(line, listOf("private", ".example", "tt732526").none { it in line })
+        }
+
+        coEvery { harness.api.getStreams(any()) } returns Response.success(StreamResponseDto(streams = listOf(stream)))
+        search(true)
+        assertTrue(summary(), "6 with sources, 0 empty" in summary() && "failed" !in summary())
+    }
+
     @Test fun `network recovery retries only the failed addon preserving healthy and empty responses`() = runTest {
         val generation = MutableStateFlow(0L)
         val flaky = compatibleAddon().copy(id = "flaky", name = "Flaky", displayName = "Flaky", baseUrl = "https://flaky.example")
