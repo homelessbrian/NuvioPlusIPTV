@@ -14,24 +14,36 @@ public final class OpenVpn2ManagementChecks {
         Sink sink = new Sink();
         OpenVpn2Management session = new OpenVpn2Management(sink);
         check(!session.statistics().authenticated);
+        check("STARTING".equals(session.statistics().openVpnState));
         session.line(">HOLD:Waiting for hold release:0");
+        check("HOLD".equals(session.statistics().openVpnState));
         check(sink.commands.get(0).equals("state on\nbytecount 1\nhold release\n"));
+        for (String milestone : new String[]{"RESOLVE", "WAIT", "AUTH", "GET_CONFIG", "ASSIGN_IP", "ADD_ROUTES"}) {
+            session.line(">STATE:0," + milestone + ",private detail,private endpoint");
+            check(milestone.equals(session.statistics().openVpnState) && !session.statistics().authenticated);
+        }
+        session.line(">STATE:0,private-state private-token,private detail,private endpoint");
+        check("OTHER".equals(session.statistics().openVpnState));
         tunnel(session);
         check(sink.protectedCount == 1 && sink.opened == 1);
         session.line(">STATE:1,CONNECTED,SUCCESS,untrusted-details");
         session.line(">BYTECOUNT:12345,54321");
         TunnelTraffic first = session.statistics();
+        check("CONNECTED".equals(first.openVpnState));
         check(first.authenticated && first.session > 0 && first.received == 12345 && first.sent == 54321);
         session.line(">PASSWORD:Auth-Token:private-token-must-not-be-logged");
+        check("CONNECTED".equals(session.statistics().openVpnState));
         check(session.statistics().authenticated && session.statistics().session == first.session);
         session.line(">LOG:1,I,untrusted-private-details");
         check(session.statistics().authenticated);
         session.line(">STATE:2,RECONNECTING,tls-error,untrusted-details");
+        check("RECONNECTING".equals(session.statistics().openVpnState));
         check(!session.statistics().authenticated && session.statistics().session == 0);
         tunnel(session);
         session.line(">STATE:4,CONNECTED,SUCCESS,untrusted-details");
         check(session.statistics().session > first.session);
         session.line(">PASSWORD:Need 'Auth' username/password");
+        check("AUTH".equals(session.statistics().openVpnState));
         check(sink.credentials == 1 && !session.statistics().authenticated);
         session.line(">STATE:5,CONNECTED,SUCCESS,untrusted-details");
         session.end();
@@ -55,6 +67,7 @@ public final class OpenVpn2ManagementChecks {
         }
         OpenVpn2Management rejected = new OpenVpn2Management(new Sink());
         rejects(rejected, ">PASSWORD:Verification Failed: 'Auth' ['private-details']");
+        check("AUTH_FAILED".equals(rejected.statistics().openVpnState));
         check(rejected.authRejected() && !rejected.statistics().authenticated);
         Sink failedProtect = new Sink(); failedProtect.rejectProtect = true;
         OpenVpn2Management unprotected = new OpenVpn2Management(failedProtect);

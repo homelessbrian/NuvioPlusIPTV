@@ -64,7 +64,7 @@ func shortProbe(t *testing.T, transport *http.Transport, timeout time.Duration) 
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return probeHTTPS(ctx, transport)
+	return probeHTTPS(ctx, transport) == probeOK
 }
 
 func TestProbeBlockedGoogleUsesHealthyCloudflareAndCancelsLosers(t *testing.T) {
@@ -100,7 +100,7 @@ func TestProbeBlockedGoogleUsesHealthyCloudflareAndCancelsLosers(t *testing.T) {
 	})
 	tunnel := &httpTunnel{transport: transport, packetLink: io.NopCloser(strings.NewReader(""))}
 	start := time.Now()
-	if !tunnel.probe() {
+	if tunnel.probe() != probeOK {
 		t.Fatal("working tunnel was rejected when Google was blocked")
 	}
 	deadline := time.Now().Add(500 * time.Millisecond)
@@ -147,8 +147,45 @@ func TestProbeStrictResponses(t *testing.T) {
 func TestProbeRejectsUntrustedTLS(t *testing.T) {
 	transport := probeFixture(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }, nil)
 	transport.TLSClientConfig = &tls.Config{RootCAs: x509.NewCertPool()}
-	if shortProbe(t, transport, time.Second) {
-		t.Fatal("untrusted TLS verified the tunnel")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if got := probeHTTPS(ctx, transport); got != "tls" {
+		t.Fatalf("untrusted certificate outcome = %q", got)
+	}
+}
+
+func TestProbeReportsMixedPrivateFailuresWithoutIdentifiers(t *testing.T) {
+	transport := probeFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "ip=private-invalid-body\n")
+	}, func(_ context.Context, address string) error {
+		switch address {
+		case "www.gstatic.com:443":
+			return &net.DNSError{Name: "private-resolver", Err: "private failure text"}
+		case "cp.cloudflare.com:443":
+			return errors.New("dial private-address failed")
+		default:
+			return nil
+		}
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if got := probeHTTPS(ctx, transport); got != "connect+dns+invalid_body" {
+		t.Fatalf("mixed outcome = %q", got)
+	}
+}
+
+func TestProbeReportsUnexpectedStatusAndTimeout(t *testing.T) {
+	transport := probeFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Host == "1.1.1.1" {
+			<-r.Context().Done()
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+	}, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if got := probeHTTPS(ctx, transport); got != "http_403+timeout" {
+		t.Fatalf("status and deadline outcome = %q", got)
 	}
 }
 
@@ -163,11 +200,11 @@ func TestProbeAllFailuresNeverUseDirectTransport(t *testing.T) {
 	// OpenVPN has no WireGuard statistics gate, so healthy direct fallback would
 	// incorrectly verify this fixture if the probe ever selected it.
 	tunnel.packetLink = io.NopCloser(strings.NewReader(""))
-	if tunnel.probe() || tunneled.Load() != int32(len(tunnelProbeChecks)) || direct.Load() != 0 {
+	if tunnel.probe() != "connect" || tunneled.Load() != int32(len(tunnelProbeChecks)) || direct.Load() != 0 {
 		t.Fatalf("probe escaped tunnel: tunneled=%d direct=%d", tunneled.Load(), direct.Load())
 	}
 	tunnel.transport = nil
-	if tunnel.probe() || direct.Load() != 0 {
+	if tunnel.probe() != "unavailable" || direct.Load() != 0 {
 		t.Fatal("missing tunnel selected the healthy direct transport")
 	}
 }
@@ -219,7 +256,7 @@ func TestProbeParentCancellationAndTunnelCloseCancelRequests(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			done := make(chan bool, 1)
-			go func() { done <- tunnel.probeContext(ctx) }()
+			go func() { done <- tunnel.probeContext(ctx) == probeOK }()
 			for range tunnelProbeChecks {
 				select {
 				case <-started:
@@ -261,7 +298,7 @@ func TestProbeSerializesConcurrentCallsWithinTheirOwnDeadline(t *testing.T) {
 		callers.Add(1)
 		go func() {
 			defer callers.Done()
-			if tunnel.probeContext(ctx) {
+			if tunnel.probeContext(ctx) == probeOK {
 				t.Error("blocked checks verified tunnel")
 			}
 		}()
@@ -276,11 +313,11 @@ func TestProbeHTTPResponseStillRequiresWireGuardHandshake(t *testing.T) {
 	tunnel, _ := testProxy(t, nil)
 	tunnel.transport.CloseIdleConnections()
 	tunnel.transport = probeFixture(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }, nil)
-	if tunnel.probe() {
+	if tunnel.probe() != "handshake_unverified" {
 		t.Fatal("HTTP success bypassed WireGuard traffic and handshake checks")
 	}
 	tunnel.packetLink = io.NopCloser(strings.NewReader(""))
-	if !tunnel.probe() {
+	if tunnel.probe() != probeOK {
 		t.Fatal("OpenVPN probe unexpectedly required WireGuard statistics")
 	}
 }
@@ -382,7 +419,7 @@ func TestProbeDoesNotVerifyReplacedTransport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	done := make(chan bool, 1)
-	go func() { done <- tunnel.probeContext(ctx) }()
+	go func() { done <- tunnel.probeContext(ctx) == probeOK }()
 	select {
 	case <-started:
 	case <-ctx.Done():
@@ -410,7 +447,7 @@ func TestProbeAlreadyCanceledDoesNotDial(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if tunnel.probeContext(ctx) || attempts.Load() != 0 {
+	if tunnel.probeContext(ctx) != "cancelled" || attempts.Load() != 0 {
 		t.Fatal("canceled probe started network work")
 	}
 }

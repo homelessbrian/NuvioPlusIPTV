@@ -106,12 +106,11 @@ func nuvioStats(id C.longlong, output *C.longlong) {
 }
 
 //export nuvioProbe
-func nuvioProbe(id C.longlong) C.int {
-	tunnel := nativeTunnel(int64(id))
-	if tunnel != nil && tunnel.probe() {
-		return 1
+func nuvioProbe(id C.longlong) *C.char {
+	if tunnel := nativeTunnel(int64(id)); tunnel != nil {
+		return C.CString(tunnel.probe())
 	}
-	return 0
+	return C.CString("unavailable")
 }
 
 //export nuvioEgress
