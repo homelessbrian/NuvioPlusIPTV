@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -44,8 +45,16 @@ class SportsViewModel @Inject constructor(
     val settings = repo.settings
     val follows = repo.follows
     val events = repo.events
-    /** The page's days plus followed teams' whole seasons (My Teams, game pages). */
-    val known = repo.known
+    private val _now = MutableStateFlow(System.currentTimeMillis())
+    val now: StateFlow<Long> = _now
+    /** The page's days, followed seasons and explicitly chosen source context (My Teams, game pages). */
+    val known: StateFlow<List<SportsEvent>> = kotlinx.coroutines.flow.combine(
+        repo.known, repo.listingContext, _now.map { it / 60_000L }.distinctUntilChanged()
+    ) { known, context, _ -> SportsEventListings.withContext(known, context, System.currentTimeMillis()) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, repo.known.value)
+    val listingSourceLeagues = repo.listingSourceLeagues
+    fun eventById(eventId: String): SportsEvent? = repo.eventById(eventId)
     val matches = repo.matches
     val loading = repo.loading
     val matching = repo.matching
@@ -63,9 +72,6 @@ class SportsViewModel @Inject constructor(
     /** Live TV has channels at all (otherwise the page explains channels need a playlist). */
     val hasChannels: StateFlow<Boolean> = liveRepo.channels.map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
-
-    private val _now = MutableStateFlow(System.currentTimeMillis())
-    val now: StateFlow<Long> = _now
 
     // ---- the page's lists (games of the day, sections, My Teams' rows), built in the background
 

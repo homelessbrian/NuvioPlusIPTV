@@ -17,11 +17,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -47,6 +49,7 @@ class SportsKnownChannelsTest {
     private var previousOnDemand = false
     private lateinit var previousScores: Map<String, SportsEvent>
     private lateinit var previousCards: Map<String, SportsEvent>
+    private lateinit var followsJson: MutableStateFlow<String>
 
     @Before fun createFixture() {
         previousOnDemand = BackgroundWork.onDemandPlaying.value
@@ -102,21 +105,111 @@ class SportsKnownChannelsTest {
         assertTrue(matches.getValue(fixture.imported.id).single().how.startsWith("Guide:"))
     }
 
-    private suspend fun install(leagueId: String, savedPick: Boolean): Fixture {
+    @Test fun `schedule-only restores legacy fixture channels without changing raw event lists`() = runBlocking {
+        val fixture = install("guide/motogp", savedPick = false, legacy = true, source = SportsListingSource.SCHEDULE)
+        val context = withTimeout(10_000) { repository.listingContext.first { it.any { event -> event.id == fixture.imported.id } } }
+        assertEquals(listOf(fixture.guide.id), repository.events.value.map { it.id })
+        assertEquals(listOf(fixture.guide.id), repository.known.value.map { it.id })
+        val displayedKnown = SportsEventListings.withContext(repository.known.value, context, fixture.now)
+        val page = SportsEventListings.forPage(repository.events.value, displayedKnown, fixture.follows,
+            repository.dayStart(-1), repository.dayStart(2), fixture.now)
+        assertEquals(listOf(fixture.imported.id), page.map { it.id })
+
+        runQuickMatch()
+        assertEquals(listOf(fixture.channel.key), repository.matches.value[fixture.imported.id].orEmpty().map { it.channel.key })
+        assertTrue(repository.matches.value.getValue(fixture.imported.id).single().how.startsWith("Guide:"))
+    }
+
+    @Test fun `legacy listing context is opt in and SportsDB arrival keeps its existing precedence`() = runBlocking {
+        val fixture = install("guide/motogp", savedPick = false, legacy = true)
+        assertTrue(withTimeout(10_000) { repository.listingContext.first() }.isEmpty())
+        val chosen = fixture.follows.withListingSource(fixture.imported.leagueId, SportsListingSource.SCHEDULE)
+        followsJson.value = chosen.toJson()
+        withTimeout(10_000) { repository.follows.first { it == chosen } }
+        val restored = withTimeout(10_000) { repository.listingContext.first { it.isNotEmpty() } }
+        assertEquals(listOf(fixture.imported.id), restored.map { it.id })
+
+        val sportsDb = fixture.imported.copy(id = "tsdb:replacement", title = "SportsDB schedule")
+        putLeagueData("tsdbData", sportsDb, fixture.now)
+        withTimeout(10_000) { repository.known.first { it.any { event -> event.id == sportsDb.id } } }
+        assertTrue(withTimeout(10_000) { repository.listingContext.first { it.isEmpty() } }.isEmpty())
+        assertFalse(repository.known.value.any { it.id == fixture.imported.id })
+        val displayed = SportsEventListings.forPage(repository.events.value, repository.known.value, chosen,
+            repository.dayStart(-1), repository.dayStart(2), fixture.now)
+        assertEquals(listOf(sportsDb.id), displayed.map { it.id })
+    }
+
+    @Test fun `guide-only recovers raw guide cards covered by a scored feed with their channels`() = runBlocking {
+        val leagueId = "guide/rugby-union"
+        val fixture = install(leagueId, savedPick = false, source = SportsListingSource.GUIDE)
+        val guide = fixture.guide.copy(title = "Harbor v Visitors")
+        @Suppress("UNCHECKED_CAST")
+        val guides = field("guideData").get(repository) as MutableStateFlow<Map<Long, List<SportsEvent>>>
+        guides.value = mapOf(repository.dayStart(0) to listOf(guide))
+        val scoredLeague = SportsCatalog.all.first { it.sport == Sport.RUGBY && it.espnPath != null }.id
+        fun side(name: String, home: Boolean) = Side(
+            TeamInfo(scoredLeague, name, name, name, name, null, null, null, null), "0", null, false, home
+        )
+        val scored = guide.copy(id = "scored-feed", leagueId = scoredLeague, source = EventSource.ESPN,
+            away = side("Visitors", false), home = side("Harbor", true), guideHits = emptyList())
+        putLeagueData("leagueData", scored, fixture.now)
+        withTimeout(10_000) { repository.events.first { it.any { event -> event.id == scored.id } && it.none { event -> event.id == guide.id } } }
+        withTimeout(10_000) { repository.known.first { it.any { event -> event.id == scored.id } && it.none { event -> event.id == guide.id } } }
+        val context = withTimeout(10_000) { repository.listingContext.first { it.any { event -> event.id == guide.id } } }
+        val displayedKnown = SportsEventListings.withContext(repository.known.value, context, fixture.now)
+        assertTrue(SportsEventListings.visibleKnown(displayedKnown, fixture.follows, fixture.now).any { it.id == guide.id })
+
+        runQuickMatch()
+        assertEquals(listOf(fixture.channel.key), repository.matches.value[guide.id].orEmpty().map { it.channel.key })
+    }
+
+    @Test fun `resetting listing source retains an explicit legacy reminder and cached game lookup`() = runBlocking {
+        val fixture = install("guide/motogp", savedPick = false, legacy = true,
+            source = SportsListingSource.SCHEDULE, automaticReminders = false)
+        val reset = fixture.follows.withListingSource(fixture.imported.leagueId, SportsListingSource.BOTH).copy(
+            reminders = listOf(SportsReminder(fixture.imported.id, fixture.imported.title, fixture.imported.startMs, true))
+        )
+        followsJson.value = reset.toJson()
+        withTimeout(10_000) { repository.follows.first { it == reset } }
+        assertTrue(withTimeout(10_000) { repository.listingContext.first() }.isEmpty())
+        assertEquals(fixture.imported.id, repository.eventById(fixture.imported.id)?.id)
+        assertEquals(fixture.imported.title, repository.eventById(fixture.imported.id)?.title)
+        @Suppress("UNCHECKED_CAST")
+        val matches = field("_matches").get(repository) as MutableStateFlow<Map<String, List<ChannelMatch>>>
+        matches.value = emptyMap()
+        runQuickMatch()
+        assertEquals(listOf(fixture.channel.key), repository.matches.value[fixture.imported.id].orEmpty().map { it.channel.key })
+        assertTrue(repository.switchesFor(fixture.imported))
+        @Suppress("UNCHECKED_CAST")
+        val reminderContext = field("reminderContext").get(repository) as StateFlow<List<SportsEvent>>
+        withTimeout(10_000) { reminderContext.first { it.any { event -> event.id == fixture.imported.id } } }
+        val required = SportsRepository::class.java.getDeclaredMethod("requiredDuringPlayback")
+            .apply { isAccessible = true }.invoke(repository) as Set<*>
+        assertTrue(required.contains(fixture.imported.leagueId))
+        assertEquals(listOf(fixture.guide.id), repository.events.value.map { it.id })
+        assertEquals(listOf(fixture.guide.id), repository.known.value.map { it.id })
+    }
+
+    private suspend fun install(
+        leagueId: String, savedPick: Boolean, legacy: Boolean = false, source: SportsListingSource? = null,
+        automaticReminders: Boolean = true
+    ): Fixture {
         val now = System.currentTimeMillis()
         val channel = LiveChannel(
             "fixture-channel", "fixture", "Fixture", "Station 123", null, null, null,
             "sports", "Sports", 1, "https://example.invalid/live"
         )
         val settings = SportsSettings(
-            leagueChannels = if (savedPick) mapOf(leagueId to channel.key) else emptyMap()
+            leagueChannels = if (savedPick) mapOf(leagueId to channel.key) else emptyMap(),
+            remindMyTeams = automaticReminders, pinnedScores = automaticReminders
         )
-        val follows = SportsFollows(pins = listOf(leagueId))
+        val follows = SportsFollows(pins = listOf(leagueId), listingSources = source?.let { mapOf(leagueId to it) }.orEmpty())
+        followsJson = MutableStateFlow(follows.toJson())
         val preferences = mockk<LiveTvPreferences>()
         every { preferences.settings } returns MutableStateFlow(LiveTvSettings())
         every { preferences.userState } returns MutableStateFlow(LiveUserState())
         every { preferences.sportsSettingsJson } returns MutableStateFlow(settings.toJson())
-        every { preferences.sportsMineJson } returns MutableStateFlow(follows.toJson())
+        every { preferences.sportsMineJson } returns followsJson
         val channels = mockk<LiveTvChannelStore>()
         every { channels.displayChannels } returns MutableStateFlow(listOf(channel))
         repository = SportsRepository(
@@ -126,6 +219,7 @@ class SportsKnownChannelsTest {
         )
         // Do not call start(): only the in-memory projections and quick matcher are exercised.
         withTimeout(10_000) { repository.settings.first { it == settings } }
+        withTimeout(10_000) { repository.follows.first { it == follows } }
         val program = EpgProgram(now - 10 * MINUTE, now + HOUR, "Live ${SportsCatalog.league(leagueId)!!.name}")
         val guide = SportsEvent(
             "guide-fixture", leagueId, program.startMs, true, GameState.LIVE,
@@ -133,21 +227,26 @@ class SportsKnownChannelsTest {
             guideHits = listOf(channel.key to program), endMs = program.stopMs
         )
         val imported = guide.copy(
-            id = "tsdb:$leagueId:fixture", title = "Clean imported event title",
+            id = "${if (legacy) "fx" else "tsdb"}:$leagueId:fixture", title = "Clean imported event title",
             source = EventSource.FIXTURES, guideHits = emptyList()
         )
         @Suppress("UNCHECKED_CAST")
         val guideData = field("guideData").get(repository) as MutableStateFlow<Map<Long, List<SportsEvent>>>
         guideData.value = mapOf(repository.dayStart(0) to listOf(guide))
+        putLeagueData(if (legacy) "fixtureData" else "tsdbData", imported, now)
+        withTimeout(10_000) { repository.events.first { it.map { event -> event.id } == listOf(guide.id) } }
+        val expectedKnown = if (legacy) setOf(guide.id) else setOf(guide.id, imported.id)
+        withTimeout(10_000) { repository.known.first { it.map { event -> event.id }.toSet() == expectedKnown } }
+        return Fixture(channel, guide, imported, follows, now)
+    }
+
+    private fun putLeagueData(name: String, event: SportsEvent, now: Long) {
         val leagueDataClass = SportsRepository::class.java.declaredClasses.single { it.simpleName == "LeagueData" }
         val constructor = leagueDataClass.getDeclaredConstructor(List::class.java, Long::class.javaPrimitiveType, String::class.java)
             .apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
-        val tsdbData = field("tsdbData").get(repository) as MutableStateFlow<Map<String, Any>>
-        tsdbData.value = mapOf(leagueId to constructor.newInstance(listOf(imported), now, null))
-        withTimeout(10_000) { repository.events.first { it.map { event -> event.id } == listOf(guide.id) } }
-        withTimeout(10_000) { repository.known.first { it.map { event -> event.id }.toSet() == setOf(guide.id, imported.id) } }
-        return Fixture(channel, guide, imported, follows, now)
+        val data = field(name).get(repository) as MutableStateFlow<Map<String, Any>>
+        data.value = mapOf(event.leagueId to constructor.newInstance(listOf(event), now, null))
     }
 
     private fun assertProjectionMismatchIsExercised(fixture: Fixture) {

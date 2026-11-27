@@ -55,7 +55,10 @@ internal object SportsRows {
      * The rows; with [sport], only that sport's: its teams, its leagues and its games ("Football"
      * from the top bar shows Arsenal, England and the Premier League, not the NFL).
      */
-    fun build(known: List<SportsEvent>, follows: SportsFollows, now: Long, sport: Sport? = null, isMine: (SportsEvent) -> Boolean): MyTeamsPage {
+    fun build(known: List<SportsEvent>, follows: SportsFollows, now: Long, sport: Sport? = null, isMine: (SportsEvent) -> Boolean): MyTeamsPage =
+        buildVisible(SportsEventListings.visibleKnown(known, follows, now), follows, now, sport, isMine)
+
+    private fun buildVisible(known: List<SportsEvent>, follows: SportsFollows, now: Long, sport: Sport?, isMine: (SportsEvent) -> Boolean): MyTeamsPage {
         if (sport != null) {
             fun of(id: String) = SportsCatalog.league(id)?.sport == sport
             val f = follows.copy(
@@ -64,7 +67,7 @@ internal object SportsRows {
                 pins = follows.pins.filter { of(it) },
                 words = emptyList()
             )
-            return build(known.filter { of(it.leagueId) }, f, now, null, isMine)
+            return buildVisible(known.filter { of(it.leagueId) }, f, now, null, isMine)
         }
         val rows = ArrayList<SportsRow>()
 
