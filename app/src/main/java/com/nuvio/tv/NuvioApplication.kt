@@ -32,6 +32,7 @@ import com.nuvio.tv.core.sync.androidtv.AndroidTvChannelSyncService
 import com.nuvio.tv.core.network.IPv4FirstDns
 import com.nuvio.tv.core.network.NoDelaySocketFactory
 import com.nuvio.tv.core.network.imageConnectivityChecker
+import com.nuvio.tv.core.player.LibassWorkerPolicy
 import com.nuvio.tv.data.local.ImagePerformancePreferences
 import com.nuvio.tv.data.local.SentrySettingsDataStore
 import com.nuvio.tv.data.mediaserver.ServerUserStateProjection
@@ -91,6 +92,11 @@ class NuvioApplication : Application(), SingletonImageLoader.Factory {
                 }
             }
         }
+    }
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        LibassWorkerPolicy.apply(base)
     }
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
