@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.nuvio.tv.R
+import com.nuvio.tv.livetv.model.guideDescriptionText
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -327,7 +328,7 @@ class RecordingsViewModel @Inject constructor(
     private val aboutPrefs = recorder.appContext.getSharedPreferences("livetv_recording_about", android.content.Context.MODE_PRIVATE)
 
     fun loadAbout(list: List<LiveTvRecording>) {
-        val todo = list.filter { it.description.isNullOrBlank() && it.title.isNotBlank() && triedAbout.add(it.id) }
+        val todo = list.filter { guideDescriptionText(it.description).isNullOrBlank() && it.title.isNotBlank() && triedAbout.add(it.id) }
         if (todo.isEmpty()) return
         val fixed = matchFixes.fixes.value
         val saved = HashMap<String, String>()

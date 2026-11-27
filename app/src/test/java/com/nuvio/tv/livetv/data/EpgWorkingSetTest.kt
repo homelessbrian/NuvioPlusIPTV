@@ -1,5 +1,11 @@
 package com.nuvio.tv.livetv.data
 
+import com.nuvio.tv.livetv.model.SUB_TITLE_MARK
+import com.nuvio.tv.livetv.record.LiveTvRecording
+import com.nuvio.tv.livetv.record.RecordingStatus
+import com.nuvio.tv.livetv.record.recordingAbout
+import com.nuvio.tv.livetv.record.withRecordingGuideDetails
+import java.io.File
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -11,6 +17,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -60,6 +67,32 @@ class EpgWorkingSetTest {
         assertEquals("full detail", database.program("a", 1_000)?.description)
         assertEquals(600, database.channelRange("a", 0, 600_000).size)
         assertEquals(600_000L, database.channelEnd("a"))
+    }
+
+    @Test fun `recording sidecar keeps the selected episodes guide text after guide expiry`() = runBlocking {
+        val synopsis = "Mara follows a distress call to the old lighthouse."
+        val db = database.writableDatabase
+        db.execSQL("UPDATE listings SET title = 'Harbour Lights', ep = 'S01E02', descr = ? WHERE gid = 1 AND start = 1000",
+            arrayOf("${SUB_TITLE_MARK}The Lighthouse\n$synopsis"))
+        db.execSQL("UPDATE listings SET title = 'Harbour Lights', ep = 'S01E03' WHERE gid = 1 AND start = 2000")
+        val listing = database.nowNext(1_500, channels = listOf("a")).getValue("a").first()
+        assertNull(listing.description)
+        val selected = listing.withRecordingGuideDetails(0L) { database.program("a", it) }
+        val dir = RuntimeEnvironment.getApplication().cacheDir
+        val sidecar = File(dir, "info.json")
+        val recording = LiveTvRecording(
+            id = "episode-2", channelKey = "a", channelName = "Harbour TV", channelLogo = null,
+            title = selected.title, episode = selected.episode, description = selected.description,
+            programStartMs = selected.startMs, programStopMs = selected.stopMs,
+            startedAtMs = selected.startMs, stopAtMs = selected.stopMs, status = RecordingStatus.DONE,
+            dir = dir.absolutePath
+        )
+        sidecar.writeText(recording.toJson().toString())
+        db.delete("listings", null, null)
+        assertNull(database.program("a", selected.startMs))
+
+        val reopened = requireNotNull(LiveTvRecording.fromJson(JSONObject(sidecar.readText()), dir.absolutePath))
+        assertEquals(synopsis, recordingAbout(reopened, mapOf(reopened.id to "A general series overview.")))
     }
 
     @Test fun `priority aliases reuse their already read models only at the same database revision`() {

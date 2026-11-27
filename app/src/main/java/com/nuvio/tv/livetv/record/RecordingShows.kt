@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import com.nuvio.tv.livetv.model.guideDescriptionText
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,7 +79,7 @@ private val EPISODE_NUMBERS = RECORDING_EPISODE_NUMBERS
 
 /** What a recording is about: the guide's description, else the one found for it (TMDB / your addons). */
 internal fun recordingAbout(rec: LiveTvRecording, found: Map<String, String>): String? =
-    rec.description?.trim()?.takeIf { it.isNotBlank() } ?: found[rec.id]
+    guideDescriptionText(rec.description)?.trim()?.takeIf { it.isNotEmpty() } ?: found[rec.id]
 
 private fun episodeNumbers(episode: String?): Pair<Int, Int>? =
     episode?.let { EPISODE_NUMBERS.find(it) }?.let { it.groupValues[1].toInt() to it.groupValues[2].toInt() }
