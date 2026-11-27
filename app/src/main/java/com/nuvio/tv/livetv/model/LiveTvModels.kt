@@ -376,11 +376,12 @@ val EpgProgram.subTitle: String?
 
 /** The description without its sub-title line (null when there's nothing else). */
 val EpgProgram.descriptionText: String?
-    get() {
-        val d = description ?: return null
-        if (d.isEmpty() || d[0] != SUB_TITLE_MARK) return d
-        return d.substringAfter('\n', "").trim().takeIf { it.isNotEmpty() }
-    }
+    get() = guideDescriptionText(description)
+
+internal fun guideDescriptionText(description: String?): String? {
+    if (description == null || !description.startsWith(SUB_TITLE_MARK)) return description
+    return description.substringAfter('\n', "").trim().takeIf { it.isNotEmpty() }
+}
 
 /** "College Football : Texas at LSU", TiviMate style; just [title] when the sub-title adds nothing. */
 fun guideTitleWithSub(title: String, sub: String?): String =

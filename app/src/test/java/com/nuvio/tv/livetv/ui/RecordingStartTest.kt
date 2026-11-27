@@ -8,6 +8,7 @@ import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.data.LiveTvStatus
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.model.EpgProgram
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.LiveUserState
 import com.nuvio.tv.livetv.player.LivePlaybackState
@@ -37,6 +38,27 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecordingStartTest {
     @get:Rule val main = MainDispatcherRule()
+
+    @Test fun `record now snapshots the matching guide description before playback handover`() = runTest {
+        val h = Harness()
+        val now = System.currentTimeMillis()
+        val light = EpgProgram(now - 30 * 60_000, now, "Drama", episode = "S02E03")
+        val shift = 15 * 60_000L
+        val description = "The episode from the guide."
+        h.settings.value = LiveTvSettings(epgOffsetMinutes = 15)
+        h.programs.value = mapOf(h.channel.key to listOf(light))
+        coEvery { h.repository.recordingProgramDetails(h.channel.key, light.startMs) } returns light.copy(description = description)
+        try {
+            until { h.viewModel.currentProgram(h.channel.key, now)?.startMs == light.startMs + shift }
+            h.viewModel.startRecording(h.channel, null, h.messages::add)
+            until { h.messages.size == 2 }
+            verify {
+                h.recorder.start(channel = h.channel, url = any(), title = "Drama", episode = "S02E03", description = description,
+                    programStartMs = light.startMs + shift, programStopMs = light.stopMs + shift, stopAtMs = any(),
+                    startDelayMs = 1_500L, preparedStorage = h.storage)
+            }
+        } finally { h.store.clear() }
+    }
 
     @Test fun `handover waits for IO preparation and preserves connection delay`() = runTest {
         val h = Harness()
@@ -142,19 +164,21 @@ class RecordingStartTest {
         val recording = LiveTvRecording("rec1", channel.key, channel.name, null, "Channel", startedAtMs = 1, stopAtMs = Long.MAX_VALUE, dir = "unused-test-recording")
         val recorder = mockk<LiveTvRecorder>(relaxed = true)
         val playback = mockk<LiveTvPlaybackController>(relaxed = true)
+        val repository = mockk<LiveTvRepository>(relaxed = true)
+        val settings = MutableStateFlow(LiveTvSettings())
+        val programs = MutableStateFlow<Map<String, List<EpgProgram>>>(emptyMap())
         val viewModel: LiveTvViewModel
 
         init {
             val prefs = mockk<LiveTvPreferences>(relaxed = true)
-            every { prefs.settings } returns MutableStateFlow(LiveTvSettings())
+            every { prefs.settings } returns settings
             every { prefs.userState } returns MutableStateFlow(LiveUserState())
             every { prefs.pictureShapes } returns MutableStateFlow(emptyMap())
             every { prefs.playlists } returns MutableStateFlow(emptyList())
             coEvery { prefs.currentSettings() } returns LiveTvSettings()
             coEvery { prefs.collapsedPlaylists() } returns emptySet()
-            val repository = mockk<LiveTvRepository>(relaxed = true)
             every { repository.status } returns MutableStateFlow(LiveTvStatus())
-            every { repository.programs } returns MutableStateFlow(emptyMap())
+            every { repository.programs } returns programs
             every { repository.epgSources } returns MutableStateFlow(emptyList())
             every { repository.epgListsLoading } returns MutableStateFlow(false)
             every { repository.guideGeneration } returns MutableStateFlow(0)
