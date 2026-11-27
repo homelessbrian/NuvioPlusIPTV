@@ -394,10 +394,13 @@ fun SportsScreen(
     /** Hold OK on a game: its best channel, straight away. */
     fun quickWatch(ev: SportsEvent) {
         val m = matches[ev.id]?.firstOrNull()
+        if (m == null && ev.state == GameState.POST) {
+            overtimeFor = ev
+            return
+        }
         when {
-            ev.state == GameState.POST -> watch(ev, m)
             m == null -> LiveTvNotice.show("No channel found for ${ev.title}. Open it and use Fix Channel to pick one.")
-            videoOn -> { SportsLaunch.pickGame(ev.id, m.channel.key); viewModel.playHere(m) }
+            videoOn && ev.state != GameState.POST -> { SportsLaunch.pickGame(ev.id, m.channel.key); viewModel.playHere(m) }
             else -> watch(ev, m)
         }
     }
