@@ -117,6 +117,10 @@
 
         <!-- Live TV fork: keeps recordings going while the app is in the background. -->
         <service
+            android:name=".livetv.ondemand.VodDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <service
             android:name=".livetv.record.LiveTvRecordingService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
