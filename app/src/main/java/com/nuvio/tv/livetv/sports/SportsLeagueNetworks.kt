@@ -175,7 +175,7 @@ internal fun LeagueNetworksPage(
     videoSlot: @Composable (Modifier) -> Unit,
     playingKey: String?,
     /** The Sports top bar's buttons (the same row every Sports page has). */
-    filters: @Composable (Modifier) -> Unit,
+    header: @Composable () -> Unit,
     onWatchFull: (LiveChannel) -> Unit
 ) {
     val found by viewModel.repo.leagueNetworks.collectAsStateWithLifecycle()
@@ -233,15 +233,6 @@ internal fun LeagueNetworksPage(
         }
     }
 
-    // The Sports top bar, the same on every Sports page.
-    val topBar: @Composable () -> Unit = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            LiveText("Sports", size = 26.sp, weight = FontWeight.Black)
-            Spacer(Modifier.width(14.dp))
-            filters(Modifier.weight(1f))
-        }
-    }
-
     val list: @Composable (Modifier) -> Unit = { m ->
         LazyColumn(
             m.fillMaxWidth().keepFocusWhileHeld(horizontal = false),
@@ -295,7 +286,7 @@ internal fun LeagueNetworksPage(
     Box(Modifier.fillMaxSize()) {
         if (videoOn) {
             Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 28.dp, top = 20.dp, bottom = SportsSpace.Bottom)) {
-                topBar()
+                header()
                 Spacer(Modifier.height(SportsSpace.RowGap))
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     Column(Modifier.width(470.dp).fillMaxHeight()) {
@@ -320,7 +311,7 @@ internal fun LeagueNetworksPage(
             }
         } else {
             Column(Modifier.fillMaxSize().padding(start = 56.dp, end = 36.dp, top = 20.dp, bottom = SportsSpace.Bottom)) {
-                topBar()
+                header()
                 Spacer(Modifier.height(SportsSpace.RowGap))
                 LiveText(
                     "Each league's own channel, found in your playlists by name.",
