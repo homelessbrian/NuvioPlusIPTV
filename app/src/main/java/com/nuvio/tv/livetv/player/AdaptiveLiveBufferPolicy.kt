@@ -6,7 +6,6 @@ import kotlin.math.abs
 internal class AdaptiveLiveBufferPolicy {
     private var lastSampleMs: Long? = null
     private var lowSinceMs: Long? = null
-    private var fullSinceMs: Long? = null
     private var filling = false
     private var recovering = false
     private var speed = 1f
@@ -15,7 +14,6 @@ internal class AdaptiveLiveBufferPolicy {
     fun reset(rearm: Boolean = false) {
         lastSampleMs = null
         lowSinceMs = null
-        fullSinceMs = null
         filling = false
         recovering = false
         speed = 1f
@@ -34,7 +32,6 @@ internal class AdaptiveLiveBufferPolicy {
         }
         if (previous != null && nowMs - previous > 2_500) {
             lowSinceMs = null
-            fullSinceMs = null
         }
         lastSampleMs = nowMs
         if (bufferedMs >= TARGET_BUFFER_MS) memoryLimited = false
@@ -42,48 +39,57 @@ internal class AdaptiveLiveBufferPolicy {
             // The byte budget cannot hold the ordinary target. Recover instead of drifting
             // farther behind live forever; only new capacity evidence or a channel re-arms it.
             lowSinceMs = null
-            fullSinceMs = null
             filling = false
             recovering = false
         } else if (!filling) {
-            if (bufferedMs < LOW_BUFFER_MS) {
+            if (bufferedMs < TARGET_BUFFER_MS) {
                 if (lowSinceMs == null) lowSinceMs = nowMs
-                if (nowMs - lowSinceMs!! >= SUSTAINED_MS) filling = true
+                if (nowMs - lowSinceMs!! >= ENTRY_DELAY_MS) filling = true
             } else lowSinceMs = null
         }
         if (filling) {
-            if (bufferedMs >= TARGET_BUFFER_MS) {
-                if (fullSinceMs == null) fullSinceMs = nowMs
-                if (nowMs - fullSinceMs!! >= SUSTAINED_MS) recovering = true
-            } else {
-                fullSinceMs = null
-                if (bufferedMs < RECOVERY_REENTRY_MS) recovering = false
-            }
+            // A user-configured maximum of exactly 20 seconds can be reached for just one sample.
+            if (bufferedMs >= TARGET_BUFFER_MS) recovering = true
+            else if (bufferedMs < RECOVERY_REENTRY_MS) recovering = false
         }
-        val target = if (filling && !recovering) MIN_SPEED else 1f
-        // A delayed UI callback cannot make the next rate change an audible jump.
-        val step = ((nowMs - (previous ?: nowMs)).coerceIn(0, 2_000) * RAMP_PER_MS).toFloat()
+        val target = if (filling && !recovering) refillSpeed(bufferedMs) else 1f
+        val changePerSecond = if (target < speed) .025f else .015f
+        // A late sample gives us no evidence about the buffer during the missed interval.
+        val elapsedMs = nowMs - (previous ?: nowMs)
+        val step = if (elapsedMs <= 2_500) elapsedMs.coerceAtMost(1_000) / 1_000f * changePerSecond else 0f
         speed = when {
             abs(target - speed) <= step -> target
             target < speed -> speed - step
             else -> speed + step
-        }.coerceIn(MIN_SPEED, 1f)
+        }.coerceIn(CRITICAL_SPEED, 1f)
         if (recovering && speed == 1f) {
             filling = false
             recovering = false
             lowSinceMs = null
-            fullSinceMs = null
         }
         return speed
     }
 
+    // Interpolate between anchors so a chunk arriving at a boundary cannot flip speed tiers.
+    private fun refillSpeed(bufferedMs: Long): Float = when {
+        bufferedMs <= CRITICAL_BUFFER_MS -> CRITICAL_SPEED
+        bufferedMs < LOW_RESERVE_MS -> CRITICAL_SPEED + (LOW_SPEED - CRITICAL_SPEED) *
+            (bufferedMs - CRITICAL_BUFFER_MS) / (LOW_RESERVE_MS - CRITICAL_BUFFER_MS)
+        bufferedMs < MILD_RESERVE_MS -> LOW_SPEED + (MILD_SPEED - LOW_SPEED) *
+            (bufferedMs - LOW_RESERVE_MS) / (MILD_RESERVE_MS - LOW_RESERVE_MS)
+        else -> MILD_SPEED
+    }
+
     companion object {
         const val TARGET_BUFFER_MS = 20_000L
-        private const val LOW_BUFFER_MS = 10_000L
-        private const val RECOVERY_REENTRY_MS = 18_000L
-        private const val SUSTAINED_MS = 3_000L
-        private const val MIN_SPEED = .98f
-        private const val RAMP_PER_MS = .000002
+        private const val RECOVERY_REENTRY_MS = 19_500L
+        private const val ENTRY_DELAY_MS = 1_000L
+        private const val MILD_RESERVE_MS = 19_000L
+        private const val LOW_RESERVE_MS = 15_000L
+        const val CRITICAL_BUFFER_MS = 10_000L
+        private const val MILD_SPEED = .97f
+        private const val LOW_SPEED = .95f
+        const val CRITICAL_SPEED = .90f
     }
 }
 
@@ -95,6 +101,8 @@ internal class AdaptiveLiveBufferSession {
     private var owned: AdaptiveLiveRate? = null
     private val expectedEvents = ArrayDeque<AdaptiveLiveRate>()
     private var manual = false
+
+    fun ownsFloor(rate: AdaptiveLiveRate): Boolean = owned == rate && rate.speed == AdaptiveLiveBufferPolicy.CRITICAL_SPEED
 
     fun byteCap(bufferedMs: Long) { policy.byteCap(bufferedMs) }
 

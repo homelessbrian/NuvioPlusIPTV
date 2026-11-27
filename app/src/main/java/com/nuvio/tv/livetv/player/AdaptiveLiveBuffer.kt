@@ -30,8 +30,10 @@ internal class AdaptiveLiveBuffer(
     private val scope: CoroutineScope,
     private val isRemoteLiveSource: () -> Boolean,
     private val clock: Clock = Clock.DEFAULT,
+    private val onExhaustedBuffer: () -> Unit,
 ) {
     private val session = AdaptiveLiveBufferSession()
+    private val backupWatchdog = AdaptiveLiveBackupWatchdog()
     private val loading = AdaptiveLiveLoadingState()
     private var player: ExoPlayer? = null
     private var sampler: Job? = null
@@ -69,6 +71,7 @@ internal class AdaptiveLiveBuffer(
 
     /** Called before replacing the selected channel or installing a local/catch-up source. */
     fun sourceChanged(newChannel: Boolean = false) {
+        backupWatchdog.reset()
         loading.sourceChanged()
         lastCap = null
         val p = player ?: return
@@ -101,6 +104,7 @@ internal class AdaptiveLiveBuffer(
         val active = enabled && foreground && p != null && p.playWhenReady &&
             p.playbackState != Player.STATE_IDLE && p.playbackState != Player.STATE_ENDED
         if (!active) {
+            backupWatchdog.reset()
             sampler?.cancel()
             sampler = null
             loading.liveSource = false
@@ -120,6 +124,7 @@ internal class AdaptiveLiveBuffer(
         val canMeasure = p.isCommandAvailable(Player.COMMAND_GET_CURRENT_MEDIA_ITEM) &&
             p.isCommandAvailable(Player.COMMAND_GET_TIMELINE)
         if (!canMeasure || !p.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) {
+            backupWatchdog.reset()
             loading.liveSource = false
             apply(session.suspend(p.playbackParameters.rate()))
             return
@@ -136,11 +141,14 @@ internal class AdaptiveLiveBuffer(
         loading.liveSource = source && supported
         val eligible = enabled && foreground && source && supported && p.isPlaying
         if (!eligible) {
+            backupWatchdog.reset()
             apply(session.suspend(p.playbackParameters.rate()))
             return
         }
         val bufferedMs = if (p.currentPosition >= 0) p.totalBufferedDuration else -1
-        apply(session.sample(p.playbackParameters.rate(), true, bufferedMs, now))
+        val current = p.playbackParameters.rate()
+        apply(session.sample(current, true, bufferedMs, now))
+        if (backupWatchdog.sample(bufferedMs, now, session.ownsFloor(current))) onExhaustedBuffer()
     }
 
     private fun apply(value: AdaptiveLiveRate?) {

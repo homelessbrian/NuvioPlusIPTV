@@ -28,11 +28,27 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [34])
 class AdaptiveLiveBufferTest {
+    @Test fun `critical buffer slows PCM playback and a refill restores normal pitch and speed`() = runTest {
+        val h = Harness(backgroundScope)
+        h.enablePcm()
+        h.bufferedMs = 2_000
+        for (second in 0L..16L) {
+            h.tick(this, second)
+            assertEquals(1f, h.parameters.pitch)
+        }
+        assertEquals(.90f, h.parameters.speed, .00001f)
+        h.bufferedMs = 20_000
+        for (second in 17L..55L) h.tick(this, second)
+        assertEquals(PlaybackParameters.DEFAULT, h.parameters)
+        verify(exactly = 0) { h.player.prepare(); h.player.stop() }
+        h.helper.release()
+    }
+
     @Test fun `unsupported commands never read forbidden measurements and restore owned speed`() = runTest {
         val h = Harness(backgroundScope)
         h.enablePcm()
         for (second in 0L..14L) h.tick(this, second)
-        assertEquals(.98f, h.parameters.speed, .000001f)
+        assertEquals(.90f, h.parameters.speed, .000001f)
         h.readCurrent = false
         h.tick(this, 15)
         assertEquals(1f, h.parameters.speed)
@@ -61,15 +77,44 @@ class AdaptiveLiveBufferTest {
         val h = Harness(backgroundScope)
         h.enablePcm()
         for (second in 0L..14L) h.tick(this, second)
-        assertEquals(.98f, h.parameters.speed, .000001f)
+        assertEquals(.90f, h.parameters.speed, .000001f)
         h.sink.configure(h.pcm.buildUpon().setSampleMimeType(MimeTypes.AUDIO_AC3).build(), 0, null)
         h.tick(this, 15)
         assertEquals(1f, h.parameters.speed)
         h.sink.configure(h.pcm, 0, null)
         for (second in 16L..30L) h.tick(this, second)
-        assertEquals(.98f, h.parameters.speed, .000001f)
+        assertEquals(.90f, h.parameters.speed, .000001f)
         h.helper.setForeground(false)
         assertEquals(1f, h.parameters.speed)
+        h.helper.release()
+    }
+
+    @Test fun `a persistently empty live channel offers a backup once and continues when none is found`() = runTest {
+        val h = Harness(backgroundScope)
+        h.bufferedMs = 1_000
+        h.enablePcm()
+        for (sec in 0L..150L) h.tick(this, sec)
+        assertEquals(1, h.backupOffers)
+        assertEquals(.90f, h.parameters.speed, .000001f)
+        verify(exactly = 0) { h.player.prepare(); h.player.stop(); h.player.release() }
+        h.helper.sourceChanged(newChannel = true)
+        for (sec in 151L..250L) h.tick(this, sec)
+        assertEquals(2, h.backupOffers)
+        h.helper.release()
+    }
+
+    @Test fun `manual slow playback or an ineligible source never offers a backup`() = runTest {
+        val h = Harness(backgroundScope)
+        h.bufferedMs = 1_000
+        h.enablePcm()
+        h.external(PlaybackParameters(.90f))
+        for (sec in 0L..150L) h.tick(this, sec)
+        assertEquals(0, h.backupOffers)
+        h.helper.sourceChanged(newChannel = true)
+        h.external(PlaybackParameters.DEFAULT)
+        h.remoteLive = false
+        for (sec in 151L..300L) h.tick(this, sec)
+        assertEquals(0, h.backupOffers)
         h.helper.release()
     }
 
@@ -77,6 +122,9 @@ class AdaptiveLiveBufferTest {
         var now = 0L
         var readCurrent = true
         var readTimeline = true
+        var remoteLive = true
+        var backupOffers = 0
+        var bufferedMs = 8_000L
         var parameters = PlaybackParameters.DEFAULT
         val listeners = mutableListOf<Player.Listener>()
         val player = mockk<ExoPlayer>(relaxed = true)
@@ -97,7 +145,7 @@ class AdaptiveLiveBufferTest {
             }
             every { player.mediaItemCount } answers { check(readTimeline) { "Forbidden timeline getter" }; 1 }
             every { player.currentPosition } answers { check(readCurrent) { "Forbidden position getter" }; now }
-            every { player.totalBufferedDuration } answers { check(readCurrent) { "Forbidden buffer getter" }; 8_000L }
+            every { player.totalBufferedDuration } answers { check(readCurrent) { "Forbidden buffer getter" }; bufferedMs }
             every { player.playbackParameters } answers { parameters }
             every { player.playbackParameters = any() } answers {
                 parameters = firstArg(); listeners.toList().forEach { it.onPlaybackParametersChanged(parameters) }
@@ -108,7 +156,7 @@ class AdaptiveLiveBufferTest {
             every { player.playWhenReady } returns true
             every { player.isPlaying } returns true
             every { delegateSink.getCurrentPositionUs(false) } answers { now * 1_000 }
-            helper = AdaptiveLiveBuffer(scope, { check(readCurrent && readTimeline); true }, clock)
+            helper = AdaptiveLiveBuffer(scope, { check(readCurrent && readTimeline); remoteLive }, clock) { backupOffers++ }
             sink = helper.wrapAudioSink(delegateSink, false)
             helper.attach(player)
         }

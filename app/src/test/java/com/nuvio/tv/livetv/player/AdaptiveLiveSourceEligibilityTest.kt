@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Timeline
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.SinglePeriodTimeline
 import com.nuvio.tv.livetv.model.LiveChannel
@@ -15,6 +16,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import io.mockk.verify
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +25,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -52,8 +55,7 @@ class AdaptiveLiveSourceEligibilityTest {
 
     @After fun closeController() {
         if (::controller.isInitialized) {
-            // No player, source or network is started by this predicate test. Close every
-            // constructor-created scope, including the asynchronous leftover-cache cleanup.
+            // Close the controller's scopes, including the asynchronous leftover-cache cleanup.
             val owners = listOf(controller, field(controller, "timeshift"), field(controller, "replayCache"))
             runBlocking {
                 owners.forEach { owner ->
@@ -114,6 +116,62 @@ class AdaptiveLiveSourceEligibilityTest {
         assertFalse(player.isCurrentMediaItemLive)
         assertTrue(eligible()) // Ordinary progressive live TS need not expose a live-edge flag.
     }
+
+    @Test fun `game and station backups share tried channels and exhaustion leaves the player alone`() {
+        val first = channel("playlist-1", "first", "https://fixture.invalid/first.ts")
+        val second = channel("playlist-2", "second", "https://fixture.invalid/second.ts")
+        val probes = mutableListOf<Pair<String, Set<String>>>()
+        val channels = listOf(first, second)
+        controller.gameFailover = { _, canTry -> probes += "game" to channels.filterNot(canTry).map { it.key }.toSet(); first }
+        controller.onLiveFailure = { _, canTry -> probes += "station" to channels.filterNot(canTry).map { it.key }.toSet(); false }
+        assertFalse(offerBackup(first))
+        assertFalse(offerBackup(second))
+        assertEquals(listOf(
+            "game" to setOf(first.key), "station" to setOf(first.key),
+            "game" to setOf(first.key, second.key), "station" to setOf(first.key, second.key),
+        ), probes)
+        assertEquals(null, controller.player)
+    }
+
+    @Test fun `matching game switches the same player once and keeps the previous channel excluded`() {
+        val player = mockk<ExoPlayer>(relaxed = true)
+        every { player.trackSelectionParameters } returns TrackSelectionParameters.Builder(RuntimeEnvironment.getApplication()).build()
+        val original = channel("playlist-1", "first", "https://fixture.invalid/first.ts")
+        val backup = channel("playlist-2", "second", "https://fixture.invalid/second.ts")
+        val duplicate = original.copy(key = "same-link", sourceId = "playlist-3")
+        val resolvedDuplicate = original.copy(key = "current-link", url = "https://fixture.invalid/resolved.ts")
+        setField(controller, "_player", player)
+        setField(controller, "currentChannel", original)
+        setField(controller, "currentUrl", resolvedDuplicate.url)
+        val triedAtStation = mutableListOf<Set<String>>()
+        val candidates = listOf(duplicate, resolvedDuplicate, original, backup)
+        controller.gameFailover = { _, canTry -> candidates.firstOrNull(canTry) }
+        controller.onLiveFailure = { _, canTry -> triedAtStation += candidates.filterNot(canTry).map { it.key }.toSet(); false }
+
+        assertTrue(offerBackup(original))
+        assertEquals(backup.key, controller.playingChannel?.key)
+        assertTrue(triedAtStation.isEmpty())
+        assertFalse(offerBackup(backup))
+        assertEquals(listOf(candidates.map { it.key }.toSet()), triedAtStation)
+        verify(exactly = 1) { player.setMediaSource(any()) }
+        verify(exactly = 1) { player.prepare() }
+    }
+
+    @Test fun `Stalker placeholders can be shared by distinct backup channels`() {
+        val first = channel("portal", "first", "http://localhost/placeholder").copy(stalkerRef = mockk())
+        val other = first.copy(key = "second", stalkerRef = mockk())
+        val eligible = mutableListOf<String>()
+        controller.onLiveFailure = { _, canTry ->
+            listOf(first, other).filter(canTry).mapTo(eligible) { it.key }
+            false
+        }
+        assertFalse(offerBackup(first))
+        assertEquals(listOf(other.key), eligible)
+    }
+
+    private fun offerBackup(channel: LiveChannel): Boolean = controller.javaClass.getDeclaredMethod(
+        "tryChannelBackup", LiveChannel::class.java, String::class.java, Boolean::class.javaPrimitiveType,
+    ).apply { isAccessible = true }.invoke(controller, channel, "fixture", true) as Boolean
 
     private fun eligible(): Boolean = LiveTvPlaybackController::class.java
         .getDeclaredMethod("isAdaptiveRemoteLiveSource").apply { isAccessible = true }.invoke(controller) as Boolean

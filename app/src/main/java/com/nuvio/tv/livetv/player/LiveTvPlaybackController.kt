@@ -77,7 +77,9 @@ class LiveTvPlaybackController @Inject constructor(
     private val stalker: StalkerGateway,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val adaptiveBuffer = AdaptiveLiveBuffer(scope, ::isAdaptiveRemoteLiveSource)
+    private val adaptiveBuffer = AdaptiveLiveBuffer(scope, ::isAdaptiveRemoteLiveSource) {
+        currentChannel?.let { tryChannelBackup(it, "could not rebuild its live buffer") }
+    }
 
     var adaptiveLiveBufferEnabled: Boolean = false
         set(value) { field = value; adaptiveBuffer.enabled = value }
@@ -889,7 +891,13 @@ class LiveTvPlaybackController @Inject constructor(
         /** The caller sets the player's source itself right after (a recording from Recordings). */
         sourceLater: Boolean = false,
     ) {
-        if (currentChannel?.key != channel.key) adaptiveBuffer.sourceChanged(newChannel = true)
+        if (currentChannel?.key != channel.key) {
+            if (!switchingToBackup) {
+                triedBackups.clear()
+                triedBackupUrls.clear()
+            }
+            adaptiveBuffer.sourceChanged(newChannel = true)
+        }
         if (stalkerStream == null && overrideUrl == null && catchupTitle == null && channel.stalkerRef != null &&
             currentChannel?.key == channel.key && activeStalkerRef == channel.stalkerRef && _state.value.error == null &&
             (stalkerResolveJob?.isActive == true || _player?.playbackState?.let { it != Player.STATE_IDLE } == true)
@@ -964,8 +972,6 @@ class LiveTvPlaybackController @Inject constructor(
         // Something chosen to play (back from the background through a launcher row, say):
         // that wins over picking up what was on before.
         resumeAfterBackground = null
-        // Picked by you (not a switch to the next channel for a game): start the game's list afresh.
-        if (!switchingForGame) gameTried.clear()
         if (previousChannelKey != channel.key) recentStalls.clear()
         shiftStartPending = false
         savedRecordingId = null
@@ -1384,9 +1390,8 @@ class LiveTvPlaybackController @Inject constructor(
             while (recentStalls.isNotEmpty() && now - recentStalls.first() > FREEZE_WINDOW_MS) recentStalls.removeFirst()
         }
         if (!archive && ((awaitingFrame && neverStartedCount >= 2) || (!awaitingFrame && recentStalls.size >= 2)) &&
-            tryGameFailover(ch, if (awaitingFrame) "never started" else "kept freezing")
+            tryChannelBackup(ch, if (awaitingFrame) "never started" else "kept freezing", allowStationBackup = awaitingFrame)
         ) return
-        if (!archive && awaitingFrame && neverStartedCount >= 2 && onLiveFailure?.invoke(ch.key) == true) return
         com.nuvio.tv.livetv.model.LiveTvLoadReport.add(
             "Channel ${ch.name} " + (if (awaitingFrame) "never started (nothing came in for ${STALL_MS / 1000}s)" else "stalled") +
                 "; reloading · ${redact(currentUrl ?: ch.url)}"
@@ -2439,10 +2444,9 @@ class LiveTvPlaybackController @Inject constructor(
             .replace(Regex("""^(https?://[^/]+)/(?!\*\*\*)[^/]+/[^/]+/(\d+(?:\.[A-Za-z0-9]+)?(?:\?.*)?)$"""), "$1/***/***/$2")
 
     /**
-     * A live channel failed twice in a row (or never started): Live TV may switch to a backup
-     * channel. True when it did, and this channel isn't tried again.
+     * A live channel needs a backup. Returns true when Live TV switched to another copy.
      */
-    var onLiveFailure: ((channelKey: String) -> Boolean)? = null
+    var onLiveFailure: ((channelKey: String, canTry: (LiveChannel) -> Boolean) -> Boolean)? = null
 
     /** Playlist ids served by Dispatcharr (see [com.nuvio.tv.livetv.model.PlaylistSource.isDispatcharr]). */
     var dispatcharrSources: () -> Set<String> = { emptySet() }
@@ -2459,25 +2463,43 @@ class LiveTvPlaybackController @Inject constructor(
 
     /**
      * Sports: the next channel showing the same live game, when [failedKey] won't play or keeps
-     * freezing ([tried]: channels already tried for it). Null when it isn't a live game's channel,
+     * freezing. The resolver skips channels that have already been tried. Null when it isn't a live game's channel,
      * when none are left, or when "Switch to a backup channel" is off. Asked before [onLiveFailure].
      */
-    var gameFailover: ((failedKey: String, tried: Set<String>) -> LiveChannel?)? = null
-    private val gameTried = HashSet<String>()
-    private var switchingForGame = false
+    var gameFailover: ((failedKey: String, canTry: (LiveChannel) -> Boolean) -> LiveChannel?)? = null
+    private val triedBackups = HashSet<String>()
+    private val triedBackupUrls = HashSet<String>()
+    private var switchingToBackup = false
     /** When the channel playing froze recently (not counting it never starting). */
     private val recentStalls = ArrayDeque<Long>()
 
-    private fun tryGameFailover(ch: LiveChannel, why: String): Boolean {
-        val f = gameFailover ?: return false
-        gameTried += ch.key
-        val next = runCatching { f(ch.key, gameTried.toSet()) }.getOrNull() ?: return false
-        if (next.key == ch.key) return false
-        com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Channel ${ch.name} $why: switched to ${next.name} (${next.group}), same game")
-        com.nuvio.tv.livetv.record.LiveTvNotice.show("${ch.name} isn't working right now. Switched to ${next.name}, showing the same game.")
-        switchingForGame = true
-        try { play(next) } finally { switchingForGame = false }
-        return true
+    private fun tryChannelBackup(ch: LiveChannel, why: String, allowStationBackup: Boolean = true): Boolean {
+        if (switchingToBackup) return false
+        triedBackups += ch.key
+        directBackupUrl(ch)?.let(triedBackupUrls::add)
+        // Format fallback can replace an HLS URL with a TS URL while retaining the channel key.
+        if (currentChannel?.key == ch.key && ch.stalkerRef == null) currentUrl?.let(triedBackupUrls::add)
+        val next = runCatching { gameFailover?.invoke(ch.key, ::canTryBackup) }.getOrNull()
+        switchingToBackup = true
+        try {
+            if (next != null && canTryBackup(next)) {
+                com.nuvio.tv.livetv.model.LiveTvLoadReport.add("Channel ${ch.name} $why: switched to ${next.name} (${next.group}), same game")
+                com.nuvio.tv.livetv.record.LiveTvNotice.show("${ch.name} isn't working right now. Switched to ${next.name}, showing the same game.")
+                play(next)
+                return true
+            }
+            return allowStationBackup && onLiveFailure?.invoke(ch.key, ::canTryBackup) == true
+        } finally {
+            switchingToBackup = false
+        }
+    }
+
+    private fun canTryBackup(channel: LiveChannel): Boolean =
+        channel.key !in triedBackups && directBackupUrl(channel) !in triedBackupUrls
+
+    // Stalker resolves a temporary address at tune time; multiple channels can share its placeholder.
+    private fun directBackupUrl(channel: LiveChannel): String? = channel.url.takeIf {
+        channel.stalkerRef == null && (it.startsWith("https://", true) || it.startsWith("http://", true))
     }
     /** Times the channel playing sat loading with nothing coming in. */
     private var neverStartedCount = 0
@@ -2501,9 +2523,7 @@ class LiveTvPlaybackController @Inject constructor(
         }
         _state.value = _state.value.copy(error = reason, isBuffering = false, reconnectAttempt = attempt)
         if (_state.value.catchupTitle == null && attempt == 2) {
-            currentChannel?.let { if (tryGameFailover(it, "failed")) return }
-            val key = currentChannel?.key
-            if (key != null && onLiveFailure?.invoke(key) == true) return
+            currentChannel?.let { if (tryChannelBackup(it, "failed")) return }
         }
         if (!autoReconnect || attempt > MAX_RECONNECTS) return
         reconnectJob?.cancel()
