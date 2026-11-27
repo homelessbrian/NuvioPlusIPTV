@@ -1097,10 +1097,11 @@ object ReportShortener {
                 else -> "${secs.toLong()}s"
             }
             var text = if (m != null) raw.substring(m.value.length) else raw
-            val cap = if (text.startsWith("Multiview sample:") || text.startsWith("VPN: vpn_traffic:")) 700 else 220
+            val vpnWait = text.startsWith("VPN: vpn_verification_wait:")
+            val cap = if (text.startsWith("Multiview sample:") || text.startsWith("VPN: vpn_traffic:") || vpnWait) 700 else 220
             if (text.length > cap) text = text.take(cap - 3) + "..."
             val prio = when {
-                PROBLEM.containsMatchIn(text) -> 0
+                vpnWait || PROBLEM.containsMatchIn(text) -> 0
                 NOISE.any { text.contains(it) } -> 3
                 TIMING.containsMatchIn(text) -> 1
                 else -> 2

@@ -308,13 +308,13 @@ func (t *httpTunnel) stats() (rx, tx, handshake int64) {
 	return rx, tx, seconds*1000 + nanos/1000000
 }
 
-func (t *httpTunnel) probe() bool {
+func (t *httpTunnel) probe() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	return t.probeContext(ctx)
 }
 
-func (t *httpTunnel) probeContext(parent context.Context) bool {
+func (t *httpTunnel) probeContext(parent context.Context) string {
 	t.mu.Lock()
 	if t.probeGate == nil {
 		t.probeGate = make(chan struct{}, 1)
@@ -325,15 +325,19 @@ func (t *httpTunnel) probeContext(parent context.Context) bool {
 	case gate <- struct{}{}:
 		defer func() { <-gate }()
 	case <-parent.Done():
-		return false
+		return probeContextDetail(parent.Err())
 	}
 	ctx, cancel := context.WithCancel(parent)
 	t.mu.Lock()
 	transport := t.transport
 	if t.closed || transport == nil || ctx.Err() != nil {
 		t.mu.Unlock()
+		reason := "unavailable"
+		if ctx.Err() != nil {
+			reason = probeContextDetail(ctx.Err())
+		}
 		cancel()
-		return false
+		return reason
 	}
 	t.probeCancel = cancel
 	t.mu.Unlock()
@@ -343,21 +347,27 @@ func (t *httpTunnel) probeContext(parent context.Context) bool {
 		t.probeCancel = nil
 		t.mu.Unlock()
 	}()
-	if !probeHTTPS(ctx, transport) || ctx.Err() != nil {
-		return false
+	if result := probeHTTPS(ctx, transport); result != probeOK {
+		return result
+	}
+	if ctx.Err() != nil {
+		return probeContextDetail(ctx.Err())
 	}
 	t.mu.Lock()
 	openVPN := t.packetLink != nil
 	available := !t.closed && t.transport == transport
 	t.mu.Unlock()
 	if !available {
-		return false
+		return "unavailable"
 	}
 	if openVPN {
-		return true
+		return probeOK
 	}
 	rx, _, handshake := t.stats()
-	return rx > 0 && handshake > 0 && time.Now().UnixMilli()-handshake <= 180000
+	if rx > 0 && handshake > 0 && time.Now().UnixMilli()-handshake <= 180000 {
+		return probeOK
+	}
+	return "handshake_unverified"
 }
 
 func (t *httpTunnel) egress() string {

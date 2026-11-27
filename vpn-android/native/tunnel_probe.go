@@ -2,12 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/netip"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // Match the Full app alternatives without leaving the selected tunnel. A single
@@ -19,10 +25,12 @@ var tunnelProbeChecks = [...]string{
 }
 
 const tunnelProbeBodyLimit = 2048
+const probeOK = "ok"
 
-func probeHTTPS(parent context.Context, transport *http.Transport) bool {
+// Only fixed, non-identifying outcomes from the existing checks enter a report.
+func probeHTTPS(parent context.Context, transport *http.Transport) string {
 	if transport == nil || transport.DialContext == nil || transport.DialTLS != nil || transport.DialTLSContext != nil {
-		return false
+		return "unavailable"
 	}
 	ctx, cancel := context.WithCancel(parent)
 	// net/http detaches request cancellation while establishing reusable pooled
@@ -62,7 +70,7 @@ func probeHTTPS(parent context.Context, transport *http.Transport) bool {
 		workers.Wait()
 		checks.CloseIdleConnections()
 	}()
-	results := make(chan bool, len(tunnelProbeChecks))
+	results := make(chan string, len(tunnelProbeChecks))
 	for _, address := range tunnelProbeChecks {
 		workers.Add(1)
 		go func() {
@@ -70,17 +78,25 @@ func probeHTTPS(parent context.Context, transport *http.Transport) bool {
 			results <- probeAnswer(ctx, checks, address)
 		}()
 	}
+	var failures []string
+collect:
 	for range tunnelProbeChecks {
 		select {
 		case <-ctx.Done():
-			return false
+			failures = append(failures, probeContextDetail(ctx.Err()))
+			break collect
 		case answered := <-results:
-			if answered && ctx.Err() == nil {
-				return true
+			if answered == probeOK {
+				if ctx.Err() == nil {
+					return probeOK
+				}
+				answered = probeContextDetail(ctx.Err())
 			}
+			failures = append(failures, answered)
 		}
 	}
-	return false
+	slices.Sort(failures)
+	return strings.Join(slices.Compact(failures), "+")
 }
 
 type probeConnection struct {
@@ -93,33 +109,82 @@ func (c *probeConnection) Close() error {
 	return c.Conn.Close()
 }
 
-func probeAnswer(ctx context.Context, transport *http.Transport, address string) bool {
+func probeContextDetail(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timeout"
+	}
+	return "cancelled"
+}
+
+func probeAnswer(ctx context.Context, transport *http.Transport, address string) string {
+	// The private dialer can return plain errors. Record whether TLS started or
+	// completed to distinguish connection and handshake failures without error text.
+	var tlsStarted, tlsCompleted atomic.Bool
+	trace := &httptrace.ClientTrace{
+		TLSHandshakeStart: func() { tlsStarted.Store(true) },
+		TLSHandshakeDone:  func(_ tls.ConnectionState, err error) { tlsCompleted.Store(err == nil) },
+	}
+	ctx = httptrace.WithClientTrace(ctx, trace)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil || request.URL.Scheme != "https" {
-		return false
+		return "unavailable"
 	}
 	// RoundTrip deliberately does not follow redirects. The supplied transport is
 	// always the VPN netstack transport, including HTTPS in HTTP-only stream mode.
 	response, err := transport.RoundTrip(request)
 	if err != nil {
-		return false
+		var dnsErr *net.DNSError
+		var netErr net.Error
+		switch {
+		case ctx.Err() != nil:
+			return probeContextDetail(ctx.Err())
+		case errors.As(err, &dnsErr):
+			return "dns"
+		case errors.As(err, &netErr) && netErr.Timeout():
+			return "timeout"
+		case !tlsStarted.Load():
+			return "connect"
+		case !tlsCompleted.Load():
+			return "tls"
+		default:
+			return "io"
+		}
 	}
 	defer response.Body.Close()
 	if strings.HasSuffix(request.URL.Path, "/generate_204") {
-		return response.StatusCode == http.StatusNoContent
+		if response.StatusCode == http.StatusNoContent {
+			return probeOK
+		}
+		return probeHTTPStatus(response.StatusCode)
 	}
 	if response.StatusCode != http.StatusOK {
-		return false
+		return probeHTTPStatus(response.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, tunnelProbeBodyLimit+1))
-	if err != nil || len(body) > tunnelProbeBodyLimit {
-		return false
+	if err != nil {
+		if ctx.Err() != nil {
+			return probeContextDetail(ctx.Err())
+		}
+		return "io"
+	}
+	if len(body) > tunnelProbeBodyLimit {
+		return "invalid_body"
 	}
 	for _, line := range strings.Split(string(body), "\n") {
 		if value, found := strings.CutPrefix(strings.TrimSuffix(line, "\r"), "ip="); found {
 			address, err := netip.ParseAddr(value)
-			return err == nil && address.Zone() == "" && !address.IsUnspecified() && !address.IsMulticast()
+			if err == nil && address.Zone() == "" && !address.IsUnspecified() && !address.IsMulticast() {
+				return probeOK
+			}
+			return "invalid_body"
 		}
 	}
-	return false
+	return "invalid_body"
+}
+
+func probeHTTPStatus(status int) string {
+	if status >= 100 && status <= 999 {
+		return "http_" + strconv.Itoa(status)
+	}
+	return "http_status"
 }

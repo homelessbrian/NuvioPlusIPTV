@@ -9,6 +9,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PlaybackDiagnosticReportTest {
+    @Test fun `latest unverified VPN snapshot survives a rolling and shortened report`() {
+        val entries = mutableListOf("+1.0s  VPN: reason: original reason")
+        for (i in 1..180) {
+            entries += "+${i * 10}.0s  VPN: vpn_traffic: received=${12_000 * i}; phase=WAITING"
+            if (i % 6 == 0) entries += "+${i * 10}.0s  VPN: vpn_verification_wait: gate=tunnel_probe; auth=true; " +
+                "session_match=true; rx_seen=true; probe_verified=false; last_probe=failed; probe_detail=timeout; " +
+                "openvpn_state=CONNECTED; probes=$i; last_probe_ms=8010; last_probe_age_s=0; wait_s=${i * 10}; " +
+                "ever_verified=true; scope=HTTP_HTTPS; engine=openvpn2"
+        }
+        val copied = ReportShortener.shorten("Build", entries.takeLast(160), 500)
+        assertFalse(copied.contains("original reason"))
+        assertTrue(copied.contains("probe_detail=timeout"))
+        assertTrue(copied.contains("wait_s=1800"))
+        assertTrue(copied.contains("engine=openvpn2"))
+        assertTrue(copied.length <= 500)
+    }
+
     @Test fun `copied report preserves four readers and late transport fields beside real errors`() {
         var now = 0L
         val samples = mutableListOf<String>()
