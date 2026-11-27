@@ -83,6 +83,7 @@ fun OnDemandHomeScreen(
     onPlay: (url: String, title: String, type: String, poster: String?, contentId: String, contentName: String, season: Int?, episode: Int?, episodeName: String?) -> Unit,
     /** The search button: Nuvio's own search. */
     onOpenSearch: () -> Unit,
+    onOpenDownloads: () -> Unit,
     /** Home's own trailer lookup and results (trailers follow Nuvio's trailer settings). */
     trailers: OnDemandTrailers? = null,
     viewModel: OnDemandViewModel = hiltViewModel()
@@ -477,6 +478,7 @@ fun OnDemandHomeScreen(
                 KindTab("Series", selected = shownKind == VodKind.SERIES) { switchTo(VodKind.SERIES) }
                 Spacer(Modifier.size(6.dp))
             }
+            KindTab("Downloads", selected = false, onClick = onOpenDownloads)
             TopButton(Icons.Default.Search, onClick = onOpenSearch)
             TopButton(Icons.Default.Tune, onClick = { showManage = true })
         }

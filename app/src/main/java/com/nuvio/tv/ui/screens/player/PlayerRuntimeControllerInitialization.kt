@@ -236,6 +236,10 @@ internal fun PlayerRuntimeController.initializePlayer(
         if (!afrPreflightGate.isCurrent(afrPreflightToken)) return@launch
         val url = prepared?.url ?: requestedUrl
         val headers = prepared?.headers ?: requestedHeaders
+        val documentDownload = contentType == com.nuvio.tv.ui.navigation.Screen.PlaylistDownloads.CONTENT_TYPE &&
+            url.startsWith("content://", ignoreCase = true)
+        val localDownload = documentDownload || (contentType == com.nuvio.tv.ui.navigation.Screen.PlaylistDownloads.CONTENT_TYPE &&
+            url.startsWith("file://", ignoreCase = true))
         val diagnosticHost = if (isStalker) "stalker" else url.safeHost()
         if (prepared != null) {
             currentStreamMimeType = prepared.mimeType ?: PlayerMediaSourceFactory.inferMimeType(
@@ -243,8 +247,10 @@ internal fun PlayerRuntimeController.initializePlayer(
             )
         }
         try {
-            com.nuvio.tv.core.vpn.awaitVpnForPlayback(context, url)
-            val proxy = com.nuvio.tv.core.vpn.awaitNativeVpnProxy(context)
+            val proxy = if (localDownload) null else {
+                com.nuvio.tv.core.vpn.awaitVpnForPlayback(context, url)
+                com.nuvio.tv.core.vpn.awaitNativeVpnProxy(context)
+            }
             if (!afrPreflightGate.isCurrent(afrPreflightToken)) { proxy?.close(); return@launch }
             nativeVpnProxy?.close()
             nativeVpnProxy = proxy
@@ -334,7 +340,9 @@ internal fun PlayerRuntimeController.initializePlayer(
             mpvHi10pGnextSoftwareFallbackEnabledSetting =
                 playerSettings.mpvHi10pGnextSoftwareFallbackEnabled
             mpvHardwareDecodeModeSetting = playerSettings.mpvHardwareDecodeMode
-            var effectiveInternalPlayerEngine = overrideInternalPlayerEngine ?: playerSettings.internalPlayerEngine
+            // Media3 opens document-provider URIs through Android's persisted grant.
+            var effectiveInternalPlayerEngine = if (documentDownload) InternalPlayerEngine.EXOPLAYER
+                else overrideInternalPlayerEngine ?: playerSettings.internalPlayerEngine
             if (effectiveInternalPlayerEngine == InternalPlayerEngine.AUTO) {
                 effectiveInternalPlayerEngine = if (isStalker) InternalPlayerEngine.EXOPLAYER else resolveAutoInternalPlayerEngine()
             }
@@ -1830,7 +1838,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                         }
 
                         // ── Main Engine Failover ──
-                        if (!isStalker && !permanentUsenetFailure && maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
+                        if (!documentDownload && !isStalker && !permanentUsenetFailure && maybeAutoSwitchInternalPlayerOnStartupError(detailedError = detailedError, allowEngineFailover = allowEngineFailover)) {
                             return
                         }
                         if (attemptAutoRetry(error, detailedError)) {

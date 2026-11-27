@@ -1,0 +1,4 @@
+<resources>
+    <string name="vod_download_channel">Playlist downloads</string>
+    <string name="vod_download_notification">Saving playlist video</string>
+</resources>
