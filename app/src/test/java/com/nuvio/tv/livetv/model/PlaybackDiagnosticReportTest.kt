@@ -9,6 +9,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PlaybackDiagnosticReportTest {
+    @Test fun `copied source lookup report keeps episodes and HTTP codes distinct`() {
+        val copied = ReportShortener.shorten("Build", listOf(
+            "Source lookup (S1E1): add-on search #1: HTTP 401 (18ms)",
+            "Source lookup (S1E2): add-on search #2: HTTP 401 (29ms)",
+            "Source lookup (S1E2): add-on search #3: HTTP 503 (35ms)",
+            "Source lookup (S1E2): add-on search #4: HTTP 503 (40ms)"
+        ), 1900)
+        assertTrue(copied.contains("S1E1): add-on search #1: HTTP 401"))
+        assertTrue(copied.contains("S1E2): add-on search #2: HTTP 401"))
+        assertTrue(copied.contains("S1E2): add-on search #4: HTTP 503 (40ms) (×2)"))
+    }
+
     @Test fun `copied report preserves four readers and late transport fields beside real errors`() {
         var now = 0L
         val samples = mutableListOf<String>()

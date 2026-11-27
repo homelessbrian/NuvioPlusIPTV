@@ -1075,6 +1075,7 @@ object ReportShortener {
     private val TIME = Regex("""^\+(\d+(?:\.\d)?)s\s+""")
     private val NUMBERS = Regex("""\d+(?:[.,]\d+)*""")
     private val SAMPLE_READERS = Regex("""\bR\d+\{""")
+    private val LOOKUP_TIMINGS = Regex("""\b\d+ms\b|(?<=add-on search #)\d+""")
     private val PROBLEM = Regex(
         """(?i)\b(fail|failed|couldn'?t|could not|error|timed? ?out|refused|won'?t|denied|missing|out of date|froze|crash|exception|not found|invalid|unreachable|no space|expired|expires|blocked|http [45]\d\d|\b[45]\d\d\b)"""
     )
@@ -1099,14 +1100,17 @@ object ReportShortener {
             var text = if (m != null) raw.substring(m.value.length) else raw
             val cap = if (text.startsWith("Multiview sample:") || text.startsWith("VPN: vpn_traffic:")) 700 else 220
             if (text.length > cap) text = text.take(cap - 3) + "..."
+            val sourceLookup = text.startsWith("Source lookup (")
             val prio = when {
+                sourceLookup && text.contains("On Demand only:") -> 0
                 PROBLEM.containsMatchIn(text) -> 0
                 NOISE.any { text.contains(it) } -> 3
                 TIMING.containsMatchIn(text) -> 1
                 else -> 2
             }
             val readerIds = if (text.startsWith("Multiview sample:")) SAMPLE_READERS.findAll(text).joinToString(",") { it.value } else ""
-            val key = readerIds + NUMBERS.replace(text, "#")
+            // Compare consecutive episodes without collapsing their numbers or different HTTP errors.
+            val key = if (sourceLookup) LOOKUP_TIMINGS.replace(text, "#") else readerIds + NUMBERS.replace(text, "#")
             val prev = byKey.remove(key)
             byKey[key] = Line(i, time, text, prio, (prev?.count ?: 0) + 1)
         }

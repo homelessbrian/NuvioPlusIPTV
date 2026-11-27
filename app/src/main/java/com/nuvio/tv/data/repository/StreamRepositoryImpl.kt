@@ -36,6 +36,7 @@ import com.nuvio.tv.core.streams.supportsStreamResource
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
+import com.nuvio.tv.livetv.model.SourceLookupReport
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.net.URLEncoder
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 private const val TAG = "StreamRepositoryImpl"
@@ -75,6 +77,7 @@ class StreamRepositoryImpl @Inject constructor(
     private val networkRecovery: com.nuvio.tv.core.network.SourceNetworkRecovery
 ) : StreamRepository {
     private val streamSearchSessions = StreamSearchSessionCache(networkGeneration = { networkRecovery.generation.value })
+    private val addonSearchIds = AtomicInteger()
     override val sourceNetworkRecovery: Flow<Long> get() = networkRecovery.generation
 
     override suspend fun needsSourceRecovery(type: String, videoId: String, season: Int?, episode: Int?, priorityBingeGroup: String?): Boolean =
@@ -278,6 +281,12 @@ class StreamRepositoryImpl @Inject constructor(
                 }
             }
             val retryServers = serverSources.withIndex().filter { attempt.includes("server:${it.index}") }
+            val reportLabel = SourceLookupReport.label(type, season, episode)
+            val search = addonSearchIds.incrementAndGet()
+            val continuation = if (continuePluginOnly) " (continuing with plugin only)" else ""
+            SourceLookupReport.record(reportLabel, "add-on search #$search: querying ${streamAddons.size} of ${addons.size} considered$continuation")
+            val reports = arrayOfNulls<AddonLookupOutcome>(streamAddons.size)
+            val remainingAddons = AtomicInteger(streamAddons.size)
 
             val attemptedAddonNames = streamAddons.map { it.value.displayName } + retryServers.map { it.value.name } +
                 if (usenetSources.ready) listOf(BuiltInUsenetService.GROUP_NAME) else emptyList()
@@ -321,13 +330,18 @@ class StreamRepositoryImpl @Inject constructor(
                 }
 
                 // Launch addon jobs
-                streamAddons.forEach { (sourceIndex, addon) ->
+                streamAddons.forEachIndexed { slot, (sourceIndex, addon) ->
                     launch {
+                        val startedAt = System.nanoTime()
+                        var sourceCount: Int? = null
+                        var outcome = "incomplete"
                         try {
                             val streamsResult = getStreamsFromAddon(addon, type, videoId)
                             when (streamsResult) {
                                 is NetworkResult.Success -> {
                                     if (streamsResult.data.isNotEmpty()) {
+                                        sourceCount = streamsResult.data.size
+                                        outcome = "stream"
                                         val namedStreams = streamsResult.data.map {
                                             it.copy(addonName = addon.displayName, addonLogo = addon.logo)
                                         }
@@ -341,9 +355,15 @@ class StreamRepositoryImpl @Inject constructor(
                                     } else {
                                         // Stream endpoint returned empty - try inline
                                         // streams from meta response as fallback.
-                                        val inlineStreams = fetchInlineStreamsFromMeta(
-                                            addon, type, videoId
-                                        )
+                                        val inlineResult = fetchInlineStreamsFromMeta(addon, type, videoId)
+                                        val inlineStreams = (inlineResult as? NetworkResult.Success)?.data.orEmpty()
+                                        if (inlineResult is NetworkResult.Error) {
+                                            outcome = "empty stream, meta ${lookupFailure(inlineResult.code, inlineResult.message)}"
+                                            if (inlineResult.code == 404) sourceCount = 0
+                                        } else {
+                                            sourceCount = inlineStreams.size
+                                            outcome = if (inlineStreams.isEmpty()) "empty" else "inline"
+                                        }
                                         if (inlineStreams.isNotEmpty()) {
                                             resultChannel.send(
                                                 AddonStreams(
@@ -359,13 +379,21 @@ class StreamRepositoryImpl @Inject constructor(
                                 }
                                 is NetworkResult.Error -> {
                                     val failure = buildAddonFailure(addon, streamsResult)
+                                    outcome = lookupFailure(streamsResult.code, streamsResult.message)
+                                    if (failure.kind == StreamFailureKind.MISSING) sourceCount = 0
                                     attemptedFailures += failure
                                     if (failure.kind == StreamFailureKind.REQUEST_FAILED) attempt("addon:$sourceIndex")
                                 }
                                 NetworkResult.Loading -> Unit
                             }
                         } catch (e: Exception) {
-                            if (e is CancellationException) throw e
+                            if (e is CancellationException) {
+                                sourceCount = null
+                                outcome = "cancelled"
+                                throw e
+                            }
+                            sourceCount = null
+                            outcome = lookupFailure(null, e.message)
                             Log.e(TAG, "Addon ${addon.name} failed: ${e.message}")
                             attempt("addon:$sourceIndex")
                             attemptedFailures += StreamAttemptFailure(
@@ -374,6 +402,12 @@ class StreamRepositoryImpl @Inject constructor(
                                 detail = e.message ?: context.getString(com.nuvio.tv.R.string.stream_error_detail_addon_request_failed)
                             )
                         } finally {
+                            val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+                            reports[slot] = AddonLookupOutcome(sourceIndex + 1, sourceCount, outcome, elapsedMs)
+                            // The last decrement observes the writes made by the other add-on jobs.
+                            if (remainingAddons.decrementAndGet() == 0) {
+                                SourceLookupReport.record(reportLabel, "add-on search #$search: " + summarizeAddons(reports.filterNotNull()))
+                            }
                             if (completedJobs.incrementAndGet() >= totalJobs) {
                                 resultChannel.close()
                             }
@@ -802,14 +836,14 @@ class StreamRepositoryImpl @Inject constructor(
 
     /**
      * Fetch meta for the given content and extract inline streams from the
-     * matching video entry.  Returns an empty list when the addon doesn't
-     * support meta or the video has no inline streams.
+     * matching video entry. The caller treats unsuccessful fallback requests as having
+     * no playable streams, but keeps their status in the support report.
      */
     private suspend fun fetchInlineStreamsFromMeta(
         addon: Addon,
         type: String,
         videoId: String
-    ): List<Stream> {
+    ): NetworkResult<List<Stream>> {
         // For inline streams the meta is fetched using the content-level ID
         // (everything before the video-specific suffix).  For "other" type
         // the videoId IS the content ID; for series it is contentId:S:E.
@@ -846,21 +880,48 @@ class StreamRepositoryImpl @Inject constructor(
         return try {
             when (val result = safeApiCall(context) { api.getMeta(metaUrl) }) {
                 is NetworkResult.Success -> {
-                    val metaDto = result.data.meta ?: return emptyList()
-                    val matchingVideo = metaDto.videos?.firstOrNull { it.id == videoId }
+                    val matchingVideo = result.data.meta?.videos?.firstOrNull { it.id == videoId }
                     val streams = matchingVideo?.streams
                         ?.mapNotNull { it.toDomain(addon.displayName, addon.logo) }
                         ?: emptyList()
                     Log.d(TAG, "Inline streams from meta: addon=${addon.displayName} videoId=$videoId found=${streams.size}")
-                    streams
+                    NetworkResult.Success(streams)
                 }
-                else -> emptyList()
+                is NetworkResult.Error -> result
+                NetworkResult.Loading -> NetworkResult.Loading
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.w(TAG, "Failed to fetch inline streams from meta for ${addon.displayName}: ${e.message}")
-            emptyList()
+            NetworkResult.Error(e.message.orEmpty())
         }
+    }
+
+    private data class AddonLookupOutcome(val number: Int, val count: Int?, val outcome: String, val elapsedMs: Long)
+
+    private fun summarizeAddons(outcomes: List<AddonLookupOutcome>): String {
+        val found = outcomes.count { (it.count ?: 0) > 0 }
+        val empty = outcomes.count { it.count == 0 }
+        // Give failures and empty replies space even when many other add-ons returned streams.
+        val details = outcomes.sortedBy { it.count ?: -1 }.joinToString("; ", limit = 6) { item ->
+            val count = item.count?.takeIf { it > 0 }?.let { " $it" }.orEmpty()
+            "#${item.number} ${item.outcome}$count (${item.elapsedMs}ms)"
+        }
+        val failed = outcomes.size - found - empty
+        val failureCount = if (failed > 0) ", $failed failed/incomplete" else ""
+        return "$found with sources, $empty empty$failureCount. $details"
+    }
+
+    /** Transport exceptions have already been folded into NetworkResult.Error by safeApiCall. */
+    private fun lookupFailure(code: Int?, message: String?): String = when {
+        code != null && code in 100..599 -> "HTTP $code"
+        message.isNullOrBlank() -> "request failed"
+        message.contains("Unable to resolve host", true) || message.contains("UnknownHost", true) -> "DNS failure"
+        message.contains("timeout", true) || message.contains("timed out", true) -> "timeout"
+        message.contains("certificate", true) || message.contains("SSL", true) || message.contains("TLS", true) -> "TLS failure"
+        message.contains("CLEARTEXT communication", true) -> "cleartext blocked"
+        message.contains("connect", true) || message.contains("unreachable", true) -> "connection failure"
+        else -> "request failed"
     }
 
     private fun buildMissingStreamFailure(addon: Addon): StreamAttemptFailure {

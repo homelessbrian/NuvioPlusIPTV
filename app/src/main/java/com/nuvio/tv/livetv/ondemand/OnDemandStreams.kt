@@ -7,12 +7,14 @@ import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.ProxyHeaders
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamBehaviorHints
+import com.nuvio.tv.livetv.model.SourceLookupReport
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 
@@ -85,16 +87,34 @@ object OnDemandStreams {
             val found = runCatching { lookup(entry, type, videoId, season, episode, title, year) }.getOrDefault(emptyList())
             if (found.isNotEmpty()) emit(found to position)
         }
-        return combine(source, onDemand) { result, (extra, position) ->
+        val label = SourceLookupReport.label(type, season, episode)
+        return combineResults(source, onDemand) { reason ->
+            SourceLookupReport.record(label, "On Demand only: $reason")
+        }
+    }
+
+    internal fun combineResults(
+        source: Flow<NetworkResult<List<AddonStreams>>>,
+        onDemand: Flow<Pair<List<Stream>, String>>,
+        reportOnDemandOnly: (String) -> Unit
+    ): Flow<NetworkResult<List<AddonStreams>>> = flow {
+        var previousReason: String? = null
+        emitAll(combine(source, onDemand) { result, (extra, position) ->
+            val reason = when {
+                extra.isEmpty() -> null
+                result is NetworkResult.Error -> "source search returned an error"
+                result is NetworkResult.Success && result.data.all { it.streams.isEmpty() } -> "source search returned no streams"
+                else -> null
+            }
+            if (reason != null && reason != previousReason) reportOnDemandOnly(reason)
+            previousReason = reason
             when {
                 extra.isEmpty() -> result
                 result is NetworkResult.Success -> NetworkResult.Success(place(result.data, AddonStreams(GROUP_NAME, null, extra), position))
-                // No addon found anything (or they failed): your provider's copy is still offered,
-                // instead of "playback unavailable".
                 result is NetworkResult.Error -> NetworkResult.Success(listOf(AddonStreams(GROUP_NAME, null, extra)))
                 else -> result
             }
-        }
+        })
     }
 
     private suspend fun lookup(
