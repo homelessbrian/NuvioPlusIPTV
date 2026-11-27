@@ -144,19 +144,6 @@ private fun rememberGuidePrograms(ch: LiveChannel?, list: List<EpgProgram>, nowM
         if (ch == null) emptyList() else prepareGuidePrograms(ch, list, nowMs, pastHours)
     }
 
-/** "Today", "Tomorrow", "Yesterday", or the day ("Sat, Oct 10") for the guide's time ruler. */
-private fun guideDayLabel(windowStart: Long, now: Long): String {
-    val dayOf = { ms: Long -> java.util.Calendar.getInstance().apply { timeInMillis = ms }.let { it.get(java.util.Calendar.YEAR) * 1000 + it.get(java.util.Calendar.DAY_OF_YEAR) } }
-    val shown = dayOf(windowStart)
-    val today = dayOf(now)
-    return when (shown) {
-        today -> "Today"
-        dayOf(now + 24 * 3_600_000L) -> "Tomorrow"
-        dayOf(now - 24 * 3_600_000L) -> "Yesterday"
-        else -> java.text.SimpleDateFormat("EEE, MMM d", java.util.Locale.getDefault()).format(java.util.Date(windowStart))
-    }
-}
-
 /** The first midnight (device time) after [ms]. */
 private fun nextMidnight(ms: Long): Long = java.util.Calendar.getInstance().apply {
     timeInMillis = ms
@@ -1326,6 +1313,7 @@ private fun LiveTvGuideScreenBody(
                 ) }
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     // ---------------------------------------------------------------- time ruler
+                    val dayLabels = rememberGuideDayLabels()
                     val channelColWidth = channelColumnWidth(settings)
                     val programAreaWidth: Dp? = if (gridWidthPx <= 0) null
                         else with(androidx.compose.ui.platform.LocalDensity.current) { gridWidthPx.toDp() } - channelColWidth
@@ -1341,7 +1329,7 @@ private fun LiveTvGuideScreenBody(
                         // Date and time above the channels (like TiviMate), or the Unassigned filter.
                         Box(Modifier.width(channelColWidth).padding(start = 8.dp)) {
                             LiveText(
-                                if (epgUnassignedOnly) "Unassigned channels" else guideDayLabel(windowStart, now),
+                                if (epgUnassignedOnly) "Unassigned channels" else dayLabels.label(windowStart, now),
                                 color = NuvioTheme.colors.TextPrimary,
                                 size = (13f * guideScale(settings)).sp,
                                 weight = FontWeight.Bold
@@ -1356,7 +1344,7 @@ private fun LiveTvGuideScreenBody(
                                 val t = windowStart + i * SLOT_MS
                                 if (showMidnight && t == midnight) continue
                                 LiveText(
-                                    text = formatDayClock(t, now, settings.use24HourClock),
+                                    text = dayLabels.dayClock(t, now, settings.use24HourClock),
                                     modifier = Modifier
                                         .offset(x = w * (i * SLOT_MS / guideWindowMs(settings).toFloat()))
                                         .align(Alignment.CenterStart)
@@ -1378,10 +1366,8 @@ private fun LiveTvGuideScreenBody(
                                 weight = FontWeight.Bold
                             )
                             if (showMidnight) {
-                                val dayName = java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault()).format(java.util.Date(midnight))
-                                val isTomorrow = midnight - now in 0..(24 * 3_600_000L)
                                 LiveTag(
-                                    if (isTomorrow) "TOMORROW · ${dayName.uppercase()}" else dayName.uppercase(),
+                                    dayLabels.midnightBadge(midnight, now),
                                     NuvioTheme.colors.FocusBackground,
                                     NuvioTheme.colors.FocusRing,
                                     Modifier
@@ -2698,8 +2684,9 @@ private fun GuideHeader(
                     Spacer(Modifier.height(if (small) 2.dp else 4.dp))
                 }
                 if (block != null) {
+                    val dayLabels = rememberGuideDayLabels()
                     val meta = buildList {
-                        if (GuideInfoPart.TIME !in hid) add(formatDayClock(block.startMs, now, settings.use24HourClock) + " – " + formatClock(block.stopMs, settings.use24HourClock))
+                        if (GuideInfoPart.TIME !in hid) add(dayLabels.dayClock(block.startMs, now, settings.use24HourClock) + " – " + formatClock(block.stopMs, settings.use24HourClock))
                         if (GuideInfoPart.LEFT !in hid && now in block.startMs until block.stopMs) add(minutesLeftLabel(block.stopMs, now))
                         p?.episode?.takeIf { settings.showEpisodeNumbers }?.let { add(it) }
                         if (GuideInfoPart.CATEGORY !in hid) p?.category?.let { add(it) }
@@ -4536,7 +4523,7 @@ private fun ProgramInfoDialog(
         if (block != null) {
             val meta = listOfNotNull(
                 "${target.channel.number}  ${target.channel.name}",
-                formatDayClock(block.startMs, now, use24h) + " – " + formatClock(block.stopMs, use24h),
+                rememberGuideDayLabels().dayClock(block.startMs, now, use24h) + " – " + formatClock(block.stopMs, use24h),
                 p?.episode?.takeIf { showEpisode }, p?.category
             ).joinToString("  ·  ")
             LiveText(meta, color = NuvioTheme.colors.TextSecondary, size = 14.sp, maxLines = 2)

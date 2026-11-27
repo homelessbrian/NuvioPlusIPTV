@@ -797,13 +797,6 @@ internal fun formatClock(ms: Long, use24h: Boolean): String {
 internal fun formatRange(startMs: Long, stopMs: Long, use24h: Boolean): String =
     "${formatClock(startMs, use24h)} – ${formatClock(stopMs, use24h)}"
 
-internal fun formatDayClock(ms: Long, now: Long, use24h: Boolean): String {
-    val day = SimpleDateFormat("yyyyMMdd", Locale.US)
-    val sameDay = day.format(Date(ms)) == day.format(Date(now))
-    val prefix = if (sameDay) "" else SimpleDateFormat("EEE ", Locale.getDefault()).format(Date(ms))
-    return prefix + formatClock(ms, use24h)
-}
-
 internal fun minutesLeftLabel(stopMs: Long, now: Long): String {
     val min = ((stopMs - now) / 60_000L).coerceAtLeast(0)
     return if (min >= 60) "${min / 60}h ${min % 60}m left" else "${min}m left"

@@ -59,17 +59,14 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 /** Where you are in overlay mode (TiviMate's name for it). */
 private enum class OverlayLevel { CHANNELS, GROUPS, SCHEDULE, DATES }
 
 /** A row of a channel's schedule: a day heading, or a program. */
 private sealed interface ScheduleRow {
-    data class Day(val label: String, val dayStart: Long) : ScheduleRow
+    data class Day(val dayStart: Long) : ScheduleRow
     data class Show(val program: EpgProgram, val dayStart: Long) : ScheduleRow
 }
 
@@ -212,7 +209,8 @@ private fun OverlayModeContent(
     }
 
     // ---- schedule of one channel, grouped by day
-    val schedule: List<ScheduleRow> = remember(scheduleChannel, programs) {
+    val dayLabels = rememberGuideDayLabels()
+    val schedule: List<ScheduleRow> = remember(scheduleChannel, programs, dayLabels) {
         val ch = scheduleChannel ?: return@remember emptyList()
         val out = ArrayList<ScheduleRow>()
         var lastDay = Long.MIN_VALUE
@@ -221,7 +219,7 @@ private fun OverlayModeContent(
         programs[ch.key].orEmpty().forEach { p ->
             val day = startOfDay(p.startMs)
             if (day != lastDay) {
-                out += ScheduleRow.Day(dayLabel(day, now), day)
+                out += ScheduleRow.Day(day)
                 lastDay = day
             }
             out += ScheduleRow.Show(p, day)
@@ -441,8 +439,8 @@ private fun OverlayModeContent(
                     if (settings.overlayShowDetails) settledChannel?.let { SchedulePreview(it, programs[it.key].orEmpty(), now, use24h) }
                 }
                 OverlayLevel.SCHEDULE, OverlayLevel.DATES -> scheduleChannel?.let { ch ->
-                    SchedulePanel(ch, schedule, rowIndex, focused = level == OverlayLevel.SCHEDULE, playback.channelKey, now, use24h)
-                    DatesPanel(days, dateIndex, focused = level == OverlayLevel.DATES, today = startOfDay(now))
+                    SchedulePanel(ch, schedule, rowIndex, focused = level == OverlayLevel.SCHEDULE, playback.channelKey, now, use24h, dayLabels)
+                    DatesPanel(days, dateIndex, focused = level == OverlayLevel.DATES, today = startOfDay(now), dayLabels = dayLabels)
                 }
             }
         }
@@ -496,7 +494,7 @@ private fun OverlayModeContent(
                 Spacer(Modifier.height(6.dp))
                 val live = now >= p.startMs && now < p.stopMs
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val range = (if (startOfDay(p.startMs) != startOfDay(now)) "${dayLabel(startOfDay(p.startMs), now)}, " else "") +
+                    val range = (if (startOfDay(p.startMs) != startOfDay(now)) "${dayLabels.label(p.startMs, now, fullWeekday = true)}, " else "") +
                         formatRange(p.startMs, p.stopMs, use24h)
                     LiveText(range, color = NuvioTheme.colors.TextSecondary, size = osp(14f))
                     if (live) {
@@ -520,7 +518,7 @@ private fun OverlayModeContent(
         LiveDialog(onDismiss = { futurePrompt = null; activity++ }, width = 460.dp) {
             LiveText(titleMarks(p.title).title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
             LiveText(
-                "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)} · ${ch.name}",
+                "${dayLabels.label(p.startMs, now, fullWeekday = true)}, ${formatRange(p.startMs, p.stopMs, use24h)} · ${ch.name}",
                 color = NuvioTheme.colors.TextSecondary, size = osp(13f)
             )
             Spacer(Modifier.height(14.dp))
@@ -572,7 +570,7 @@ private fun OverlayModeContent(
         LiveDialog(onDismiss = { recordMenu = null; activity++ }, width = 460.dp) {
             LiveText(titleMarks(p.title).title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
             LiveText(
-                "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)} · ${ch.name}",
+                "${dayLabels.label(p.startMs, now, fullWeekday = true)}, ${formatRange(p.startMs, p.stopMs, use24h)} · ${ch.name}",
                 color = NuvioTheme.colors.TextSecondary, size = osp(13f)
             )
             Spacer(Modifier.height(14.dp))
@@ -641,7 +639,7 @@ private fun OverlayModeContent(
                 LiveText(titleMarks(p.title).title, size = osp(22f), weight = FontWeight.Bold, maxLines = 2)
                 Spacer(Modifier.height(6.dp))
                 val meta = listOfNotNull(
-                    "${dayLabel(startOfDay(p.startMs), now)}, ${formatRange(p.startMs, p.stopMs, use24h)}",
+                    "${dayLabels.label(p.startMs, now, fullWeekday = true)}, ${formatRange(p.startMs, p.stopMs, use24h)}",
                     ch.name,
                     p.episode?.takeIf { settings.showEpisodeNumbers && it.isNotBlank() },
                     p.category?.takeIf { it.isNotBlank() }
@@ -974,7 +972,8 @@ private fun SchedulePanel(
     focused: Boolean,
     playingKey: String?,
     now: Long,
-    use24h: Boolean
+    use24h: Boolean,
+    dayLabels: GuideDayLabels,
 ) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (index - 3).coerceAtLeast(0))
     keepVisible(state, index)
@@ -996,7 +995,7 @@ private fun SchedulePanel(
             itemsIndexed(rows) { i, row ->
                 when (row) {
                     is ScheduleRow.Day -> LiveText(
-                        row.label,
+                        dayLabels.label(row.dayStart, now, fullWeekday = true),
                         color = NuvioTheme.colors.Secondary,
                         size = osp(14f),
                         weight = FontWeight.SemiBold,
@@ -1056,10 +1055,9 @@ private fun SchedulePanel(
 }
 
 @Composable
-private fun DatesPanel(days: List<Long>, index: Int, focused: Boolean, today: Long) {
+private fun DatesPanel(days: List<Long>, index: Int, focused: Boolean, today: Long, dayLabels: GuideDayLabels) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (index - 3).coerceAtLeast(0))
     keepVisible(state, index)
-    val fmt = remember { SimpleDateFormat("EEE,\nMMM d", Locale.getDefault()) }
     Column(modifier = Modifier.width(100.dp).fillMaxHeight().background(PanelMid).padding(top = 56.dp)) {
         LazyColumn(state = state, modifier = Modifier.fillMaxSize()) {
             itemsIndexed(days) { i, day ->
@@ -1077,7 +1075,7 @@ private fun DatesPanel(days: List<Long>, index: Int, focused: Boolean, today: Lo
                     contentAlignment = Alignment.Center
                 ) {
                     LiveText(
-                        fmt.format(Date(day)),
+                        dayLabels.twoLineDate(day),
                         color = if (day == today && !(isSelected && focused)) NuvioTheme.colors.Secondary else colors.text,
                         size = osp(13f),
                         maxLines = 2,
@@ -1095,17 +1093,6 @@ private fun startOfDay(ms: Long): Long = Calendar.getInstance().apply {
     timeInMillis = ms
     set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
 }.timeInMillis
-
-private fun dayLabel(dayStart: Long, now: Long): String {
-    val today = startOfDay(now)
-    val diffDays = Math.round((dayStart - today) / 86_400_000.0).toInt()
-    return when (diffDays) {
-        0 -> "Today"
-        -1 -> "Yesterday"
-        1 -> "Tomorrow"
-        else -> SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date(dayStart))
-    }
-}
 
 // ==================================================================== backup channels flyout
 
