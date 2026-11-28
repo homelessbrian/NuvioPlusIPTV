@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -2243,38 +2244,72 @@ private fun GamePage(
             Spacer(Modifier.height(6.dp))
         }
         top()
-        Row(Modifier.weight(1f).fillMaxWidth()) {
-            Column(Modifier.weight(1f).fillMaxHeight()) {
-                if (showVideo) {
-                    // Something in the window: the picture where the score was, the score beside it.
-                    Row(Modifier.fillMaxWidth()) {
-                        videoSlot(Modifier.height(GAME_VIDEO_HEIGHT).aspectRatio(16f / 9f))
-                        Spacer(Modifier.width(12.dp))
-                        GameScoreColumn(ev, sides, settings.hideScores, now, use24h, sport, Modifier.weight(1f).height(GAME_VIDEO_HEIGHT))
-                    }
-                } else scoreboard()
-                Spacer(Modifier.height(8.dp))
-                actions()
-                Spacer(Modifier.height(4.dp))
-                tabRow()
-                Spacer(Modifier.height(6.dp))
-                tabContent(Modifier.weight(1f).fillMaxWidth().padding(start = 6.dp, bottom = 14.dp))
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val watchWidth = minOf(WATCH_WIDTH, maxWidth * 0.42f)
+            Row(Modifier.fillMaxSize()) {
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    if (showVideo) {
+                        GamePreviewHeader(ev, sides, settings.hideScores, now, use24h, sport, videoSlot)
+                    } else scoreboard()
+                    Spacer(Modifier.height(8.dp))
+                    actions()
+                    Spacer(Modifier.height(4.dp))
+                    tabRow()
+                    Spacer(Modifier.height(6.dp))
+                    tabContent(Modifier.weight(1f).fillMaxWidth().padding(start = 6.dp, bottom = 14.dp))
+                }
+                Spacer(Modifier.width(18.dp))
+                watchOn(Modifier.width(watchWidth).fillMaxHeight().padding(bottom = 14.dp))
             }
-            Spacer(Modifier.width(18.dp))
-            watchOn(Modifier.width(WATCH_WIDTH).fillMaxHeight().padding(bottom = 14.dp))
         }
     }
     }
 }
 
-/** The video's height on a game page (16:9), leaving room for the tabs under it. */
+/** The video's height on a wide game page (16:9), leaving room for the tabs under it. */
 private val GAME_VIDEO_HEIGHT = 216.dp
+private const val GAME_VIDEO_ASPECT_RATIO = 16f / 9f
+private val GAME_SCORE_MIN_WIDTH = 144.dp
+private val GAME_VIDEO_MIN_WIDTH = 160.dp
+private val GAME_SCORE_GAP = 12.dp
 
 /** The game page's "Watch on" column. */
 private val WATCH_WIDTH = 360.dp
 
 /** How far down the page the teams' colours reach while something plays. */
 private val TEAM_WASH_HEIGHT = 300.dp
+
+@Composable
+internal fun GamePreviewHeader(
+    ev: SportsEvent,
+    sides: List<Side>,
+    hideScores: Boolean,
+    now: Long,
+    use24h: Boolean,
+    sport: Sport,
+    videoSlot: @Composable (Modifier) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val availableVideoWidth = maxWidth - GAME_SCORE_MIN_WIDTH - GAME_SCORE_GAP
+        if (availableVideoWidth >= GAME_VIDEO_MIN_WIDTH) {
+            val videoWidth = minOf(GAME_VIDEO_HEIGHT * GAME_VIDEO_ASPECT_RATIO, availableVideoWidth)
+            Row(Modifier.fillMaxWidth()) {
+                videoSlot(Modifier.width(videoWidth).aspectRatio(GAME_VIDEO_ASPECT_RATIO))
+                Spacer(Modifier.width(GAME_SCORE_GAP))
+                GameScoreColumn(
+                    ev, sides, hideScores, now, use24h, sport,
+                    Modifier.weight(1f).heightIn(min = videoWidth / GAME_VIDEO_ASPECT_RATIO)
+                )
+            }
+        } else {
+            val videoWidth = minOf(maxWidth, GAME_VIDEO_MIN_WIDTH)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                GameScoreColumn(ev, sides, hideScores, now, use24h, sport, Modifier.fillMaxWidth(), compact = true)
+                videoSlot(Modifier.width(videoWidth).aspectRatio(GAME_VIDEO_ASPECT_RATIO))
+            }
+        }
+    }
+}
 
 /** The two teams' colours across the top of a game page, one each side, fading out downwards. */
 @Composable
@@ -2306,24 +2341,38 @@ private fun TeamColourWash(sides: List<Side>, modifier: Modifier) {
  * small version (abbreviations and scores).
  */
 @Composable
-private fun GameScoreColumn(ev: SportsEvent, sides: List<Side>, hideScores: Boolean, now: Long, use24h: Boolean, sport: Sport, modifier: Modifier) {
+private fun GameScoreColumn(
+    ev: SportsEvent,
+    sides: List<Side>,
+    hideScores: Boolean,
+    now: Long,
+    use24h: Boolean,
+    sport: Sport,
+    modifier: Modifier,
+    compact: Boolean = false,
+) {
     val showScore = ev.hasScore && !hideScores && ev.state != GameState.PRE
     val live = ev.state == GameState.LIVE
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
-        val wide = maxWidth >= 240.dp && sides.size == 2
+    BoxWithConstraints(modifier, propagateMinConstraints = true) {
+        val wide = !compact && maxWidth >= 240.dp && sides.size == 2
         if (!wide) {
             Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (sides.size == 2) {
                     sides.forEach { s ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            TeamLogo(s.team, 22.dp)
-                            Spacer(Modifier.width(6.dp))
-                            Column(Modifier.weight(1f)) {
-                                LiveText(s.rankedName(s.team.abbr.ifBlank { s.team.name }), color = Color.White, size = 13.sp, weight = FontWeight.ExtraBold)
-                                if (sport == Sport.AMERICAN_FOOTBALL && !hideScores) s.record?.let { LiveText(it, size = 9.sp, color = SportsLook.Dim) }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                TeamLogo(s.team, 22.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Column(Modifier.weight(1f)) {
+                                    LiveText(s.rankedName(s.team.abbr.ifBlank { s.team.name }), color = Color.White, size = 13.sp, weight = FontWeight.ExtraBold)
+                                    if (sport == Sport.AMERICAN_FOOTBALL && !hideScores) s.record?.let { LiveText(it, size = 9.sp, color = SportsLook.Dim) }
+                                }
+                                if (s.onOffense && live && !hideScores) OffensiveMarker(sport, s, 13.sp)
                             }
-                            if (s.onOffense && live && !hideScores) OffensiveMarker(sport, s, 13.sp)
-                            if (showScore) LiveText(s.score.orEmpty(), color = Color.White, size = 18.sp, weight = FontWeight.Black)
+                            if (showScore) {
+                                LiveText(s.score.orEmpty(), modifier = Modifier.padding(start = 4.dp),
+                                    color = Color.White, size = 18.sp, weight = FontWeight.Black)
+                            }
                         }
                     }
                 } else {
@@ -2340,7 +2389,7 @@ private fun GameScoreColumn(ev: SportsEvent, sides: List<Side>, hideScores: Bool
         val lead = if (showScore) sides.maxByOrNull { it.score?.toDoubleOrNull() ?: 0.0 } else null
         val tied = showScore && sides[0].score == sides[1].score
         val periods = showScore && sides.any { it.periods.isNotEmpty() } && (sport != Sport.RUGBY || periodsAddUp(sides))
-        Column(Modifier.fillMaxSize().padding(start = 6.dp, end = 4.dp), verticalArrangement = Arrangement.Center) {
+        Column(Modifier.fillMaxWidth().padding(start = 6.dp, end = 4.dp), verticalArrangement = Arrangement.Center) {
             sides.forEach { s ->
                 val dim = showScore && !tied && s != lead && ev.state == GameState.POST
                 Row(
