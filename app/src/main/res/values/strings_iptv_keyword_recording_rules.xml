@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_keyword_recording_rule">Keyword rule</string>
+    <string name="iptv_keyword_recording_badge">Keyword</string>
+    <string name="iptv_keyword_recording_waiting">Waiting for the current recording to finish</string>
+    <string name="iptv_keyword_recording_rule_detail">Records matching programme titles on %1$s. Stopping the rule cancels its scheduled recordings.</string>
+    <string name="iptv_keyword_recording_stop">Stop Keyword Recording</string>
+    <string name="iptv_keyword_recording_keep">Recordings to Keep</string>
+    <string name="iptv_keyword_recording_keep_all">Keep All Recordings</string>
+    <string name="iptv_keyword_recording_retention_help">If you set a limit, older recordings from this rule are deleted as new ones are made.</string>
+    <string name="iptv_keyword_recording_padding_help">Applies to every match of this rule, including recordings already scheduled. Default follows the Live TV Recordings settings.</string>
+</resources>

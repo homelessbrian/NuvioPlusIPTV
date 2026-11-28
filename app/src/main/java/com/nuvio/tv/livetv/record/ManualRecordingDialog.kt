@@ -1,7 +1,10 @@
 package com.nuvio.tv.livetv.record
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,27 +19,35 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nuvio.tv.R
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.ui.LiveDialog
 import com.nuvio.tv.livetv.ui.LiveFocusRow
 import com.nuvio.tv.livetv.ui.LiveText
+import com.nuvio.tv.livetv.ui.LiveTextField
 import com.nuvio.tv.livetv.ui.MenuItem
 import com.nuvio.tv.livetv.ui.TextInputDialog
 import com.nuvio.tv.livetv.ui.focusedTextColor
 import com.nuvio.tv.ui.theme.NuvioTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -47,12 +58,15 @@ import java.util.Locale
  * listings (PPV events, a game that isn't in the guide). ◀ ▶ change the highlighted value.
  * Repeat records the same time every week on the days picked ([onSchedule]'s days, as
  * Calendar.SUNDAY..SATURDAY; empty: just once).
+ * [onKeyword] saves a programme title rule for the same channel.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ManualRecordingDialog(
     channel: LiveChannel,
     use24h: Boolean,
     onSchedule: (title: String, startMs: Long, stopMs: Long, days: Set<Int>) -> Unit,
+    onKeyword: suspend (String) -> KeywordRecordingResult,
     onDismiss: () -> Unit
 ) {
     val now = remember { System.currentTimeMillis() }
@@ -119,6 +133,22 @@ internal fun ManualRecordingDialog(
     val name = customName?.takeIf { it.isNotBlank() } ?: defaultName
 
     val first = remember { FocusRequester() }
+    val keywordButton = remember { FocusRequester() }
+    var enteringKeyword by remember { mutableStateOf(false) }
+    var restoreKeywordFocus by remember { mutableStateOf(false) }
+    if (enteringKeyword) {
+        KeywordRecordingDialog(
+            channelName = channel.name,
+            onKeyword = onKeyword,
+            onAdded = onDismiss,
+            onDismiss = {
+                enteringKeyword = false
+                restoreKeywordFocus = true
+            }
+        )
+        return
+    }
+
     LiveDialog(onDismiss = onDismiss, width = 520.dp) {
         LiveText("Schedule a Recording", size = 20.sp, weight = FontWeight.Bold)
         LiveText("◀ ▶ change the highlighted setting", color = NuvioTheme.colors.TextSecondary, size = 13.sp)
@@ -163,7 +193,7 @@ internal fun ManualRecordingDialog(
             LiveText(it, color = NuvioTheme.colors.Error, size = 13.sp, maxLines = 2)
         }
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             LiveFocusRow(onClick = {
                 val days = repeatDays()
                 if (repeat != 0) {
@@ -182,9 +212,15 @@ internal fun ManualRecordingDialog(
                 }
             }) { f -> LiveText("Schedule", color = focusedTextColor(f)) }
             LiveFocusRow(onClick = onDismiss) { f -> LiveText("Cancel", color = focusedTextColor(f)) }
+            LiveFocusRow(modifier = Modifier.focusRequester(keywordButton), onClick = { enteringKeyword = true }) { focused ->
+                LiveText(stringResource(R.string.iptv_keyword_recording_dialog_title), color = focusedTextColor(focused))
+            }
         }
     }
-    LaunchedEffect(Unit) { delay(60); runCatching { first.requestFocus() } }
+    LaunchedEffect(Unit) {
+        delay(60)
+        runCatching { (if (restoreKeywordFocus) keywordButton else first).requestFocus() }
+    }
 
     if (pickingDays) RepeatDaysPicker(
         selected = customDays,
@@ -214,6 +250,99 @@ internal fun ManualRecordingDialog(
             onConfirm = { text -> customName = text.trim().ifBlank { null }; editing = null }
         )
     }
+}
+
+@Composable
+private fun KeywordRecordingDialog(
+    channelName: String,
+    onKeyword: suspend (String) -> KeywordRecordingResult,
+    onAdded: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var text by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf<Int?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val field = remember { FocusRequester() }
+    val saveButton = remember { FocusRequester() }
+    val cancelButton = remember { FocusRequester() }
+    val addedMessage = stringResource(R.string.iptv_keyword_recording_dialog_added)
+
+    fun save() {
+        if (saving) return
+        val term = text.trim()
+        if (term.isEmpty()) {
+            problem = R.string.iptv_keyword_recording_dialog_invalid
+            return
+        }
+        saving = true
+        problem = null
+        keyboard?.hide()
+        scope.launch {
+            problem = try {
+                when (onKeyword(term)) {
+                    KeywordRecordingResult.ADDED -> {
+                        LiveTvNotice.show(addedMessage)
+                        onAdded()
+                        return@launch
+                    }
+                    KeywordRecordingResult.ALREADY_EXISTS -> R.string.iptv_keyword_recording_dialog_duplicate
+                    KeywordRecordingResult.INVALID -> R.string.iptv_keyword_recording_dialog_invalid
+                }
+            } catch (e: CancellationException) {
+                saving = false
+                throw e
+            } catch (_: Exception) {
+                R.string.iptv_keyword_recording_dialog_save_failed
+            }
+            saving = false
+        }
+    }
+
+    LiveDialog(onDismiss = { if (!saving) onDismiss() }) {
+        LiveText(stringResource(R.string.iptv_keyword_recording_dialog_title), size = 20.sp, weight = FontWeight.Bold)
+        LiveText(channelName, size = 15.sp, color = NuvioTheme.colors.TextSecondary)
+        Spacer(Modifier.height(8.dp))
+        LiveText(
+            stringResource(R.string.iptv_keyword_recording_dialog_description),
+            size = 13.sp, color = NuvioTheme.colors.TextSecondary, maxLines = 3
+        )
+        Spacer(Modifier.height(12.dp))
+        // Down leaves the text editor instead of moving the cursor.
+        Box(Modifier.onPreviewKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                saveButton.requestFocus()
+                true
+            } else false
+        }) {
+            LiveTextField(
+                value = text,
+                onValueChange = { if (!saving) { text = it; problem = null } },
+                hint = stringResource(R.string.iptv_keyword_recording_dialog_hint),
+                focusRequester = field,
+                onDone = ::save
+            )
+        }
+        problem?.let {
+            Spacer(Modifier.height(8.dp))
+            LiveText(stringResource(it), color = NuvioTheme.colors.Error, size = 14.sp, maxLines = 3)
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            LiveFocusRow(modifier = Modifier.focusRequester(saveButton).focusProperties {
+                up = field; right = cancelButton
+            }, onClick = ::save) { focused ->
+                LiveText(stringResource(if (saving) R.string.action_saving else R.string.action_save), color = focusedTextColor(focused))
+            }
+            LiveFocusRow(modifier = Modifier.focusRequester(cancelButton).focusProperties {
+                up = field; left = saveButton
+            }, onClick = { if (!saving) onDismiss() }) { focused ->
+                LiveText(stringResource(R.string.action_cancel), color = focusedTextColor(focused))
+            }
+        }
+    }
+    LaunchedEffect(Unit) { delay(80); runCatching { field.requestFocus() } }
 }
 
 private val REPEATS = listOf("Never", "Every day", "Weekdays", "Weekends", "Custom")

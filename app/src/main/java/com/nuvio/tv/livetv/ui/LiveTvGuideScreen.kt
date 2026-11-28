@@ -296,7 +296,7 @@ private fun LiveTvGuideScreenBody(
         p ?: return null
         if (p.stopMs <= System.currentTimeMillis()) return null
         val n = com.nuvio.tv.livetv.data.LiveTvRepository.normalize(titleMarks(p.title).title)
-        return if (seriesList.any { it.channel.key == ch.key && it.norm == n }) "Stop recording series" else "Record series"
+        return if (seriesList.any { !it.matchKeyword && it.channel.key == ch.key && it.norm == n }) "Stop recording series" else "Record series"
     }
     fun doRecord(ch: LiveChannel, p: EpgProgram) {
         val nowMs = System.currentTimeMillis()
@@ -2150,6 +2150,7 @@ private fun LiveTvGuideScreenBody(
                     com.nuvio.tv.livetv.record.LiveTvNotice.show(viewModel.scheduler.addManual(ch, title, start, stop, days))
                     scope.launch { delay(60); runCatching { gridFocus.requestFocus() } }
                 },
+                onKeyword = { keyword -> viewModel.scheduler.addKeyword(ch, keyword) },
                 onDismiss = {
                     manualRecordingFor = null
                     scope.launch { delay(60); runCatching { gridFocus.requestFocus() } }

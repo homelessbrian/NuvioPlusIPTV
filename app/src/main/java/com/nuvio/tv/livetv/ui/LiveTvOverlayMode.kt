@@ -567,7 +567,7 @@ private fun OverlayModeContent(
         }
         val seriesLabel = if (p.stopMs <= now) null else {
             val n = com.nuvio.tv.livetv.data.LiveTvRepository.normalize(titleMarks(p.title).title)
-            if (seriesList.any { it.channel.key == ch.key && it.norm == n }) "Stop recording series" else "Record series"
+            if (seriesList.any { !it.matchKeyword && it.channel.key == ch.key && it.norm == n }) "Stop recording series" else "Record series"
         }
         LiveDialog(onDismiss = { recordMenu = null; activity++ }, width = 460.dp) {
             LiveText(titleMarks(p.title).title, size = osp(20f), weight = FontWeight.Bold, maxLines = 2)
