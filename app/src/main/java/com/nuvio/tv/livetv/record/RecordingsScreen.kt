@@ -470,6 +470,7 @@ fun RecordingsScreen(
     val recordings by viewModel.recordings.collectAsStateWithLifecycle()
     val schedules by viewModel.schedules.collectAsStateWithLifecycle()
     val seriesRules by viewModel.series.collectAsStateWithLifecycle()
+    val keywordRuleIds = remember(seriesRules) { seriesRules.filter { it.matchKeyword }.map { it.id }.toSet() }
     val repeatRules by viewModel.repeats.collectAsStateWithLifecycle()
     val posters by viewModel.posters.collectAsStateWithLifecycle()
     val art by viewModel.art.collectAsStateWithLifecycle()
@@ -573,7 +574,7 @@ fun RecordingsScreen(
     LaunchedEffect(schedules, seriesRules, repeatRules) {
         viewModel.loadTitlePosters(
             schedules.map { RecordingsViewModel.TitleAsk(it.title, it.channel.name, !it.episode.isNullOrBlank()) } +
-                seriesRules.map { RecordingsViewModel.TitleAsk(it.title, it.channel.name, series = true) } +
+                seriesRules.filterNot { it.matchKeyword }.map { RecordingsViewModel.TitleAsk(it.title, it.channel.name, series = true) } +
                 repeatRules.map { RecordingsViewModel.TitleAsk(it.title, it.channel.name) }
         )
     }
@@ -620,7 +621,7 @@ fun RecordingsScreen(
                     color = colors.TextSecondary
                 )
                 Spacer(Modifier.width(18.dp))
-                // Record a time you pick, on a channel with no listings (PPV events…).
+                // Schedule by time or set a keyword rule for a channel.
                 PillButton(
                     "+ New Recording",
                     primary = false,
@@ -637,7 +638,7 @@ fun RecordingsScreen(
                         LiveText("No recordings yet", size = 20.sp, weight = FontWeight.SemiBold)
                         Spacer(Modifier.height(8.dp))
                         LiveText(
-                            "In the Live TV guide, long-press a show and choose Record or Record series. While watching, open the menu and choose Record this show. For a channel with no listings, use + New Recording.",
+                            "In the Live TV guide, hold OK on a show and choose Record or Record Series. Use + New Recording to schedule by time or keyword.",
                             size = 14.sp, color = colors.TextSecondary, maxLines = 3
                         )
                     }
@@ -733,7 +734,21 @@ fun RecordingsScreen(
                             schedules = schedules,
                             posterOf = { titlePosters[posterKey(it.title)] },
                             channelLine = { withPlaylist(it.channel.name, it.channel.sourceId) },
-                            noteOf = { if (it.useCatchup) viewModel.catchupNote(it) else null },
+                            noteOf = {
+                                when {
+                                    it.useCatchup -> viewModel.catchupNote(it)
+                                    it.seriesId in keywordRuleIds && it.nextTryMs > 0L ->
+                                        recContext.getString(R.string.iptv_keyword_recording_waiting)
+                                    else -> null
+                                }
+                            },
+                            badgeOf = {
+                                when {
+                                    it.seriesId in keywordRuleIds -> recContext.getString(R.string.iptv_keyword_recording_badge)
+                                    it.seriesId != null -> "Series"
+                                    else -> null
+                                }
+                            },
                             use24h = use24h,
                             firstModifier = Modifier.focusRequester(first),
                             onClick = { scheduleMenu = it }
@@ -750,9 +765,13 @@ fun RecordingsScreen(
                             gridItems(seriesRules, key = { it.id }) { r ->
                                 SeriesPosterCard(
                                     title = r.title,
-                                    poster = titlePosters[posterKey(r.title)],
+                                    poster = if (r.matchKeyword) null else titlePosters[posterKey(r.title)],
                                     channelLogo = r.channel.logo,
-                                    line = (if (r.newOnly) "New episodes" else "All episodes") + " · " +
+                                    line = (when {
+                                        r.matchKeyword -> recContext.getString(R.string.iptv_keyword_recording_rule)
+                                        r.newOnly -> "New episodes"
+                                        else -> "All episodes"
+                                    }) + " · " +
                                         (if (r.keepLast > 0) "Keep last ${r.keepLast}" else "Keep all") +
                                         (padLine(r)?.let { " · $it" } ?: ""),
                                     channel = withPlaylist(r.channel.name, r.channel.sourceId),
@@ -855,26 +874,29 @@ fun RecordingsScreen(
     // A series: stop it, or choose how many episodes to keep (its own list, so Stop is never
     // pushed off the bottom by the keep choices).
     seriesMenu?.let { r ->
+        val ruleDetail = if (r.matchKeyword) recContext.getString(R.string.iptv_keyword_recording_rule_detail, r.channel.name)
+            else (if (r.newOnly) "Only airings the guide marks as NEW on " else "Every episode on ") + r.channel.name +
+                " (repeats of episodes already recorded are skipped). Stopping it also cancels the airings it set that haven't started; what's recorded is kept."
+        val stopLabel = if (r.matchKeyword) recContext.getString(R.string.iptv_keyword_recording_stop) else "Stop Recording Series"
+        val keepLabel = if (r.matchKeyword) recContext.getString(R.string.iptv_keyword_recording_keep) else "Episodes to Keep"
         RecordingActionDialog(
             title = r.title,
-            detail = (playlistOf(r.channel.sourceId)?.let { "Recording from playlist: $it\n" } ?: "") +
-                (if (r.newOnly) "Only airings the guide marks as NEW on " else "Every episode on ") + r.channel.name +
-                " (repeats of episodes already recorded are skipped). Stopping it also cancels the airings it set that haven't started; what's recorded is kept.",
-            actions = listOf(
-                "Stop Recording Series" to { seriesMenu = null; viewModel.scheduler.removeSeries(r.id) },
-                ("Record: " + (if (r.newOnly) "New Episodes Only" else "All Episodes")) to {
+            detail = (playlistOf(r.channel.sourceId)?.let { "Recording from playlist: $it\n" } ?: "") + ruleDetail,
+            actions = buildList {
+                add(stopLabel to { seriesMenu = null; viewModel.scheduler.removeSeries(r.id) })
+                if (!r.matchKeyword) add(("Record: " + (if (r.newOnly) "New Episodes Only" else "All Episodes")) to {
                     seriesMenu = null; viewModel.scheduler.setNewOnly(r.id, !r.newOnly)
-                },
-                ("Episodes to Keep: " + (if (r.keepLast == 0) "All" else "Last ${r.keepLast}")) to { seriesMenu = null; seriesKeepMenu = r },
-                ("Start Recording Early: " + (if (r.preMin < 0) "Default (${minLabel(liveSettings.recordPreMinutes)})" else minLabel(r.preMin))) to {
+                })
+                add(("$keepLabel: " + (if (r.keepLast == 0) "All" else "Last ${r.keepLast}")) to { seriesMenu = null; seriesKeepMenu = r })
+                add(("Start Recording Early: " + (if (r.preMin < 0) "Default (${minLabel(liveSettings.recordPreMinutes)})" else minLabel(r.preMin))) to {
                     seriesMenu = null; seriesPadMenu = r to "pre"
-                },
-                ("Keep Recording After: " + (if (r.postMin < 0) "Default (${minLabel(liveSettings.recordPostMinutes)})" else minLabel(r.postMin))) to {
+                })
+                add(("Keep Recording After: " + (if (r.postMin < 0) "Default (${minLabel(liveSettings.recordPostMinutes)})" else minLabel(r.postMin))) to {
                     seriesMenu = null; seriesPadMenu = r to "post"
-                },
-                "Fix Match" to { seriesMenu = null; fixMatchFor = r.title to true },
-                "Close" to { seriesMenu = null }
-            ),
+                })
+                if (!r.matchKeyword) add("Fix Match" to { seriesMenu = null; fixMatchFor = r.title to true })
+                add("Close" to { seriesMenu = null })
+            },
             onDismiss = { seriesMenu = null }
         )
     }
@@ -898,8 +920,9 @@ fun RecordingsScreen(
         val choices = if (pre) listOf(0, 1, 2, 5, 10, 15, 30) else listOf(0, 2, 5, 10, 15, 20, 30, 45, 60)
         RecordingActionDialog(
             title = if (pre) "Start Recording Early" else "Keep Recording After",
-            detail = r.title + ": " + (if (pre) "starts this long before each episode." else "keeps going this long after each episode, for shows that often run over.") +
-                " Episodes already set change too. Default follows Settings › Live TV › Recordings.",
+            detail = if (r.matchKeyword) recContext.getString(R.string.iptv_keyword_recording_padding_help)
+                else r.title + ": " + (if (pre) "starts this long before each episode." else "keeps going this long after each episode, for shows that often run over.") +
+                    " Episodes already set change too. Default follows Settings › Live TV › Recordings.",
             actions = (listOf(-1) + choices).map { m ->
                 val label = (if (m < 0) "Default (${minLabel(default)})" else minLabel(m)) + if (current == m) "  ✓" else ""
                 label to {
@@ -912,10 +935,15 @@ fun RecordingsScreen(
     }
     seriesKeepMenu?.let { r ->
         RecordingActionDialog(
-            title = "Episodes to Keep",
-            detail = r.title + ": older episodes are deleted as new ones are recorded.",
+            title = if (r.matchKeyword) recContext.getString(R.string.iptv_keyword_recording_keep) else "Episodes to Keep",
+            detail = if (r.matchKeyword) recContext.getString(R.string.iptv_keyword_recording_retention_help)
+                else r.title + ": older episodes are deleted as new ones are recorded.",
             actions = listOf(0, 1, 3, 5, 10).map { n ->
-                val label = (if (n == 0) "Keep All Episodes" else "Keep the Last $n") + if (r.keepLast == n) "  ✓" else ""
+                val label = (when {
+                    n != 0 -> "Keep the Last $n"
+                    r.matchKeyword -> recContext.getString(R.string.iptv_keyword_recording_keep_all)
+                    else -> "Keep All Episodes"
+                }) + if (r.keepLast == n) "  ✓" else ""
                 label to { seriesKeepMenu = null; viewModel.scheduler.setKeep(r.id, n) }
             },
             onDismiss = { seriesKeepMenu = null }
@@ -1035,6 +1063,9 @@ fun RecordingsScreen(
             channel = ch,
             use24h = use24h,
             onSchedule = { title, start, stop, days -> manualFor = null; viewModel.scheduleManual(ch, title, start, stop, days) },
+            onKeyword = { keyword ->
+                viewModel.scheduler.addKeyword(ch, keyword).also { if (it == KeywordRecordingResult.ADDED) pickedTab = TAB_SERIES }
+            },
             onDismiss = { manualFor = null }
         )
     }
@@ -1494,6 +1525,7 @@ private fun ScheduledByDay(
     posterOf: (RecordingSchedule) -> String?,
     channelLine: (RecordingSchedule) -> String,
     noteOf: (RecordingSchedule) -> String?,
+    badgeOf: (RecordingSchedule) -> String?,
     use24h: Boolean,
     firstModifier: Modifier,
     onClick: (RecordingSchedule) -> Unit
@@ -1541,6 +1573,7 @@ private fun ScheduledByDay(
                     times = time.format(Date(s.startMs)) + " – " + time.format(Date(s.stopMs)),
                     channel = channelLine(s),
                     note = noteOf(s),
+                    ruleBadge = badgeOf(s),
                     modifier = Modifier
                         .then(if (isFirstOfDay) Modifier.focusRequester(dayReqs[d]) else Modifier)
                         .then(if (d == 0 && isFirstOfDay) firstModifier else Modifier)
@@ -1559,7 +1592,7 @@ private fun ScheduledByDay(
     }
 }
 
-/** One show set to record: a small poster, the title, when and where, and Series when a series set it. */
+/** One show set to record: poster, title, time, channel, and rule badge when applicable. */
 @Composable
 private fun ScheduleRow(
     s: RecordingSchedule,
@@ -1567,6 +1600,7 @@ private fun ScheduleRow(
     times: String,
     channel: String,
     note: String?,
+    ruleBadge: String?,
     modifier: Modifier,
     onClick: () -> Unit
 ) {
@@ -1600,12 +1634,12 @@ private fun ScheduleRow(
             LiveText("$times · $channel", size = 13.sp, color = colors.TextSecondary)
             note?.let { LiveText(it, size = 12.sp, color = colors.TextTertiary) }
         }
-        if (s.seriesId != null) {
+        if (ruleBadge != null) {
             Spacer(Modifier.width(12.dp))
             Box(
                 Modifier.clip(RoundedCornerShape(50)).background(colors.Secondary.copy(alpha = 0.16f))
                     .padding(horizontal = 10.dp, vertical = 3.dp)
-            ) { LiveText("Series", size = 12.sp, weight = FontWeight.SemiBold, color = colors.TextSecondary) }
+            ) { LiveText(ruleBadge, size = 12.sp, weight = FontWeight.SemiBold, color = colors.TextSecondary) }
         }
     }
 }

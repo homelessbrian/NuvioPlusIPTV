@@ -35,9 +35,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.text.Normalizer
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -151,7 +153,7 @@ data class RecordingSchedule(
     }
 }
 
-/** "Record series": every airing of [title] on this channel. */
+/** A recording rule for one channel, matching a series title or a keyword phrase. */
 data class SeriesRule(
     val id: String,
     val channel: ChannelSnapshot,
@@ -168,15 +170,26 @@ data class SeriesRule(
     val newOnly: Boolean = false,
     /** This series' own extra time before / after each episode, in minutes (-1 = the Recordings setting). */
     val preMin: Int = -1,
-    val postMin: Int = -1
+    val postMin: Int = -1,
+    val matchKeyword: Boolean = false,
+    /** Guide start times of individual keyword airings canceled by hand. */
+    val skippedStarts: List<Long> = emptyList()
 ) {
     val norm: String get() = LiveTvRepository.normalize(title)
     val hasOwnTimes: Boolean get() = preMin >= 0 || postMin >= 0
+    internal val keyword = if (matchKeyword) {
+        normalizeRecordingKeyword(title).takeIf { it.any(Char::isLetterOrDigit) }.orEmpty()
+    } else ""
+
+    internal fun matchesKeyword(programTitle: String): Boolean =
+        keyword.isNotEmpty() && normalizeRecordingKeyword(programTitle).contains(keyword)
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id); put("channel", channel.toJson()); put("title", title); put("keepLast", keepLast)
         put("seen", org.json.JSONArray(seen)); put("newOnly", newOnly)
         put("preMin", preMin); put("postMin", postMin)
+        if (matchKeyword) put("matchKeyword", true)
+        if (skippedStarts.isNotEmpty()) put("skippedStarts", JSONArray(skippedStarts))
     }
 
     companion object {
@@ -185,10 +198,21 @@ data class SeriesRule(
             o.optJSONArray("seen")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
             o.optBoolean("newOnly", false),
             o.optInt("preMin", -1),
-            o.optInt("postMin", -1)
+            o.optInt("postMin", -1),
+            o.optBoolean("matchKeyword"),
+            o.optJSONArray("skippedStarts")?.let { a -> (0 until a.length()).map { a.optLong(it) }.filter { it > 0L } }.orEmpty()
         )
     }
 }
+
+enum class KeywordRecordingResult { ADDED, ALREADY_EXISTS, INVALID }
+
+private val keywordWhitespace = Regex("""[\p{Z}\s]+""")
+
+private fun recordingKeywordPhrase(text: String): String = keywordWhitespace.replace(text, " ").trim()
+
+private fun normalizeRecordingKeyword(text: String): String =
+    Normalizer.normalize(recordingKeywordPhrase(text), Normalizer.Form.NFC).lowercase()
 
 /**
  * A recording set by hand that repeats: the same time on the chosen days of the week
@@ -266,6 +290,7 @@ class LiveTvRecordingScheduler @Inject constructor(
     private val expandLock = Mutex()
 
     @Volatile private var started = false
+    private var loaded = false
     /** Extra time before and after recordings (Settings → Live TV → Recordings), kept up to date. */
     @Volatile private var padPreMs = PRE_MS
     @Volatile private var padPostMs = POST_MS
@@ -311,7 +336,7 @@ class LiveTvRecordingScheduler @Inject constructor(
 
     fun seriesFor(channelKey: String, title: String): SeriesRule? {
         val n = LiveTvRepository.normalize(title)
-        return _series.value.firstOrNull { it.channel.key == channelKey && it.norm == n }
+        return _series.value.firstOrNull { !it.matchKeyword && it.channel.key == channelKey && it.norm == n }
     }
 
     /**
@@ -380,22 +405,38 @@ class LiveTvRecordingScheduler @Inject constructor(
     }
 
     /** Puts a show in the list (unless that airing is already in it) and sets its alarm. */
-    private suspend fun insert(schedule: RecordingSchedule, guideOffsetMs: Long? = null) {
+    private suspend fun insert(schedule: RecordingSchedule, guideOffsetMs: Long? = null, matchKeyword: Boolean = false) {
         val s = schedule.withGuideDetails(guideOffsetMs)
         mutex.withLock {
-            if (_schedules.value.none { it.channel.key == s.channel.key && it.startMs == s.startMs }) {
-                _schedules.value = (_schedules.value + s).sortedBy { it.startMs }
-                save()
+            if (_schedules.value.any {
+                    it.channel.key == s.channel.key && (it.startMs == s.startMs ||
+                        matchKeyword && s.guideStartMs != null && it.guideStartMs == s.guideStartMs)
+                }) return@withLock
+            if (matchKeyword) {
+                // The guide lookup above suspended. The user may have removed the rule or canceled
+                // this airing through another rule while it was in progress.
+                val rule = _series.value.firstOrNull { it.id == s.seriesId && it.matchKeyword } ?: return@withLock
+                val guideStart = s.guideStartMs ?: s.startMs
+                if (s.startMs <= System.currentTimeMillis() || guideStart in rule.skippedStarts ||
+                    recorder.recordings.value.any { it.channelKey == s.channel.key && it.programStartMs == s.startMs }
+                ) return@withLock
             }
+            _schedules.value = (_schedules.value + s).sortedBy { it.startMs }
+            save()
+            arm(s)
         }
-        arm(s)
     }
 
     /**
      * The recording for [program] and the message to show; null when it records straight away
      * (on now, no catch-up) or can't record.
      */
-    private fun prepare(channel: LiveChannel, program: EpgProgram, seriesId: String?): Pair<RecordingSchedule?, String> {
+    private fun prepare(
+        channel: LiveChannel,
+        program: EpgProgram,
+        seriesId: String?,
+        startImmediately: Boolean = true
+    ): Pair<RecordingSchedule?, String> {
         val now = System.currentTimeMillis()
         val useCatchup = channel.catchup != null && (channel.catchup.days > 0) &&
             (channel.stalkerRef == null || (!program.providerProgramId.isNullOrBlank() &&
@@ -419,7 +460,7 @@ class LiveTvRecordingScheduler @Inject constructor(
             providerSourceIdentity = program.providerSourceIdentity,
             isNew = isNew(program),
         )
-        if (!useCatchup && now >= program.startMs) {
+        if (startImmediately && !useCatchup && now >= program.startMs) {
             // On now, no catch-up: record from now.
             if (recorder.activeFor(channel.key) == null) {
                 scope.launch {
@@ -528,10 +569,32 @@ class LiveTvRecordingScheduler @Inject constructor(
         else "Recording every \"$title\" on ${channel.name}"
     }
 
+    /** Records upcoming guide airings with a title containing [keyword] on this channel. */
+    suspend fun addKeyword(channel: LiveChannel, keyword: String): KeywordRecordingResult = withContext(Dispatchers.IO) {
+        val title = recordingKeywordPhrase(keyword)
+        val rule = SeriesRule("r" + System.nanoTime(), ChannelSnapshot.of(channel), title, matchKeyword = true)
+        if (rule.keyword.isEmpty()) return@withContext KeywordRecordingResult.INVALID
+        val added = mutex.withLock {
+            loadLocked()
+            if (_series.value.any { it.matchKeyword && it.channel.key == channel.key && it.keyword == rule.keyword }) {
+                false
+            } else {
+                val rules = _series.value + rule
+                writeSchedules(rules)
+                _series.value = rules
+                true
+            }
+        }
+        if (!added) return@withContext KeywordRecordingResult.ALREADY_EXISTS
+        scope.launch { expandSeries() }
+        KeywordRecordingResult.ADDED
+    }
+
     /** New episodes only, or every episode, for a series. */
     fun setNewOnly(seriesId: String, newOnly: Boolean) {
         scope.launch {
             mutex.withLock {
+                if (_series.value.any { it.id == seriesId && it.matchKeyword }) return@launch
                 _series.value = _series.value.map { if (it.id == seriesId) it.copy(newOnly = newOnly) else it }
                 if (newOnly) {
                     // Repeats it already set that haven't started go.
@@ -620,12 +683,17 @@ class LiveTvRecordingScheduler @Inject constructor(
         val rules = _series.value
         if (rules.isEmpty()) return@withLock
         val now = System.currentTimeMillis()
+        val keywordGuideOffset = if (rules.any(SeriesRule::matchKeyword)) currentGuideOffset() ?: 0L else 0L
         for (rule in rules) {
+            val listings = runCatching { repository.upcomingListings(rule.channel.key, days = 7) }.getOrDefault(emptyList())
+            val channel = repository.channels.value.firstOrNull { it.key == rule.channel.key } ?: rule.channel.toChannel()
+            if (rule.matchKeyword) {
+                expandKeyword(rule, channel, listings, now, keywordGuideOffset)
+                continue
+            }
             // Episodes set in this pass (and the ones set before it, which are in the list now:
             // each one is put in the list before the next airing is looked at).
             val setNow = mutableSetOf<String>()
-            val listings = runCatching { repository.upcomingListings(rule.channel.key, days = 7) }.getOrDefault(emptyList())
-            val channel = repository.channels.value.firstOrNull { it.key == rule.channel.key } ?: rule.channel.toChannel()
             listings.filter { LiveTvRepository.normalize(cleanTitle(it.title)) == rule.norm && it.stopMs > now }.forEach { p ->
                 // New episodes only: repeats (airings without the guide's NEW mark) are left out.
                 if (rule.newOnly && !isNew(p)) return@forEach
@@ -648,6 +716,27 @@ class LiveTvRecordingScheduler @Inject constructor(
                 // upcomingListings returns the guide's stored times, before the UI offset.
                 prepare(channel, p, rule.id).first?.let { insert(it, guideOffsetMs = 0L) }
             }
+        }
+    }
+
+    private suspend fun expandKeyword(
+        rule: SeriesRule,
+        channel: LiveChannel,
+        listings: List<EpgProgram>,
+        now: Long,
+        guideOffset: Long
+    ) {
+        for (listing in listings) {
+            val program = listing.copy(startMs = listing.startMs + guideOffset, stopMs = listing.stopMs + guideOffset)
+            if (program.startMs <= now || program.startMs > now + KEYWORD_LOOKAHEAD_MS || program.stopMs <= program.startMs) continue
+            if (listing.startMs in rule.skippedStarts || !rule.matchesKeyword(listing.title)) continue
+            if (isScheduled(channel.key, program) || recorder.recordings.value.any {
+                    it.channelKey == channel.key && it.programStartMs == program.startMs
+                }) continue
+            // A listing may reach its start time during expansion. Use the queued path so the
+            // rule and airing can always be checked (and canceled) before the alarm is armed.
+            val schedule = prepare(channel, program, rule.id, startImmediately = false).first ?: continue
+            insert(schedule.copy(guideStartMs = listing.startMs), matchKeyword = true)
         }
     }
 
@@ -737,7 +826,11 @@ class LiveTvRecordingScheduler @Inject constructor(
     fun fire(id: String) {
         scope.launch {
             if (!started) { load() }
-            val pending = _schedules.value.firstOrNull { it.id == id } ?: run { recorder.stopServiceIfIdle(); return@launch }
+            val (pending, matchKeyword) = mutex.withLock {
+                val schedule = _schedules.value.firstOrNull { it.id == id }
+                schedule to _series.value.any { schedule != null && it.id == schedule.seriesId && it.matchKeyword }
+            }
+            if (pending == null) { recorder.stopServiceIfIdle(); return@launch }
             // Older queued recordings may only have a guide-grid title and time.
             val s = pending.withGuideDetails()
             if (_schedules.value.none { it == pending }) return@launch
@@ -745,11 +838,27 @@ class LiveTvRecordingScheduler @Inject constructor(
             if (!s.useCatchup) {
                 if (now >= s.stopMs) { drop(s, "\"${s.title}\" was missed"); return@launch }
                 // Too early (the alarm came early): set it again.
-                if (now < s.startMs - s.pre - 60_000L) { arm(s); recorder.stopServiceIfIdle(); return@launch }
+                if (now < s.startMs - s.pre - 60_000L || (matchKeyword && now < s.nextTryMs)) {
+                    arm(s); recorder.stopServiceIfIdle(); return@launch
+                }
                 val channel = freshChannel(s.channel)
-                markSeen(s)
-                recorder.start(channel, channel.url, s.title, s.episode, s.description, s.startMs, s.stopMs, s.stopMs + s.post,
+                if (!matchKeyword) markSeen(s)
+                val recording = recorder.start(channel, channel.url, s.title, s.episode, s.description, s.startMs, s.stopMs, s.stopMs + s.post,
                     onFinished = { rec -> s.seriesId?.let { keepOnlyNewest(it) } }, seriesId = s.seriesId)
+                if (matchKeyword && recording.isRecording && recording.channelKey == channel.key && recording.programStartMs != s.startMs) {
+                    // The recorder kept the channel's earlier airing, which may still have padding
+                    // left. Retry this airing when that recording ends, while it can still be recorded.
+                    val retryAt = minOf(s.stopMs, maxOf(recording.stopAtMs, System.currentTimeMillis() + KEYWORD_LIVE_RETRY_MS))
+                    val retry = s.copy(nextTryMs = retryAt)
+                    mutex.withLock {
+                        if (pending !in _schedules.value) return@withLock
+                        _schedules.value = _schedules.value.map { if (it == pending) retry else it }
+                        save()
+                        arm(retry)
+                    }
+                    recorder.stopServiceIfIdle()
+                    return@launch
+                }
                 remove(s)
                 LiveTvNotice.show("Recording \"${s.title}\" on ${channel.name}")
                 if (_repeats.value.any { it.id == s.seriesId }) expandRepeats()
@@ -774,8 +883,10 @@ class LiveTvRecordingScheduler @Inject constructor(
                 ?: if (stalkerArchive == null) kotlinx.coroutines.withTimeoutOrNull(10_000L) { repository.learnServerZone(channel) } else null
             // As when watching catch-up: the guide's shift off, the playlist's catch-up shift on.
             val overrides = runCatching { prefs.userState.first().epgOverrides }.getOrDefault(emptyMap())
+            val globalGuideOffset = if (matchKeyword && s.guideStartMs != null) s.startMs - s.guideStartMs
+                else settings.epgOffsetMinutes * 60_000L
             val shift = repository.guideShiftMs(channel, overrides) +
-                settings.epgOffsetMinutes * 60_000L - settings.catchupShiftMinutes * 60_000L -
+                globalGuideOffset - settings.catchupShiftMinutes * 60_000L -
                 (playlist?.catchupShiftMinutes ?: 0) * 60_000L
             val url = if (stalkerArchive != null) channel.url else catchup?.let {
                 // Same kind of link as watching (the catch-up setting): HLS comes as pieces, which
@@ -802,8 +913,8 @@ class LiveTvRecordingScheduler @Inject constructor(
                         fireTime(o) <= now2 + QUEUE_WAIT_MS
                 }
                 if (recorder.catchupBusy(channel.sourceId) || earlierWaiting) return@withLock null
-                remove(s)
-                markSeen(s)
+                if (!remove(s, requirePresent = matchKeyword)) return@withLock null
+                if (!matchKeyword) markSeen(s)
                 if (_repeats.value.any { it.id == s.seriesId }) scope.launch { expandRepeats() }
                 recorder.start(
                 channel, url, s.title, s.episode, s.description, s.startMs, s.stopMs,
@@ -836,8 +947,17 @@ class LiveTvRecordingScheduler @Inject constructor(
                         if (offline) com.nuvio.tv.livetv.model.LiveTvLoadReport.add("\"${s.title}\": no connection, so it's saved once the connection is back")
                         val retry = s.copy(attempts = if (offline) s.attempts else s.attempts + 1, nextTryMs = System.currentTimeMillis() + RETRY_MS)
                         scope.launch {
-                            mutex.withLock { _schedules.value = (_schedules.value + retry).sortedBy { it.startMs }; save() }
-                            arm(retry)
+                            mutex.withLock {
+                                if (matchKeyword) {
+                                    val rule = _series.value.firstOrNull { it.id == retry.seriesId } ?: return@withLock
+                                    if ((retry.guideStartMs ?: retry.startMs) in rule.skippedStarts || _schedules.value.any {
+                                            it.channel.key == retry.channel.key && it.startMs == retry.startMs
+                                        }) return@withLock
+                                }
+                                _schedules.value = (_schedules.value + retry).sortedBy { it.startMs }
+                                save()
+                                arm(retry)
+                            }
                         }
                     }
                 },
@@ -849,10 +969,11 @@ class LiveTvRecordingScheduler @Inject constructor(
                 // Another download from this provider first: check again in a minute (not a try used up).
                 val wait = s.copy(nextTryMs = System.currentTimeMillis() + QUEUE_WAIT_MS)
                 mutex.withLock {
+                    if (matchKeyword && _schedules.value.none { it.id == s.id }) return@withLock
                     _schedules.value = _schedules.value.map { if (it.id == s.id) wait else it }
                     save()
+                    arm(wait)
                 }
-                arm(wait)
                 recorder.stopServiceIfIdle()
             }
         }
@@ -935,6 +1056,18 @@ class LiveTvRecordingScheduler @Inject constructor(
             }
             return
         }
+        if (_series.value.any { it.id == id && it.matchKeyword }) {
+            val keepSince = System.currentTimeMillis() - KEYWORD_LOOKAHEAD_MS
+            val guideStart = s.guideStartMs ?: s.startMs
+            _series.value = _series.value.map { rule ->
+                // The same channel and time identify this airing for every keyword rule, even if
+                // the guide used flags in its original title that aren't in the recording title.
+                if (rule.matchKeyword && rule.channel.key == s.channel.key && guideStart !in rule.skippedStarts) {
+                    rule.copy(skippedStarts = rule.skippedStarts.filter { it >= keepSince } + guideStart)
+                } else rule
+            }
+            return
+        }
         val ep = episodeKey(s.episode) ?: return
         _series.value = _series.value.map { r ->
             if (r.id == id && ep !in r.seen) r.copy(seen = (r.seen + ep).takeLast(500)) else r
@@ -953,11 +1086,11 @@ class LiveTvRecordingScheduler @Inject constructor(
         }
     }
 
-    private suspend fun remove(s: RecordingSchedule) {
-        mutex.withLock {
-            _schedules.value = _schedules.value.filterNot { it.id == s.id }
-            save()
-        }
+    private suspend fun remove(s: RecordingSchedule, requirePresent: Boolean = false): Boolean = mutex.withLock {
+        if (requirePresent && _schedules.value.none { it.id == s.id }) return@withLock false
+        _schedules.value = _schedules.value.filterNot { it.id == s.id }
+        save()
+        true
     }
 
     private suspend fun drop(s: RecordingSchedule, message: String) {
@@ -970,20 +1103,26 @@ class LiveTvRecordingScheduler @Inject constructor(
     // ------------------------------------------------------------------ saving
 
     private fun save() {
-        runCatching {
-            file.parentFile?.mkdirs()
-            val o = JSONObject()
-            o.put("schedules", JSONArray().apply { _schedules.value.forEach { put(it.toJson()) } })
-            o.put("series", JSONArray().apply { _series.value.forEach { put(it.toJson()) } })
-            o.put("repeats", JSONArray().apply { _repeats.value.forEach { put(it.toJson()) } })
-            val tmp = File(file.parentFile, file.name + ".tmp")
-            tmp.writeText(o.toString())
-            if (!tmp.renameTo(file)) { tmp.copyTo(file, overwrite = true); tmp.delete() }
-        }
+        runCatching { writeSchedules(_series.value) }
     }
 
-    private suspend fun load() = mutex.withLock {
-        val o = runCatching { JSONObject(file.readText()) }.getOrNull() ?: return@withLock
+    private fun writeSchedules(rules: List<SeriesRule>) {
+        file.parentFile?.mkdirs()
+        val o = JSONObject()
+        o.put("schedules", JSONArray().apply { _schedules.value.forEach { put(it.toJson()) } })
+        o.put("series", JSONArray().apply { rules.forEach { put(it.toJson()) } })
+        o.put("repeats", JSONArray().apply { _repeats.value.forEach { put(it.toJson()) } })
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        tmp.writeText(o.toString())
+        if (!tmp.renameTo(file)) { tmp.copyTo(file, overwrite = true); tmp.delete() }
+    }
+
+    private suspend fun load() = mutex.withLock { loadLocked() }
+
+    private fun loadLocked() {
+        if (loaded) return
+        loaded = true
+        val o = runCatching { JSONObject(file.readText()) }.getOrNull() ?: return
         val s = o.optJSONArray("schedules")
         val r = o.optJSONArray("series")
         _schedules.value = (0 until (s?.length() ?: 0)).mapNotNull { i -> runCatching { RecordingSchedule.fromJson(s!!.getJSONObject(i)) }.getOrNull() }
@@ -1017,6 +1156,8 @@ class LiveTvRecordingScheduler @Inject constructor(
         /** A catch-up download waiting for another from the same provider checks again this often. */
         const val QUEUE_WAIT_MS = 60_000L
         const val MAX_TRIES = 3
+        private const val KEYWORD_LOOKAHEAD_MS = 7 * 24 * 60 * 60_000L
+        private const val KEYWORD_LIVE_RETRY_MS = 5_000L
 
         private val SE = Regex("""(?i)\bS(?:eason)?\s*0*(\d{1,3})\s*[\-.:,x]?\s*E(?:p(?:isode)?)?\s*0*(\d{1,4})\b""")
         private val SXE = Regex("""\b0*(\d{1,2})\s*x\s*0*(\d{1,4})\b""")

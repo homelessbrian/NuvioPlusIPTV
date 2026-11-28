@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_keyword_recording_dialog_title">Keyword Recording</string>
+    <string name="iptv_keyword_recording_dialog_description">Match a word or phrase in programme titles on this channel.</string>
+    <string name="iptv_keyword_recording_dialog_hint">Word or phrase</string>
+    <string name="iptv_keyword_recording_dialog_added">Keyword recording added</string>
+    <string name="iptv_keyword_recording_dialog_duplicate">This keyword recording already exists on this channel.</string>
+    <string name="iptv_keyword_recording_dialog_invalid">Enter a word or phrase with at least one letter or number.</string>
+    <string name="iptv_keyword_recording_dialog_save_failed">Could not save the keyword recording. Try again.</string>
+</resources>

@@ -89,6 +89,7 @@ internal fun BackupChannelMenu(
                 LiveTvNotice.show(viewModel.scheduler.addManual(channel, title, start, stop, days))
                 onDismiss()
             },
+            onKeyword = { keyword -> viewModel.scheduler.addKeyword(channel, keyword) },
             onDismiss = onDismiss
         )
         else -> {
@@ -103,7 +104,7 @@ internal fun BackupChannelMenu(
             }
             val seriesLabel = program?.let { p ->
                 val n = com.nuvio.tv.livetv.data.LiveTvRepository.normalize(titleMarks(p.title).title)
-                if (series.any { it.channel.key == channel.key && it.norm == n }) "Stop recording series" else "Record series"
+                if (series.any { !it.matchKeyword && it.channel.key == channel.key && it.norm == n }) "Stop recording series" else "Record series"
             }
             val canRestart = viewModel.canWatchFromStart(channel)
             val bell = com.nuvio.tv.livetv.calendar.rememberLiveBell(program, channel)
