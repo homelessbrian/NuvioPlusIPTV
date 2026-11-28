@@ -26,9 +26,10 @@ class RemoteControlCodecTest {
 
     @Test fun keyAliasesAndBlankAutomaticNamesRoundTripWithoutDuplicateOkButtons() {
         val config = RemoteConfiguration(extras = listOf(RemoteExtraButton(RemoteButton(KeyEvent.KEYCODE_PROG_RED))))
-            .withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, RemoteButton(KeyEvent.KEYCODE_ENTER), RemoteAction.OPEN_GUIDE)
+            .withBinding(RemoteScreen.LIVE_TV, RemotePress.ONCE, RemoteButton(KeyEvent.KEYCODE_ENTER), RemoteAction.OPEN_RECENT_CHANNELS)
         val decoded = RemoteControlCodec.decode(RemoteControlCodec.encode(config))
         assertEquals(RemoteButton(KeyEvent.KEYCODE_DPAD_CENTER), decoded.bindings.single().button)
+        assertEquals(RemoteAction.OPEN_RECENT_CHANNELS, decoded.bindings.single().action)
         assertEquals("", decoded.extras.single().label)
     }
 

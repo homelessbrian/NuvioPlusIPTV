@@ -1211,6 +1211,12 @@ internal fun LiveTvSettingsContent(
                     )
                     SubHeading(context.getString(R.string.iptv_settings_moving_around))
                     SettingsToggleRow(
+                        context.getString(R.string.iptv_settings_simple_live_tv),
+                        context.getString(R.string.iptv_settings_simple_live_tv_description),
+                        s.simpleLiveTv,
+                        { update { it.copy(simpleLiveTv = !it.simpleLiveTv) } }
+                    )
+                    SettingsToggleRow(
                         context.getString(R.string.iptv_settings_ok_opens_full_screen),
                         context.getString(R.string.iptv_settings_ok_on_a_show_goes_straight_to_full),
                         s.openFullscreenOnSelect,

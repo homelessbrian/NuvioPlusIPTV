@@ -5,11 +5,14 @@ import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.remote.RemoteAction
 import com.nuvio.tv.remote.RemoteButton
 import com.nuvio.tv.remote.RemoteCatalog
+import com.nuvio.tv.remote.RemoteConfiguration
 import com.nuvio.tv.remote.RemoteDefaultBinding
 import com.nuvio.tv.remote.RemotePress
 import com.nuvio.tv.remote.RemoteScreen
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Pin the legacy input behavior that the guide describes, independent of custom bindings. */
@@ -76,6 +79,35 @@ class RemoteHostDefaultsTest {
         assertEquals(RemoteAction.OPTIONS, live.action(KeyEvent.KEYCODE_DPAD_CENTER, RemotePress.HOLD))
         assertEquals(550L, live.first { it.button.keyCode == KeyEvent.KEYCODE_DPAD_CENTER && it.press == RemotePress.HOLD }.holdMillis)
         assertNull(live.action(KeyEvent.KEYCODE_GUIDE))
+    }
+
+    @Test fun `simple live TV changes short OK only during regular live playback`() {
+        val settings = LiveTvSettings(simpleLiveTv = true)
+        val live = RemoteHostDefaults.live(settings)
+        assertEquals(RemoteAction.OPEN_RECENT_CHANNELS, live.action(KeyEvent.KEYCODE_DPAD_CENTER))
+        assertEquals(RemoteAction.OPTIONS, live.action(KeyEvent.KEYCODE_DPAD_CENTER, RemotePress.HOLD))
+        assertEquals(RemoteAction.OPEN_RECENT_CHANNELS,
+            RemoteHostDefaults.live(settings, leftSeeks = true).action(KeyEvent.KEYCODE_DPAD_CENTER))
+        assertEquals(RemoteAction.SHOW_CONTROLS,
+            RemoteHostDefaults.live(settings, rightSeeks = true).action(KeyEvent.KEYCODE_DPAD_CENTER))
+        assertEquals(RemoteAction.SHOW_CONTROLS,
+            RemoteHostDefaults.live(settings, replaying = true).action(KeyEvent.KEYCODE_DPAD_CENTER))
+        assertEquals(RemoteAction.SHOW_CONTROLS,
+            RemoteHostDefaults.live(settings, recentChannelsAvailable = false).action(KeyEvent.KEYCODE_DPAD_CENTER))
+    }
+
+    @Test fun `a custom OK overrides simple mode and recents is assignable in live TV only`() {
+        val screen = RemoteScreen.LIVE_TV
+        val recent = RemoteAction.OPEN_RECENT_CHANNELS
+        val ok = RemoteButton(KeyEvent.KEYCODE_DPAD_CENTER)
+        val defaults = RemoteHostDefaults.live(LiveTvSettings(simpleLiveTv = true))
+        val custom = RemoteConfiguration().withBinding(screen, RemotePress.ONCE, ok, RemoteAction.SHOW_INFO)
+        assertEquals(RemoteAction.SHOW_INFO, RemoteCatalog.effectiveAction(custom, screen, RemotePress.ONCE, ok, defaults))
+        assertEquals(RemoteAction.OPTIONS, RemoteCatalog.effectiveAction(custom, screen, RemotePress.HOLD, ok, defaults))
+        assertEquals(listOf(screen), RemoteScreen.entries.filter { recent in RemoteCatalog.supportedActions(it) })
+        assertTrue(RemoteHostDefaults.canHandleLiveAction(recent, browsing = false))
+        assertFalse(RemoteHostDefaults.canHandleLiveAction(recent, browsing = true))
+        assertFalse(RemoteHostDefaults.canHandleLiveAction(recent, browsing = false, recentChannelsAvailable = false))
     }
 
     @Test fun `normal movie and recording players teach their different OK and media semantics`() {

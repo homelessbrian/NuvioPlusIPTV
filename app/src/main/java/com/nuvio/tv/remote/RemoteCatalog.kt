@@ -37,7 +37,8 @@ object RemoteCatalog {
     }
 
     fun supportedActions(screen: RemoteScreen): List<RemoteAction> = when (screen) {
-        RemoteScreen.LIVE_TV -> listOf(RemoteAction.OPEN_GUIDE, RemoteAction.CHANNEL_BROWSER, RemoteAction.SHOW_INFO, RemoteAction.SHOW_CONTROLS,
+        RemoteScreen.LIVE_TV -> listOf(RemoteAction.OPEN_GUIDE, RemoteAction.CHANNEL_BROWSER, RemoteAction.OPEN_RECENT_CHANNELS,
+            RemoteAction.SHOW_INFO, RemoteAction.SHOW_CONTROLS,
             RemoteAction.NEXT_CHANNEL, RemoteAction.PREVIOUS_CHANNEL, RemoteAction.LAST_CHANNEL,
             RemoteAction.BROWSE_NEXT_CHANNEL, RemoteAction.BROWSE_PREVIOUS_CHANNEL, RemoteAction.PLAY_PAUSE,
             RemoteAction.OPTIONS, RemoteAction.AUDIO, RemoteAction.SUBTITLES, RemoteAction.MULTIVIEW,

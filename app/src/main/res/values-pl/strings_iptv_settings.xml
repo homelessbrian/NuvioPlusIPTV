@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Uruchamiaj na pełnym ekranie"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"Gdy pierwszy raz po uruchomieniu aplikacji otworzysz telewizję na żywo, ostatni kanał włączy się na pełnym ekranie"</string>
     <string name="iptv_settings_moving_around">"Poruszanie się"</string>
+    <string name="iptv_settings_simple_live_tv">"Prosta telewizja na żywo"</string>
+    <string name="iptv_settings_simple_live_tv_description">"Podczas oglądania telewizji na żywo OK otwiera ostatnio oglądane kanały. Naciśnij OK ponownie, aby otworzyć program TV."</string>
+    <string name="iptv_simple_live_tv_guide">"Program TV"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Ostatnio oglądane kanały"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"Tutaj pojawią się oglądane przez Ciebie kanały."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK otwiera pełny ekran"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK na programie przechodzi od razu do pełnego ekranu, zamiast najpierw odtwarzać go w podglądzie"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Przechodź do nazw kanałów (jak w dekoderze)"</string>

@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Démarrer en plein écran"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"La première fois que vous ouvrez la TV en direct après le lancement de l’app, votre dernière chaîne s’affiche en plein écran"</string>
     <string name="iptv_settings_moving_around">"Navigation"</string>
+    <string name="iptv_settings_simple_live_tv">"TV en direct simplifiée"</string>
+    <string name="iptv_settings_simple_live_tv_description">"En regardant la TV en direct, OK ouvre les chaînes récentes. Appuyez de nouveau sur OK pour ouvrir le guide TV."</string>
+    <string name="iptv_simple_live_tv_guide">"Guide TV"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Chaînes récentes"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"Les chaînes que vous regardez apparaîtront ici."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK ouvre en plein écran"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK sur un programme passe directement en plein écran, au lieu de le lire d’abord dans l’aperçu"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Arriver sur les noms des chaînes (comme un décodeur)"</string>

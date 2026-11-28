@@ -29,6 +29,7 @@ internal fun RemoteAction.titleRes(screen: RemoteScreen? = null): Int = when {
     else -> when (this) {
     RemoteAction.OPEN_GUIDE -> R.string.remote_action_open_guide
     RemoteAction.CHANNEL_BROWSER -> R.string.remote_action_channel_browser
+    RemoteAction.OPEN_RECENT_CHANNELS -> R.string.remote_action_open_recent_channels
     RemoteAction.SHOW_INFO -> R.string.remote_action_show_info
     RemoteAction.NEXT_CHANNEL -> R.string.remote_action_next_channel
     RemoteAction.PREVIOUS_CHANNEL -> R.string.remote_action_previous_channel
@@ -75,6 +76,7 @@ internal fun RemoteAction.helpRes(screen: RemoteScreen? = null): Int = when {
     else -> when (this) {
     RemoteAction.OPEN_GUIDE -> R.string.remote_action_open_guide_help
     RemoteAction.CHANNEL_BROWSER -> R.string.remote_action_channel_browser_help
+    RemoteAction.OPEN_RECENT_CHANNELS -> R.string.remote_action_open_recent_channels_help
     RemoteAction.SHOW_INFO -> R.string.remote_action_show_info_help
     RemoteAction.NEXT_CHANNEL -> R.string.remote_action_next_channel_help
     RemoteAction.PREVIOUS_CHANNEL -> R.string.remote_action_previous_channel_help

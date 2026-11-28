@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"البدء بملء الشاشة"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"أول مرة تفتح فيها Live TV بعد تشغيل التطبيق، تُعرض آخر قناة بملء الشاشة"</string>
     <string name="iptv_settings_moving_around">"التنقل"</string>
+    <string name="iptv_settings_simple_live_tv">"البث المباشر المبسّط"</string>
+    <string name="iptv_settings_simple_live_tv_description">"أثناء مشاهدة البث المباشر، يفتح زر OK القنوات التي شوهدت مؤخرًا. اضغط عليه مجددًا لفتح دليل التلفزيون."</string>
+    <string name="iptv_simple_live_tv_guide">"دليل التلفزيون"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"القنوات التي شوهدت مؤخرًا"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"ستظهر هنا القنوات التي تشاهدها."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK يفتح ملء الشاشة"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK على برنامج ينتقل مباشرة إلى ملء الشاشة، بدل تشغيله في المعاينة أولًا"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"الانتقال إلى أسماء القنوات (مثل جهاز الكابل)"</string>

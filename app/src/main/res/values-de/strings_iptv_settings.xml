@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Im Vollbild starten"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"Wenn du Live-TV nach dem App-Start zum ersten Mal öffnest, läuft dein letzter Sender im Vollbild"</string>
     <string name="iptv_settings_moving_around">"Navigation"</string>
+    <string name="iptv_settings_simple_live_tv">"Einfaches Live-TV"</string>
+    <string name="iptv_settings_simple_live_tv_description">"Beim Live-TV öffnet OK die zuletzt gesehenen Sender. Drücke erneut OK, um den TV-Programmführer zu öffnen."</string>
+    <string name="iptv_simple_live_tv_guide">"TV-Programmführer"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Zuletzt gesehene Sender"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"Hier erscheinen die Sender, die du ansiehst."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK öffnet Vollbild"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK auf einer Sendung geht direkt ins Vollbild, statt sie zuerst in der Vorschau abzuspielen"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Auf Sendernamen landen (wie bei einer Kabelbox)"</string>

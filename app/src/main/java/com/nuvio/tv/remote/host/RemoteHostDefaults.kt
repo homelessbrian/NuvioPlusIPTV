@@ -12,8 +12,15 @@ import com.nuvio.tv.remote.RemoteScreen
 /** The guide describes the host's effective defaults; it never changes those defaults. */
 object RemoteHostDefaults {
     /** Browsing stays remappable for browse commands; its OK, Back and other navigation stay native. */
-    fun canHandleLiveAction(action: RemoteAction, browsing: Boolean): Boolean = !browsing ||
-        action == RemoteAction.BROWSE_NEXT_CHANNEL || action == RemoteAction.BROWSE_PREVIOUS_CHANNEL
+    fun canHandleLiveAction(action: RemoteAction, browsing: Boolean, recentChannelsAvailable: Boolean = true): Boolean =
+        when (action) {
+            RemoteAction.BROWSE_NEXT_CHANNEL, RemoteAction.BROWSE_PREVIOUS_CHANNEL -> true
+            RemoteAction.OPEN_RECENT_CHANNELS -> !browsing && recentChannelsAvailable
+            else -> !browsing
+        }
+
+    fun liveOkAction(settings: LiveTvSettings, recentChannelsAvailable: Boolean): RemoteAction =
+        if (settings.simpleLiveTv && recentChannelsAvailable) RemoteAction.OPEN_RECENT_CHANNELS else RemoteAction.SHOW_CONTROLS
 
     fun canRemapLiveButton(button: RemoteButton, browsing: Boolean): Boolean =
         !browsing || button.canonical().keyCode != KeyEvent.KEYCODE_DPAD_CENTER
@@ -33,7 +40,8 @@ object RemoteHostDefaults {
         settings: LiveTvSettings,
         replaying: Boolean = false,
         leftSeeks: Boolean = false,
-        rightSeeks: Boolean = false
+        rightSeeks: Boolean = false,
+        recentChannelsAvailable: Boolean = !replaying && !rightSeeks
     ): List<RemoteDefaultBinding> {
         val defaults = RemoteCatalog.defaults(RemoteScreen.LIVE_TV).toMutableList()
         fun set(code: Int, action: RemoteAction?, press: RemotePress = RemotePress.ONCE, holdMillis: Long = 0,
@@ -49,7 +57,7 @@ object RemoteHostDefaults {
         listOf(KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN).forEach {
             set(it, if (settings.reverseZap) next else previous)
         }
-        set(KeyEvent.KEYCODE_DPAD_CENTER, RemoteAction.SHOW_CONTROLS)
+        set(KeyEvent.KEYCODE_DPAD_CENTER, liveOkAction(settings, recentChannelsAvailable))
         set(KeyEvent.KEYCODE_DPAD_LEFT, when {
             replaying || leftSeeks -> RemoteAction.SEEK_BACK
             settings.overlayMode -> RemoteAction.CHANNEL_BROWSER

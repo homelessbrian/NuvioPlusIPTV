@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Iniciar em tela cheia"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"Na primeira vez que você abre a TV ao vivo depois de iniciar o app, o seu último canal toca em tela cheia"</string>
     <string name="iptv_settings_moving_around">"Navegação"</string>
+    <string name="iptv_settings_simple_live_tv">"TV ao vivo simplificada"</string>
+    <string name="iptv_settings_simple_live_tv_description">"Ao assistir à TV ao vivo, OK abre os canais recentes. Pressione OK novamente para abrir o guia de TV."</string>
+    <string name="iptv_simple_live_tv_guide">"Guia de TV"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Canais recentes"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"Os canais que você assistir aparecerão aqui."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK abre em tela cheia"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK num programa vai direto para a tela cheia, em vez de reproduzi-lo primeiro na prévia"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Cair nos nomes dos canais (como um decodificador)"</string>
