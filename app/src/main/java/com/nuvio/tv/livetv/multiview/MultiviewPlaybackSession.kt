@@ -323,7 +323,7 @@ private class AndroidMultiviewPanePlayer(
      */
     private fun tryOtherFormat(error: PlaybackException): Boolean {
         val ch = channel ?: return false
-        if (ch.stalkerRef != null) return false
+        if (ch.stalkerRef != null || com.nuvio.tv.livetv.data.AddonChannels.isRef(ch.url)) return false
         val url = streamUrl ?: ch.url
         if (LiveStreamFormats.isUnrecognizedFormat(error) && formatGuess < LiveStreamFormats.FORMAT_GUESSES.size) {
             streamMime = LiveStreamFormats.FORMAT_GUESSES[formatGuess++]
@@ -621,8 +621,33 @@ private class AndroidMultiviewPanePlayer(
         mediaPolicy = null
         val expected = ++generation
         error = null
-        resolving = channel.stalkerRef != null
-        if (channel.stalkerRef != null) {
+        val addon = com.nuvio.tv.livetv.data.AddonChannels.isRef(channel.url)
+        resolving = channel.stalkerRef != null || addon
+        if (addon) {
+            // An add-on channel: its link is asked from the add-on (the next one on a reconnect).
+            player.stop()
+            player.clearMediaItems()
+            onChanged()
+            val attempt = reconnectAttempt
+            resolveJob = scope.launch {
+                try {
+                    if (attempt > 0 && attempt % 3 == 0) com.nuvio.tv.livetv.data.AddonChannels.forget(channel)
+                    val link = com.nuvio.tv.livetv.data.AddonChannels.pick(channel, attempt)
+                    if (released || expected != generation) return@launch
+                    resolving = false
+                    prepareResolved(channel.copy(url = link.url, headers = link.headers))
+                    onChanged()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    if (released || expected != generation) return@launch
+                    resolving = false
+                    if (!scheduleReconnect("couldn't get the add-on's link")) {
+                        fail(com.nuvio.tv.livetv.data.AddonChannels.failureMessage(failure, channel))
+                    }
+                }
+            }
+        } else if (channel.stalkerRef != null) {
             player.stop()
             player.clearMediaItems()
             onChanged()

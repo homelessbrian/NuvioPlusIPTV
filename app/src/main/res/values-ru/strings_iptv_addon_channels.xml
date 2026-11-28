@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Добавить каналы из дополнения"</string>
+    <string name="iptv_addon_add_subtitle">"Списки каналов из установленных дополнений, например CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Дополнение)"</string>
+    <string name="iptv_addon_pick_title">"Выберите список каналов"</string>
+    <string name="iptv_addon_pick_loading">"Проверяем ваши дополнения…"</string>
+    <string name="iptv_addon_pick_empty">"Ни в одном установленном дополнении нет списка каналов. Сначала установите такое (например, CNCVerse Bridge) в разделе «Дополнения»."</string>
+    <string name="iptv_addon_pick_hint">"Каждый список добавляется как отдельный плейлист. Если дополнение — это приложение на этом телевизоре, не закрывайте его."</string>
+    <string name="iptv_addon_pick_added">"Добавлено"</string>
+    <string name="iptv_addon_guide_matching_on">"Сопоставление с телегидом: Вкл."</string>
+    <string name="iptv_addon_guide_matching_off">"Сопоставление с телегидом: Выкл."</string>
+</resources>

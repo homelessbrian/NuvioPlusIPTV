@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"从附加组件添加频道"</string>
+    <string name="iptv_addon_add_subtitle">"来自已安装附加组件的频道列表，例如 CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">"（附加组件）"</string>
+    <string name="iptv_addon_pick_title">"选择频道列表"</string>
+    <string name="iptv_addon_pick_loading">"正在查看你的附加组件…"</string>
+    <string name="iptv_addon_pick_empty">"已安装的附加组件都没有频道列表。请先在附加组件中安装一个（例如 CNCVerse Bridge）。"</string>
+    <string name="iptv_addon_pick_hint">"每个列表会作为单独的播放列表添加。如果附加组件是这台电视上的应用，请保持其运行。"</string>
+    <string name="iptv_addon_pick_added">"已添加"</string>
+    <string name="iptv_addon_guide_matching_on">"节目单匹配：开"</string>
+    <string name="iptv_addon_guide_matching_off">"节目单匹配：关"</string>
+</resources>

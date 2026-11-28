@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Dodaj kanały z dodatku"</string>
+    <string name="iptv_addon_add_subtitle">"Listy kanałów z zainstalowanych dodatków, np. CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Dodatek)"</string>
+    <string name="iptv_addon_pick_title">"Wybierz listę kanałów"</string>
+    <string name="iptv_addon_pick_loading">"Sprawdzanie dodatków…"</string>
+    <string name="iptv_addon_pick_empty">"Żaden z zainstalowanych dodatków nie ma listy kanałów. Najpierw zainstaluj jakiś (np. CNCVerse Bridge) w Dodatkach."</string>
+    <string name="iptv_addon_pick_hint">"Każda lista jest dodawana jako osobna playlista. Jeśli dodatek jest aplikacją na tym telewizorze, pozostaw ją uruchomioną."</string>
+    <string name="iptv_addon_pick_added">"Dodano"</string>
+    <string name="iptv_addon_guide_matching_on">"Dopasowanie do przewodnika: Wł."</string>
+    <string name="iptv_addon_guide_matching_off">"Dopasowanie do przewodnika: Wył."</string>
+</resources>

@@ -14,6 +14,7 @@ import com.nuvio.tv.livetv.model.LiveUserState
 import com.nuvio.tv.livetv.model.PlaylistSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -31,8 +32,21 @@ class LiveTvSettingsViewModel @Inject constructor(
     private val posterResolver: com.nuvio.tv.livetv.data.LiveTvPosterResolver,
     private val matcher247: com.nuvio.tv.livetv.data.LiveTv247Matcher,
     private val profileManager: com.nuvio.tv.core.profile.ProfileManager,
-    private val sportsAddons: com.nuvio.tv.livetv.sports.SportsAddonSource
+    private val sportsAddons: com.nuvio.tv.livetv.sports.SportsAddonSource,
+    private val addons: com.nuvio.tv.domain.repository.AddonRepository
 ) : ViewModel() {
+
+    /** The channel lists your installed (switched on) add-ons offer, for Add channels from an add-on. */
+    suspend fun addonChannelLists(): List<com.nuvio.tv.livetv.data.AddonChannels.ListChoice> =
+        runCatching { addons.getInstalledAddons().first() }.getOrDefault(emptyList())
+            .filter { it.enabled }
+            .let { com.nuvio.tv.livetv.data.AddonChannels.channelLists(it) }
+
+    fun addAddonList(choice: com.nuvio.tv.livetv.data.AddonChannels.ListChoice) = viewModelScope.launch {
+        repository.addAddonList(choice.listName, choice.addon.baseUrl, choice.catalog.apiType, choice.catalog.id)
+    }
+
+    fun setGuideNameMatch(playlistId: String, on: Boolean) = viewModelScope.launch { repository.setGuideNameMatch(playlistId, on) }
 
     /** Add-ons that give live game streams, for Backups & Game Channels' order. */
     suspend fun liveStreamAddonNames(): List<String> = sportsAddons.liveStreamAddonNames()

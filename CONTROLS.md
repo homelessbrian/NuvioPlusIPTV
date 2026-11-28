@@ -41,6 +41,7 @@ Drive backup includes the layout for an explicit restore.
 | **0–9** | Jump to a channel number |
 | **Long-press OK** | Channel menu: favorites, **Remind me**, **Add to Multiview**, **Record**, **Watch from the beginning**, hide, **Manage visibility**, **Reorder**, **Copy**, rename, renumber, **Assign EPG** |
 | **Hold Back** or **Play/Pause** | Back to full screen on what's playing |
+| **Long-press OK** on an add-on list's playlist heading (in the groups) | **Guide matching** on/off · **Update now** |
 | **◀** at the left edge of a long list | Back up to the top first · again opens the menu |
 | **Back** | Back to "now" → the group list → the side menu · from a search, back to your group |
 

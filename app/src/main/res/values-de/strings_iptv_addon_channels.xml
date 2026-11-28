@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Kanäle aus einem Add-on hinzufügen"</string>
+    <string name="iptv_addon_add_subtitle">"Kanallisten aus deinen installierten Add-ons, z. B. CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Add-on)"</string>
+    <string name="iptv_addon_pick_title">"Kanalliste wählen"</string>
+    <string name="iptv_addon_pick_loading">"Add-ons werden durchsucht…"</string>
+    <string name="iptv_addon_pick_empty">"Keines deiner installierten Add-ons hat eine Kanalliste. Installiere zuerst eines (z. B. CNCVerse Bridge) unter Add-ons."</string>
+    <string name="iptv_addon_pick_hint">"Jede Liste wird als eigene Playlist hinzugefügt. Ist das Add-on eine App auf diesem Fernseher, lass sie laufen."</string>
+    <string name="iptv_addon_pick_added">"Hinzugefügt"</string>
+    <string name="iptv_addon_guide_matching_on">"EPG-Zuordnung: An"</string>
+    <string name="iptv_addon_guide_matching_off">"EPG-Zuordnung: Aus"</string>
+</resources>

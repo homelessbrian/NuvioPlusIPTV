@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Pridať kanály z doplnku"</string>
+    <string name="iptv_addon_add_subtitle">"Zoznamy kanálov z nainštalovaných doplnkov, napr. CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Doplnok)"</string>
+    <string name="iptv_addon_pick_title">"Vyberte zoznam kanálov"</string>
+    <string name="iptv_addon_pick_loading">"Prezerám vaše doplnky…"</string>
+    <string name="iptv_addon_pick_empty">"Žiadny z nainštalovaných doplnkov nemá zoznam kanálov. Najprv nejaký nainštalujte (napr. CNCVerse Bridge) v Doplnkoch."</string>
+    <string name="iptv_addon_pick_hint">"Každý zoznam sa pridá ako samostatný playlist. Ak je doplnok aplikácia v tomto televízore, nechajte ju spustenú."</string>
+    <string name="iptv_addon_pick_added">"Pridané"</string>
+    <string name="iptv_addon_guide_matching_on">"Párovanie so sprievodcom: Zapnuté"</string>
+    <string name="iptv_addon_guide_matching_off">"Párovanie so sprievodcom: Vypnuté"</string>
+</resources>

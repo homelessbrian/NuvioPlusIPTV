@@ -469,8 +469,10 @@ class SportsAddonSource @Inject constructor(
 
         private val NOT_SPORTS_TYPES = setOf("movie", "series", "anime")
         private val VOD_WORDS = listOf("replay", "recap", "highlight", "catchup", "catch up", "catch-up")
-        private val SKIP_WORDS = listOf("iptv", "channel", "24/7", "news", "vod", "music", "radio")
-        private val LIVE_WORDS = listOf("live", "today", "event", "match", "game", "fixture", "upcoming", "tonight")
+        // "Live TV" lists are channel lists (CNCVerse Bridge's EasyPlay Live TV), not games; they
+        // can be added to Live TV as playlists instead.
+        private val SKIP_WORDS = listOf("iptv", "channel", "24/7", "news", "vod", "music", "radio", "live tv", "livetv")
+        private val LIVE_WORDS = listOf("live", "today", "event", "match", "game", "fixture", "upcoming", "tonight", "ppv", "pay per view")
 
         /** How fitting one list is (higher first); -1 = it can't have this game. */
         internal fun catalogRank(id: String, name: String, sport: Sport, leagueWords: List<String>, days: Int?): Int {

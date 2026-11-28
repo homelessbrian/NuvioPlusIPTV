@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Tilføj kanaler fra en tilføjelse"</string>
+    <string name="iptv_addon_add_subtitle">"Kanallister fra dine installerede tilføjelser, f.eks. CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Tilføjelse)"</string>
+    <string name="iptv_addon_pick_title">"Vælg en kanalliste"</string>
+    <string name="iptv_addon_pick_loading">"Ser på dine tilføjelser…"</string>
+    <string name="iptv_addon_pick_empty">"Ingen af dine installerede tilføjelser har en kanalliste. Installer først en (f.eks. CNCVerse Bridge) under Tilføjelser."</string>
+    <string name="iptv_addon_pick_hint">"Hver liste tilføjes som sin egen playliste. Hvis tilføjelsen er en app på dette tv, så lad den køre."</string>
+    <string name="iptv_addon_pick_added">"Tilføjet"</string>
+    <string name="iptv_addon_guide_matching_on">"Guidematchning: Til"</string>
+    <string name="iptv_addon_guide_matching_off">"Guidematchning: Fra"</string>
+</resources>

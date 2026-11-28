@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"ஆட்-ஆனிலிருந்து சேனல்களைச் சேர்"</string>
+    <string name="iptv_addon_add_subtitle">"நிறுவிய ஆட்-ஆன்களின் சேனல் பட்டியல்கள், CNCVerse Bridge போன்றவை"</string>
+    <string name="iptv_addon_suffix">" (ஆட்-ஆன்)"</string>
+    <string name="iptv_addon_pick_title">"சேனல் பட்டியலைத் தேர்ந்தெடு"</string>
+    <string name="iptv_addon_pick_loading">"உங்கள் ஆட்-ஆன்கள் பார்க்கப்படுகின்றன…"</string>
+    <string name="iptv_addon_pick_empty">"நிறுவிய எந்த ஆட்-ஆனிலும் சேனல் பட்டியல் இல்லை. முதலில் ஆட்-ஆன்களில் ஒன்றை (CNCVerse Bridge போன்றது) நிறுவவும்."</string>
+    <string name="iptv_addon_pick_hint">"ஒவ்வொரு பட்டியலும் தனி பிளேலிஸ்டாகச் சேர்க்கப்படும். ஆட்-ஆன் இந்த டிவியில் உள்ள ஆப் என்றால், அதை இயக்கத்தில் வைத்திருங்கள்."</string>
+    <string name="iptv_addon_pick_added">"சேர்க்கப்பட்டது"</string>
+    <string name="iptv_addon_guide_matching_on">"வழிகாட்டி பொருத்தம்: இயக்கம்"</string>
+    <string name="iptv_addon_guide_matching_off">"வழிகாட்டி பொருத்தம்: முடக்கம்"</string>
+</resources>

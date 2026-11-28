@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Dodaj kanale iz dodatka"</string>
+    <string name="iptv_addon_add_subtitle">"Liste kanala iz instaliranih dodataka, kao što je CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Dodatak)"</string>
+    <string name="iptv_addon_pick_title">"Izaberite listu kanala"</string>
+    <string name="iptv_addon_pick_loading">"Pregledam vaše dodatke…"</string>
+    <string name="iptv_addon_pick_empty">"Nijedan instalirani dodatak nema listu kanala. Prvo instalirajte jedan (npr. CNCVerse Bridge) u Dodacima."</string>
+    <string name="iptv_addon_pick_hint">"Svaka lista se dodaje kao posebna plejlista. Ako je dodatak aplikacija na ovom TV-u, ostavite je pokrenutu."</string>
+    <string name="iptv_addon_pick_added">"Dodato"</string>
+    <string name="iptv_addon_guide_matching_on">"Uparivanje vodiča: Uključeno"</string>
+    <string name="iptv_addon_guide_matching_off">"Uparivanje vodiča: Isključeno"</string>
+</resources>

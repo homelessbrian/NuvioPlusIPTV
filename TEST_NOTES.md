@@ -8,6 +8,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 -->
 
 ## Live TV
+- Channels from add-ons: Settings › Live TV › Playlists › Add channels from an add-on adds an add-on's channel list (like CNCVerse Bridge's Clown IPTV or EasyPlay) as a playlist, with its countries as groups. Links are asked from the add-on when you tune; listings come from your guides by channel name. Hold OK on its playlist heading in the guide (or open it in Settings) to turn Guide matching off or update it
 - Simple Live TV (Settings › Live TV › Playback › Moving Around): OK in full screen opens big Recent Channels rows, OK again opens the guide over the video
 - Subtitle size and position: player gear › Subtitles (Left/Right to change) and Settings › Live TV › Playback › Picture & Sound
 - Your remote moved to Settings › Live TV › Setup
@@ -19,6 +20,7 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 - Keyword recording: + New Recording › Keyword records every upcoming show on that channel whose title contains your words (e.g. college football)
 
 ## Sports
+- Sports now also looks in add-on PPV lists for games, and no longer treats "Live TV" channel lists as game lists
 - Sports: the same snooker, darts or golf event listed under different names on several channels now shows as one card with all its channels
 - Sports uses your Channel Order everywhere: game page list, the channel reminders and auto-switch tune, and which channels a game keeps when it has many. A game's Sort channels button and Sports settings › Channels open the same screen
 - Channel checks: new Auto with preview (keeps checking other feeds while one plays, uses a second provider connection)

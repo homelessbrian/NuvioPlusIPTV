@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Προσθήκη καναλιών από πρόσθετο"</string>
+    <string name="iptv_addon_add_subtitle">"Λίστες καναλιών από τα εγκατεστημένα πρόσθετα, όπως το CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Πρόσθετο)"</string>
+    <string name="iptv_addon_pick_title">"Επιλέξτε λίστα καναλιών"</string>
+    <string name="iptv_addon_pick_loading">"Έλεγχος των πρόσθετών σας…"</string>
+    <string name="iptv_addon_pick_empty">"Κανένα εγκατεστημένο πρόσθετο δεν έχει λίστα καναλιών. Εγκαταστήστε πρώτα ένα (π.χ. CNCVerse Bridge) στα Πρόσθετα."</string>
+    <string name="iptv_addon_pick_hint">"Κάθε λίστα προστίθεται ως ξεχωριστή λίστα αναπαραγωγής. Αν το πρόσθετο είναι εφαρμογή σε αυτή την τηλεόραση, κρατήστε την ανοιχτή."</string>
+    <string name="iptv_addon_pick_added">"Προστέθηκε"</string>
+    <string name="iptv_addon_guide_matching_on">"Αντιστοίχιση οδηγού: Ενεργή"</string>
+    <string name="iptv_addon_guide_matching_off">"Αντιστοίχιση οδηγού: Ανενεργή"</string>
+</resources>

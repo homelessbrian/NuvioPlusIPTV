@@ -2169,6 +2169,9 @@ class LiveTvPreferences @Inject constructor(
                     linkPassword = o.optString("linkPassword"),
                     vodInPlaylist = o.optBoolean("vodInPlaylist", false),
                     vodSwitchSet = o.optBoolean("vodSwitchSet", false),
+                    addonType = o.optString("addonType"),
+                    addonCatalog = o.optString("addonCatalog"),
+                    guideNameMatch = o.optBoolean("guideNameMatch", true),
                     dispatcharr = o.optBoolean("dispatcharr", false)
                 )
             }
@@ -2201,6 +2204,8 @@ class LiveTvPreferences @Inject constructor(
                     .put("catchupShiftMinutes", s.catchupShiftMinutes)
                     .apply {
                         if (s.dispatcharr) put("dispatcharr", true)
+                        if (s.addonCatalog.isNotBlank()) put("addonType", s.addonType).put("addonCatalog", s.addonCatalog)
+                        if (!s.guideNameMatch) put("guideNameMatch", false)
                         if (s.guidesOff.isNotEmpty()) put("guidesOff", JSONArray(s.guidesOff.sorted()))
                         val type = if (s.isStalker) "stalker" else s.sourceType
                         if (type.isNotBlank()) put("sourceType", type)

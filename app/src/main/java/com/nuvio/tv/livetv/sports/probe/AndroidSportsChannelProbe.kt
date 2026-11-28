@@ -82,9 +82,12 @@ class AndroidSportsChannelProbe @Inject constructor(
             val requests = SportsProbeHttpSession()
             try {
                 if (channel.stalkerRef != null) prepared = stalker.prepare(channel, probeMimeType = false)
-                awaitVpnForPlayback(context, prepared?.url ?: channel.url)
+                // An add-on channel: checked on the link the add-on gives for it.
+                val addonLink = if (com.nuvio.tv.livetv.data.AddonChannels.isRef(channel.url)) com.nuvio.tv.livetv.data.AddonChannels.pick(channel) else null
+                val headers = addonLink?.headers ?: prepared?.headers ?: channel.headers
+                awaitVpnForPlayback(context, addonLink?.url ?: prepared?.url ?: channel.url)
                 preparationComplete()
-                val url = prepared?.url ?: channel.url
+                val url = addonLink?.url ?: prepared?.url ?: channel.url
                 if (runCatching { URI(url).scheme?.lowercase() }.getOrNull() !in setOf("http", "https")) {
                     return@withLock result(SportsProbeStatus.UNVERIFIED, "Unsupported format")
                 }
@@ -97,8 +100,8 @@ class AndroidSportsChannelProbe @Inject constructor(
                         continuousTs = true,
                         httpDecorator = decorate,
                         requireMediaPreparation = true,
-                        httpFactoryOverride = requests.factory(prepared?.headers ?: channel.headers),
-                    ).build(url, prepared?.headers ?: channel.headers, isLive = true)
+                        httpFactoryOverride = requests.factory(headers),
+                    ).build(url, headers, isLive = true)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

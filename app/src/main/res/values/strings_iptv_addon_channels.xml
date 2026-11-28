@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Add channels from an add-on"</string>
+    <string name="iptv_addon_add_subtitle">"Channel lists from your installed add-ons, like CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Add-on)"</string>
+    <string name="iptv_addon_pick_title">"Choose a channel list"</string>
+    <string name="iptv_addon_pick_loading">"Looking at your add-ons…"</string>
+    <string name="iptv_addon_pick_empty">"None of your installed add-ons has a channel list. Install one (like CNCVerse Bridge) in Add-ons first."</string>
+    <string name="iptv_addon_pick_hint">"Each list is added as its own playlist. If the add-on is an app on this TV, keep it running."</string>
+    <string name="iptv_addon_pick_added">"Added"</string>
+    <string name="iptv_addon_guide_matching_on">"Guide matching: On"</string>
+    <string name="iptv_addon_guide_matching_off">"Guide matching: Off"</string>
+</resources>

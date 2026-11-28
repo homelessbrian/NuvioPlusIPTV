@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"অ্যাড-অন থেকে চ্যানেল যোগ করুন"</string>
+    <string name="iptv_addon_add_subtitle">"ইনস্টল করা অ্যাড-অনের চ্যানেল তালিকা, যেমন CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (অ্যাড-অন)"</string>
+    <string name="iptv_addon_pick_title">"একটি চ্যানেল তালিকা বেছে নিন"</string>
+    <string name="iptv_addon_pick_loading">"আপনার অ্যাড-অন দেখা হচ্ছে…"</string>
+    <string name="iptv_addon_pick_empty">"আপনার ইনস্টল করা কোনো অ্যাড-অনে চ্যানেল তালিকা নেই। আগে অ্যাড-অনে একটি (যেমন CNCVerse Bridge) ইনস্টল করুন।"</string>
+    <string name="iptv_addon_pick_hint">"প্রতিটি তালিকা আলাদা প্লেলিস্ট হিসেবে যোগ হয়। অ্যাড-অনটি এই টিভির অ্যাপ হলে সেটি চালু রাখুন।"</string>
+    <string name="iptv_addon_pick_added">"যোগ হয়েছে"</string>
+    <string name="iptv_addon_guide_matching_on">"গাইড মেলানো: চালু"</string>
+    <string name="iptv_addon_guide_matching_off">"গাইড মেলানো: বন্ধ"</string>
+</resources>

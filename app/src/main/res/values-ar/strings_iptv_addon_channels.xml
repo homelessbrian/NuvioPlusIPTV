@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"إضافة قنوات من إضافة"</string>
+    <string name="iptv_addon_add_subtitle">"قوائم قنوات من الإضافات المثبتة، مثل CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (إضافة)"</string>
+    <string name="iptv_addon_pick_title">"اختر قائمة قنوات"</string>
+    <string name="iptv_addon_pick_loading">"جارٍ فحص إضافاتك…"</string>
+    <string name="iptv_addon_pick_empty">"لا تحتوي أي من إضافاتك المثبتة على قائمة قنوات. ثبّت واحدة (مثل CNCVerse Bridge) في الإضافات أولاً."</string>
+    <string name="iptv_addon_pick_hint">"تُضاف كل قائمة كقائمة تشغيل مستقلة. إذا كانت الإضافة تطبيقًا على هذا التلفاز، فأبقِه قيد التشغيل."</string>
+    <string name="iptv_addon_pick_added">"تمت الإضافة"</string>
+    <string name="iptv_addon_guide_matching_on">"مطابقة الدليل: مفعّلة"</string>
+    <string name="iptv_addon_guide_matching_off">"مطابقة الدليل: متوقفة"</string>
+</resources>

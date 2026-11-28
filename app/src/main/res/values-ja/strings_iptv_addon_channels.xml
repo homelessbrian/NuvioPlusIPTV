@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"アドオンからチャンネルを追加"</string>
+    <string name="iptv_addon_add_subtitle">"インストール済みアドオンのチャンネルリスト（CNCVerse Bridge など）"</string>
+    <string name="iptv_addon_suffix">" (アドオン)"</string>
+    <string name="iptv_addon_pick_title">"チャンネルリストを選択"</string>
+    <string name="iptv_addon_pick_loading">"アドオンを確認中…"</string>
+    <string name="iptv_addon_pick_empty">"インストール済みのアドオンにチャンネルリストがありません。まずアドオンで1つ（CNCVerse Bridge など）をインストールしてください。"</string>
+    <string name="iptv_addon_pick_hint">"リストごとに個別のプレイリストとして追加されます。アドオンがこのテレビのアプリなら、起動したままにしてください。"</string>
+    <string name="iptv_addon_pick_added">"追加済み"</string>
+    <string name="iptv_addon_guide_matching_on">"番組表の照合: オン"</string>
+    <string name="iptv_addon_guide_matching_off">"番組表の照合: オフ"</string>
+</resources>

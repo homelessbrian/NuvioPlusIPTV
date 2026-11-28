@@ -94,6 +94,8 @@ class LiveTvPlaybackController @Inject constructor(
 
     private var currentChannel: LiveChannel? = null
     private var stalkerResolveJob: Job? = null
+    /** The add-on channel playing (as listed, its link a placeholder): reconnects ask the add-on again. */
+    private var activeAddonChannel: LiveChannel? = null
     private var stalkerGeneration = 0L
     private var activeStalkerRef: StalkerStreamRef? = null
     private var stalkerMediaPolicy: StalkerMediaPolicy? = null
@@ -1066,6 +1068,19 @@ class LiveTvPlaybackController @Inject constructor(
             if (stalkerResolveJob?.isActive != true && _player?.isPlaying == false) _player?.play()
             return
         }
+        // An add-on channel: its link is asked from the add-on first (the next one on a retry).
+        if (com.nuvio.tv.livetv.data.AddonChannels.isRef(channel.url) && overrideUrl == null && catchupTitle == null && stalkerStream == null) {
+            if (currentChannel?.key == channel.key && activeAddonChannel?.key == channel.key && _state.value.error == null &&
+                reconnectAttempt == 0 &&
+                (stalkerResolveJob?.isActive == true || _player?.playbackState?.let { it != Player.STATE_IDLE } == true)
+            ) {
+                if (stalkerResolveJob?.isActive != true && _player?.isPlaying == false) _player?.play()
+                return
+            }
+            playAddon(channel, fallback, fallbacks, reconnectAttempt, sourceLater)
+            return
+        }
+        activeAddonChannel = null
         val previousChannelKey = currentChannel?.key
         val ref = stalkerStream ?: when {
             catchupTitle == null && overrideUrl?.startsWith("file:") != true && overrideUrl?.contains("127.0.0.1") != true -> channel.stalkerRef
@@ -1108,6 +1123,41 @@ class LiveTvPlaybackController @Inject constructor(
             } catch (failure: Exception) {
                 if (generation != stalkerGeneration) return@launch
                 scheduleReconnect(StalkerGateway.failureMessage(failure))
+            }
+        }
+    }
+
+    private fun playAddon(channel: LiveChannel, fallback: String?, fallbacks: List<String>, reconnectAttempt: Int, sourceLater: Boolean) {
+        val previousChannelKey = currentChannel?.key
+        stalkerResolveJob?.cancel()
+        val generation = ++stalkerGeneration
+        activeStalkerRef = null
+        stalkerMediaPolicy?.retire()
+        stalkerMediaPolicy = null
+        stalkerMimeType = null
+        activeAddonChannel = channel
+        reconnectJob?.cancel()
+        stopReplayCache()
+        stopShift()
+        _player?.stop()
+        currentChannel = channel
+        currentUrl = null
+        _state.value = LivePlaybackState(channelKey = channel.key, isBuffering = true).copy(reconnectAttempt = reconnectAttempt)
+        stalkerResolveJob = scope.launch {
+            try {
+                // Every link tried once: ask the add-on again (links from some add-ons expire).
+                if (reconnectAttempt > 0 && reconnectAttempt % 3 == 0) com.nuvio.tv.livetv.data.AddonChannels.forget(channel)
+                val link = com.nuvio.tv.livetv.data.AddonChannels.pick(channel, reconnectAttempt)
+                if (generation != stalkerGeneration) return@launch
+                playResolved(channel.copy(url = link.url, headers = link.headers), fallback = fallback, fallbacks = fallbacks,
+                    previousChannelKey = previousChannelKey, reconnectAttempt = reconnectAttempt, sourceLater = sourceLater)
+                // playResolved keeps the channel it was given (with the real link); this one stays the add-on's.
+                activeAddonChannel = channel
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (generation != stalkerGeneration) return@launch
+                scheduleReconnect(com.nuvio.tv.livetv.data.AddonChannels.failureMessage(failure, channel))
             }
         }
     }
@@ -1466,6 +1516,7 @@ class LiveTvPlaybackController @Inject constructor(
         stalkerResolveJob?.cancel()
         stalkerGeneration++
         activeStalkerRef = null
+        activeAddonChannel = null
         savedRecordingId = null
         savedRecordingPlaylist = null
         clearStarting()
@@ -2808,6 +2859,11 @@ class LiveTvPlaybackController @Inject constructor(
                 restartStalker(if (_state.value.catchupTitle != null) _player?.currentPosition ?: 0L else 0L)
                 return@launch
             }
+            // An add-on channel: the add-on is asked again, for its next link.
+            activeAddonChannel?.takeIf { it.key == ch.key && _state.value.catchupTitle == null }?.let { original ->
+                play(original, reconnectAttempt = attempt)
+                return@launch
+            }
             val url = currentUrl ?: return@launch
             val p = _player ?: return@launch
             val resumeAt = ownReplayResumeAt(p)
@@ -2897,6 +2953,7 @@ class LiveTvPlaybackController @Inject constructor(
         stalkerResolveJob?.cancel()
         stalkerGeneration++
         activeStalkerRef = null
+        activeAddonChannel = null
         backgroundJob?.cancel()
         backgroundJob = null
         resumeAfterBackground = null

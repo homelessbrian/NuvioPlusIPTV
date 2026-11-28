@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Thêm kênh từ tiện ích"</string>
+    <string name="iptv_addon_add_subtitle">"Danh sách kênh từ các tiện ích đã cài, như CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Tiện ích)"</string>
+    <string name="iptv_addon_pick_title">"Chọn danh sách kênh"</string>
+    <string name="iptv_addon_pick_loading">"Đang xem các tiện ích của bạn…"</string>
+    <string name="iptv_addon_pick_empty">"Không tiện ích nào đã cài có danh sách kênh. Hãy cài một tiện ích (như CNCVerse Bridge) trong Tiện ích trước."</string>
+    <string name="iptv_addon_pick_hint">"Mỗi danh sách được thêm thành một playlist riêng. Nếu tiện ích là ứng dụng trên TV này, hãy để nó chạy."</string>
+    <string name="iptv_addon_pick_added">"Đã thêm"</string>
+    <string name="iptv_addon_guide_matching_on">"Khớp lịch phát sóng: Bật"</string>
+    <string name="iptv_addon_guide_matching_off">"Khớp lịch phát sóng: Tắt"</string>
+</resources>

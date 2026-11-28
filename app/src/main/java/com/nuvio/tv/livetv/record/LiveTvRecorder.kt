@@ -292,7 +292,11 @@ class LiveTvRecorder @Inject constructor(
             // Accounts with one connection can refuse a new one while the old is still closing.
             if (startDelayMs > 0) delay(startDelayMs)
             try {
-                record(rec, url, channel.headers, finite, fallbacks, onFinished, channel.sourceId, resumeFrom, expectedSec,
+                // An add-on channel: recorded from the link the add-on gives for it now.
+                val addonLink = if (com.nuvio.tv.livetv.data.AddonChannels.isRef(url)) runCatching {
+                    com.nuvio.tv.livetv.data.AddonChannels.pick(channel)
+                }.onFailure { LiveTvNotice.show(com.nuvio.tv.livetv.data.AddonChannels.failureMessage(it, channel)) }.getOrNull() else null
+                record(rec, addonLink?.url ?: url, addonLink?.headers ?: channel.headers, finite, fallbacks, onFinished, channel.sourceId, resumeFrom, expectedSec,
                     stalkerStream?.let { ref -> { stalker.prepare(channel.sourceId, ref) } })
             } finally {
                 catchupSources.remove(id)

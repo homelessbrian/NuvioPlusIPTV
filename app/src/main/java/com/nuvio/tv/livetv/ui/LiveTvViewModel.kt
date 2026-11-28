@@ -1433,6 +1433,15 @@ class LiveTvViewModel @Inject constructor(
         .map { list -> list.associate { it.id to it.name } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    /** Add-on channel lists (id → whether guide matching by name is on), for their heading's menu. */
+    val addonPlaylists: StateFlow<Map<String, Boolean>> = prefs.playlists
+        .map { list -> list.filter { it.isAddon }.associate { it.id to it.guideNameMatch } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    fun setGuideNameMatch(playlistId: String, on: Boolean) = viewModelScope.launch { repository.setGuideNameMatch(playlistId, on) }
+
+    fun updatePlaylistNow(playlistId: String) = repository.updatePlaylistNow(playlistId)
+
     /** Playlists folded away in the group list (saved, so they stay folded next time). */
     val collapsedPlaylists = session.collapsedPlaylists
 

@@ -268,6 +268,42 @@ class LiveTvRepository @Inject constructor(
         }
     }
 
+    /**
+     * An add-on's channel list added as a playlist (Settings › Add channels from an add-on). The
+     * same list added again is left as it is. Returns the playlist's id.
+     */
+    suspend fun addAddonList(name: String, addonUrl: String, type: String, catalogId: String): String {
+        prefs.currentPlaylists().firstOrNull { it.isAddon && it.url == addonUrl && it.addonType == type && it.addonCatalog == catalogId }
+            ?.let { return it.id }
+        val id = UUID.randomUUID().toString()
+        prefs.updatePlaylists {
+            it + PlaylistSource(
+                id = id, name = name.ifBlank { "Add-on channels" }, url = addonUrl,
+                sourceType = PlaylistSource.ADDON_TYPE, addonType = type, addonCatalog = catalogId,
+                importVod = false, vodSwitchSet = true
+            )
+        }
+        scope.launch { refreshInternal(forcePlaylists = false, forceEpg = false, forceIds = setOf(id)) }
+        return id
+    }
+
+    /** One playlist downloaded again now (the guide's playlist heading menu). */
+    fun updatePlaylistNow(playlistId: String) {
+        scope.launch { refreshInternal(forcePlaylists = false, forceEpg = false, forceIds = setOf(playlistId)) }
+    }
+
+    /**
+     * Guide matching by channel name for an add-on list switched on or off (its channels have no
+     * guide ids, so names are all there is to go on). The guide is matched again.
+     */
+    suspend fun setGuideNameMatch(playlistId: String, on: Boolean) {
+        prefs.updatePlaylists { list -> list.map { if (it.id == playlistId) it.copy(guideNameMatch = on) else it } }
+        scope.launch {
+            rebuild()
+            refreshInternal(forcePlaylists = false, forceEpg = false)
+        }
+    }
+
     suspend fun addXtream(
         name: String,
         server: String,
@@ -708,9 +744,13 @@ class LiveTvRepository @Inject constructor(
                 setStatus(loading = true, message = statusText(R.string.iptv_repository_status_updating_playlist, pl.name))
                 val before = if (file.exists()) file.length() to file.lastModified() else null
                 val result = runCatching {
-                    if (pl.hasCatalog) {
+                    if (pl.hasCatalog || pl.isAddon) {
                         val old = if (file.exists()) File(file.parentFile, file.name + ".prev").also { file.copyTo(it, overwrite = true) } else null
-                        if (pl.isStalker) downloadStalker(pl, file) else downloadXtream(pl, file)
+                        when {
+                            pl.isAddon -> downloadAddonList(pl, file)
+                            pl.isStalker -> downloadStalker(pl, file)
+                            else -> downloadXtream(pl, file)
+                        }
                         // Xtream lists are rebuilt each time: unchanged if identical to before.
                         val unchanged = old != null && sameDecoded(old, file)
                         old?.delete()
@@ -720,7 +760,7 @@ class LiveTvRepository @Inject constructor(
                     } else downloadM3u(pl, file, full = forcePlaylists || pl.id in forceIds)
                 }
                 // M3U links from Xtream providers (get.php with a login): the account's details.
-                if (!pl.hasCatalog) refreshM3uAccount(pl)
+                if (!pl.hasCatalog && !pl.isAddon) refreshM3uAccount(pl)
                 val err = result.exceptionOrNull()?.let { e ->
                     if (pl.isStalker) com.nuvio.tv.livetv.stalker.StalkerGateway.safeUpdateError(e) else when (e) {
                         is java.net.UnknownHostException -> "Couldn't find the provider's server (${e.message?.substringAfter("\"")?.substringBefore("\"") ?: "address"}). Check the address, your internet, or try again later."
@@ -734,13 +774,13 @@ class LiveTvRepository @Inject constructor(
                     }
                 }
                 if (err != null) {
-                    LiveTvNotice.show(statusText(R.string.iptv_repository_status_playlist_update_failed, pl.name, if (pl.isStalker) err else result.exceptionOrNull()?.let { playlistNoticeError(it) }.orEmpty()))
+                    LiveTvNotice.show(statusText(R.string.iptv_repository_status_playlist_update_failed, pl.name, if (pl.isStalker || pl.isAddon) err else result.exceptionOrNull()?.let { playlistNoticeError(it) }.orEmpty()))
                     Log.w(TAG, "Playlist ${pl.name} failed: $err")
                     LIVE_REPORT.add("Playlist \"${pl.name}\" failed: $err" + if (pl.isXtream) " (Xtream login: server ${if (pl.xtreamServer.isBlank()) "missing" else "set"}, user ${if (pl.xtreamUsername.isBlank()) "missing" else "set"}, password ${if (pl.xtreamPassword.isBlank()) "missing" else "set"})" else "")
                 }
                 if (before == null && file.exists()) newlyAdded += pl.name
                 if (result.getOrNull() == true || (before == null && file.exists())) changed = true
-            } else if (!pl.hasCatalog && pl.m3uLogin == null && !pl.vodInPlaylist && file.exists() && linkLoginChecked.add(pl.id)) {
+            } else if (!pl.hasCatalog && !pl.isAddon && pl.m3uLogin == null && !pl.vodInPlaylist && file.exists() && linkLoginChecked.add(pl.id)) {
                 // Playlists saved before movies, series and logins were read from their links:
                 // looked at once per start, so On Demand doesn't wait for the next playlist update.
                 refreshM3uAccount(pl)
@@ -1890,8 +1930,13 @@ class LiveTvRepository @Inject constructor(
         sb.append('|').append(_channels.value.size).append(':').append(_channels.value.sumOf { it.key.hashCode().toLong() })
         tvgShiftStamp()?.let { sb.append("|tvg=").append(it) }
         guideUsersStamp()?.let { sb.append("|gu=").append(it) }
+        nameMatchOff().takeIf { it.isNotEmpty() }?.let { sb.append("|nm=").append(it.sorted().joinToString(",")) }
         return sb.toString()
     }
+
+    /** Add-on lists whose guide matching by channel name is switched off. */
+    private fun nameMatchOff(): Set<String> =
+        prefs.currentPlaylists().filter { it.isAddon && !it.guideNameMatch }.mapTo(HashSet()) { it.id }
 
     /** One guide file as the fingerprint sees it (also the format of the Assign EPG lists' stamp). */
     private fun targetStamp(t: EpgTarget): String {
@@ -1915,11 +1960,13 @@ class LiveTvRepository @Inject constructor(
      */
     private suspend fun guideParts(settings: LiveTvSettings, targets: List<EpgTarget>, fingerprint: String): String {
         val overrides = prefs.userState.first().epgOverrides
+        val noNameMatch = nameMatchOff()
         val playlists = JSONObject()
         _channels.value.groupBy { it.sourceId }.forEach { (id, list) ->
             // Guides switched off for this playlist go with it (a playlist taken away takes its switches along).
             val off = targets.filter { !guideFor(it.fileId, id) }.map { it.fileId }.sorted()
-            playlists.put(id, "${list.size}:${list.sumOf { it.key.hashCode().toLong() }}" + (if (off.isEmpty()) "" else "|off=" + off.joinToString(",")))
+            playlists.put(id, "${list.size}:${list.sumOf { it.key.hashCode().toLong() }}" + (if (off.isEmpty()) "" else "|off=" + off.joinToString(",")) +
+                (if (id in noNameMatch) "|nm=off" else ""))
         }
         return JSONObject()
             .put("fp", fingerprint)
@@ -2406,7 +2453,7 @@ class LiveTvRepository @Inject constructor(
             var unmarkedLinks = 0
             var parsedEntries = 0
             var linkKind = PlaylistLinks.Kind.UNMARKED
-            val skipVod: ((String) -> Boolean)? = if (pl.isStalker) null else { url ->
+            val skipVod: ((String) -> Boolean)? = if (pl.isStalker || pl.isAddon) null else { url ->
                 linkKind = PlaylistLinks.classify(url)
                 (linkKind == PlaylistLinks.Kind.VOD).also { if (it) vodLinks++ }
             }
@@ -2418,7 +2465,7 @@ class LiveTvRepository @Inject constructor(
                     M3uParser.read(reader, skipVod) { e ->
                         try {
                             parsedEntries++
-                            if (!pl.isStalker) {
+                            if (!pl.isStalker && !pl.isAddon) {
                                 if (linkKind == PlaylistLinks.Kind.LIVE) liveLinks++ else {
                                     unmarkedLinks++
                                     tail.unmarkedEntry()
@@ -2476,7 +2523,7 @@ class LiveTvRepository @Inject constructor(
                 continue
             }
             embeddedEpgUrls[pl.id] = parsed.getOrThrow()
-            val hideStrays = !pl.isStalker && prefs.currentSettings().hideStrayEntries &&
+            val hideStrays = !pl.isStalker && !pl.isAddon && prefs.currentSettings().hideStrayEntries &&
                 isMarkedPlaylist(liveLinks + vodLinks, unmarkedLinks)
             if (hideStrays) counter = tail.removeStrays(counter) { EPISODE_NAME.containsMatchIn(it) }
             val strays = tail.removed
@@ -2589,8 +2636,12 @@ class LiveTvRepository @Inject constructor(
         val byTvgId = HashMap<String, MutableList<LiveChannel>>()
         val byName = HashMap<String, MutableList<LiveChannel>>()
         // No guide can use these indexes when this setup has no EPG sources.
+        // Add-on lists with guide matching switched off: their channels only get listings that
+        // were picked by hand (they have no guide ids, so name matching is all they'd get).
+        val noNameMatch = nameMatchOff()
         if (targets.isNotEmpty()) channels.forEach { c ->
             if (c.key in overrides) return@forEach
+            if (c.sourceId in noNameMatch) return@forEach
             c.tvgId?.lowercase()?.let { byTvgId.getOrPut(it) { ArrayList() }.add(c) }
             normalize(c.tvgName ?: "").takeIf { it.isNotEmpty() }?.let { byName.getOrPut(it) { ArrayList() }.add(c) }
             normalize(c.name).takeIf { it.isNotEmpty() }?.let { byName.getOrPut(it) { ArrayList() }.add(c) }
@@ -3755,6 +3806,25 @@ class LiveTvRepository @Inject constructor(
         "m3u8" -> "m3u8"
         // Auto: .ts unless the provider only allows HLS.
         else -> if (allowedFormats.isNotEmpty() && "ts" !in allowedFormats && "m3u8" in allowedFormats) "m3u8" else "ts"
+    }
+
+    /**
+     * An add-on's channel list, saved like any playlist (zipped M3U). Its channels' links are
+     * placeholders the add-on is asked about when a channel is tuned (see [AddonChannels]).
+     * Written to a side file first, so a list cut off half-way leaves the saved one as it was.
+     */
+    private suspend fun downloadAddonList(pl: PlaylistSource, target: File) {
+        target.parentFile?.mkdirs()
+        val tmp = File(target.parentFile, target.name + ".tmp")
+        try {
+            val order = fastGzip(tmp.outputStream()).bufferedWriter().use { out -> AddonChannels.download(pl, out) }
+            if (order.isNotEmpty()) runCatching {
+                groupOrderFile(pl.id).writeText(order.joinToString("\n") { it.replace('\n', ' ').replace('\r', ' ') })
+            }
+            if (!tmp.renameTo(target)) { tmp.copyTo(target, overwrite = true); tmp.delete() }
+        } finally {
+            if (tmp.exists()) tmp.delete()
+        }
     }
 
     private fun writeXtreamPlaylist(pl: PlaylistSource, url: String, categories: Map<String, String>, target: File) {

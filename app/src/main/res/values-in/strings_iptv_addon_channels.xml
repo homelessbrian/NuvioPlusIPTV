@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Tambah saluran dari add-on"</string>
+    <string name="iptv_addon_add_subtitle">"Daftar saluran dari add-on yang terpasang, seperti CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Add-on)"</string>
+    <string name="iptv_addon_pick_title">"Pilih daftar saluran"</string>
+    <string name="iptv_addon_pick_loading">"Memeriksa add-on Anda…"</string>
+    <string name="iptv_addon_pick_empty">"Tidak ada add-on terpasang yang memiliki daftar saluran. Pasang satu dulu (seperti CNCVerse Bridge) di Add-on."</string>
+    <string name="iptv_addon_pick_hint">"Setiap daftar ditambahkan sebagai playlist tersendiri. Jika add-on berupa aplikasi di TV ini, biarkan tetap berjalan."</string>
+    <string name="iptv_addon_pick_added">"Ditambahkan"</string>
+    <string name="iptv_addon_guide_matching_on">"Pencocokan panduan: Aktif"</string>
+    <string name="iptv_addon_guide_matching_off">"Pencocokan panduan: Nonaktif"</string>
+</resources>

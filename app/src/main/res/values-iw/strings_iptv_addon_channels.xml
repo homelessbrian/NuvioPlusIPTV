@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"הוספת ערוצים מתוסף"</string>
+    <string name="iptv_addon_add_subtitle">"רשימות ערוצים מהתוספים המותקנים, כמו CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (תוסף)"</string>
+    <string name="iptv_addon_pick_title">"בחירת רשימת ערוצים"</string>
+    <string name="iptv_addon_pick_loading">"בודק את התוספים שלך…"</string>
+    <string name="iptv_addon_pick_empty">"לאף אחד מהתוספים המותקנים אין רשימת ערוצים. התקן קודם אחד (כמו CNCVerse Bridge) בתוספים."</string>
+    <string name="iptv_addon_pick_hint">"כל רשימה נוספת כפלייליסט נפרד. אם התוסף הוא אפליקציה בטלוויזיה הזו, השאר אותה פועלת."</string>
+    <string name="iptv_addon_pick_added">"נוסף"</string>
+    <string name="iptv_addon_guide_matching_on">"התאמת מדריך: פועל"</string>
+    <string name="iptv_addon_guide_matching_off">"התאמת מדריך: כבוי"</string>
+</resources>

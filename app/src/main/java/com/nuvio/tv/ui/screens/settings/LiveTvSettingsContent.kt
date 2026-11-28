@@ -223,6 +223,7 @@ private sealed interface LiveDialog {
     data object AddStalker : LiveDialog
     data object AddEpg : LiveDialog
     data object AddFromPhone : LiveDialog
+    data object AddFromAddon : LiveDialog
     data class PlaylistActions(val source: PlaylistSource) : LiveDialog
     data class CatchupZone(val source: PlaylistSource) : LiveDialog
     data class EditPlaylist(val source: PlaylistSource) : LiveDialog
@@ -584,7 +585,7 @@ internal fun LiveTvSettingsContent(
                         val account = accounts[pl.id]
                         val expiring = pl.enabled && account?.expiringSoon() == true
                         SettingsActionRow(
-                            title = pl.name + when { pl.isStalker -> context.getString(R.string.iptv_settings_stalker); pl.isXtream -> context.getString(R.string.iptv_settings_xtream); else -> "" },
+                            title = pl.name + when { pl.isStalker -> context.getString(R.string.iptv_settings_stalker); pl.isXtream -> context.getString(R.string.iptv_settings_xtream); pl.isAddon -> context.getString(R.string.iptv_addon_suffix); else -> "" },
                             subtitle = when {
                                 pl.hasCatalog && pl.enabled && !pl.importLive && pl.importVod -> context.getString(R.string.iptv_settings_movies_series_only_tv_channels_off)
                                 pl.hasCatalog && pl.enabled && !pl.importLive && !pl.importVod -> context.getString(R.string.iptv_settings_nothing_included_turn_on_tv_channels_or_movies)
@@ -619,6 +620,12 @@ internal fun LiveTvSettingsContent(
                         subtitle = context.getString(R.string.iptv_settings_use_the_portal_url_and_mac_address_supplied),
                         leadingIcon = Icons.Default.Add,
                         onClick = { dialog = LiveDialog.AddStalker }
+                    )
+                    SettingsActionRow(
+                        title = context.getString(R.string.iptv_addon_add_title),
+                        subtitle = context.getString(R.string.iptv_addon_add_subtitle),
+                        leadingIcon = Icons.Default.Add,
+                        onClick = { dialog = LiveDialog.AddFromAddon }
                     )
                     SubHeading(context.getString(R.string.iptv_settings_tv_guides_epg))
                     epgs.forEach { e ->
@@ -2154,6 +2161,7 @@ internal fun LiveTvSettingsContent(
             }
         )
         LiveDialog.AddFromPhone -> AddFromPhoneDialog(viewModel = viewModel, onDismiss = close)
+        LiveDialog.AddFromAddon -> AddFromAddonDialog(viewModel = viewModel, playlists = playlists, onDismiss = close)
         LiveDialog.AddEpg -> SourceFormDialog(
             title = context.getString(R.string.iptv_settings_add_epg_source_2),
             fields = listOf(
@@ -2181,6 +2189,11 @@ internal fun LiveTvSettingsContent(
                 context.getString(R.string.iptv_settings_update_now) to { viewModel.updatePlaylistNow(d.source); close() },
                 (if (d.source.enabled) context.getString(R.string.iptv_settings_disable) else context.getString(R.string.iptv_settings_enable)) to { viewModel.setPlaylistEnabled(d.source.id, !d.source.enabled); close() },
                 context.getString(R.string.iptv_settings_delete_playlist) to { dialog = LiveDialog.ConfirmDeletePlaylist(d.source) },
+                // Add-on lists: their channels get listings by channel name; off when the matches are wrong.
+                if (d.source.isAddon) context.getString(if (d.source.guideNameMatch) R.string.iptv_addon_guide_matching_on else R.string.iptv_addon_guide_matching_off) to {
+                    viewModel.setGuideNameMatch(d.source.id, !d.source.guideNameMatch)
+                    close()
+                } else null,
                 // Whose channel logos to show: the playlist's own or the guide's (each falls back
                 // to the other when it has none).
                 (if (d.source.logoSource == "epg") context.getString(R.string.iptv_settings_logos_prefer_logos_from_epg) else context.getString(R.string.iptv_settings_logos_prefer_logos_from_playlist)) to {
@@ -2190,7 +2203,7 @@ internal fun LiveTvSettingsContent(
                 // Which stream format to ask for. Xtream: Auto follows what the account allows.
                 // M3U links: Auto keeps the playlist's own links; TS / HLS switch links that can
                 // be switched (Xtream-style links, Dispatcharr).
-                if (!d.source.isStalker) (context.getString(R.string.iptv_settings_stream_format) + when (d.source.streamFormat) {
+                if (!d.source.isStalker && !d.source.isAddon) (context.getString(R.string.iptv_settings_stream_format) + when (d.source.streamFormat) {
                     "ts" -> "TS"; "m3u8" -> "HLS (m3u8)"; else -> if (d.source.isXtream) context.getString(R.string.iptv_settings_auto) else context.getString(R.string.iptv_settings_as_in_playlist)
                 }) to {
                     val next = when (d.source.streamFormat) { "auto" -> "ts"; "ts" -> "m3u8"; else -> "auto" }
@@ -2199,7 +2212,7 @@ internal fun LiveTvSettingsContent(
                 } else null,
                 // Which clock replay links are written in. Automatic: the one the provider's
                 // server reports (or that the app worked out); pick one when that's wrong.
-                if (!d.source.isStalker) (context.getString(R.string.iptv_settings_catchup_zone_value, catchupZoneLabel(context, d.source))) to { dialog = LiveDialog.CatchupZone(d.source) } else null,
+                if (!d.source.isStalker && !d.source.isAddon) (context.getString(R.string.iptv_settings_catchup_zone_value, catchupZoneLabel(context, d.source))) to { dialog = LiveDialog.CatchupZone(d.source) } else null,
                 // Time shifts for this playlist: its built-in guide, and its catch-up.
                 // Which guides this playlist's channels get their listings from.
                 guidesValue(context, d.source, playlists, epgs, viewModel.playlistsWithOwnGuide(playlists))?.let {
@@ -2208,7 +2221,7 @@ internal fun LiveTvSettingsContent(
                 (context.getString(R.string.iptv_settings_guide_shift_value, offsetLabel(context, d.source.guideShiftMinutes))).takeIf { d.source.liveEnabled }?.let {
                     it to { dialog = LiveDialog.PlaylistGuideShift(d.source) }
                 },
-                (context.getString(R.string.iptv_settings_catchup_shift_value, offsetLabel(context, d.source.catchupShiftMinutes))).takeIf { d.source.liveEnabled && !d.source.isStalker }?.let {
+                (context.getString(R.string.iptv_settings_catchup_shift_value, offsetLabel(context, d.source.catchupShiftMinutes))).takeIf { d.source.liveEnabled && !d.source.isStalker && !d.source.isAddon }?.let {
                     it to { dialog = LiveDialog.PlaylistCatchupShift(d.source) }
                 },
                 // Which Nuvio profiles see this playlist (with more than one profile, or when it's
@@ -2243,7 +2256,18 @@ internal fun LiveTvSettingsContent(
         )
         is LiveDialog.EditPlaylist -> {
             val src = d.source
-            if (src.isStalker) {
+            if (src.isAddon) {
+                // An add-on list: only its name can be changed (the rest comes from the add-on).
+                SourceFormDialog(
+                    title = context.getString(R.string.iptv_settings_edit_playlist),
+                    fields = listOf(FormField(context.getString(R.string.iptv_settings_name), "", src.name)),
+                    onDismiss = close,
+                    onSave = { v, _ ->
+                        if (v[0].isNotBlank() && v[0] != src.name) viewModel.savePlaylist(src.copy(name = v[0].trim()))
+                        close()
+                    }
+                )
+            } else if (src.isStalker) {
                 StalkerSourceDialog(src, hidePassword = com.nuvio.tv.livetv.parental.ParentalControls.hideLogins(s), onDismiss = close, onSave = { name, config, guide, vod, live, _ ->
                     viewModel.savePlaylist(src.copy(name = name, sourceType = "stalker", stalkerConfig = config,
                         useEmbeddedEpg = guide, importVod = vod, importLive = live))
@@ -3090,6 +3114,45 @@ private fun BackupsOnTvDialog(
                 SettingsDialogActionButton(text = context.getString(R.string.action_close), onClick = onDismiss)
             }
         }
+    }
+}
+
+/** Settings › Add channels from an add-on: the channel lists your installed add-ons offer, one to pick. */
+@Composable
+private fun AddFromAddonDialog(viewModel: LiveTvSettingsViewModel, playlists: List<PlaylistSource>, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // The channel lists your installed add-ons offer (null while they're looked at).
+    var lists by remember { mutableStateOf<List<com.nuvio.tv.livetv.data.AddonChannels.ListChoice>?>(null) }
+    LaunchedEffect(Unit) { lists = viewModel.addonChannelLists() }
+    val found = lists
+    when {
+        found == null -> ActionListDialog(
+            title = context.getString(R.string.iptv_addon_pick_title),
+            subtitle = context.getString(R.string.iptv_addon_pick_loading),
+            actions = listOf(context.getString(R.string.action_close) to onDismiss),
+            onDismiss = onDismiss
+        )
+        found.isEmpty() -> ActionListDialog(
+            title = context.getString(R.string.iptv_addon_pick_title),
+            subtitle = context.getString(R.string.iptv_addon_pick_empty),
+            actions = listOf(context.getString(R.string.action_close) to onDismiss),
+            onDismiss = onDismiss
+        )
+        else -> ActionListDialog(
+            title = context.getString(R.string.iptv_addon_pick_title),
+            subtitle = context.getString(R.string.iptv_addon_pick_hint),
+            actions = found.map { choice ->
+                val added = playlists.any {
+                    it.isAddon && it.url == choice.addon.baseUrl && it.addonType == choice.catalog.apiType && it.addonCatalog == choice.catalog.id
+                }
+                val label = choice.listName + "  ·  " + choice.addonName + if (added) "  ·  " + context.getString(R.string.iptv_addon_pick_added) else ""
+                label to {
+                    if (!added) viewModel.addAddonList(choice)
+                    onDismiss()
+                }
+            },
+            onDismiss = onDismiss
+        )
     }
 }
 

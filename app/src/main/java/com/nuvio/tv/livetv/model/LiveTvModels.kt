@@ -98,12 +98,25 @@ data class PlaylistSource(
      * M3U links: the user picked whether to load movies and series (when adding the playlist or
      * in its settings), so finding them in the playlist later doesn't switch them back on.
      */
-    val vodSwitchSet: Boolean = false
+    val vodSwitchSet: Boolean = false,
+    /**
+     * Add-on channel lists ([sourceType] "addon"): the list's type and id in the add-on (whose
+     * address is [url]). The channels' links are asked from the add-on when one is tuned.
+     */
+    val addonType: String = "",
+    val addonCatalog: String = "",
+    /**
+     * Add-on channel lists: their channels get listings from your guides by channel name (they
+     * have no guide ids of their own). Switched off when the matches are wrong.
+     */
+    val guideNameMatch: Boolean = true
 ) {
     /** The user agent requests for this playlist go out with ("" = the app default). */
     val effectiveUserAgent: String get() = userAgent.ifBlank { fallbackUserAgent }
     val isStalker: Boolean get() = sourceType == "stalker" || stalkerConfig != null
-    val isXtream: Boolean get() = !isStalker && xtreamServer.isNotBlank()
+    /** A channel list from an installed add-on (like CNCVerse Bridge), not a provider playlist. */
+    val isAddon: Boolean get() = sourceType == ADDON_TYPE && !isStalker
+    val isXtream: Boolean get() = !isStalker && !isAddon && xtreamServer.isNotBlank()
     val hasCatalog: Boolean get() = isXtream || isStalker
 
     /**
@@ -112,7 +125,7 @@ data class PlaylistSource(
      * ([linkServer]). Null for anything else.
      */
     val m3uLogin: Triple<String, String, String>? get() {
-        if (isStalker || isXtream) return null
+        if (isStalker || isXtream || isAddon) return null
         return loginInLink() ?: linkServer.takeIf { it.isNotBlank() && linkUsername.isNotBlank() }
             ?.let { Triple(it, linkUsername, linkPassword) }
     }
@@ -151,7 +164,7 @@ data class PlaylistSource(
      * Dispatcharr's own M3U link (".../output/m3u").
      */
     val isDispatcharr: Boolean get() =
-        dispatcharr || (!isXtream && !isStalker && DISPATCHARR_M3U.containsMatchIn(tidyLink(url).substringBefore('?')))
+        dispatcharr || (!isXtream && !isStalker && !isAddon && DISPATCHARR_M3U.containsMatchIn(tidyLink(url).substringBefore('?')))
 
     /** The time zone catch-up links are written in: the one picked in settings, else the server's. */
     val catchupZone: String get() = catchupTimezone.ifBlank { serverTimezone }
@@ -167,7 +180,7 @@ data class PlaylistSource(
 
     /** A channel link from this M3U playlist in the chosen stream format (unchanged on Auto). */
     fun m3uStreamLink(link: String): String {
-        if (hasCatalog) return link
+        if (hasCatalog || isAddon) return link
         return when (streamFormat) {
             "ts", "m3u8" -> streamLinkAs(link, streamFormat)
             else -> link
@@ -188,6 +201,9 @@ data class PlaylistSource(
     private fun enc(s: String) = java.net.URLEncoder.encode(s.trim(), "UTF-8")
 
     companion object {
+        /** [sourceType] of an add-on channel list. */
+        const val ADDON_TYPE = "addon"
+
         /** How another playlist's built-in guide is named in [guidesOff]. */
         fun builtInGuideKey(playlistId: String) = "playlist:$playlistId"
 
@@ -1068,7 +1084,7 @@ object DeveloperTools {
  */
 object LiveTvLoadReport {
     /** Which Live TV kit this app was built from: changed with every kit, so a report shows the exact build. */
-    const val KIT_STAMP = "2026-11-28 14:30"
+    const val KIT_STAMP = "2026-11-28 16:40"
 
     /** The first line of every report: kit and app version, so it's clear which build wrote it. */
     val buildLine: String

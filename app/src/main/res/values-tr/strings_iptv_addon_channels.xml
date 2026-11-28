@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live TV: channel lists from add-ons -->
+    <string name="iptv_addon_add_title">"Bir eklentiden kanal ekle"</string>
+    <string name="iptv_addon_add_subtitle">"Yüklü eklentilerinizdeki kanal listeleri, örn. CNCVerse Bridge"</string>
+    <string name="iptv_addon_suffix">" (Eklenti)"</string>
+    <string name="iptv_addon_pick_title">"Bir kanal listesi seçin"</string>
+    <string name="iptv_addon_pick_loading">"Eklentileriniz inceleniyor…"</string>
+    <string name="iptv_addon_pick_empty">"Yüklü eklentilerinizin hiçbirinde kanal listesi yok. Önce Eklentiler bölümünden bir tane (örn. CNCVerse Bridge) yükleyin."</string>
+    <string name="iptv_addon_pick_hint">"Her liste ayrı bir oynatma listesi olarak eklenir. Eklenti bu TV\'deki bir uygulamaysa açık tutun."</string>
+    <string name="iptv_addon_pick_added">"Eklendi"</string>
+    <string name="iptv_addon_guide_matching_on">"Rehber eşleştirme: Açık"</string>
+    <string name="iptv_addon_guide_matching_off">"Rehber eşleştirme: Kapalı"</string>
+</resources>

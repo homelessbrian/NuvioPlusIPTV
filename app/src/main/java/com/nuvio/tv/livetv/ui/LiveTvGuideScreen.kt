@@ -431,6 +431,7 @@ private fun LiveTvGuideScreenBody(
     var pinWrong by remember { mutableStateOf(false) }
     var pinRemovesLock by remember { mutableStateOf(false) }
     val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()
+    val addonPlaylists by viewModel.addonPlaylists.collectAsStateWithLifecycle()
     val collapsedPlaylists by viewModel.collapsedPlaylists.collectAsStateWithLifecycle()
     var savedMovedKey by remember { mutableStateOf<String?>(null) }
     var visibilityChannels by remember { mutableStateOf<List<LiveChannel>>(emptyList()) }
@@ -460,6 +461,8 @@ private fun LiveTvGuideScreenBody(
     var searchOpen by remember { mutableStateOf(false) }
     var textPrompt by remember { mutableStateOf<TextPrompt?>(null) }
     var groupMenu by remember { mutableStateOf<ChannelGroup?>(null) }
+    // An add-on list's heading held: its menu (guide matching, update now).
+    var playlistMenu by remember { mutableStateOf<String?>(null) }
     var epgPickerFor by remember { mutableStateOf<LiveChannel?>(null) }
     var logoPickerFor by remember { mutableStateOf<LiveChannel?>(null) }
     var logoPanelFocusTick by remember { mutableIntStateOf(0) }
@@ -1078,7 +1081,7 @@ private fun LiveTvGuideScreenBody(
             !visibilityMode && !reorderActive && !groupReorderMode && !favoritesMode && !copyPickMode &&
             !copyTargetPicker && copyPickerFor == null && pinGroup == null && menuTarget == null &&
             !guideGearOpen && manualRecordingFor == null && infoTarget == null && !searchOpen &&
-            textPrompt == null && groupMenu == null && !epgListsOpen
+            textPrompt == null && groupMenu == null && playlistMenu == null && !epgListsOpen
     ) { action ->
         lastKeyAt = System.currentTimeMillis()
         fun unavailable() = com.nuvio.tv.livetv.record.LiveTvNotice.show(
@@ -1269,6 +1272,8 @@ private fun LiveTvGuideScreenBody(
                     showPlaylistHeadings = settings.groupPlaylistHeadings,
                     collapsed = collapsedPlaylists,
                     onToggleCollapse = { viewModel.togglePlaylistCollapsed(it) },
+                    menuPlaylists = addonPlaylists.keys,
+                    onPlaylistMenu = { playlistMenu = it },
                     reorderingId = groupReorderId,
                     reorderMode = groupReorderMode,
                     reorderFocusId = groupReorderFocus,
@@ -2398,6 +2403,27 @@ private fun LiveTvGuideScreenBody(
                 }
             )
         }
+        playlistMenu?.let { id ->
+            val matching = addonPlaylists[id]
+            if (matching == null) {
+                playlistMenu = null
+            } else {
+                val onText = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_addon_guide_matching_on)
+                val offText = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_addon_guide_matching_off)
+                val updateText = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_settings_update_now)
+                ActionMenuDialog(
+                    title = playlistNames[id] ?: "Playlist",
+                    actions = listOf(
+                        // Listings by channel name: off when they're wrong for this list.
+                        (if (matching) onText else offText) to {
+                            viewModel.setGuideNameMatch(id, !matching); playlistMenu = null
+                        },
+                        updateText to { viewModel.updatePlaylistNow(id); playlistMenu = null }
+                    ),
+                    onDismiss = { playlistMenu = null }
+                )
+            }
+        }
         groupMenu?.let { g ->
             val isCustom = g.id.startsWith(ChannelGroup.CUSTOM_PREFIX)
             val favAddText = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_guide_add_favorite_group)
@@ -3334,6 +3360,9 @@ private fun GroupColumn(
     playlistNames: Map<String, String> = emptyMap(),
     collapsed: Set<String> = emptySet(),
     onToggleCollapse: (String) -> Unit = {},
+    /** Playlists whose heading has a menu when OK is held (add-on lists). */
+    menuPlaylists: Set<String> = emptySet(),
+    onPlaylistMenu: (String) -> Unit = {},
     reorderingId: String? = null,
     /** Reorder groups is open (with or without a group in hand). */
     reorderMode: Boolean = reorderingId != null,
@@ -3565,7 +3594,8 @@ private fun GroupColumn(
                             containsSelected = inSource.any { it.id == selectedId },
                             onFocused = { focusedKey = "header:$src" },
                             focusRequester = requesterFor("header:$src"),
-                            onClick = { onToggleCollapse(src) }
+                            onClick = { onToggleCollapse(src) },
+                            onLongClick = if (src in menuPlaylists) ({ onPlaylistMenu(src) }) else null
                         )
                     }
                     if (!isCollapsed) inSource.forEach { groupItem(it) }
@@ -3611,7 +3641,8 @@ private fun PlaylistHeader(
     containsSelected: Boolean,
     onFocused: () -> Unit = {},
     focusRequester: FocusRequester? = null,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
@@ -3629,7 +3660,8 @@ private fun PlaylistHeader(
             .combinedClickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
+                onClick = onClick,
+                onLongClick = onLongClick
             )
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically
