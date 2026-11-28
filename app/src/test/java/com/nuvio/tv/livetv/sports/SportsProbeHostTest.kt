@@ -146,6 +146,81 @@ class SportsProbeHostTest {
         assertEquals(0, fixture.opens)
     }
 
+    @Test fun `automatic checks can resume after a live preview renders when a second stream is allowed`() = runTest {
+        val other = secondFeed()
+        val fixture = Fixture(backgroundScope, otherChannels = listOf(other))
+        fixture.played(firstFrame = false)
+        fixture.state.value = fixture.state.value.copy(isBuffering = true, isPlaying = false)
+        fixture.open()
+        runCurrent()
+        assertTrue(fixture.host.blockedByPlayback.value)
+        assertEquals(0, fixture.opens)
+
+        fixture.settings.value = fixture.settings.value.copy(checkChannelsDuringPlayback = true)
+        runCurrent()
+        assertTrue(fixture.host.blockedByPlayback.value)
+        assertEquals(0, fixture.opens)
+
+        val resume = fixture.host.previewCheckResumption()
+        fixture.host.stopAndJoin()
+        fixture.played()
+        resume()
+        runCurrent()
+
+        assertFalse(fixture.host.blockedByPlayback.value)
+        assertEquals(listOf(other), fixture.checkedChannels)
+        assertTrue(fixture.host.results.value.getValue(fixture.channel.key).playbackVerified)
+        assertEquals(SportsProbeStatus.WORKING, fixture.host.results.value.getValue(other.key).status)
+    }
+
+    @Test fun `idle-only automatic checks leave the other channel deferred during a live preview`() = runTest {
+        val other = secondFeed()
+        val fixture = Fixture(backgroundScope, otherChannels = listOf(other))
+        fixture.played()
+        fixture.open()
+        runCurrent()
+
+        assertTrue(fixture.host.blockedByPlayback.value)
+        assertEquals(SportsProbeStatus.DEFERRED, fixture.host.results.value.getValue(other.key).status)
+        assertEquals(0, fixture.opens)
+    }
+
+    @Test fun `recording multiview and on demand defer checks even when a second stream is allowed`() = runTest {
+        val other = secondFeed()
+        val fixture = Fixture(backgroundScope, otherChannels = listOf(other))
+        fixture.settings.value = fixture.settings.value.copy(checkChannelsDuringPlayback = true)
+        fixture.played()
+        BackgroundWork.nuvioPlaying.value = true
+        fixture.open()
+        runCurrent()
+        assertEquals(0, fixture.opens)
+
+        BackgroundWork.onDemandPlaying.value = true
+        BackgroundWork.nuvioPlaying.value = false
+        runCurrent()
+        assertEquals(0, fixture.opens)
+
+        fixture.recordings.value = listOf(mockk<LiveTvRecording> { every { isRecording } returns true })
+        BackgroundWork.onDemandPlaying.value = false
+        runCurrent()
+
+        assertTrue(fixture.host.blockedByPlayback.value)
+        assertEquals(0, fixture.opens)
+    }
+
+    @Test fun `a playing channel with unknown dimensions does not open a duplicate connection`() = runTest {
+        val other = secondFeed()
+        val fixture = Fixture(backgroundScope, otherChannels = listOf(other))
+        fixture.settings.value = fixture.settings.value.copy(checkChannelsDuringPlayback = true)
+        fixture.played()
+        fixture.state.value = fixture.state.value.copy(videoWidth = 0, videoHeight = 0)
+        fixture.open()
+        runCurrent()
+
+        assertEquals(listOf(other), fixture.checkedChannels)
+        assertEquals(SportsProbeStatus.DEFERRED, fixture.host.results.value.getValue(fixture.channel.key).status)
+    }
+
     @Test fun `profile changes revoke an already captured playback guard and cached health`() = runTest {
         val fixture = Fixture(backgroundScope)
         fixture.open()
@@ -211,19 +286,23 @@ class SportsProbeHostTest {
         val channel: LiveChannel = source(),
         publishUser: Boolean = true,
         installed: List<Addon> = emptyList(),
+        otherChannels: List<LiveChannel> = emptyList(),
     ) {
         val user = MutableSharedFlow<LiveUserState>(replay = 1)
         val live = MutableStateFlow(LiveTvSettings())
         val sources = MutableStateFlow(listOf(PlaylistSource("provider", "Provider", "https://fixture.invalid/list.m3u")))
         val installed = MutableStateFlow(installed)
         val profile = MutableStateFlow(1)
-        val channelList = MutableStateFlow(listOf(channel))
+        private val candidates = listOf(channel) + otherChannels
+        val channelList = MutableStateFlow(candidates)
         val state = MutableStateFlow(LivePlaybackState())
         val recordings = MutableStateFlow<List<LiveTvRecording>>(emptyList())
+        val settings = MutableStateFlow(SportsSettings(autoCheckChannels = true))
         val known = MutableStateFlow(listOf(SportsEvent("game", "league", 1_800_000_000_000L,
             true, GameState.LIVE, "Game", null, null, null, null)))
         val videos = MutableStateFlow<Map<String, List<ChannelMatch>>>(emptyMap())
-        var opens = 0
+        val checkedChannels = mutableListOf<LiveChannel>()
+        val opens: Int get() = checkedChannels.size
         private var playing: LiveChannel? = null
         val host: SportsProbeHost
 
@@ -231,7 +310,10 @@ class SportsProbeHostTest {
             if (publishUser) user.tryEmit(LiveUserState())
             val context = mockk<Context> { every { getSystemService(ConnectivityManager::class.java) } returns null }
             val engine = mockk<AndroidSportsChannelProbe> {
-                coEvery { check(any()) } answers { opens++; SportsProbeResult(SportsProbeStatus.WORKING, 1920, 1080) }
+                coEvery { check(any()) } answers {
+                    checkedChannels.add(firstArg())
+                    SportsProbeResult(SportsProbeStatus.WORKING, 1920, 1080)
+                }
             }
             val playback = mockk<LiveTvPlaybackController> {
                 every { state } returns this@Fixture.state
@@ -253,9 +335,9 @@ class SportsProbeHostTest {
                 every { activeProfileReady } returns MutableStateFlow(true)
             }
             val repository = mockk<SportsRepository> {
-                every { settings } returns MutableStateFlow(SportsSettings(autoCheckChannels = true))
+                every { settings } returns this@Fixture.settings
                 every { known } returns this@Fixture.known
-                every { matches } returns MutableStateFlow(mapOf("game" to listOf(match(channel))))
+                every { matches } returns MutableStateFlow(mapOf("game" to candidates.map(::match)))
                 every { vodMatches } returns MutableStateFlow(emptyMap())
                 every { videoMatches } returns videos
             }
@@ -263,7 +345,7 @@ class SportsProbeHostTest {
                 .bind(scope, indexDispatcher = scope.coroutineContext[ContinuationInterceptor] as CoroutineDispatcher)
         }
 
-        fun open() = host.open("game", listOf(channel), automatic = true)
+        fun open() = host.open("game", candidates, automatic = true)
         fun played(firstFrame: Boolean = true) {
             playing = channel
             state.value = LivePlaybackState(channelKey = channel.key, isPlaying = true, videoWidth = 1920,
@@ -274,6 +356,7 @@ class SportsProbeHostTest {
     private companion object {
         fun source() = LiveChannel("fixture", "provider", "Provider", "Fixture", null, null, null,
             "probe-locked-group", "Sports", 1, "https://fixture.invalid/stream.ts")
+        fun secondFeed() = source().copy(key = "other-feed", url = "https://fixture.invalid/other-feed.ts")
         fun match(channel: LiveChannel) = ChannelMatch(channel, 100, "Fixture", null, null, false)
     }
 }

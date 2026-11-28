@@ -55,6 +55,12 @@ private val REMIND_TIMES = listOf(0, 5, 10, 15, 30, 60)
 
 private fun remindLabel(m: Int): String = if (m <= 0) "When it starts" else "$m minutes before"
 
+private enum class ChannelCheckMode(val title: String, val description: String) {
+    OFF("Off", "Skip automatic checks."),
+    IDLE("Automatic when idle", "Check game channels only when no other stream is open."),
+    WHILE_WATCHING("Automatic while watching", "Check game channels even while watching. This uses a second provider connection.")
+}
+
 /** Sports, in Nuvio's settings (next to Live TV). */
 @Composable
 fun SportsSettingsContent(
@@ -70,6 +76,11 @@ fun SportsSettingsContent(
     val shownCount = SportsCatalog.leagues.count { SportsCatalog.shown(it, s) }
     val links = s.networkChannels.size + s.teamChannels.size + s.leagueChannels.size + s.eventChannels.size
     val fixes = links + s.blocked.size
+    val channelCheckMode = when {
+        !s.autoCheckChannels -> ChannelCheckMode.OFF
+        s.checkChannelsDuringPlayback -> ChannelCheckMode.WHILE_WATCHING
+        else -> ChannelCheckMode.IDLE
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -170,8 +181,8 @@ fun SportsSettingsContent(
                     )
                     SettingsActionRow(
                         title = "Channel checks",
-                        subtitle = "Checks availability, resolution and frame rate when you open a game. Back or Play stops the checks.",
-                        value = if (s.autoCheckChannels) "Automatic" else "Off",
+                        subtitle = "Automatically checks channel availability, resolution and FPS when you open a game.",
+                        value = channelCheckMode.title,
                         leadingIcon = Icons.Default.Tune,
                         onClick = { dialog = "channelChecks" }
                     )
@@ -280,9 +291,17 @@ fun SportsSettingsContent(
     when (dialog) {
         "channelChecks" -> SettingsSingleChoiceDialog(
             title = "Channel checks",
-            options = listOf(SettingsPickerOption("off", "Off"), SettingsPickerOption("automatic", "Automatic")),
-            selectedValue = if (s.autoCheckChannels) "automatic" else "off",
-            onOptionSelected = { value -> update { it.copy(autoCheckChannels = value == "automatic") }; close() },
+            options = ChannelCheckMode.entries.map { SettingsPickerOption(it, it.title, description = it.description) },
+            selectedValue = channelCheckMode,
+            onOptionSelected = { mode ->
+                update {
+                    it.copy(
+                        autoCheckChannels = mode != ChannelCheckMode.OFF,
+                        checkChannelsDuringPlayback = mode == ChannelCheckMode.WHILE_WATCHING
+                    )
+                }
+                close()
+            },
             onDismiss = close
         )
         "region" -> SettingsSingleChoiceDialog(

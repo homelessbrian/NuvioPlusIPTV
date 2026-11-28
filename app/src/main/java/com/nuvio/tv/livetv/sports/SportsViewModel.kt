@@ -223,12 +223,14 @@ class SportsViewModel @Inject constructor(
     /** Plays the channel in the Sports page's window (no full screen), remembered as last watched. */
     fun playHere(m: ChannelMatch) {
         previewReturn.cancel()
+        val resumeChecks = channelProbeHost.previewCheckResumption()
         if (playback.playingChannel?.key == m.channel.key && playingKey.value != null) {
             cancelPendingPlayback()
             channelProbeHost.stop()
+            resumeChecks()
             return
         }
-        playAfterChecks(m, rememberWatched = true)
+        playAfterChecks(m, rememberWatched = true, onStarted = resumeChecks)
     }
 
     /**

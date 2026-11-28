@@ -45,7 +45,10 @@ class SportsChannelProbePreferencesTest {
         val playbackBackup = mockk<PlaybackSettingsBackup>(relaxed = true) {
             every { exportDeviceSettings() } answers { JSONObject() }
         }
-        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), playbackBackup)
+        preferences = LiveTvPreferences(
+            context, profileManager, mockk(relaxed = true), playbackBackup,
+            sharedSettings = mockk(relaxed = true), preferenceSettings = mockk(relaxed = true)
+        )
         mockkStatic(VpnBackup::class)
         every { VpnBackup.prepareExport(any<Context>(), null) } returns "{\"version\":1,\"profiles\":[]}"
         every { VpnBackup.restoreSetup(any<Context>(), any<String>()) } just Runs
@@ -71,18 +74,29 @@ class SportsChannelProbePreferencesTest {
         assertEquals("saved-channel", current().leagueChannels["motogp"])
     }
 
-    @Test fun `Sports sync roundtrips enabled and disabled channel checking without changing picks`() = runTest {
+    @Test fun `old automatic channel checks remain idle only`() = runTest {
+        preferences.editSportsSettings { JSONObject().put("autoCheckChannels", true).toString() }
+
+        assertTrue(current().autoCheckChannels)
+        assertFalse(current().checkChannelsDuringPlayback)
+    }
+
+    @Test fun `Sports sync roundtrips each channel checking mode without changing picks`() = runTest {
         assertEquals(SyncPart.SPORTS, SyncParts.partOf("sports"))
-        for (enabled in listOf(true, false)) {
-            val expected = SportsSettings(
-                autoCheckChannels = enabled,
+        val modes = listOf(
+            SportsSettings(),
+            SportsSettings(autoCheckChannels = true),
+            SportsSettings(autoCheckChannels = true, checkChannelsDuringPlayback = true)
+        )
+        for (mode in modes) {
+            val expected = mode.copy(
                 leagueChannels = mapOf("motogp" to "saved-channel"),
                 preferredGroups = setOf("sports"),
             )
             preferences.editSportsSettings { expected.toJson() }
             val setup = JSONObject(preferences.exportForSync().toString())
             assertEquals(expected.toJson(), setup.getJSONObject("sports").getString("v"))
-            preferences.editSportsSettings { SportsSettings(autoCheckChannels = !enabled).toJson() }
+            preferences.editSportsSettings { SportsSettings(autoCheckChannels = !mode.autoCheckChannels).toJson() }
 
             preferences.importFromSync(setup)
 
