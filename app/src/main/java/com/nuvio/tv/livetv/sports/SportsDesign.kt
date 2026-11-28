@@ -296,12 +296,12 @@ internal fun playingEventId(
         ))?.id
 }
 
-/** A score: fixed-width digits, dimmed when behind, and a short yellow flash when it changes. */
+/** A score that flashes briefly when the same game or team's score changes. */
 @Composable
-internal fun ScoreLabel(score: String, dim: Boolean, size: TextUnit) {
-    var last by remember { mutableStateOf(score) }
-    var flash by remember { mutableStateOf(false) }
-    LaunchedEffect(score) {
+internal fun ScoreLabel(eventId: String, score: String, dim: Boolean, size: TextUnit, teamId: String? = null) {
+    var last by remember(eventId, teamId) { mutableStateOf(score) }
+    var flash by remember(eventId, teamId) { mutableStateOf(false) }
+    LaunchedEffect(eventId, teamId, score) {
         if (score != last) {
             last = score
             flash = true
@@ -351,6 +351,7 @@ internal fun HeroTeamName(side: Side, sport: Sport, live: Boolean, hideScores: B
 /** One team on its own band in its colour: logo, name (★ when followed), record, and the score. */
 @Composable
 internal fun TeamBand(
+    eventId: String,
     side: Side,
     showScore: Boolean,
     dim: Boolean,
@@ -384,7 +385,7 @@ internal fun TeamBand(
             extra?.takeIf { it.isNotBlank() }?.let { LiveText(it, color = Color.White.copy(alpha = 0.6f), size = name * 0.68f, weight = FontWeight.SemiBold) }
         }
         if (side.onOffense) OffensiveMarker(offenseSport, side, name)
-        if (showScore) ScoreLabel(side.score.orEmpty(), dim, score)
+        if (showScore) ScoreLabel(eventId, side.score.orEmpty(), dim, score, teamId = side.team.id)
         else trailing?.invoke()
     }
 }
@@ -525,6 +526,7 @@ internal fun GameCard(
                     val tied = showScore && sides[0].score == sides[1].score
                     sides.forEach { side ->
                         TeamBand(
+                            eventId = ev.id,
                             side = side,
                             showScore = showScore,
                             dim = showScore && !tied && side != lead,
@@ -952,7 +954,7 @@ internal fun GameHeaderBands(ev: SportsEvent, hideScores: Boolean) {
         val tied = showScore && sides[0].score == sides[1].score
         Column(Modifier.fillMaxWidth()) {
             sides.forEach { s ->
-                TeamBand(s, showScore, showScore && !tied && s != lead, followed = false, modifier = Modifier.height(46.dp), logo = 32.dp, name = 15.sp, score = 22.sp,
+                TeamBand(ev.id, s, showScore, showScore && !tied && s != lead, followed = false, modifier = Modifier.height(46.dp), logo = 32.dp, name = 15.sp, score = 22.sp,
                     offenseSport = sport.takeIf { ev.state == GameState.LIVE && !hideScores })
             }
         }

@@ -134,7 +134,7 @@ private fun PinStrip(ev: SportsEvent) {
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     Spacer(Modifier.width(4.dp))
-                    ScoreLabel(s.score.orEmpty(), dim = false, size = 12.sp)
+                    ScoreLabel(ev.id, s.score.orEmpty(), dim = false, size = 12.sp, teamId = s.team.id)
                 }
             }
         }
