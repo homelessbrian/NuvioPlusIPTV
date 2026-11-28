@@ -170,8 +170,13 @@ internal class WatchStatsBucket {
             }
         }
 
+        /** The most-watched entries kept per bucket, so a channel surfer's list can't grow without end. */
+        internal const val MAX_SAVED_ENTRIES = 100
+
         private fun encodeBreakdown(values: Map<String, WatchStatsBreakdown>): JSONArray = JSONArray().apply {
-            values.forEach { (id, value) ->
+            val kept = if (values.size <= MAX_SAVED_ENTRIES) values.entries
+                else values.entries.sortedWith(compareBy(rankOrder) { it.value }).take(MAX_SAVED_ENTRIES)
+            kept.forEach { (id, value) ->
                 put(JSONArray().put(id).put(value.name).put(value.count).put(value.durationMillis)
                     .put(value.moviePlays).put(value.episodePlays))
             }
