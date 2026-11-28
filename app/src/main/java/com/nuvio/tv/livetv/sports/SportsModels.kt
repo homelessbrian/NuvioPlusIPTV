@@ -224,8 +224,10 @@ data class SportsSettings(
     val showHighlights: Boolean = true,
     /** A finished game's page lists condensed games. */
     val showCondensed: Boolean = true,
-    /** Check the open game's channels when playback is idle. Checks consume provider connections. */
-    val autoCheckChannels: Boolean = false
+    /** Automatically check the open game's channels. Each check uses a provider connection. */
+    val autoCheckChannels: Boolean = false,
+    /** Allow an automatic channel check while another stream is open. */
+    val checkChannelsDuringPlayback: Boolean = false
 ) {
     fun toJson(): String = JSONObject()
         .put("showInSidebar", showInSidebar)
@@ -236,6 +238,7 @@ data class SportsSettings(
         .put("pinnedScores", pinnedScores)
         .put("bestChannelFirst", bestChannelFirst)
         .put("autoCheckChannels", autoCheckChannels)
+        .put("checkChannelsDuringPlayback", checkChannelsDuringPlayback)
         .put("remindMyTeams", remindMyTeams)
         .put("remindMinutes", remindMinutes)
         .put("autoSwitch", autoSwitch)
@@ -270,6 +273,7 @@ data class SportsSettings(
                     pinnedScores = o.optBoolean("pinnedScores", d.pinnedScores),
                     bestChannelFirst = o.optBoolean("bestChannelFirst", d.bestChannelFirst),
                     autoCheckChannels = o.optBoolean("autoCheckChannels", d.autoCheckChannels),
+                    checkChannelsDuringPlayback = o.optBoolean("checkChannelsDuringPlayback", d.checkChannelsDuringPlayback),
                     remindMyTeams = o.optBoolean("remindMyTeams", d.remindMyTeams),
                     remindMinutes = o.optInt("remindMinutes", d.remindMinutes),
                     autoSwitch = o.optBoolean("autoSwitch", d.autoSwitch),

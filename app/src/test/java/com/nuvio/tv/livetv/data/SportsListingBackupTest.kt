@@ -48,7 +48,10 @@ class SportsListingBackupTest {
         val playbackBackup = mockk<PlaybackSettingsBackup>(relaxed = true) {
             every { exportDeviceSettings() } answers { JSONObject() }
         }
-        preferences = LiveTvPreferences(context, profileManager, mockk(relaxed = true), playbackBackup)
+        preferences = LiveTvPreferences(
+            context, profileManager, mockk(relaxed = true), playbackBackup,
+            sharedSettings = mockk(relaxed = true), preferenceSettings = mockk(relaxed = true)
+        )
         mockkStatic(VpnBackup::class)
         every { VpnBackup.prepareExport(any<Context>(), null) } returns "{\"version\":1,\"profiles\":[]}"
         every { VpnBackup.restoreSetup(any<Context>(), any<String>()) } just Runs

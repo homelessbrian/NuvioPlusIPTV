@@ -27,6 +27,7 @@ internal class SportsProbeQueue(
     private val epoch: () -> Any = { 0 },
     private val now: () -> Long = System::currentTimeMillis,
     private val publishable: (LiveChannel) -> Boolean = { true },
+    private val playingChannelKey: () -> String? = { null },
 ) {
     private data class Key(val channel: LiveChannel, val epoch: Any)
     private data class Cached(val value: SportsProbeResult, val savedAt: Long)
@@ -69,6 +70,7 @@ internal class SportsProbeQueue(
                     continue
                 }
                 if (busy()) { seed(); break }
+                if (channel.key == playingChannelKey()) continue
                 _results.value = _results.value + (channel.key to SportsProbeResult(SportsProbeStatus.CHECKING))
                 val result = try {
                     supervisorScope {
@@ -89,7 +91,7 @@ internal class SportsProbeQueue(
                     if (current(work) && !busy() && !cancelledForPlayback) completed[work.key] = deferred("Check cancelled")
                     continue
                 } catch (_: Exception) {
-                    SportsProbeResult(SportsProbeStatus.UNVERIFIED, detail = "Check could not finish")
+                    SportsProbeResult(SportsProbeStatus.UNVERIFIED)
                 }
                 if (!current(work) || !permitted(channel) || !current(work)) {
                     if (current(work)) completed[work.key] = deferred("Channel changed; check again")
@@ -141,7 +143,9 @@ internal class SportsProbeQueue(
     fun refresh() {
         if (closed) return
         syncEpoch()
-        if (busy()) active?.let { cancelledForPlayback = true; it.cancel() }
+        if (busy() || activeWork?.let { it.key.channel.key == playingChannelKey() } == true) {
+            active?.let { cancelledForPlayback = true; it.cancel() }
+        }
         if (activeWork?.let { !publishable(it.key.channel) } == true) active?.cancel()
         seed()
         changed.trySend(Unit)
@@ -166,6 +170,13 @@ internal class SportsProbeQueue(
         val previous = active
         stop()
         previous?.join()
+    }
+
+    /** Resume an in-page check after the preview has taken over its provider connection. */
+    fun resume(eventId: String) {
+        if (closed || event != eventId || !automatic) return
+        requested = true
+        refresh()
     }
 
     fun close() {
@@ -214,6 +225,7 @@ internal class SportsProbeQueue(
 
     private fun seed() {
         val waiting = requested && busy()
+        val playing = playingChannelKey()
         val values = linkedMapOf<String, SportsProbeResult>()
         var blocked = false
         for (channel in channels.values) {
@@ -223,15 +235,23 @@ internal class SportsProbeQueue(
                 cache.remove(key)
                 continue
             }
-            val observed = observation(channel)?.let { it.copy(checkedAtMs = it.checkedAtMs.takeIf { t -> t > 0 } ?: now()) }
+            val previous = completed[key] ?: cached(key)?.also { completed[key] = it }
+            val observed = observation(channel)?.let { live ->
+                val savedRate = previous?.takeIf { it.width == live.width && it.height == live.height }?.frameRate
+                live.copy(
+                    checkedAtMs = live.checkedAtMs.takeIf { it > 0 } ?: now(),
+                    frameRate = live.frameRate.takeIf { it > 0f } ?: savedRate ?: 0f
+                )
+            }
             if (observed != null && observed.status in CACHEABLE) {
                 completed[key] = observed
                 cache[key] = Cached(observed, now())
             }
-            val value = observed ?: completed[key] ?: cached(key)?.also { completed[key] = it }
+            val value = observed ?: previous
                 ?: when {
                     !requested -> null
-                    waiting -> deferred("Video is playing; check when idle").also { blocked = true }
+                    waiting -> deferred("Video playing").also { blocked = true }
+                    channel.key == playing -> deferred("Video info pending")
                     activeWork?.let { current(it) && it.key == key } == true -> SportsProbeResult(SportsProbeStatus.CHECKING)
                     else -> SportsProbeResult(SportsProbeStatus.QUEUED)
                 }

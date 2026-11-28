@@ -89,7 +89,8 @@ class SportsProbeHost @Inject constructor(
         }.distinctUntilChanged().stateIn(owner, SharingStarted.Eagerly, null)
         queue = SportsProbeQueue(owner, engine, { allowed(it) }, ::busy, ::observed,
             epoch = { listOf(revision, VpnPlaybackProtection.settingsRevision(), VpnPlaybackProtection.networkRecoveryRevision(), ForkDns.choice.name) },
-            publishable = { allowed(it) })
+            publishable = { allowed(it) },
+            playingChannelKey = { playback.state.value.channelKey })
         watch(playback.state) { queue.refresh() }
         watch(BackgroundWork.nuvioPlaying) { queue.refresh() }
         watch(BackgroundWork.onDemandPlaying) { queue.refresh() }
@@ -163,6 +164,15 @@ class SportsProbeHost @Inject constructor(
     internal fun stop() = queue.stop()
     internal suspend fun stopAndJoin() = queue.stopAndJoin()
 
+    internal fun previewCheckResumption(): () -> Unit {
+        val eventId = gameId ?: return {}
+        return {
+            if (gameId == eventId && repository.settings.value.autoCheckChannels) {
+                queue.resume(eventId)
+            }
+        }
+    }
+
     /** Capture the original selection before waiting for network cleanup. */
     internal fun playbackGuard(candidate: LiveChannel, replay: Boolean = false): () -> Boolean {
         val selectedProfile = profiles.activeProfileId.value
@@ -201,9 +211,16 @@ class SportsProbeHost @Inject constructor(
         }
     }
 
-    private fun busy(): Boolean = playback.state.value.channelKey != null ||
-        BackgroundWork.nuvioPlaying.value || BackgroundWork.onDemandPlaying.value ||
-        recorder.recordings.value.any { it.isRecording }
+    private fun busy(): Boolean {
+        if (BackgroundWork.nuvioPlaying.value || BackgroundWork.onDemandPlaying.value ||
+            recorder.recordings.value.any { it.isRecording }) return true
+        val state = playback.state.value
+        if (state.channelKey == null) return false
+        // Let the preview finish tuning before the check opens another provider connection.
+        return !repository.settings.value.checkChannelsDuringPlayback ||
+            state.catchupTitle != null || !state.hasRenderedVideoFrame || state.isBuffering ||
+            !(state.isPlaying || state.userPaused)
+    }
 
     private fun invalidate() {
         revision++

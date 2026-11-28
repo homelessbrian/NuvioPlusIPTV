@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
@@ -25,6 +26,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -35,6 +37,7 @@ import com.nuvio.tv.livetv.sports.probe.sportsProbeChannelRows
 import com.nuvio.tv.ui.theme.NuvioTheme
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -87,7 +90,8 @@ class SportsChannelProbeUiTest {
                     width = 1920, height = 1080, checkedAtMs = NOW - 5_000, frameRate = 25f),
             )
         }
-        compose.onNode(preferred).assertIsDisplayed().assertIsFocused().assertTextContains("Unavailable now", substring = true)
+        compose.onNode(preferred).assertIsDisplayed().assertIsFocused()
+            .assertTextContains("Unavailable · Access denied (401)")
         compose.onNode(alternative).assertTextContains("Working", substring = true)
             .assertTextContains("1920×1080 · 50 fps", substring = true).assertTextContains("Measured")
         compose.onNode(lowerRate).assertTextContains("1920×1080 · 25 fps", substring = true)
@@ -113,9 +117,9 @@ class SportsChannelProbeUiTest {
         compose.runOnIdle { assertEquals(primary.channel.key, chosen) }
         compose.runOnIdle {
             checks.value = checks.value + (primary.channel.key to SportsProbeResult(
-                SportsProbeStatus.DEFERRED, detail = "Video is playing"))
+                SportsProbeStatus.DEFERRED, detail = "Video playing"))
         }
-        compose.onNode(preferred).assertIsFocused().assertTextContains("Check deferred", substring = true)
+        compose.onNode(preferred).assertIsFocused().assertTextContains("On hold · Video playing")
         compose.onAllNodes(hasClickAction()).assertCountEquals(3)
     }
 
@@ -151,7 +155,7 @@ class SportsChannelProbeUiTest {
             )
         }
         compose.onNode(focused).assertIsDisplayed().assertIsFocused()
-            .assertTextContains("Unavailable now", substring = true)
+            .assertTextContains("Unavailable")
         press(KeyEvent.KEYCODE_DPAD_CENTER)
         compose.runOnIdle { assertEquals(current.channel.key, chosen) }
         // A later successful check moves this same focused channel back to the top.
@@ -164,6 +168,34 @@ class SportsChannelProbeUiTest {
         compose.onNode(hasText(sources.last().channel.name)).assertIsFocused()
         press(KeyEvent.KEYCODE_DPAD_CENTER)
         compose.runOnIdle { assertEquals(sources.last().channel.key, chosen) }
+    }
+
+    @Test
+    fun narrowRowShowsTheFullStatusBelowItsMeasuredResolutionAndFrameRate() {
+        val channel = match("narrow", "Fixture Sports Channel", "A Long Provider Name", "HD")
+        val quality = "1920×1080 · 50 fps"
+        compose.setContent {
+            NuvioTheme {
+                Box(Modifier.width(240.dp)) {
+                    SportsChannelRow(
+                        channel, finished = false, playing = false, now = NOW,
+                        probe = SportsProbeResult(SportsProbeStatus.WORKING,
+                            width = 1920, height = 1080, checkedAtMs = NOW - 5_000, frameRate = 50f),
+                        showProbe = true,
+                        onClick = {}
+                    )
+                }
+            }
+        }
+
+        compose.onNode(hasText(channel.channel.name) and hasClickAction())
+            .assertTextContains("Working", substring = true)
+            .assertTextContains(quality)
+            .assertTextContains("Measured")
+        compose.onAllNodes(hasClickAction()).assertCountEquals(1)
+        val qualityBounds = singleLineBounds(quality)
+        val statusBounds = singleLineBounds("Working")
+        assertTrue("The check status must appear below the quality readout", statusBounds.top >= qualityBounds.bottom)
     }
 
     @Test
@@ -190,6 +222,18 @@ class SportsChannelProbeUiTest {
         compose.onNode(matcher).performSemanticsAction(SemanticsActions.RequestFocus)
         compose.waitForIdle()
         compose.onNode(matcher).assertIsDisplayed().assertIsFocused()
+    }
+
+    private fun singleLineBounds(text: String): Rect {
+        val node = compose.onNode(hasText(text, substring = true), useUnmergedTree = true).assertIsDisplayed()
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { getLayouts ->
+            assertTrue(getLayouts(layouts))
+        }
+        val layout = layouts.single()
+        assertEquals("Expected one line for $text", 1, layout.lineCount)
+        assertFalse("Text is cut off: $text", layout.hasVisualOverflow || layout.isLineEllipsized(0))
+        return node.fetchSemanticsNode().boundsInRoot
     }
 
     private fun press(code: Int) {

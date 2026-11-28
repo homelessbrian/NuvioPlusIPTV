@@ -55,6 +55,16 @@ private val REMIND_TIMES = listOf(0, 5, 10, 15, 30, 60)
 
 private fun remindLabel(m: Int): String = if (m <= 0) "When it starts" else "$m minutes before"
 
+private enum class ChannelCheckMode(val title: String, val shortLabel: String, val description: String) {
+    OFF("Off", "Off", "Skip automatic checks."),
+    IDLE("Auto when idle", "Idle only", "Check when no stream is open."),
+    WHILE_WATCHING(
+        "Auto with preview",
+        "With preview",
+        "Also check during the Sports preview. Uses a second provider connection."
+    )
+}
+
 /** Sports, in Nuvio's settings (next to Live TV). */
 @Composable
 fun SportsSettingsContent(
@@ -70,6 +80,11 @@ fun SportsSettingsContent(
     val shownCount = SportsCatalog.leagues.count { SportsCatalog.shown(it, s) }
     val links = s.networkChannels.size + s.teamChannels.size + s.leagueChannels.size + s.eventChannels.size
     val fixes = links + s.blocked.size
+    val channelCheckMode = when {
+        !s.autoCheckChannels -> ChannelCheckMode.OFF
+        s.checkChannelsDuringPlayback -> ChannelCheckMode.WHILE_WATCHING
+        else -> ChannelCheckMode.IDLE
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -164,14 +179,14 @@ fun SportsSettingsContent(
                     )
                     SettingsToggleRow(
                         "Best Channel First",
-                        "Lists each feed by resolution, then frame rate. With channel checks on, working feeds come first.",
+                        "Sorts by resolution, then FPS. With checks on, working feeds come first.",
                         s.bestChannelFirst,
                         { update { it.copy(bestChannelFirst = !it.bestChannelFirst) } }
                     )
                     SettingsActionRow(
-                        title = "Channel checks",
-                        subtitle = "Checks availability, resolution and frame rate when you open a game. Back or Play stops the checks.",
-                        value = if (s.autoCheckChannels) "Automatic" else "Off",
+                        title = "Channel Checks",
+                        subtitle = "Checks channel availability, resolution and FPS.",
+                        value = channelCheckMode.shortLabel,
                         leadingIcon = Icons.Default.Tune,
                         onClick = { dialog = "channelChecks" }
                     )
@@ -279,11 +294,20 @@ fun SportsSettingsContent(
     val close: () -> Unit = { dialog = null }
     when (dialog) {
         "channelChecks" -> SettingsSingleChoiceDialog(
-            title = "Channel checks",
-            options = listOf(SettingsPickerOption("off", "Off"), SettingsPickerOption("automatic", "Automatic")),
-            selectedValue = if (s.autoCheckChannels) "automatic" else "off",
-            onOptionSelected = { value -> update { it.copy(autoCheckChannels = value == "automatic") }; close() },
-            onDismiss = close
+            title = "Channel Checks",
+            options = ChannelCheckMode.entries.map { SettingsPickerOption(it, it.title, description = it.description) },
+            selectedValue = channelCheckMode,
+            onOptionSelected = { mode ->
+                update {
+                    it.copy(
+                        autoCheckChannels = mode != ChannelCheckMode.OFF,
+                        checkChannelsDuringPlayback = mode == ChannelCheckMode.WHILE_WATCHING
+                    )
+                }
+                close()
+            },
+            onDismiss = close,
+            subtitle = "Checks run on the game page."
         )
         "region" -> SettingsSingleChoiceDialog(
             title = "Your region",

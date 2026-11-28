@@ -77,7 +77,7 @@ class AndroidSportsChannelProbe @Inject constructor(
         onVerified: (SportsProbeResult) -> Unit,
     ): SportsProbeResult =
         serial.withLock {
-            if (channel.drm != null) return@withLock result(SportsProbeStatus.PROTECTED, "Protected stream")
+            if (channel.drm != null) return@withLock result(SportsProbeStatus.PROTECTED)
             var prepared: StalkerPlayback? = null
             val requests = SportsProbeHttpSession()
             try {
@@ -86,7 +86,7 @@ class AndroidSportsChannelProbe @Inject constructor(
                 preparationComplete()
                 val url = prepared?.url ?: channel.url
                 if (runCatching { URI(url).scheme?.lowercase() }.getOrNull() !in setOf("http", "https")) {
-                    return@withLock result(SportsProbeStatus.UNVERIFIED, "Unsupported stream format")
+                    return@withLock result(SportsProbeStatus.UNVERIFIED, "Unsupported format")
                 }
                 probeSportsMediaSource(onVerified = onVerified, beforeClose = { requests.close(); prepared?.policy?.retire() }) { decorate ->
                     LiveTvMediaSourceBuilder(
@@ -126,8 +126,8 @@ internal suspend fun boundedSportsProbeCheck(
 ): SportsProbeResult {
     var prepared = false
     return withTimeoutOrNull(timeoutMs) { check { prepared = true } }
-        ?: if (prepared) verified() ?: result(SportsProbeStatus.UNVERIFIED, "Slow or not verified")
-        else result(SportsProbeStatus.DEFERRED, "Waiting for VPN or provider")
+        ?: if (prepared) verified() ?: result(SportsProbeStatus.UNVERIFIED, "Timed out")
+        else result(SportsProbeStatus.DEFERRED, "VPN or provider")
 }
 
 /** Real Media3 periods and sample queues; the source factory remains injectable for loopback tests. */
@@ -211,7 +211,7 @@ internal suspend fun probeSportsMediaSource(
                                     .firstOrNull { it.type == C.TRACK_TYPE_VIDEO }
                                     ?: return@withTimeoutOrNull result(SportsProbeStatus.UNVERIFIED, "No video track")
                                 if (group.getFormat(0).drmInitData != null) {
-                                    return@withTimeoutOrNull result(SportsProbeStatus.PROTECTED, "Protected stream")
+                                    return@withTimeoutOrNull result(SportsProbeStatus.PROTECTED)
                                 }
                                 val streams = arrayOfNulls<SampleStream>(1)
                                 period.selectTracks(
@@ -233,7 +233,7 @@ internal suspend fun probeSportsMediaSource(
                                     sample.clear()
                                     when (video.readData(holder, sample, SampleStream.FLAG_OMIT_SAMPLE_DATA)) {
                                         C.RESULT_FORMAT_READ -> {
-                                            if (holder.format?.drmInitData != null) return@withTimeoutOrNull result(SportsProbeStatus.PROTECTED, "Protected stream")
+                                            if (holder.format?.drmInitData != null) return@withTimeoutOrNull result(SportsProbeStatus.PROTECTED)
                                             if (format != holder.format) {
                                                 completed()?.let { return@withTimeoutOrNull it }
                                                 firstTimeUs = null
@@ -244,8 +244,8 @@ internal suspend fun probeSportsMediaSource(
                                         }
                                         C.RESULT_BUFFER_READ -> {
                                             if (sample.isEndOfStream) return@withTimeoutOrNull completed()
-                                                ?: result(SportsProbeStatus.UNVERIFIED, "Too little media to verify")
-                                            if (sample.isEncrypted) return@withTimeoutOrNull result(SportsProbeStatus.PROTECTED, "Protected stream")
+                                                ?: result(SportsProbeStatus.UNVERIFIED, "Too little video")
+                                            if (sample.isEncrypted) return@withTimeoutOrNull result(SportsProbeStatus.PROTECTED)
                                             val timestamp = sample.timeUs
                                             if (timestamp != C.TIME_UNSET && timestamp != C.TIME_END_OF_SOURCE) {
                                                 firstTimeUs = firstTimeUs?.let { minOf(it, timestamp) } ?: timestamp
@@ -277,8 +277,8 @@ internal suspend fun probeSportsMediaSource(
                         }
                         delay(20L)
                     }
-                    @Suppress("UNREACHABLE_CODE") result(SportsProbeStatus.UNVERIFIED, "Not verified")
-                } ?: working ?: result(SportsProbeStatus.UNVERIFIED, "Slow or not verified")
+                    @Suppress("UNREACHABLE_CODE") result(SportsProbeStatus.UNVERIFIED)
+                } ?: working ?: result(SportsProbeStatus.UNVERIFIED, "Timed out")
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -304,7 +304,7 @@ internal suspend fun probeSportsMediaSource(
     }
 }
 
-private fun result(status: SportsProbeStatus, detail: String) =
+private fun result(status: SportsProbeStatus, detail: String? = null) =
     SportsProbeResult(status, checkedAtMs = System.currentTimeMillis(), detail = detail)
 
 @OptIn(UnstableApi::class)
@@ -313,8 +313,8 @@ internal fun sportsProbeFailure(failure: Exception): SportsProbeResult {
     val http = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
     return when {
         http != null -> result(SportsProbeStatus.UNAVAILABLE, "HTTP ${http.responseCode}")
-        causes.any { it is ProbeBudgetExceeded || it is SocketTimeoutException } -> result(SportsProbeStatus.UNVERIFIED, "Slow or not verified")
-        else -> result(SportsProbeStatus.UNVERIFIED, "Could not verify media")
+        causes.any { it is ProbeBudgetExceeded || it is SocketTimeoutException } -> result(SportsProbeStatus.UNVERIFIED, "Check limit reached")
+        else -> result(SportsProbeStatus.UNVERIFIED)
     }
 }
 

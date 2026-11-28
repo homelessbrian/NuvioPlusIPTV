@@ -88,6 +88,34 @@ class SportsProbeQueueTest {
         queue.close()
     }
 
+    @Test fun `resume restarts checks only for the open automatic game`() = runTest {
+        val source = channel("one")
+        var calls = 0
+        val queue = SportsProbeQueue(backgroundScope, SportsChannelProbe {
+            calls++
+            if (calls == 1) awaitCancellation() else working()
+        }, { true }, { false })
+
+        queue.open("game", listOf(source), false)
+        queue.resume("game")
+        runCurrent()
+        assertEquals(0, calls)
+
+        queue.open("game", listOf(source), true)
+        runCurrent()
+        assertEquals(1, calls)
+        queue.stopAndJoin()
+        queue.resume("different-game")
+        runCurrent()
+        assertEquals(1, calls)
+
+        queue.resume("game")
+        runCurrent()
+        assertEquals(2, calls)
+        assertEquals(SportsProbeStatus.WORKING, queue.results.value.getValue(source.key).status)
+        queue.close()
+    }
+
     @Test fun `busy playback uses its observation and defers other network checks until idle`() = runTest {
         val played = channel("playing")
         val other = channel("other")
@@ -141,6 +169,69 @@ class SportsProbeQueueTest {
         runCurrent()
         assertEquals(2, calls)
         assertEquals(SportsProbeStatus.WORKING, queue.results.value.getValue("one").status)
+        queue.close()
+    }
+
+    @Test fun `the playing channel releases its check slot for other channels`() = runTest {
+        val selected = channel("selected")
+        val other = channel("other")
+        var playingKey: String? = null
+        val calls = mutableListOf<String>()
+        val queue = SportsProbeQueue(backgroundScope, SportsChannelProbe {
+            calls += it.key
+            if (calls.size == 1) awaitCancellation() else working()
+        }, { true }, { false }, playingChannelKey = { playingKey })
+        queue.open("game", listOf(selected, other), true)
+        runCurrent()
+        assertEquals(listOf(selected.key), calls)
+
+        playingKey = selected.key
+        queue.refresh()
+        runCurrent()
+        assertEquals(listOf(selected.key, other.key), calls)
+        assertEquals(SportsProbeStatus.DEFERRED, queue.results.value.getValue(selected.key).status)
+        assertEquals(SportsProbeStatus.WORKING, queue.results.value.getValue(other.key).status)
+
+        playingKey = null
+        queue.refresh()
+        runCurrent()
+        assertEquals(listOf(selected.key, other.key, selected.key), calls)
+        assertEquals(SportsProbeStatus.WORKING, queue.results.value.getValue(selected.key).status)
+        queue.close()
+    }
+
+    @Test fun `a playing observation keeps saved FPS only for matching dimensions`() = runTest {
+        val source = channel("one")
+        val checkedRate = 59.94f
+        var calls = 0
+        var observation: SportsProbeResult? = null
+        val queue = SportsProbeQueue(backgroundScope, SportsChannelProbe {
+            calls++
+            working().copy(frameRate = checkedRate)
+        }, { true }, { false }, observation = { observation }, now = { 100L })
+        queue.open("game", listOf(source), true)
+        runCurrent()
+
+        observation = working().copy(playbackVerified = true)
+        queue.refresh()
+        runCurrent()
+        val playing = queue.results.value.getValue(source.key)
+        assertTrue(playing.playbackVerified)
+        assertEquals(checkedRate, playing.frameRate, 0f)
+
+        observation = null
+        queue.close("game")
+        queue.open("game", listOf(source), true)
+        runCurrent()
+        assertEquals(1, calls)
+        assertEquals(checkedRate, queue.results.value.getValue(source.key).frameRate, 0f)
+
+        observation = working(1280).copy(height = 720, playbackVerified = true)
+        queue.refresh()
+        runCurrent()
+        val changed = queue.results.value.getValue(source.key)
+        assertEquals(720, changed.height)
+        assertEquals(0f, changed.frameRate, 0f)
         queue.close()
     }
 

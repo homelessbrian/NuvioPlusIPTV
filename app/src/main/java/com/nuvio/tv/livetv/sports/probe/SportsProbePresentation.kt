@@ -18,27 +18,28 @@ internal fun SportsProbeStatusLine(result: SportsProbeResult?, now: Long, modifi
         else -> SportsLook.Dim
     }
     val status = when (result?.status) {
-        SportsProbeStatus.QUEUED -> "Waiting to check"
+        SportsProbeStatus.QUEUED -> "Waiting"
         SportsProbeStatus.CHECKING -> "Checking…"
         SportsProbeStatus.WORKING -> if (result?.playbackVerified == true) "Playing" else "Working"
-        SportsProbeStatus.UNAVAILABLE -> "Unavailable now"
-        SportsProbeStatus.UNVERIFIED -> "Not verified"
-        SportsProbeStatus.PROTECTED -> "Protected / not verified"
-        SportsProbeStatus.DEFERRED -> "Check deferred"
+        SportsProbeStatus.UNAVAILABLE -> "Unavailable"
+        SportsProbeStatus.UNVERIFIED -> "Unverified"
+        SportsProbeStatus.PROTECTED -> "Protected"
+        SportsProbeStatus.DEFERRED -> "On hold"
         null -> "Not checked"
     }
-    val unknownSize = "picture size unknown".takeIf { result?.status == SportsProbeStatus.WORKING && result.height <= 0 }
-    val age = result?.checkedAtMs?.takeIf { it > 0 }?.let {
-        val seconds = ((now - it).coerceAtLeast(0) / 1_000)
+    val unknownSize = "Size unknown".takeIf { result?.status == SportsProbeStatus.WORKING && result.height <= 0 }
+    val check = result?.takeUnless { it.playbackVerified }
+    val detail = check?.detail?.takeIf(String::isNotBlank)
+    val age = check?.checkedAtMs?.takeIf { it > 0 }?.let {
+        val seconds = (now - it).coerceAtLeast(0) / 1_000
         when {
-            result?.playbackVerified == true -> "now"
-            seconds < 60 -> "checked just now"
-            seconds < 3_600 -> "checked ${seconds / 60}m ago"
-            else -> "checked ${seconds / 3_600}h ago"
+            seconds < 60 -> null
+            seconds < 3_600 -> "${seconds / 60}m ago"
+            else -> "${seconds / 3_600}h ago"
         }
     }
     LiveText(
-        listOfNotNull(status, unknownSize, result?.detail?.takeIf { it.isNotBlank() && result?.playbackVerified != true }, age).joinToString(" · "),
+        listOfNotNull(status, unknownSize, detail, age).joinToString(" · "),
         modifier = modifier, color = color, size = 10.sp, weight = FontWeight.Medium, maxLines = 1,
     )
 }
