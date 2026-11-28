@@ -10,6 +10,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ScrubbingModeParameters
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import com.nuvio.tv.core.player.AdaptiveVodBufferLimit
+import com.nuvio.tv.core.player.BitrateAwareLoadControl
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.ui.screens.settings.MemoryBudget
 
@@ -270,7 +272,10 @@ object NuvioExoPlayerPerformanceHelper {
      * Builds a [DefaultLoadControl] tuned for Nuvio performance when enabled,
      * or a standard ExoPlayer [DefaultLoadControl] when disabled.
      */
-    fun buildLoadControl(context: Context? = null, chunkOverheadMb: Int = 0): DefaultLoadControl {
+    internal fun buildLoadControl(
+        chunkOverheadMb: Int = 0,
+        adaptiveBufferLimit: AdaptiveVodBufferLimit? = null
+    ): DefaultLoadControl {
         return if (enabled) {
             val effectiveTargetBufferMb = (targetBufferSizeMb - chunkOverheadMb)
                 .coerceAtLeast(MemoryBudget.MIN_BUFFER_MB)
@@ -293,6 +298,19 @@ object NuvioExoPlayerPerformanceHelper {
                 "ExoPerformance",
                 "buildLoadControl: targetBufferSizeMb=$targetBufferSizeMb, chunkOverheadMb=$chunkOverheadMb, effectiveTargetBufferMb=$effectiveTargetBufferMb, targetBytes=$targetBufferBytes, backBufferMs=$resolvedBackBufferMs"
             )
+            if (adaptiveBufferLimit != null) {
+                return BitrateAwareLoadControl(
+                    minBufferMs = minBufferMs,
+                    maxBufferMs = maxBufferMs,
+                    bufferForPlaybackMs = bufferForPlaybackMs,
+                    bufferForPlaybackAfterRebufferMs = bufferForPlaybackAfterRebufferMs,
+                    backBufferDurationMs = resolvedBackBufferMs,
+                    retainBackBufferFromKeyframe = true,
+                    budgetBytes = targetBufferBytes.toLong(),
+                    allocator = allocator,
+                    adaptiveBufferLimit = adaptiveBufferLimit
+                )
+            }
             DefaultLoadControl.Builder()
                 .setAllocator(allocator)
                 .setTargetBufferBytes(targetBufferBytes)

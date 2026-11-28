@@ -1,6 +1,7 @@
 package com.nuvio.tv.core.player
 
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -8,6 +9,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.analytics.PlayerId
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.SinglePeriodTimeline
 import androidx.media3.exoplayer.source.TrackGroupArray
 import androidx.media3.exoplayer.trackselection.ExoTrackSelection
 import androidx.media3.exoplayer.upstream.DefaultAllocator
@@ -159,7 +161,92 @@ class BitrateAwareLoadControlTest {
         }
     }
 
-    private fun withPreparedLoadControl(budgetSegments: Int, block: (BitrateAwareLoadControl) -> Unit) {
+    @Test
+    fun `automatic target reduction stops allocation and still starts at 2x below rebuffer threshold`() {
+        var now = 0L
+        var freeHeap = 100L * MIB
+        val adaptiveLimit = AdaptiveVodBufferLimit({ now }) {
+            AdaptiveVodBufferLimit.MemorySample(128L * MIB, 128L * MIB - freeHeap, null, 0L, false)
+        }
+        withPreparedLoadControl(
+            budgetSegments = 40 * MIB / C.DEFAULT_BUFFER_SEGMENT_SIZE,
+            adaptiveLimit = adaptiveLimit
+        ) { control ->
+            val params = loadingParameters(1_000_000L, rebuffering = true, speed = 2f)
+            val allocations = List(12 * MIB / C.DEFAULT_BUFFER_SEGMENT_SIZE) { control.allocator.allocate() }
+            try {
+                assertEquals(40 * MIB, control.activeTargetBufferBytes)
+                assertTrue(control.shouldContinueLoading(params))
+                assertFalse(control.shouldStartPlayback(params))
+
+                now = 1_000
+                freeHeap = 8L * MIB
+                assertFalse(control.shouldContinueLoading(params))
+                assertEquals(12 * MIB, control.activeTargetBufferBytes)
+                assertTrue(control.shouldStartPlayback(params))
+
+                // The confirmed DV7 limit continues to cap future recovery.
+                control.setBudgetBytesOverride(8L * MIB)
+                now = 8_000
+                freeHeap = 100L * MIB
+                assertFalse(control.shouldContinueLoading(params))
+                assertEquals(8 * MIB, control.activeTargetBufferBytes)
+            } finally {
+                allocations.forEach { control.allocator.release(it) }
+            }
+        }
+    }
+
+    @Test
+    fun `stock track target is preserved and actual live windows bypass the adaptive limit`() {
+        var samples = 0
+        val adaptiveLimit = AdaptiveVodBufferLimit({ 0L }) {
+            samples++
+            AdaptiveVodBufferLimit.MemorySample(384L * MIB, 79L * MIB, 100L * MIB, 100L * MIB, false)
+        }
+        val liveTimeline = SinglePeriodTimeline(C.TIME_UNSET, false, true, true, null, MediaItem.EMPTY)
+        val live = loadingParameters(0L, timeline = liveTimeline)
+        withPreparedLoadControl(budgetSegments = null, adaptiveLimit = adaptiveLimit, initialParams = live) { control ->
+            assertEquals(DefaultLoadControl.DEFAULT_MIN_BUFFER_SIZE, control.activeTargetBufferBytes)
+            assertTrue(control.shouldContinueLoading(live))
+            assertEquals(0, samples)
+            assertTrue(control.shouldContinueLoading(loadingParameters(0L)))
+            assertEquals(1, samples)
+            assertEquals(12 * MIB, control.activeTargetBufferBytes)
+            assertTrue(control.shouldContinueLoading(live))
+            assertEquals(DefaultLoadControl.DEFAULT_MIN_BUFFER_SIZE, control.activeTargetBufferBytes)
+        }
+    }
+
+    @Test
+    fun `preparing the same player again clears old tracks and samples memory for new tracks`() {
+        var usedHeapMb = 122L
+        var samples = 0
+        val adaptiveLimit = AdaptiveVodBufferLimit({ 0L }) {
+            samples++
+            AdaptiveVodBufferLimit.MemorySample(128L * MIB, usedHeapMb * MIB, null, 0L, false)
+        }
+        withPreparedLoadControl(
+            budgetSegments = 40 * MIB / C.DEFAULT_BUFFER_SEGMENT_SIZE,
+            adaptiveLimit = adaptiveLimit
+        ) { control ->
+            assertEquals(12 * MIB, control.activeTargetBufferBytes)
+            control.onPrepared(PlayerId.UNSET)
+            assertEquals(0, control.activeTargetBufferBytes)
+
+            usedHeapMb = 28
+            control.onTracksSelected(loadingParameters(0L), TrackGroupArray.EMPTY, emptyArray())
+            assertEquals(2, samples)
+            assertEquals(40 * MIB, control.activeTargetBufferBytes)
+        }
+    }
+
+    private fun withPreparedLoadControl(
+        budgetSegments: Int?,
+        adaptiveLimit: AdaptiveVodBufferLimit? = null,
+        initialParams: LoadControl.Parameters = loadingParameters(0L),
+        block: (BitrateAwareLoadControl) -> Unit
+    ) {
         val control = BitrateAwareLoadControl(
             minBufferMs = 15_000,
             maxBufferMs = 45_000,
@@ -167,12 +254,13 @@ class BitrateAwareLoadControlTest {
             bufferForPlaybackAfterRebufferMs = 10_000,
             backBufferDurationMs = 0,
             retainBackBufferFromKeyframe = false,
-            budgetBytes = budgetSegments.toLong() * C.DEFAULT_BUFFER_SEGMENT_SIZE,
-            allocator = DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE, 0, false)
+            budgetBytes = budgetSegments?.toLong()?.times(C.DEFAULT_BUFFER_SEGMENT_SIZE),
+            allocator = DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE, 0, false),
+            adaptiveBufferLimit = adaptiveLimit
         )
         control.onPrepared(PlayerId.UNSET)
         try {
-            control.onTracksSelected(loadingParameters(0L), TrackGroupArray.EMPTY, emptyArray())
+            control.onTracksSelected(initialParams, TrackGroupArray.EMPTY, emptyArray())
             block(control)
         } finally {
             control.onStopped(PlayerId.UNSET)
@@ -180,16 +268,25 @@ class BitrateAwareLoadControlTest {
         }
     }
 
-    private fun loadingParameters(bufferedDurationUs: Long, rebuffering: Boolean = false) = LoadControl.Parameters(
+    private fun loadingParameters(
+        bufferedDurationUs: Long,
+        rebuffering: Boolean = false,
+        speed: Float = 1f,
+        timeline: Timeline = Timeline.EMPTY
+    ) = LoadControl.Parameters(
         PlayerId.UNSET,
-        Timeline.EMPTY,
-        MediaSource.MediaPeriodId("movie"),
+        timeline,
+        MediaSource.MediaPeriodId(if (timeline.isEmpty) "movie" else timeline.getUidOfPeriod(0)),
         /* playbackPositionUs= */ 0L,
         bufferedDurationUs,
-        /* playbackSpeed= */ 1f,
+        speed,
         /* playWhenReady= */ true,
         rebuffering,
         /* targetLiveOffsetUs= */ C.TIME_UNSET,
         /* lastRebufferRealtimeMs= */ C.TIME_UNSET
     )
+
+    private companion object {
+        const val MIB = 1024 * 1024
+    }
 }

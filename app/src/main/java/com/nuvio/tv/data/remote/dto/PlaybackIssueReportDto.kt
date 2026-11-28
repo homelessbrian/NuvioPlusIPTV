@@ -240,7 +240,8 @@ data class PlaybackIssuePlaybackSettingsDto(
     @Json(name = "nextEpisodeThresholdPercent") val nextEpisodeThresholdPercent: Float,
     @Json(name = "nextEpisodeThresholdMinutesBeforeEnd") val nextEpisodeThresholdMinutesBeforeEnd: Float,
     @Json(name = "streamReuseLastLinkEnabled") val streamReuseLastLinkEnabled: Boolean,
-    @Json(name = "streamReuseLastLinkCacheHours") val streamReuseLastLinkCacheHours: Int
+    @Json(name = "streamReuseLastLinkCacheHours") val streamReuseLastLinkCacheHours: Int,
+    @Json(name = "adaptiveVodBufferEnabled") val adaptiveVodBufferEnabled: Boolean = false
 )
 
 @JsonClass(generateAdapter = true)
@@ -333,7 +334,12 @@ data class PlaybackIssuePlaybackHealthSnapshotDto(
     @Json(name = "loadStartedCount") val loadStartedCount: Int,
     @Json(name = "loadCompletedCount") val loadCompletedCount: Int,
     @Json(name = "loadCanceledCount") val loadCanceledCount: Int,
-    @Json(name = "loadErrorCount") val loadErrorCount: Int
+    @Json(name = "loadErrorCount") val loadErrorCount: Int,
+    @Json(name = "bufferedAheadMs") val bufferedAheadMs: Long? = null,
+    @Json(name = "javaHeapUsedBytes") val javaHeapUsedBytes: Long? = null,
+    @Json(name = "javaHeapLimitBytes") val javaHeapLimitBytes: Long? = null,
+    @Json(name = "exoAllocatedBufferBytes") val exoAllocatedBufferBytes: Long? = null,
+    @Json(name = "exoTargetBufferBytes") val exoTargetBufferBytes: Long? = null
 )
 
 @JsonClass(generateAdapter = true)

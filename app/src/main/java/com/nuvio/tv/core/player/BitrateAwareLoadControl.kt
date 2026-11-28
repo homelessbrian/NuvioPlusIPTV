@@ -2,18 +2,19 @@ package com.nuvio.tv.core.player
 
 import android.os.Handler
 import androidx.media3.common.C
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.analytics.PlayerId
+import androidx.media3.exoplayer.source.TrackGroupArray
 import androidx.media3.exoplayer.trackselection.ExoTrackSelection
-import androidx.media3.exoplayer.upstream.Allocator
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 
 /**
- * DefaultLoadControl with a byte target tied to the device memory budget, and a back
- * buffer / budget that can be adjusted at runtime once we know whether the stream is
- * really DV7.
+ * Load control for one player with a configurable byte target and a back buffer/budget
+ * that can be adjusted after confirming DV7 conversion.
  *
  * On a DV-capable display AUTO arms conversion for every file, but most never actually
  * convert. So we build with the full budget and the user's back buffer, then tighten
@@ -27,9 +28,10 @@ class BitrateAwareLoadControl(
     bufferForPlaybackAfterRebufferMs: Int,
     backBufferDurationMs: Int,
     retainBackBufferFromKeyframe: Boolean,
-    /** Memory ceiling in bytes. */
-    private val budgetBytes: Long,
-    allocator: DefaultAllocator = DefaultAllocator(/* trimOnReset= */ true, C.DEFAULT_BUFFER_SEGMENT_SIZE, 64)
+    /** Configured byte target, or null to use Media3's track-based target. */
+    private val budgetBytes: Long?,
+    allocator: DefaultAllocator = DefaultAllocator(/* trimOnReset= */ true, C.DEFAULT_BUFFER_SEGMENT_SIZE, 64),
+    private val adaptiveBufferLimit: AdaptiveVodBufferLimit? = null
 ) : DefaultLoadControl(
     allocator,
     minBufferMs,
@@ -43,6 +45,22 @@ class BitrateAwareLoadControl(
     backBufferDurationMs,
     retainBackBufferFromKeyframe
 ) {
+
+    private class SelectedTracks(
+        var parameters: LoadControl.Parameters,
+        val groups: TrackGroupArray,
+        val selections: Array<out ExoTrackSelection?>,
+        val configuredTargetBytes: Int
+    )
+
+    // These fields are owned by the playback thread. The target is also read by diagnostics.
+    private var selectedTracks: SelectedTracks? = null
+    private val allocatorFootprintBytes = { allocator.memoryFootprint.toLong() }
+    private val period = Timeline.Period()
+    private val window = Timeline.Window()
+    @Volatile
+    var activeTargetBufferBytes: Int = 0
+        private set
 
     // Effective back buffer (µs) when >= 0, else the constructed value.
     @Volatile
@@ -69,19 +87,17 @@ class BitrateAwareLoadControl(
     private var budgetBytesOverride: Long = -1L
 
     /**
-     * Set the byte budget at runtime; negative restores the constructed budget.
+     * Lower the byte budget at runtime. A negative value restores the configured ceiling.
      *
-     * Also updates any already-created `PlayerLoadingState.targetBufferBytes` entries in
-     * [DefaultLoadControl] and refreshes the allocator target size so overrides applied at
-     * first frame (after `onTracksSelected`) take effect immediately.
+     * Pass the active [player] when calling from outside the playback thread.
      */
     fun setBudgetBytesOverride(bytes: Long, player: ExoPlayer? = null) {
         budgetBytesOverride = if (bytes < 0L) -1L else bytes
         val looper = runCatching { player?.playbackLooper }.getOrNull()
         if (looper != null && looper.thread.isAlive && Thread.currentThread() !== looper.thread) {
-            Handler(looper).post { applyBudgetToActiveLoadingStates() }
+            Handler(looper).post { selectedTracks?.let { updateTarget(it) } }
         } else {
-            applyBudgetToActiveLoadingStates()
+            selectedTracks?.let { updateTarget(it) }
         }
     }
 
@@ -90,38 +106,82 @@ class BitrateAwareLoadControl(
         return if (override >= 0L) override else super.getBackBufferDurationUs(playerId)
     }
 
-    override fun calculateTargetBufferBytes(
+    override fun onTracksSelected(
+        parameters: LoadControl.Parameters,
+        trackGroups: TrackGroupArray,
         trackSelectionArray: Array<out ExoTrackSelection?>
-    ): Int {
-        // Let high-bitrate streams fill up to the byte budget without requiring the minimum
-        // buffered duration; low-bitrate streams can stop at the maximum duration first.
-        return currentTargetBufferBytes()
+    ) {
+        val configuredTarget = budgetBytes?.coerceIn(1L, Int.MAX_VALUE.toLong())?.toInt()
+            ?: super.calculateTargetBufferBytes(trackSelectionArray)
+        val tracks = SelectedTracks(parameters, trackGroups, trackSelectionArray, configuredTarget)
+        selectedTracks = tracks
+        updateTarget(tracks, force = true)
     }
 
-    private fun currentTargetBufferBytes(): Int {
-        val effectiveBudget = if (budgetBytesOverride >= 0L) budgetBytesOverride else budgetBytes
-        return effectiveBudget.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    override fun calculateTargetBufferBytes(trackSelectionArray: Array<out ExoTrackSelection?>): Int =
+        activeTargetBufferBytes
+
+    override fun shouldContinueLoading(parameters: LoadControl.Parameters): Boolean {
+        updateAdaptiveTarget(parameters)
+        return super.shouldContinueLoading(parameters)
     }
 
-    private fun applyBudgetToActiveLoadingStates() {
-        runCatching {
-            val targetBytes = currentTargetBufferBytes()
-            val loadingStatesField = DefaultLoadControl::class.java.getDeclaredField("loadingStates").apply {
-                isAccessible = true
-            }
-            val statesMap = loadingStatesField.get(this) as? Map<*, *> ?: return
-            for (state in statesMap.values) {
-                if (state == null) continue
-                val targetField = state.javaClass.getDeclaredField("targetBufferBytes").apply {
-                    isAccessible = true
-                }
-                targetField.setInt(state, targetBytes)
-            }
-            val updateAllocatorMethod = DefaultLoadControl::class.java.getDeclaredMethod("updateAllocator").apply {
-                isAccessible = true
-            }
-            updateAllocatorMethod.invoke(this)
+    override fun shouldStartPlayback(parameters: LoadControl.Parameters): Boolean {
+        updateAdaptiveTarget(parameters)
+        return super.shouldStartPlayback(parameters)
+    }
+
+    override fun onPrepared(playerId: PlayerId) {
+        super.onPrepared(playerId)
+        clearSelectedTracks(playerId)
+    }
+
+    override fun onStopped(playerId: PlayerId) {
+        super.onStopped(playerId)
+        clearSelectedTracks(playerId)
+    }
+
+    override fun onReleased(playerId: PlayerId) {
+        super.onReleased(playerId)
+        clearSelectedTracks(playerId)
+    }
+
+    private fun clearSelectedTracks(playerId: PlayerId) {
+        if (selectedTracks?.parameters?.playerId != playerId) return
+        selectedTracks = null
+        activeTargetBufferBytes = 0
+        adaptiveBufferLimit?.reset()
+    }
+
+    private fun updateAdaptiveTarget(parameters: LoadControl.Parameters) {
+        if (adaptiveBufferLimit == null) return
+        val tracks = selectedTracks?.takeIf { it.parameters.playerId == parameters.playerId } ?: return
+        tracks.parameters = parameters
+        updateTarget(tracks)
+    }
+
+    private fun updateTarget(tracks: SelectedTracks, force: Boolean = false) {
+        val budgetOverride = budgetBytesOverride
+        val ceiling = if (budgetOverride < 0L) tracks.configuredTargetBytes
+            else minOf(tracks.configuredTargetBytes.toLong(), budgetOverride.coerceAtLeast(1L)).toInt()
+        val limit = adaptiveBufferLimit
+        val target = if (limit != null && !isLive(tracks.parameters)) {
+            limit.targetBytes(ceiling, allocatorFootprintBytes)
+        } else {
+            ceiling
         }
+        if (!force && activeTargetBufferBytes == target) return
+        activeTargetBufferBytes = target
+        // Media3 uses this target both to stop loading and to accept playback below the duration
+        // thresholds, including after seeking and rebuffering. Updating it also trims idle blocks.
+        super.onTracksSelected(tracks.parameters, tracks.groups, tracks.selections)
+    }
+
+    private fun isLive(parameters: LoadControl.Parameters): Boolean {
+        val timeline = parameters.timeline
+        val index = timeline.getIndexOfPeriod(parameters.mediaPeriodId.periodUid)
+        if (index == C.INDEX_UNSET) return false
+        return timeline.getWindow(timeline.getPeriod(index, period).windowIndex, window).isLive
     }
 
     private fun applyBackBufferToInternalPlayer(player: ExoPlayer, effectiveBackBufferUs: Long) {

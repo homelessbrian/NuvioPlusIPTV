@@ -30,7 +30,16 @@ private const val PLAYBACK_HEALTH_SNAPSHOT_INTERVAL_MS = 5_000L
 private const val POSITION_STALL_THRESHOLD_MS = 5_000L
 private const val POSITION_PROGRESS_EPSILON_MS = 250L
 
-internal class PlayerPlaybackAnalyticsDiagnostics {
+internal data class PlaybackMemorySnapshot(
+    val javaHeapUsedBytes: Long,
+    val javaHeapLimitBytes: Long,
+    val exoAllocatedBufferBytes: Long?,
+    val exoTargetBufferBytes: Long?
+)
+
+internal class PlayerPlaybackAnalyticsDiagnostics(
+    private val memorySnapshotProvider: () -> PlaybackMemorySnapshot? = { null }
+) {
     private var sessionStartedAtElapsedMs: Long = SystemClock.elapsedRealtime()
     private var sessionStartedAtWallTimeMs: Long = System.currentTimeMillis()
     private val events: ArrayDeque<PlaybackIssuePlaybackEventInput> = ArrayDeque()
@@ -195,7 +204,8 @@ internal class PlayerPlaybackAnalyticsDiagnostics {
         player: Player,
         hasRenderedFirstFrame: Boolean,
         rebufferCount: Int = 0,
-        rebufferTotalMs: Long = 0L
+        rebufferTotalMs: Long = 0L,
+        forceHealthSnapshot: Boolean = false
     ) {
         val now = SystemClock.elapsedRealtime()
         val position = player.currentPosition.coerceAtLeast(0L)
@@ -217,7 +227,7 @@ internal class PlayerPlaybackAnalyticsDiagnostics {
             now = now,
             rebufferCount = rebufferCount,
             rebufferTotalMs = rebufferTotalMs,
-            force = false
+            force = forceHealthSnapshot
         )
 
         val shouldDetectStall = hasRenderedFirstFrame &&
@@ -660,6 +670,33 @@ internal class PlayerPlaybackAnalyticsDiagnostics {
         )
     }
 
+    fun recordMpvProgressSnapshot(
+        positionMs: Long,
+        bufferedPositionMs: Long,
+        durationMs: Long,
+        speed: Float,
+        playWhenReady: Boolean,
+        isBuffering: Boolean,
+        rebufferCount: Int,
+        rebufferTotalMs: Long
+    ) {
+        playbackStateName = (if (isBuffering) Player.STATE_BUFFERING else Player.STATE_READY).playbackStateName()
+        this.playWhenReady = playWhenReady
+        isPlaying = playWhenReady && !isBuffering
+        isLoading = isBuffering
+        playbackSpeed = speed
+        this.positionMs = positionMs
+        this.bufferedPositionMs = bufferedPositionMs.coerceAtLeast(positionMs)
+        this.durationMs = durationMs.takeIf { it > 0L }
+        bufferedPercentage = safeBufferedPercentage(bufferedPositionMs, durationMs)
+        recordHealthSnapshotIfNeeded(
+            now = SystemClock.elapsedRealtime(),
+            rebufferCount = rebufferCount,
+            rebufferTotalMs = rebufferTotalMs,
+            force = false
+        )
+    }
+
     fun snapshot(
         player: Player?,
         hasRenderedFirstFrame: Boolean,
@@ -667,27 +704,30 @@ internal class PlayerPlaybackAnalyticsDiagnostics {
         rebufferTotalMs: Long,
         rebufferStartedAtMs: Long
     ): PlaybackIssuePlaybackAnalyticsInput {
-        player?.let {
+        if (player != null) {
             recordProgressSnapshot(
-                player = it,
+                player = player,
                 hasRenderedFirstFrame = hasRenderedFirstFrame,
                 rebufferCount = rebufferCount,
-                rebufferTotalMs = rebufferTotalMs
+                rebufferTotalMs = rebufferTotalMs,
+                forceHealthSnapshot = true
             )
         }
         val now = SystemClock.elapsedRealtime()
+        if (player == null) {
+            recordHealthSnapshotIfNeeded(
+                now = now,
+                rebufferCount = rebufferCount,
+                rebufferTotalMs = rebufferTotalMs,
+                force = true
+            )
+        }
         val capturedAtMs = System.currentTimeMillis()
         val currentRebufferMs = if (rebufferStartedAtMs > 0L) {
             (now - rebufferStartedAtMs).coerceAtLeast(0L)
         } else {
             0L
         }
-        recordHealthSnapshotIfNeeded(
-            now = now,
-            rebufferCount = rebufferCount,
-            rebufferTotalMs = rebufferTotalMs,
-            force = true
-        )
         val firstFrameElapsed = firstFrameElapsedMs
         val combinedRawEventLines = buildList {
             addAll(rawEventLines)
@@ -783,6 +823,9 @@ internal class PlayerPlaybackAnalyticsDiagnostics {
             return
         }
         lastHealthSnapshotAtElapsedMs = now
+        val memory = memorySnapshotProvider()
+        val position = positionMs
+        val bufferedPosition = bufferedPositionMs
         healthSnapshots.addLast(
             PlaybackIssuePlaybackHealthSnapshotInput(
                 timeMs = System.currentTimeMillis(),
@@ -806,7 +849,12 @@ internal class PlayerPlaybackAnalyticsDiagnostics {
                 loadStartedCount = loadStartedCount,
                 loadCompletedCount = loadCompletedCount,
                 loadCanceledCount = loadCanceledCount,
-                loadErrorCount = loadErrorCount
+                loadErrorCount = loadErrorCount,
+                bufferedAheadMs = if (position != null && bufferedPosition != null) bufferedPosition - position else null,
+                javaHeapUsedBytes = memory?.javaHeapUsedBytes,
+                javaHeapLimitBytes = memory?.javaHeapLimitBytes,
+                exoAllocatedBufferBytes = memory?.exoAllocatedBufferBytes,
+                exoTargetBufferBytes = memory?.exoTargetBufferBytes
             )
         )
         while (healthSnapshots.size > PLAYBACK_HEALTH_SNAPSHOT_LIMIT) {

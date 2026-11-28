@@ -64,6 +64,7 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.player.DolbyVisionCodecFallback
 import com.nuvio.tv.core.player.DolbyVisionBaseLayerPolicy
 import com.nuvio.tv.core.player.BitrateAwareLoadControl
+import com.nuvio.tv.core.player.AdaptiveVodBufferLimit
 import com.nuvio.tv.core.player.DolbyVisionConversionConfig
 import com.nuvio.tv.core.player.DolbyVisionConversionStats
 import com.nuvio.tv.core.player.DolbyVisionExtractorsFactory
@@ -85,6 +86,7 @@ import com.nuvio.tv.data.repository.PlaybackIssueErrorInput
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.stalker.StalkerPlaybackLocator
 import com.nuvio.tv.livetv.multiview.StalkerPlayerEntryPoint
+import com.nuvio.tv.livetv.record.RecordingResume
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -176,6 +178,7 @@ private fun PlayerRuntimeController.disposeExoPlayerBeforeRebuild() {
         runCatching { player.release() }
     }
     _exoPlayer = null
+    _loadControl = null
     playbackSpeedAwareAudioSink = null
 }
 
@@ -276,6 +279,9 @@ internal fun PlayerRuntimeController.initializePlayer(
             lastPlaybackIssueError = null
             playbackIssueReportRequestVersion.incrementAndGet()
             playbackAnalyticsDiagnostics.reset()
+            rebufferCount = 0
+            rebufferTotalMs = 0L
+            rebufferStartedAtMs = 0L
             _uiState.update {
                 it.copy(
                     playbackIssueReportStatus = PlaybackIssueReportStatus.Idle,
@@ -441,9 +447,6 @@ internal fun PlayerRuntimeController.initializePlayer(
             // ── ExoPlayer Dolby Vision Logic (mode-driven via Dv7HandlingMode) ──
             DoviBridge.resetRuntimeCounters()
             DolbyVisionConversionStats.reset()
-            rebufferCount = 0
-            rebufferTotalMs = 0L
-            rebufferStartedAtMs = 0L
 
             // Resolve effective DV7 mode — AUTO consults the display-capability policy.
             // The persisted enum stays as-is; only the runtime behavior is derived per playback.
@@ -630,6 +633,15 @@ internal fun PlayerRuntimeController.initializePlayer(
             }
             currentParallelChunkOverheadMb = parallelOverheadMb
 
+            val adaptiveBufferLimit = if (
+                playerSettings.adaptiveVodBufferEnabled &&
+                !LivePlaybackUiPolicy.isLiveContentType(contentType) &&
+                !RecordingResume.isRecording(contentType)
+            ) {
+                AdaptiveVodBufferLimit(context, scope, nativeAllocator = playerSettings.nuvioPerformanceModeEnabled)
+            } else {
+                null
+            }
             val loadControl = if (playerSettings.nuvioPerformanceModeEnabled) {
                 effectiveBackBufferDurationMs = NuvioExoPlayerPerformanceHelper.backBufferMs
                 currentBitrateAwareLoadControl = null
@@ -637,7 +649,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     PlayerRuntimeController.TAG,
                     "BUFFER_GATE: engine=exo-native-perf master=on parallelOverheadMb=$parallelOverheadMb; NuvioExoPlayerPerformanceHelper.buildLoadControl host=${diagnosticHost}"
                 )
-                NuvioExoPlayerPerformanceHelper.buildLoadControl(context, parallelOverheadMb)
+                NuvioExoPlayerPerformanceHelper.buildLoadControl(parallelOverheadMb, adaptiveBufferLimit)
             } else if (playerSettings.bufferEngineEnabled) {
                 val bufferSettings = playerSettings.bufferSettings
                 // Managed (default) caps the buffer at the device budget; off uses Target Buffer Size.
@@ -682,7 +694,8 @@ internal fun PlayerRuntimeController.initializePlayer(
                     backBufferDurationMs = backBufferMsAtBuild,
                     retainBackBufferFromKeyframe = true,
                     budgetBytes = budgetBytes,
-                    allocator = allocator
+                    allocator = allocator,
+                    adaptiveBufferLimit = adaptiveBufferLimit
                 ).also { currentBitrateAwareLoadControl = it }
             } else {
                 // Stock LoadControl: DefaultLoadControl configured with 1.5s back buffer so 1s rewind doesn't clear buffer.
@@ -693,11 +706,24 @@ internal fun PlayerRuntimeController.initializePlayer(
                     "BUFFER_GATE: engine=exo-stock master=off; DefaultLoadControl " +
                             "(1.5s back buffer, no VOD cache) host=${diagnosticHost}"
                 )
-                DefaultLoadControl.Builder()
-                    .setBackBuffer(1_500, /* retainBackBufferFromKeyframe = */ true)
-                    .build()
+                if (adaptiveBufferLimit != null) {
+                    BitrateAwareLoadControl(
+                        minBufferMs = DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                        maxBufferMs = DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                        bufferForPlaybackMs = DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                        bufferForPlaybackAfterRebufferMs = DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+                        backBufferDurationMs = effectiveBackBufferDurationMs,
+                        retainBackBufferFromKeyframe = true,
+                        budgetBytes = null,
+                        allocator = androidx.media3.exoplayer.upstream.DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE),
+                        adaptiveBufferLimit = adaptiveBufferLimit
+                    )
+                } else {
+                    DefaultLoadControl.Builder()
+                        .setBackBuffer(effectiveBackBufferDurationMs, /* retainBackBufferFromKeyframe = */ true)
+                        .build()
+                }
             }
-            _loadControl = loadControl
 
             // The cache wraps whichever upstream data source it is given, so it does not depend on
             // either buffer engine. The low-RAM plus confirmed DV7 case is handled dynamically at
@@ -725,6 +751,7 @@ internal fun PlayerRuntimeController.initializePlayer(
             Log.i(
                 PlayerRuntimeController.TAG,
                 "BUFFER_NETWORK: bufferEngine=${playerSettings.bufferEngineEnabled} " +
+                        "adaptiveVodBuffer=${adaptiveBufferLimit != null} " +
                         "parallelNetwork=${playerSettings.parallelNetworkEnabled} " +
                         "useParallel=${mediaSourceFactory.useParallelConnections} " +
                         "nuvioPerf=${mediaSourceFactory.nuvioPerformanceModeEnabled} " +

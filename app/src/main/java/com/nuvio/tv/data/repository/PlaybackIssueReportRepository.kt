@@ -184,7 +184,8 @@ data class PlaybackIssuePlaybackSettingsInput(
     val nextEpisodeThresholdPercent: Float,
     val nextEpisodeThresholdMinutesBeforeEnd: Float,
     val streamReuseLastLinkEnabled: Boolean,
-    val streamReuseLastLinkCacheHours: Int
+    val streamReuseLastLinkCacheHours: Int,
+    val adaptiveVodBufferEnabled: Boolean = false
 )
 
 @Singleton
@@ -427,7 +428,8 @@ class PlaybackIssueReportRepository @Inject constructor(
             nextEpisodeThresholdPercent = nextEpisodeThresholdPercent.coerceIn(0f, 100f),
             nextEpisodeThresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEnd.coerceAtLeast(0f),
             streamReuseLastLinkEnabled = streamReuseLastLinkEnabled,
-            streamReuseLastLinkCacheHours = streamReuseLastLinkCacheHours.coerceAtLeast(0)
+            streamReuseLastLinkCacheHours = streamReuseLastLinkCacheHours.coerceAtLeast(0),
+            adaptiveVodBufferEnabled = adaptiveVodBufferEnabled
         )
 
     private fun PlaybackIssuePlaybackAnalyticsInput.toDto(): PlaybackIssuePlaybackAnalyticsDto =
@@ -529,7 +531,12 @@ class PlaybackIssueReportRepository @Inject constructor(
             loadStartedCount = loadStartedCount.coerceAtLeast(0),
             loadCompletedCount = loadCompletedCount.coerceAtLeast(0),
             loadCanceledCount = loadCanceledCount.coerceAtLeast(0),
-            loadErrorCount = loadErrorCount.coerceAtLeast(0)
+            loadErrorCount = loadErrorCount.coerceAtLeast(0),
+            bufferedAheadMs = bufferedAheadMs?.takeIf { it >= 0L },
+            javaHeapUsedBytes = javaHeapUsedBytes?.takeIf { it >= 0L },
+            javaHeapLimitBytes = javaHeapLimitBytes?.takeIf { it > 0L },
+            exoAllocatedBufferBytes = exoAllocatedBufferBytes?.takeIf { it >= 0L },
+            exoTargetBufferBytes = exoTargetBufferBytes?.takeIf { it > 0L }
         )
 
     private fun PlaybackIssuePlaybackFormatInput.toDto(): PlaybackIssuePlaybackFormatDto =
