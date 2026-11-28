@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sports_hub_hide_scores">Hide Scores</string>
+    <string name="sports_hub_show_scores">Show Scores</string>
+    <string name="sports_hub_show_scores_hint">Select Show Scores in the Sports Hub.</string>
+</resources>

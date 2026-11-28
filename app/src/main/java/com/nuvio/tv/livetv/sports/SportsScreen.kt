@@ -2,6 +2,7 @@
 
 package com.nuvio.tv.livetv.sports
 
+import com.nuvio.tv.R
 import com.nuvio.tv.remote.RemoteAction
 import com.nuvio.tv.remote.RemoteScreen
 import com.nuvio.tv.remote.host.RemoteActionHost
@@ -74,6 +75,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -868,9 +870,9 @@ private fun SportsHub(
             val index = when (effectiveChip) {
                 CHIP_MINE -> 0
                 CHIP_ALL -> 1
-                CHIP_TABLES -> 2
-                CHIP_NETWORKS -> 3
-                else -> followedSports.indexOfFirst { CHIP_SPORT + it.name == effectiveChip }.takeIf { it >= 0 && followedSports.size > 1 }?.plus(6)
+                CHIP_TABLES -> 3
+                CHIP_NETWORKS -> 4
+                else -> followedSports.indexOfFirst { CHIP_SPORT + it.name == effectiveChip }.takeIf { it >= 0 && followedSports.size > 1 }?.plus(7)
             }
             if (index != null && topBarState.layoutInfo.visibleItemsInfo.none { it.key == key }) {
                 runCatching { topBarState.scrollToItem(index) }
@@ -1062,6 +1064,11 @@ private fun SportsHub(
                     "▦", if (sections.liveCount > 0) "All Events · ${sections.liveCount} live" else "All Events",
                     effectiveChip == CHIP_ALL, on(CHIP_ALL).then(upTo), withLabel = true, labelPadding = labelPadding
                 ) { pickChip(CHIP_ALL) }
+            }
+            item(key = "score-visibility") {
+                SportsScoresToggle(settings.hideScores, labelPadding = labelPadding) {
+                    viewModel.repo.updateSettings { it.copy(hideScores = !it.hideScores) }
+                }
             }
             // Your leagues' tables.
             item(key = CHIP_TABLES) { FilterIcon("🏆", "Tables", effectiveChip == CHIP_TABLES, on(CHIP_TABLES).then(upTo), withLabel = true, labelPadding = labelPadding) { pickChip(CHIP_TABLES) } }
@@ -1270,6 +1277,24 @@ private fun SportsHub(
         )
     }
     }
+}
+
+@Composable
+internal fun SportsScoresToggle(
+    hideScores: Boolean,
+    modifier: Modifier = Modifier,
+    labelPadding: Dp = 12.dp,
+    onToggle: () -> Unit
+) {
+    FilterIcon(
+        icon = "👁",
+        label = stringResource(if (hideScores) R.string.sports_hub_show_scores else R.string.sports_hub_hide_scores),
+        selected = hideScores,
+        modifier = modifier,
+        withLabel = true,
+        labelPadding = labelPadding,
+        onClick = onToggle
+    )
 }
 
 @Composable
@@ -2155,7 +2180,9 @@ private fun GamePage(
             }
             Column(Modifier.fillMaxWidth().sportsFrame(false, accent = NuvioTheme.colors.Secondary).padding(horizontal = 12.dp, vertical = 9.dp)) {
                 when {
-                    settings.hideScores && ev.state != GameState.PRE -> LiveText("Scores are hidden (Sports settings).", color = SportsLook.Dim, size = 12.sp)
+                    settings.hideScores && ev.state != GameState.PRE -> LiveText(
+                        stringResource(R.string.sports_hub_show_scores_hint), color = SportsLook.Dim, size = 12.sp, maxLines = 2
+                    )
                     ev.standings.isNotEmpty() -> {
                         // A race's finishing order (running order while it's on), a golf leaderboard.
                         LiveText(
@@ -2823,5 +2850,5 @@ private fun rememberScoringPlays(ev: SportsEvent, hideScores: Boolean, viewModel
             delay(30_000)
         }
     }
-    return plays
+    return if (hideScores) emptyList() else plays
 }
