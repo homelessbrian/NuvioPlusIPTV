@@ -854,6 +854,11 @@ internal class SportsMatcher(
      * word that isn't the sport's own or a session word (here "Malaysia"), so two different
      * games on at once ("Wigan v Leeds", "Hull v Warrington") stay separate. Wrestling has its
      * own merging (SportsRepository) and names you follow are left as they are.
+     *
+     * Event sports (snooker, darts, golf…) are often listed with nothing but the sport and the
+     * tournament ("Snooker: UK Championship", "World Snooker Tour - UK Championship"), which
+     * leaves no word to compare. Those plain listings, on at the same time, are one event; a
+     * plain one also joins a named one when that's the only one of the sport on then.
      */
     private fun mergeSameSession(events: List<SportsEvent>, now: Long): List<SportsEvent> {
         if (events.size < 2) return events
@@ -868,10 +873,13 @@ internal class SportsMatcher(
             val league = SportsCatalog.league(ev.leagueId)
             if (league == null || ev.word != null || league.sport == Sport.WRESTLING) { out += ev; continue }
             val words = sessionWords(ev.title, league)
-            val run = if (words.isEmpty()) null else runs.firstOrNull { r ->
-                r.league.id == league.id && ev.startMs < r.end && ev.startMs - r.items.first().startMs <= 60 * MINUTE &&
-                    words.any { it in r.words }
-            }
+            fun onWith(r: Run) = r.league.id == league.id &&
+                (ev.startMs < r.end || ev.startMs - r.items.first().startMs <= 30 * MINUTE) &&
+                ev.startMs - r.items.first().startMs <= 60 * MINUTE
+            val run = if (words.isNotEmpty()) runs.firstOrNull { r -> onWith(r) && words.any { it in r.words } }
+            else if (league.kind != LeagueKind.EVENT) null
+            else runs.firstOrNull { r -> onWith(r) && r.words.isEmpty() }
+                ?: runs.filter { r -> onWith(r) }.singleOrNull()
             if (run == null) {
                 runs += Run(league, ev)
             } else {

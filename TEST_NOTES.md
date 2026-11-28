@@ -14,5 +14,6 @@ headings as changes land on dev. Typing in the box uses the box instead and leav
 ## Recordings
 
 ## Sports
+- Sports: the same snooker, darts or golf event listed under different names on several channels now shows as one card with all its channels
 
 ## Other
