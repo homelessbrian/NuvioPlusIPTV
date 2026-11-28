@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"以全屏啟動"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"啟動應用後第一次開啟 Live TV 時，全屏播放上次的頻道"</string>
     <string name="iptv_settings_moving_around">"移動"</string>
+    <string name="iptv_settings_simple_live_tv">"簡易 Live TV"</string>
+    <string name="iptv_settings_simple_live_tv_description">"觀看直播時，按 OK 開啟最近觀看的頻道。再按一次 OK 開啟節目指南。"</string>
+    <string name="iptv_simple_live_tv_guide">"節目指南"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"最近觀看的頻道"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"你觀看過的頻道會顯示在這裡。"</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK 開啟全屏"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"在節目上按 OK 直接全屏，而不是先在預覽中播放"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"落在頻道名稱上（像有線電視盒）"</string>

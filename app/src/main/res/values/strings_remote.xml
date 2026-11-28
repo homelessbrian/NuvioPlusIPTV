@@ -145,6 +145,8 @@
     <string name="remote_action_open_guide_help">Open the guide to browse channels and their schedule.</string>
     <string name="remote_action_channel_browser">Show your channel list</string>
     <string name="remote_action_channel_browser_help">See other channels while the current channel keeps playing. Use Up or Down to choose a channel, then OK to watch it.</string>
+    <string name="remote_action_open_recent_channels">Open recent channels</string>
+    <string name="remote_action_open_recent_channels_help">Open your recently watched channels. TV Guide is highlighted. Press OK to open it over the playing channel, or move down to pick a recent channel.</string>
     <string name="remote_action_show_info">Show information</string>
     <string name="remote_action_show_info_help">Show information about what is playing and its playback controls.</string>
     <string name="remote_action_stream_info">Show stream information</string>

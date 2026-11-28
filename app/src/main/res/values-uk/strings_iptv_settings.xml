@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Починати на весь екран"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"Під час першого відкриття Live TV після запуску застосунку останній канал відтворюється на весь екран"</string>
     <string name="iptv_settings_moving_around">"Навігація"</string>
+    <string name="iptv_settings_simple_live_tv">"Простий режим Live TV"</string>
+    <string name="iptv_settings_simple_live_tv_description">"Під час перегляду наживо кнопка OK відкриває нещодавні канали. Натисніть OK ще раз, щоб відкрити телегід."</string>
+    <string name="iptv_simple_live_tv_guide">"Телегід"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Нещодавні канали"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"Тут з’являться канали, які ви переглядаєте."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK відкриває на весь екран"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK на передачі одразу відкриває повний екран замість попереднього перегляду"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Переходити на назви каналів (як на кабельній приставці)"</string>

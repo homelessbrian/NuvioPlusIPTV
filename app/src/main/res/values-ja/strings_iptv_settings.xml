@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"全画面で開始"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"アプリ起動後、最初に Live TV を開いたときに最後のチャンネルを全画面で再生します"</string>
     <string name="iptv_settings_moving_around">"操作"</string>
+    <string name="iptv_settings_simple_live_tv">"シンプル Live TV"</string>
+    <string name="iptv_settings_simple_live_tv_description">"ライブ視聴中に OK を押すと最近見たチャンネルが開きます。もう一度 OK を押すと番組表が開きます。"</string>
+    <string name="iptv_simple_live_tv_guide">"番組表"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"最近見たチャンネル"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"視聴したチャンネルがここに表示されます。"</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK で全画面"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"番組で OK を押すと、プレビューで再生せずにすぐ全画面になります"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"チャンネル名に移動（ケーブルボックス風）"</string>

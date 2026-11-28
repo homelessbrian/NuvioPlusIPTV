@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Bắt đầu toàn màn hình"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"Lần đầu mở Live TV sau khi khởi động ứng dụng, kênh gần nhất phát toàn màn hình"</string>
     <string name="iptv_settings_moving_around">"Di chuyển"</string>
+    <string name="iptv_settings_simple_live_tv">"Live TV đơn giản"</string>
+    <string name="iptv_settings_simple_live_tv_description">"Khi xem truyền hình trực tiếp, OK sẽ mở các kênh đã xem gần đây. Nhấn OK lần nữa để mở hướng dẫn TV."</string>
+    <string name="iptv_simple_live_tv_guide">"Hướng dẫn TV"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Kênh đã xem gần đây"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"Các kênh bạn xem sẽ xuất hiện ở đây."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK mở toàn màn hình"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK trên một chương trình chuyển thẳng sang toàn màn hình, thay vì phát trong xem trước trước"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Đáp vào tên kênh (như hộp truyền hình cáp)"</string>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iptv_simple_live_tv_guide">TV Guide</string>
+    <string name="iptv_simple_live_tv_recent_channels">Recent Channels</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">Channels you watch will appear here.</string>
+</resources>

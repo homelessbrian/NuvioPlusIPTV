@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Tam ekranda başlat"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"Uygulamayı başlattıktan sonra Canlı TV’yi ilk açtığında son kanalın tam ekranda oynar"</string>
     <string name="iptv_settings_moving_around">"Gezinme"</string>
+    <string name="iptv_settings_simple_live_tv">"Basit Canlı TV"</string>
+    <string name="iptv_settings_simple_live_tv_description">"Canlı TV izlerken OK son izlenen kanalları açar. TV rehberini açmak için OK tuşuna tekrar basın."</string>
+    <string name="iptv_simple_live_tv_guide">"TV rehberi"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Son izlenen kanallar"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"İzlediğiniz kanallar burada görünür."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK tam ekranı açar"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"Bir programda OK, önce önizlemede oynatmak yerine doğrudan tam ekrana geçer"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Kanal adlarına geç (kablo kutusu gibi)"</string>

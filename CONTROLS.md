@@ -59,6 +59,12 @@ In the guide's **Gear** (Guide display), the arrows move between the switches an
 | **Long-press OK** or **Menu** | Audio, subtitles, screen size, picture shape, stream info, sleep timer, record, **Add to Multiview**, watch from the beginning, find & stream |
 | **Back** | Back to the guide |
 
+### Simple Live TV
+
+Turn on **Simple Live TV** in **Settings → Live TV → Playback → Opening & Channel Surfing → Moving Around**. While watching live TV in full screen, press **OK** to open **Recent Channels** with **TV Guide** highlighted. Press **OK** again to open the guide, or use the arrows to highlight a recent channel and press **OK** to watch it. **Back** closes Recent Channels. **Hold OK** opens playback options.
+
+**Your remote** shows **Open recent channels** as the default short OK action in Simple Live TV. You can also assign it to another button on the Live TV screen.
+
 ### Overlay mode
 | Button | Action |
 |---|---|

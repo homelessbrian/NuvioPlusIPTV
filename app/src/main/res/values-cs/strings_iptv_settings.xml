@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Spustit na celou obrazovku"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"Při prvním otevření Live TV po spuštění aplikace se poslední kanál přehraje na celou obrazovku"</string>
     <string name="iptv_settings_moving_around">"Pohyb"</string>
+    <string name="iptv_settings_simple_live_tv">"Jednoduchá Live TV"</string>
+    <string name="iptv_settings_simple_live_tv_description">"Při sledování živého vysílání otevře OK nedávné kanály. Dalším stiskem OK otevřete TV program."</string>
+    <string name="iptv_simple_live_tv_guide">"TV program"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Nedávné kanály"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"Zde se zobrazí kanály, které sledujete."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK otevře celou obrazovku"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK na pořadu jde rovnou na celou obrazovku, místo aby se nejdřív přehrál v náhledu"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Přistát na názvech kanálů (jako u set-top boxu)"</string>

@@ -712,6 +712,8 @@ data class LiveTvSettings(
     val backupSourceOrder: String = "",
     /** Qualities ("4K,FHD,HD,SD,?"), in the order chosen. Empty: best first. */
     val backupQualityOrder: String = "",
+    /** OK opens Recent Channels from fullscreen live playback. */
+    val simpleLiveTv: Boolean = false,
     /** Channel surfing: Up / Down show other channels on the info bar; OK switches. */
     val channelSurf: Boolean = false,
     /** Parts of the full-screen bar switched off (⚙ → Play bar layout), comma separated. */

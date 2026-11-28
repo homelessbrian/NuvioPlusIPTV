@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Starten in volledig scherm"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"De eerste keer dat je live tv opent na het starten van de app, speelt je laatste zender in volledig scherm"</string>
     <string name="iptv_settings_moving_around">"Navigeren"</string>
+    <string name="iptv_settings_simple_live_tv">"Eenvoudige live-tv"</string>
+    <string name="iptv_settings_simple_live_tv_description">"Tijdens het live tv-kijken opent OK de recente zenders. Druk nogmaals op OK om de tv-gids te openen."</string>
+    <string name="iptv_simple_live_tv_guide">"Tv-gids"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Recente zenders"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"Zenders die je bekijkt, verschijnen hier."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK opent volledig scherm"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK op een programma gaat meteen naar volledig scherm, in plaats van het eerst in het voorbeeld af te spelen"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Op zendernamen uitkomen (zoals een decoder)"</string>

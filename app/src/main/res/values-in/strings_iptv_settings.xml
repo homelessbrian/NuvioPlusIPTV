@@ -277,6 +277,11 @@
     <string name="iptv_settings_start_in_full_screen">"Mulai Layar Penuh"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"Pertama kali Anda membuka Live TV setelah memulai aplikasi, saluran terakhir diputar layar penuh"</string>
     <string name="iptv_settings_moving_around">"Bernavigasi"</string>
+    <string name="iptv_settings_simple_live_tv">"Live TV Sederhana"</string>
+    <string name="iptv_settings_simple_live_tv_description">"Saat menonton Live TV, OK membuka saluran yang baru ditonton. Tekan OK lagi untuk membuka panduan TV."</string>
+    <string name="iptv_simple_live_tv_guide">"Panduan TV"</string>
+    <string name="iptv_simple_live_tv_recent_channels">"Saluran yang baru ditonton"</string>
+    <string name="iptv_simple_live_tv_no_recent_channels">"Saluran yang Anda tonton akan muncul di sini."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK Membuka Layar Penuh"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK pada acara langsung ke layar penuh, tanpa memutarnya di pratinjau dulu"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Mendarat di Nama Saluran (Seperti Kotak Kabel)"</string>

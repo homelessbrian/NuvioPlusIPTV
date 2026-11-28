@@ -81,6 +81,7 @@ private sealed interface ScheduleRow {
 @Composable
 internal fun LiveTvOverlayMode(
     viewModel: LiveTvViewModel,
+    simpleControls: Boolean,
     onClose: () -> Unit,
     onFindInNuvio: (EpgProgram, LiveChannel) -> Unit
 ) {
@@ -93,10 +94,10 @@ internal fun LiveTvOverlayMode(
         else -> 1f to 1f
     }
     androidx.compose.runtime.CompositionLocalProvider(
-        LocalOverlayScale provides textScale,
-        LocalOverlayRowScale provides rowScale
+        LocalOverlayScale provides if (simpleControls) textScale.coerceAtLeast(1.2f) else textScale,
+        LocalOverlayRowScale provides if (simpleControls) rowScale.coerceAtLeast(1.2f) else rowScale
     ) {
-        OverlayModeContent(viewModel, onClose, onFindInNuvio)
+        OverlayModeContent(viewModel, onClose, onFindInNuvio, autoClose = !simpleControls)
     }
 }
 
@@ -121,7 +122,8 @@ private fun odp(v: Float): androidx.compose.ui.unit.Dp = (v * LocalOverlayScale.
 private fun OverlayModeContent(
     viewModel: LiveTvViewModel,
     onClose: () -> Unit,
-    onFindInNuvio: (EpgProgram, LiveChannel) -> Unit
+    onFindInNuvio: (EpgProgram, LiveChannel) -> Unit,
+    autoClose: Boolean
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val programs by viewModel.programs.collectAsStateWithLifecycle()
@@ -194,7 +196,7 @@ private fun OverlayModeContent(
     }
     LaunchedEffect(Unit) { delay(60); runCatching { focus.requestFocus() } }
     // Closes itself after a while without a key press.
-    LaunchedEffect(activity) {
+    if (autoClose) LaunchedEffect(activity) {
         delay(15_000)
         if (futurePrompt == null && recordMenu == null && infoMenu == null) onClose()
     }

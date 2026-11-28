@@ -277,6 +277,8 @@
     <string name="iptv_settings_start_in_full_screen">"Start in Full Screen"</string>
     <string name="iptv_settings_the_first_time_you_open_live_tv_after">"The first time you open Live TV after starting the app, your last channel plays full screen"</string>
     <string name="iptv_settings_moving_around">"Moving Around"</string>
+    <string name="iptv_settings_simple_live_tv">"Simple Live TV"</string>
+    <string name="iptv_settings_simple_live_tv_description">"While watching live TV, OK opens Recent Channels. Press OK again for the TV Guide."</string>
     <string name="iptv_settings_ok_opens_full_screen">"OK Opens Full Screen"</string>
     <string name="iptv_settings_ok_on_a_show_goes_straight_to_full">"OK on a show goes straight to full screen, instead of playing it in the preview first"</string>
     <string name="iptv_settings_land_on_channel_names_like_a_cable_box">"Land on Channel Names (Like a Cable Box)"</string>
