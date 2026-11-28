@@ -84,10 +84,6 @@ object NuvioExoPlayerPerformanceHelper {
     @Volatile
     var targetBufferSizeMb: Int = 250
 
-    // The allocator recycles internally, so only its own counters show what is actually held.
-    @Volatile
-    var liveAllocator: DefaultAllocator? = null
-
     @Volatile
     var calculatedMemoryUsageMb: Int = 0
 
@@ -287,7 +283,6 @@ object NuvioExoPlayerPerformanceHelper {
                 )
             }
             val allocator = DefaultAllocator(true, DEFAULT_NUVIO_ALLOCATOR_SEGMENT_SIZE, 0, enabled)
-            liveAllocator = allocator
             val resolvedBackBufferMs = backBufferMs.coerceAtLeast(0)
             android.util.Log.i(
                 "ExoPerformance",
