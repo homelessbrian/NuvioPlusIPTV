@@ -12,8 +12,10 @@ import com.nuvio.tv.livetv.data.ForkHttp
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.LiveUserState
+import com.nuvio.tv.livetv.model.PlaylistSource
 import com.nuvio.tv.livetv.parental.ParentalControls
 import com.nuvio.tv.livetv.stalker.StalkerGateway
+import com.nuvio.tv.livetv.stalker.StalkerPlayback
 import com.nuvio.vpn.android.VpnHttpClient
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -28,6 +30,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -36,6 +39,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.Call
+import java.io.Closeable
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -49,6 +53,8 @@ interface VodDownloadsEntryPoint { fun vodDownloads(): VodDownloads }
 
 fun vodDownloads(context: Context): VodDownloads =
     EntryPointAccessors.fromApplication(context.applicationContext, VodDownloadsEntryPoint::class.java).vodDownloads()
+
+internal data class VodDownloadSize(val bytes: Long, val estimated: Boolean)
 
 @Singleton
 class VodDownloads @Inject constructor(
@@ -131,6 +137,49 @@ class VodDownloads @Inject constructor(
     internal suspend fun canSave(item: VodItem) =
         visible(item.playlistId, category(item), prefs.userState.first(), ParentalControls.enabled(prefs.settings.first())) &&
             !repository.isAdult(item)
+
+    internal suspend fun downloadSize(profileId: Int, item: VodItem, episode: VodEpisode?): VodDownloadSize? =
+        withContext(Dispatchers.IO) {
+            if (!current(profileId) || !canSave(item) || (item.kind == VodKind.SERIES) != (episode != null))
+                return@withContext null
+            if (episode != null && episode.playlistId.isNotEmpty() && episode.playlistId != item.playlistId)
+                return@withContext null
+            val source = downloadSource(item) ?: return@withContext null
+            val url = if (episode == null) repository.movieUrl(item) else repository.episodeUrl(episode)
+            if (url == null || vodIsManifest(url, "") || !current(profileId)) return@withContext null
+
+            val exact = withTimeoutOrNull(DOWNLOAD_SIZE_TIMEOUT_MS) {
+                try {
+                    fileTarget(source, url, probeMimeType = false).use { target ->
+                        if (!current(profileId)) return@use null
+                        probeVodFileSize(target.httpCalls, target.url, target.userAgent, LiveTvRepository.DEFAULT_UA)
+                    }
+                } catch (e: CancellationException) { throw e }
+                catch (_: Exception) { null }
+            }
+            if (!current(profileId)) return@withContext null
+            if (exact != null) return@withContext VodDownloadSize(exact, estimated = false)
+            val estimate = if (episode == null) repository.cachedMovieSizeEstimate(item) else episode.tech?.estimatedBytes
+            estimate?.takeIf { it > 0 }?.let { VodDownloadSize(it, estimated = true) }
+        }
+
+    private suspend fun downloadSource(item: VodItem): PlaylistSource? =
+        prefs.currentPlaylists().firstOrNull { it.id == item.playlistId && it.enabled && it.importVod }
+
+    private inner class FileTarget(
+        val url: String,
+        val userAgent: String,
+        private val portal: StalkerPlayback?,
+    ) : Closeable {
+        val httpCalls: Call.Factory get() = portal?.policy?.mediaCalls() ?: calls
+        override fun close() { portal?.policy?.retire() }
+    }
+
+    private suspend fun fileTarget(source: PlaylistSource, url: String, probeMimeType: Boolean): FileTarget {
+        val locator = StalkerPlaybackLocator.decode(url)
+        val portal = locator?.let { stalker.prepare(it.sourceId, it.stream, probeMimeType) }
+        return FileTarget(portal?.url ?: url, source.effectiveUserAgent.ifBlank { LiveTvRepository.DEFAULT_UA }, portal)
+    }
 
     private fun start(profile: Int) {
         try {
@@ -229,18 +278,14 @@ class VodDownloads @Inject constructor(
         checkRunning()
         val item = repository.itemByUid(row.uid) ?: throw VodDownloadError("This title is no longer in the playlist.")
         if (!canSave(item)) throw VodDownloadError("This title is unavailable for download.")
-        val source = prefs.currentPlaylists().firstOrNull { it.id == item.playlistId && it.enabled && it.importVod }
-            ?: throw VodDownloadError("This playlist is no longer available.")
+        val source = downloadSource(item) ?: throw VodDownloadError("This playlist is no longer available.")
         val url = if (row.episodeId == null) repository.movieUrl(item) else {
             repository.info(item)?.episodes?.firstOrNull { it.id == row.episodeId && it.season == row.season && it.episode == row.number }
                 ?.let { repository.episodeUrl(it) }
         } ?: throw VodDownloadError("The provider no longer lists this video.")
-        val locator = StalkerPlaybackLocator.decode(url)
-        val portal = locator?.let { stalker.prepare(it.sourceId, it.stream) }
+        val target = fileTarget(source, url, probeMimeType = true)
         try {
-            val target = portal?.url ?: url
-            openVodFile(portal?.policy?.mediaCalls() ?: calls, target,
-                source.effectiveUserAgent.ifBlank { LiveTvRepository.DEFAULT_UA }, LiveTvRepository.DEFAULT_UA) { call ->
+            openVodFile(target.httpCalls, target.url, target.userAgent, LiveTvRepository.DEFAULT_UA) { call ->
                 activeCalls[id] = call
                 checkRunning()
             }.use { response ->
@@ -292,7 +337,7 @@ class VodDownloads @Inject constructor(
             }
         } finally {
             activeCalls.remove(id)
-            portal?.policy?.retire()
+            target.close()
         }
     }
 
@@ -307,6 +352,7 @@ class VodDownloads @Inject constructor(
 
     private companion object {
         val pending = setOf(VodDownloadStatus.QUEUED, VodDownloadStatus.DOWNLOADING)
+        const val DOWNLOAD_SIZE_TIMEOUT_MS = 6_000L
         const val DIRECT_ONLY = "This source is not a supported direct video file. HLS and DASH playlists cannot be downloaded."
     }
 }

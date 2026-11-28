@@ -8,11 +8,18 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nuvio.tv.livetv.record.RecordingStorage
 import com.nuvio.tv.livetv.startup.LiveTvStartupEntryPoint
+import com.nuvio.tv.livetv.ui.LiveText
+import com.nuvio.tv.ui.components.NuvioDialog
+import com.nuvio.tv.ui.screens.settings.SettingsActionRow
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CancellationException
 
@@ -22,8 +29,11 @@ internal data class PlaylistDownloadPick(
     val season: Int? = null,
     val episode: Int? = null,
     val episodeId: String? = null,
-    val chooseVersion: Boolean = false
+    val chooseVersion: Boolean = false,
+    val confirmed: Boolean = false
 )
+
+private data class PlaylistDownloadSelection(val item: VodItem, val episode: VodEpisode?)
 
 internal class PlaylistDownloadActionState : ViewModel() {
     val pending = mutableStateOf<PlaylistDownloadPick?>(null)
@@ -58,6 +68,7 @@ internal fun rememberPlaylistDownloadAction(): (PlaylistDownloadPick) -> Unit {
         var pending by state.pending
         var choosingFolder by state.choosingFolder
         var versions by remember { mutableStateOf(emptyList<OnDemandRepository.Version>()) }
+        var selection by remember { mutableStateOf<PlaylistDownloadSelection?>(null) }
 
         fun notify(message: String) = Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         LaunchedEffect(pending, choosingFolder) {
@@ -75,10 +86,6 @@ internal fun rememberPlaylistDownloadAction(): (PlaylistDownloadPick) -> Unit {
                             return@LaunchedEffect
                         }
                     }
-                    if (downloads.currentFolder(profile) == null) {
-                        choosingFolder = true
-                        return@LaunchedEffect
-                    }
                     val episode = if (item.kind == VodKind.SERIES) {
                         repository.info(item)?.episodes?.firstOrNull {
                             it.season == request.season && it.episode == request.episode &&
@@ -87,6 +94,12 @@ internal fun rememberPlaylistDownloadAction(): (PlaylistDownloadPick) -> Unit {
                     } else null
                     if (item.kind == VodKind.SERIES && episode == null) {
                         notify("This playlist version doesn't include that episode.")
+                    } else if (!request.confirmed) {
+                        selection = PlaylistDownloadSelection(item, episode)
+                        return@LaunchedEffect
+                    } else if (downloads.currentFolder(profile) == null) {
+                        choosingFolder = true
+                        return@LaunchedEffect
                     } else {
                         notify(downloads.enqueue(profile, item, episode) ?: "Added to Downloads")
                     }
@@ -104,6 +117,22 @@ internal fun rememberPlaylistDownloadAction(): (PlaylistDownloadPick) -> Unit {
                 versions = emptyList()
             }, onDismiss = { versions = emptyList(); pending = null })
         }
+        selection?.let { selected ->
+            PlaylistDownloadConfirmation(
+                selected,
+                sizeLookup = { downloads.downloadSize(profile, selected.item, selected.episode) },
+                onConfirm = {
+                    selection = null
+                    pending = pending?.copy(
+                        uid = selected.item.uid,
+                        episodeId = selected.episode?.id,
+                        chooseVersion = false,
+                        confirmed = true
+                    )
+                },
+                onDismiss = { selection = null; pending = null }
+            )
+        }
         if (choosingFolder) {
             PlaylistDownloadFolderPicker(
                 profile = profile,
@@ -113,5 +142,50 @@ internal fun rememberPlaylistDownloadAction(): (PlaylistDownloadPick) -> Unit {
         }
         val start: (PlaylistDownloadPick) -> Unit = { if (pending == null) pending = it }
         start
+    }
+}
+
+@Composable
+private fun PlaylistDownloadConfirmation(
+    selection: PlaylistDownloadSelection,
+    sizeLookup: suspend () -> VodDownloadSize?,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val title = remember(selection) {
+        buildString {
+            append(OnDemandDatabase.displayTitle(selection.item.name))
+            selection.episode?.let { episode ->
+                append(" · S${episode.season} E${episode.episode}")
+                if (episode.title.isNotBlank()) append(" · ${episode.title}")
+            }
+        }
+    }
+    var checking by remember(selection) { mutableStateOf(true) }
+    var size by remember(selection) { mutableStateOf<VodDownloadSize?>(null) }
+    LaunchedEffect(selection) {
+        size = try {
+            sizeLookup()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        checking = false
+    }
+
+    val sizeText = when (val result = size) {
+        null -> if (checking) "Checking download size…" else "Size unavailable"
+        else -> {
+            val amount = RecordingStorage.sizeLabel(result.bytes)
+            if (result.estimated) "Estimated size · $amount" else "Size · $amount"
+        }
+    }
+    val cancelFocus = remember { FocusRequester() }
+    NuvioDialog(onDismiss = onDismiss, title = "Download?", subtitle = title) {
+        LiveText(sizeText)
+        SettingsActionRow("Download", subtitle = null, enabled = !checking, onClick = onConfirm)
+        SettingsActionRow("Cancel", subtitle = null, modifier = Modifier.focusRequester(cancelFocus), onClick = onDismiss)
+        LaunchedEffect(Unit) { cancelFocus.requestFocus() }
     }
 }

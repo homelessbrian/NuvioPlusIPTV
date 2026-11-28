@@ -933,6 +933,9 @@ class OnDemandRepository @Inject constructor(
             item.providerDurationSeconds?.let { "${it / 60} min" }, episodes.sortedWith(compareBy({ it.season }, { it.episode })))
     }
 
+    /** Reuses movie metadata already loaded from the provider. */
+    internal fun cachedMovieSizeEstimate(item: VodItem): Long? = infoCache[item.uid]?.tech?.estimatedBytes
+
     /** Provider details for a movie or series (series include every episode). Cached. */
     suspend fun info(item: VodItem): VodInfo? = withContext(Dispatchers.IO) {
         val pl = playlist(item.playlistId) ?: return@withContext null
