@@ -7,6 +7,7 @@ import com.nuvio.tv.remote.RemoteScreen
 import com.nuvio.tv.remote.host.RemoteActionHost
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,11 +34,13 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -208,6 +212,7 @@ private val LIST_WIDTH = 470.dp
  * The window is the same video player as Live TV's preview and full screen, so the picture
  * carries on without restarting from the list to the game page, to full screen and back.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SportsScreen(
     /** Live TV is playing the picked channel: open it full screen. */
@@ -249,6 +254,9 @@ fun SportsScreen(
     val hubFocus = remember { mutableStateOf<String?>(null) }
     val gameCardFocus = remember { GameCardFocus() }
     var focusedGameId by remember { mutableStateOf<String?>(null) }
+    val hasFocusedGame by remember {
+        derivedStateOf(structuralEqualityPolicy()) { focusedGameId != null }
+    }
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     // The page the open game came from (the Calendar): Back goes back there, not to the hub.
     var fromRoute by rememberSaveable { mutableStateOf<String?>(null) }
@@ -282,8 +290,9 @@ fun SportsScreen(
     var returnTo by remember { mutableStateOf<String?>(null) }
     // Kept while a game is open, so the list is where you left it when you come back.
     val listState = rememberLazyListState()
-    // My Teams rows: where each row and the page were, and the card last highlighted.
-    val rowsState = rememberLazyListState()
+    // My Sports shows about two rows. Keep nearby rows ready when focus scrolls back to them.
+    val rowsCacheWindow = remember { LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 1f) }
+    val rowsState = rememberLazyListState(cacheWindow = rowsCacheWindow)
     val rowStates = remember { HashMap<String, androidx.compose.foundation.lazy.LazyListState>() }
     // The card last highlighted (not page state: moving the highlight mustn't redraw the page).
     val rowFocus = remember { arrayOfNulls<String>(1) }
@@ -446,7 +455,7 @@ fun SportsScreen(
     val remoteContext = androidx.compose.ui.platform.LocalContext.current
     RemoteActionHost(
         screen = RemoteScreen.SPORTS,
-        enabled = focusedGameId != null && !picker && fixFor == null && tableReq == null &&
+        enabled = hasFocusedGame && !picker && fixFor == null && tableReq == null &&
             openId == null && !topBarFocused
     ) { action ->
         fun unavailable() = LiveTvNotice.show(remoteContext.getString(com.nuvio.tv.R.string.remote_action_unavailable))
