@@ -11,7 +11,8 @@ internal fun PlayerRuntimeController.resolveUsenetForSwitch(
     stream: Stream,
     fromEpisodePanel: Boolean,
     target: Video? = null,
-    autoPlay: Boolean = false
+    autoPlay: Boolean = false,
+    recoveringPlayback: Boolean = false
 ): Boolean {
     if (!stream.isUsenet()) {
         if (stream.isTorrent()) UsenetSidecar.peek()?.releaseIfDifferent(null)
@@ -32,7 +33,7 @@ internal fun PlayerRuntimeController.resolveUsenetForSwitch(
                     ?: context.getString(com.nuvio.tv.R.string.player_stream_fallback_exhausted))
             debridResolveJob = null
             if (fromEpisodePanel) switchToEpisodeStream(resolved, target, autoPlay, continuingSelection = true)
-            else switchToSourceStream(resolved)
+            else switchToSourceStream(resolved, recoveringPlayback)
         } catch (e: CancellationException) { throw e
         } catch (e: Exception) {
             debridResolveJob = null

@@ -69,6 +69,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.nuvio.tv.core.util.withAppLocale
+import com.nuvio.tv.data.watchstats.WatchActivity
+import com.nuvio.tv.data.watchstats.WatchStatsRepository
+import com.nuvio.tv.data.watchstats.WatchStatsSession
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -114,6 +117,7 @@ class PlayerRuntimeController(
     internal val serverStreams: ServerStreams,
     internal val usenetSourceSettings: com.nuvio.tv.core.usenet.UsenetSourceSettings,
     internal val party: com.nuvio.tv.core.party.PartyRepository,
+    internal val watchStatsRepository: WatchStatsRepository,
     internal val profileId: Int,
     internal val savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
@@ -121,6 +125,10 @@ class PlayerRuntimeController(
 
     /** Resolved once so every `context.getString(...)` here follows the app language. */
     internal val context: Context = context.withAppLocale()
+    internal val watchStatsSession = WatchStatsSession(watchStatsRepository, scope)
+    internal var watchStatsActivity: WatchActivity? = null
+    // MPV keeps reporting the previous file while a replacement is being resolved.
+    internal var watchStatsMpvMediaRequested = false
 
     companion object {
         private val CONVERTIBLE_DV_PROFILES = setOf("5", "7")
@@ -312,6 +320,7 @@ class PlayerRuntimeController(
         mediaSourceFactory.logVodCacheStats()
         mediaSourceFactory.evictCachedSession()
         releasePlayer()
+        resetWatchStatsPlayback()
         playerSession.close()
     }
 
@@ -915,6 +924,7 @@ class PlayerRuntimeController(
         cancelStreamFallback()
         com.nuvio.tv.core.usenet.UsenetSidecar.peek()?.release(currentStreamUrl)
         releasePlayer()
+        resetWatchStatsPlayback()
         stopTorrentStream()
         torrentService.shutdown()
         startupLoadingReportJob?.cancel()

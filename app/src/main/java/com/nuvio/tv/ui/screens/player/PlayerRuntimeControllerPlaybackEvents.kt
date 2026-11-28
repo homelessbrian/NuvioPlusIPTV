@@ -399,6 +399,7 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                 if (view != null) {
                     val failure = view.consumePlaybackFailure()
                     if (failure != null && streamFallbackSession?.ownsPlayback(currentStreamUrl) == true) {
+                        pauseWatchStatsPlayback()
                         if (!maybeAutoSwitchInternalPlayerOnStartupError(failure, allowEngineFailover = true) &&
                             !tryNextStream(failure)
                         ) {
@@ -458,13 +459,14 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         durationMs = playerDuration,
                         fromRequestedMedia = fromRequestedMedia
                     )
+                    val isLive = view.isLiveStreamNow()
                     publishPlaybackTimeline(
                         currentPosition = displayPosition,
                         duration = playerDuration,
                         bufferedPosition = bufferedPosition.coerceAtLeast(displayPosition),
                         // Live TV fork: a recording still being made looks live to the player (and its
                         // length keeps growing), but it's a recording: skipping back and forward stay on.
-                        playerReportsLive = (view.isLiveStreamNow() || mpvDurationGrowth.grew) &&
+                        playerReportsLive = (isLive || mpvDurationGrowth.grew) &&
                             !com.nuvio.tv.livetv.record.RecordingResume.isRecording(contentType),
                         isPlaying = playingForWatchClock
                     )
@@ -487,9 +489,14 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     val nearEnd = endDetectionArmed && playerDuration > 0L &&
                         pos >= (effectiveDuration - PlayerNextEpisodeRules.NEAR_END_MS)
                     val eofNow = view.isEofReached()
+                    updateWatchStatsPlayback(
+                        playing = watchStatsMpvMediaRequested && firstFrameReady &&
+                            fromRequestedMedia && playingForWatchClock && !eofNow,
+                        live = isLive || mpvDurationGrowth.grew
+                    )
                     if (!eofNow) mpvEofSeenClear = true
                     val mpvEofReached = mpvEofSeenClear && eofNow
-                    val naturalEnded = !view.isLiveStreamNow() && (nearEnd || mpvEofReached) && shouldTreatAsNaturalPlaybackCompletion(
+                    val naturalEnded = !isLive && (nearEnd || mpvEofReached) && shouldTreatAsNaturalPlaybackCompletion(
                         hasRenderedFirstFrame = firstFrameReady,
                         hasFatalError = !_uiState.value.error.isNullOrBlank(),
                         durationMs = effectiveDuration
@@ -499,7 +506,7 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     // two minutes as a placeholder clip.
                     val recordingEnded = !naturalEnded &&
                         com.nuvio.tv.livetv.record.RecordingResume.isRecording(contentType) &&
-                        !view.isLiveStreamNow() && mpvEofReached && firstFrameReady &&
+                        !isLive && mpvEofReached && firstFrameReady &&
                         _uiState.value.error.isNullOrBlank()
                     val wasEnded = _uiState.value.playbackEnded
                     _uiState.update { state ->
@@ -537,6 +544,8 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
             }
 
             _exoPlayer?.let { player ->
+                // Also picks up opting in while the player is already playing.
+                updateExoWatchStats(player)
                 val pos = player.currentPosition.coerceAtLeast(0L)
                 val playerDuration = player.duration
                 if (playerDuration > lastKnownDuration) {

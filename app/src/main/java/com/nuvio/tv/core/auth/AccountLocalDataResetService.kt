@@ -7,6 +7,7 @@ import com.nuvio.tv.core.profile.ProfileScopedCredentialStore
 import com.nuvio.tv.data.local.ProfileDataStore
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
 import com.nuvio.tv.data.local.ProfileLockStateDataStore
+import com.nuvio.tv.data.watchstats.WatchStatsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
@@ -23,9 +24,14 @@ class AccountLocalDataResetService @Inject constructor(
     private val profileDataStore: ProfileDataStore,
     private val profileLockStateDataStore: ProfileLockStateDataStore,
     private val credentialStores: Set<@JvmSuppressWildcards ProfileScopedCredentialStore>,
-    private val androidTvChannelManager: AndroidTvChannelManager
+    private val androidTvChannelManager: AndroidTvChannelManager,
+    private val watchStats: WatchStatsRepository,
 ) {
     suspend fun clearAfterSignOut() = withContext(Dispatchers.IO) {
+        runCatching {
+            watchStats.setTrackingEnabled(false)
+            watchStats.flushPending()
+        }.onFailure { Log.w(ACCOUNT_RESET_TAG, "Failed to stop watch activity tracking", it) }
         runCatching { androidTvChannelManager.clearAll() }
             .onFailure { Log.w(ACCOUNT_RESET_TAG, "Failed to clear Android TV channel data", it) }
         runCatching { profileDataStoreFactory.clearProfileScopedData() }

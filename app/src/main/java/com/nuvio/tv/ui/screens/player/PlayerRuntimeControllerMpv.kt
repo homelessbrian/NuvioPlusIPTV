@@ -13,6 +13,8 @@ private const val MPV_RESUME_SEEK_TOLERANCE_MS = 1500L
 
 internal fun PlayerRuntimeController.attachMpvView(view: NuvioMpvSurfaceView?) {
     if (mpvView === view) return
+    pauseWatchStatsPlayback()
+    watchStatsMpvMediaRequested = false
     mpvView = view
 
     if (view == null) return
@@ -28,6 +30,7 @@ internal fun PlayerRuntimeController.attachMpvView(view: NuvioMpvSurfaceView?) {
         view.applyHardwareDecodeMode(mpvHardwareDecodeModeSetting)
         registerMpvEventRelay(view)
         view.setMedia(currentStreamUrl, currentHeaders)
+        watchStatsMpvMediaRequested = true
         view.setPlaybackSpeed(_uiState.value.playbackSpeed)
         view.applyAudioAmplificationDb(_uiState.value.audioAmplificationDb)
         view.applyAudioLanguagePreferences(mpvPreferredAudioLanguages)
@@ -95,6 +98,8 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
     headers: Map<String, String>,
     allowEngineFailover: Boolean = true
 ) {
+    pauseWatchStatsPlayback()
+    watchStatsMpvMediaRequested = false
     mpvMediaLoadPrepared = true
     prefetchAutoSyncIndex(url, headers) // AutoSync hook
     _exoPlayer?.release()
@@ -137,6 +142,7 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
             ?: (_uiState.value.pendingSeekPosition?.coerceAtLeast(0L) ?: 0L)
         playbackAnalyticsDiagnostics.setStartupStartPosition(initialResumePosition)
         view.setMedia(url, headers, initialResumePosition)
+        watchStatsMpvMediaRequested = true
         playbackAnalyticsDiagnostics.recordRawEventLine(
             "PLAYER_INIT: engine=MPV host=${url.safeMpvTraceHost()} " +
                 "playbackSpeed=${_uiState.value.playbackSpeed} resumePositionMs=$initialResumePosition"
@@ -243,6 +249,7 @@ internal fun PlayerRuntimeController.pauseForLifecycle() {
     }
     // Mark we're in background so onPlayerError can defer recovery to onResume.
     isInBackground = true
+    pauseWatchStatsPlayback()
 
     // Release the session while backgrounded so Bluetooth controls cannot resume playback.
     releaseMediaSession()
@@ -683,6 +690,7 @@ internal fun PlayerRuntimeController.setPlaybackSpeedInternal(speed: Float) {
 
 internal fun PlayerRuntimeController.setPlaybackPaused(paused: Boolean) {
     if (isUsingMpvEngine()) {
+        if (paused) pauseWatchStatsPlayback()
         mpvView?.setPaused(paused)
         _uiState.update { it.copy(isPlaying = !paused) }
         refreshMpvMediaSession()

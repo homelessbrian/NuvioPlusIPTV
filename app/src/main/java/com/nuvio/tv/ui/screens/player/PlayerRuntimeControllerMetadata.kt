@@ -61,6 +61,9 @@ internal fun PlayerRuntimeController.initializeCloudPlaybackSequence() {
 internal fun PlayerRuntimeController.applyMetaDetails(meta: Meta) {
     metaVideos = meta.videos
     metaGenres = meta.genres
+    watchStatsActivity?.let { activity ->
+        if (activity.genres != meta.genres) watchStatsActivity = activity.copy(genres = meta.genres)
+    }
     metaCountry = meta.country
     // Fill in content language from meta if not provided via navigation args.
     if (contentLanguage == null) {

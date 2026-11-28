@@ -135,7 +135,7 @@ internal fun PlayerRuntimeController.tryFallbackToNextSourceAfterError(errorMess
                 PlayerRuntimeController.TAG,
                 "Source failed to start, falling back to ${playable.name ?: playable.addonName} from ${playable.addonName}"
             )
-            switchToSourceStream(playable)
+            switchToSourceStream(playable, recoveringPlayback = true)
             autoSelectedSourceUrl = currentStreamUrl
             sourceFallbackTriedKeys += "url:$currentStreamUrl"
             return@launch

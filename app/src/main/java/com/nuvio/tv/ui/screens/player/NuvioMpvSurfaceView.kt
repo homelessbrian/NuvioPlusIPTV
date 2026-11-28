@@ -19,6 +19,7 @@ import kotlin.math.roundToLong
 internal const val MPV_TRACK_LIST_PROPERTY = "track-list"
 internal const val MPV_SID_PROPERTY = "sid"
 internal const val MPV_SUB_TEXT_PROPERTY = "sub-text"
+internal val MPV_WATCH_STATS_PLAYBACK_PROPERTIES = setOf("pause", "paused-for-cache", "core-idle")
 private const val MPV_TEXT_OUTLINE_SIZE_PER_WIDTH = 0.5
 private val MPV_STYLED_SUBTITLE_CODECS = setOf(
     "subrip", "srt", "webvtt", "text", "mov_text", "microdvd", "mpl2", "subviewer", "subviewer1", "sami", "realtext"
@@ -972,6 +973,9 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         mpv.observeProperty(MPV_TRACK_LIST_PROPERTY, MPV.mpvFormat.MPV_FORMAT_NONE)
         mpv.observeProperty(MPV_SID_PROPERTY, MPV.mpvFormat.MPV_FORMAT_STRING)
         mpv.observeProperty(MPV_SUB_TEXT_PROPERTY, MPV.mpvFormat.MPV_FORMAT_STRING)
+        MPV_WATCH_STATS_PLAYBACK_PROPERTIES.forEach { property ->
+            mpv.observeProperty(property, MPV.mpvFormat.MPV_FORMAT_FLAG)
+        }
     }
 
     private fun applyHeaders(headers: Map<String, String>) {

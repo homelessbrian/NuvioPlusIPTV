@@ -1,10 +1,12 @@
 package com.nuvio.tv.core.profile
 
 import android.content.Context
+import android.util.Log
 import com.nuvio.vpn.android.VpnPlaybackProtection
 import com.nuvio.tv.R
 import com.nuvio.tv.data.local.ProfileDataStore
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
+import com.nuvio.tv.data.watchstats.WatchStatsRepository
 import com.nuvio.tv.domain.model.UserProfile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.io.File
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,7 +29,8 @@ class ProfileManager @Inject constructor(
     private val profileDataStore: ProfileDataStore,
     private val factory: ProfileDataStoreFactory,
     private val credentialStores: Set<@JvmSuppressWildcards ProfileScopedCredentialStore>,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val watchStats: WatchStatsRepository,
 ) {
     companion object {
         const val MAX_PROFILES = 6
@@ -137,6 +141,11 @@ class ProfileManager @Inject constructor(
 
     private suspend fun removeLocalProfileData(id: Int) {
         if (id == 1) return
+        try {
+            watchStats.clearProfile(id)
+        } catch (failure: IOException) {
+            Log.w("ProfileManager", "Could not clear watch stats before removing profile data", failure)
+        }
         credentialStores.forEach { store -> store.removeProfile(id) }
         deleteProfileDataAsync(id)
     }

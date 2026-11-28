@@ -15,6 +15,8 @@ internal fun PlayerRuntimeController.releasePlayer(
     flushPlaybackState: Boolean,
     keepTorrentStream: Boolean = false
 ) {
+    pauseWatchStatsPlayback()
+    watchStatsMpvMediaRequested = false
     movieStartupAttempt?.mark(MovieStartupStep.STOP)
     movieStartupAttempt = null
     if (flushPlaybackState) cancelStreamFallback()

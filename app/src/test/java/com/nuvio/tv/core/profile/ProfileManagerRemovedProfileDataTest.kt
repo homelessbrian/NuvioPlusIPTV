@@ -3,6 +3,7 @@ package com.nuvio.tv.core.profile
 import android.content.Context
 import com.nuvio.tv.data.local.ProfileDataStore
 import com.nuvio.tv.data.local.ProfileDataStoreFactory
+import com.nuvio.tv.data.watchstats.WatchStatsRepository
 import com.nuvio.tv.domain.model.UserProfile
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -26,6 +27,7 @@ class ProfileManagerRemovedProfileDataTest {
     private lateinit var tempDir: File
     private lateinit var factory: ProfileDataStoreFactory
     private lateinit var credentialStore: ProfileScopedCredentialStore
+    private lateinit var watchStats: WatchStatsRepository
     private lateinit var manager: ProfileManager
     private val storedProfiles = MutableStateFlow(listOf(profile(1), profile(2), profile(3)))
 
@@ -49,7 +51,8 @@ class ProfileManagerRemovedProfileDataTest {
         }
         factory = mockk(relaxed = true)
         credentialStore = mockk(relaxed = true)
-        manager = ProfileManager(profileDataStore, factory, setOf(credentialStore), context)
+        watchStats = mockk(relaxed = true)
+        manager = ProfileManager(profileDataStore, factory, setOf(credentialStore), context, watchStats)
     }
 
     @After
@@ -69,6 +72,7 @@ class ProfileManagerRemovedProfileDataTest {
         verify(exactly = 1) { credentialStore.removeProfile(2) }
         verify(exactly = 0) { credentialStore.removeProfile(3) }
         coVerify(exactly = 1) { factory.clearProfile(2) }
+        coVerify(exactly = 1) { watchStats.clearProfile(2) }
     }
 
     @Test
@@ -78,6 +82,7 @@ class ProfileManagerRemovedProfileDataTest {
         verify(exactly = 1) { factory.markProfileCreated(4) }
         verify(exactly = 0) { credentialStore.removeProfile(any()) }
         coVerify(exactly = 0) { factory.clearProfile(any()) }
+        coVerify(exactly = 0) { watchStats.clearProfile(any()) }
     }
 
     @Test
