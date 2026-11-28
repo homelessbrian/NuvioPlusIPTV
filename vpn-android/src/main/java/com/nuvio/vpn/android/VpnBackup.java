@@ -19,6 +19,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 /** Portable account-backup payload. Android Keystore ciphertext is never sent to another device. */
@@ -52,18 +53,27 @@ public final class VpnBackup {
             for (AndroidProfileStore.Entry entry : entries) {
                 // Fail the backup instead of silently replacing an unreadable profile remotely.
                 try (ProfileEnvelope.Opened opened = store.open(entry.id)) {
-                    char[] content = opened.copyContents();
-                    try { profiles.put(new JSONObject().put("id", entry.id).put("name", opened.getLabel())
-                            .put("protocol", opened.getProtocol().name()).put("configuration", new String(content))); }
-                    finally { Arrays.fill(content, '\0'); }
+                    profiles.put(profileEntry(entry.id, opened.getLabel(), opened.getProtocol(), opened.copyContents()));
                 }
             }
             HashSet<String> ids = new HashSet<>();
             for (AndroidProfileStore.Entry entry : entries) ids.add(entry.id);
             ProfileSelections settings = new AndroidVpnSettings(context).snapshot();
             settings.checkProfiles(ids);
-            return settings.writeTo(new JSONObject().put("version", 1).put("profiles", profiles)).toString();
+            return setupJson(profiles, settings);
         }
+    }
+
+    private static String setupJson(JSONArray profiles, ProfileSelections settings) throws JSONException {
+        return settings.writeTo(new JSONObject().put("version", 1).put("profiles", profiles)).toString();
+    }
+
+    private static JSONObject profileEntry(String id, String label, ProfileImport.Protocol protocol, char[] content)
+            throws JSONException {
+        try {
+            return new JSONObject().put("id", id).put("name", label.trim())
+                    .put("protocol", protocol.name()).put("configuration", new String(content));
+        } finally { Arrays.fill(content, '\0'); }
     }
 
     public static void restoreSetup(Context context, String encoded) throws Exception {
@@ -81,11 +91,10 @@ public final class VpnBackup {
             JSONArray profiles = payload.getJSONArray("profiles");
             if (profiles.length() > 32) throw new IOException("VPN profile limit reached.");
             ProfileSelections selections = ProfileSelections.parse(payload);
-            // Never turn the VPN on here without a profile to use (the copy is kept matching, so
-            // the "nothing changed" check below compares like with like).
-            if (selections.turnOffWithoutProfile()) selections.writeTo(payload);
+            // Compare the settings as they'll be stored, including safety normalization.
+            selections.turnOffWithoutProfile();
             HashSet<String> ids = new HashSet<>();
-            ArrayList<ProfileImport.Candidate> candidates = new ArrayList<>();
+            ArrayList<AndroidProfileStore.Restored> restored = new ArrayList<>();
             try {
                 for (int i = 0; i < profiles.length(); i++) {
                     JSONObject p = profiles.getJSONObject(i);
@@ -97,7 +106,7 @@ public final class VpnBackup {
                     byte[] raw = p.getString("configuration").getBytes(StandardCharsets.UTF_8);
                     try {
                         ProfileImport.Candidate candidate = ProfileImport.read(new ByteArrayInputStream(raw), ProfileImport.Protocol.valueOf(p.getString("protocol")));
-                        candidates.add(candidate);
+                        restored.add(new AndroidProfileStore.Restored(id, label, candidate));
                         if (candidate.getProtocol() == ProfileImport.Protocol.WIREGUARD) WireGuardProfiles.parseForRestore(candidate);
                     }
                     finally { Arrays.fill(raw, (byte) 0); }
@@ -106,14 +115,18 @@ public final class VpnBackup {
                 String current = null;
                 try { current = exportSetup(context); }
                 catch (Exception unreadable) { /* A validated backup can repair unreadable local state. */ }
-                if (payload.toString().equals(current)) return;
+                if (current != null) {
+                    // Match the native export, irrespective of the incoming JSON or profile order.
+                    restored.sort((a, b) -> a.id.compareTo(b.id));
+                    JSONArray normalized = new JSONArray();
+                    for (AndroidProfileStore.Restored profile : restored) {
+                        normalized.put(profileEntry(profile.id, profile.name, profile.candidate.getProtocol(),
+                                profile.candidate.copyContents()));
+                    }
+                    if (current.equals(setupJson(normalized, selections))) return;
+                }
                 AndroidProfileStore store = new AndroidProfileStore(context);
                 AndroidVpnSettings settings = new AndroidVpnSettings(context);
-                ArrayList<AndroidProfileStore.Restored> restored = new ArrayList<>();
-                for (int i = 0; i < profiles.length(); i++) {
-                    JSONObject p = profiles.getJSONObject(i);
-                    restored.add(new AndroidProfileStore.Restored(p.getString("id"), p.getString("name"), candidates.get(i)));
-                }
                 // Pause requests and invalidate even a same-ID connection whose keys changed.
                 // Keep saved protection intent enabled throughout; a failed restore must not
                 // temporarily turn protected playback into a direct connection.
@@ -121,7 +134,7 @@ public final class VpnBackup {
                     VpnPlaybackProtection.beginProfileRestore(context);
                     store.replace(restored, onlyIfEmpty, settings, selections);
                 } finally { VpnPlaybackProtection.endProfileRestore(context); }
-            } finally { for (ProfileImport.Candidate candidate : candidates) candidate.close(); }
+            } finally { for (AndroidProfileStore.Restored profile : restored) profile.candidate.close(); }
         }
     }
 
