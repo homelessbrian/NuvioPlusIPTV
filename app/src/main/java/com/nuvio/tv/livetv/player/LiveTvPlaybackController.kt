@@ -2880,7 +2880,8 @@ class LiveTvPlaybackController @Inject constructor(
      * own player opens, so the two never hold the audio at the same time.
      */
     fun releaseNow() {
-        if (_player != null) release()
+        // A provider tune can still be resolving before it creates an ExoPlayer.
+        if (_player != null || currentChannel != null || pendingProviderTune?.isActive == true) release()
     }
 
     private fun release() {
