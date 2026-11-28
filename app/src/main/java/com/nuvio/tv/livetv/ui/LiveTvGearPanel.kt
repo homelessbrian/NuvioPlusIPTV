@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,14 +48,24 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
+import com.nuvio.tv.R
+import com.nuvio.tv.livetv.model.LiveSubtitleAppearance
 import com.nuvio.tv.livetv.model.PanelRowList
 import com.nuvio.tv.livetv.model.PanelRowLists
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 /**
  * ⚙ on the full-screen bar: everything that isn't play, back 30 and forward 30. Record, Audio,
@@ -90,7 +101,7 @@ internal fun GearPanel(
     /** "Watch from the beginning" (live, catch-up channel), "Back to live" (replay) or "Go live" (paused). */
     timeAction: String?,
     hidden: Set<String>,
-    /** Live TV settings now, for the Quick Channels page (the row under the bar) and the info bar's time. */
+    /** Live TV settings now, for Quick Channels, the info bar and subtitle appearance. */
     quickSettings: com.nuvio.tv.livetv.model.LiveTvSettings,
     /** Every group that can be added to Quick Channels (asked when its pages open). */
     quickGroups: () -> List<RowGroupOption>,
@@ -180,6 +191,7 @@ internal fun GearPanel(
                 }
                 val hint = when (page) {
                     "sleep" -> "Stops playback after"; "audio" -> "Applies to this channel"
+                    "subs" -> stringResource(R.string.settings_card_depth_fine_tune_hint_tv)
                     "record" -> "Hold Record to skip this"; "recordTime" -> "◀ ▶ change the time"; else -> null
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
@@ -212,6 +224,34 @@ internal fun GearPanel(
                             var showMore by remember { mutableStateOf(moreSubtitleOptions.any { it.selected }) }
                             choice("Off", !anyOn, !anyOn || subtitleOptions.none { it.selected }) { onPickSubtitle(null) }
                             subtitleOptions.forEach { o -> choice(o.label, o.selected, o.selected) { onPickSubtitle(o) } }
+                            val appearance = quickSettings.subtitleAppearance
+                            SubtitleAdjustmentRow(
+                                label = stringResource(R.string.live_tv_subtitle_size),
+                                valueLabel = stringResource(R.string.live_tv_subtitle_size_percent, appearance.sizePercent),
+                                value = appearance.sizePercent,
+                                range = LiveSubtitleAppearance.SIZE_RANGE,
+                                step = LiveSubtitleAppearance.SIZE_STEP
+                            ) { size ->
+                                onQuickUpdate { settings ->
+                                    settings.copy(subtitleAppearance = settings.subtitleAppearance.copy(sizePercent = size))
+                                }
+                            }
+                            val offset = appearance.verticalOffsetPercent
+                            SubtitleAdjustmentRow(
+                                label = stringResource(R.string.live_tv_subtitle_position),
+                                valueLabel = when {
+                                    offset > 0 -> stringResource(R.string.live_tv_subtitle_position_higher, offset)
+                                    offset < 0 -> stringResource(R.string.live_tv_subtitle_position_lower, -offset)
+                                    else -> stringResource(R.string.live_tv_subtitle_position_default)
+                                },
+                                value = offset,
+                                range = LiveSubtitleAppearance.VERTICAL_OFFSET_RANGE,
+                                step = LiveSubtitleAppearance.VERTICAL_OFFSET_STEP
+                            ) { offsetPercent ->
+                                onQuickUpdate { settings ->
+                                    settings.copy(subtitleAppearance = settings.subtitleAppearance.copy(verticalOffsetPercent = offsetPercent))
+                                }
+                            }
                             if (moreSubtitleOptions.isNotEmpty()) {
                                 GearRow(Modifier.fillMaxWidth(), onClick = { showMore = !showMore }) { focused ->
                                     LiveText((if (showMore) "▾  " else "▸  ") + "More caption tracks", size = 13.sp, weight = FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
@@ -441,18 +481,68 @@ internal fun gearText(focused: Boolean, dim: Boolean = false): Color =
 /** One line in the gear panel: white when highlighted. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun GearRow(modifier: Modifier, onClick: () -> Unit, content: @Composable RowScope.(Boolean) -> Unit) {
+internal fun GearRow(modifier: Modifier, onClick: (() -> Unit)?, content: @Composable RowScope.(Boolean) -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Row(
         modifier
             .clip(RoundedCornerShape(10.dp))
             .background(if (focused) Color.White else Color.Transparent)
             .onFocusChanged { focused = it.isFocused }
-            .combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .then(
+                if (onClick == null) Modifier.focusable()
+                else Modifier.combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            )
             .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) { content(focused) }
+}
+
+@Composable
+private fun SubtitleAdjustmentRow(
+    label: String,
+    valueLabel: String,
+    value: Int,
+    range: IntRange,
+    step: Int,
+    onChange: (Int) -> Unit
+) {
+    fun change(next: Int): Boolean {
+        val clamped = next.coerceIn(range)
+        if (clamped == value) return false
+        onChange(clamped)
+        return true
+    }
+    GearRow(
+        modifier = Modifier.fillMaxWidth()
+            .onPreviewKeyEvent { event ->
+                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.nativeKeyEvent.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> change(value - step)
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> change(value + step)
+                    else -> return@onPreviewKeyEvent false
+                }
+                true
+            }
+            .semantics(mergeDescendants = true) {
+                stateDescription = valueLabel
+                val steps = (range.last - range.first) / step
+                progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), range.first.toFloat()..range.last.toFloat(), steps - 1)
+                setProgress { target ->
+                    if (!target.isFinite()) return@setProgress false
+                    val index = ((target - range.first) / step).roundToInt().coerceIn(0, steps)
+                    change(range.first + index * step)
+                }
+            },
+        onClick = null
+    ) { focused ->
+        LiveText(label, size = 13.sp, weight = FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
+        LiveText(
+            if (focused) "◀  $valueLabel  ▶" else valueLabel,
+            size = 13.sp, weight = FontWeight.Bold, color = gearText(focused),
+            modifier = Modifier.clearAndSetSemantics { }
+        )
+    }
 }
 
 /** Record / Audio / Subtitles / Favorite: an icon, its name and what it's set to. */

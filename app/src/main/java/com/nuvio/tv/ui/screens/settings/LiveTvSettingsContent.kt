@@ -72,6 +72,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.livetv.model.ChannelSort
 import com.nuvio.tv.livetv.model.EpgSource
+import com.nuvio.tv.livetv.model.LiveSubtitleAppearance
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.PlaylistSource
 import com.nuvio.tv.livetv.model.completePlaylistAddress
@@ -1337,6 +1338,36 @@ internal fun LiveTvSettingsContent(
                         context.getString(R.string.iptv_settings_turns_captions_on_when_a_channel_has_them),
                         s.captionsByDefault,
                         { update { it.copy(captionsByDefault = !it.captionsByDefault) } }
+                    )
+                    val appearance = s.subtitleAppearance
+                    SliderSettingsItem(
+                        title = context.getString(R.string.live_tv_subtitle_size),
+                        value = appearance.sizePercent,
+                        valueText = context.getString(R.string.live_tv_subtitle_size_percent, appearance.sizePercent),
+                        minValue = LiveSubtitleAppearance.SIZE_RANGE.first,
+                        maxValue = LiveSubtitleAppearance.SIZE_RANGE.last,
+                        step = LiveSubtitleAppearance.SIZE_STEP,
+                        onValueChange = { size ->
+                            update { it.copy(subtitleAppearance = it.subtitleAppearance.copy(sizePercent = size)) }
+                        }
+                    )
+                    val position = appearance.verticalOffsetPercent
+                    SliderSettingsItem(
+                        title = context.getString(R.string.live_tv_subtitle_position),
+                        value = position,
+                        valueText = when {
+                            position > 0 -> context.getString(R.string.live_tv_subtitle_position_higher, position)
+                            position < 0 -> context.getString(R.string.live_tv_subtitle_position_lower, -position)
+                            else -> context.getString(R.string.live_tv_subtitle_position_default)
+                        },
+                        minValue = LiveSubtitleAppearance.VERTICAL_OFFSET_RANGE.first,
+                        maxValue = LiveSubtitleAppearance.VERTICAL_OFFSET_RANGE.last,
+                        step = LiveSubtitleAppearance.VERTICAL_OFFSET_STEP,
+                        onValueChange = { offset ->
+                            update {
+                                it.copy(subtitleAppearance = it.subtitleAppearance.copy(verticalOffsetPercent = offset))
+                            }
+                        }
                     )
                     SettingsToggleRow(
                         context.getString(R.string.iptv_settings_audio_passthrough),

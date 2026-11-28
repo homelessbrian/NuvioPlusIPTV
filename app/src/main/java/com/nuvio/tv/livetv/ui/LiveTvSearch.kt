@@ -303,6 +303,7 @@ fun LiveTvSearchPreview(results: LiveTvSearchResults, modifier: Modifier = Modif
         onDispose { vm.playback.detach() }
     }
     val playback by vm.playback.state.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     // Back on search after a details page (the player was let go meanwhile): start it again.
     LaunchedEffect(results.previewKey) {
         val key = results.previewKey ?: return@LaunchedEffect
@@ -313,6 +314,7 @@ fun LiveTvSearchPreview(results: LiveTvSearchResults, modifier: Modifier = Modif
     Box(modifier = modifier) {
         LivePlayerSurface(
             player = vm.playback.player,
+            subtitleAppearance = settings.subtitleAppearance,
             modifier = Modifier.fillMaxSize(),
             useSurfaceView = false,
             onAttached = { vm.playback.onSurfaceAttached() }

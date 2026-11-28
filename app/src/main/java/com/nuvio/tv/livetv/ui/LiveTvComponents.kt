@@ -1,6 +1,7 @@
 package com.nuvio.tv.livetv.ui
 
 import com.nuvio.tv.livetv.model.EpgProgram
+import com.nuvio.tv.livetv.model.LiveSubtitleAppearance
 
 import android.view.LayoutInflater
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -690,6 +691,7 @@ private class AboveAnchor(private val anchor: androidx.compose.ui.geometry.Rect,
 @Composable
 internal fun LivePlayerSurface(
     player: Player?,
+    subtitleAppearance: LiveSubtitleAppearance,
     modifier: Modifier = Modifier,
     useSurfaceView: Boolean,
     resizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT,
@@ -710,7 +712,7 @@ internal fun LivePlayerSurface(
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            (LayoutInflater.from(ctx).inflate(layout, null) as PlayerView).also { viewRef = it }
+            (LayoutInflater.from(ctx).inflate(layout, null) as LiveTvPlayerView).also { viewRef = it }
         },
         update = { view ->
             if (view.player !== player) {
@@ -718,6 +720,7 @@ internal fun LivePlayerSurface(
                 if (player != null) onAttached()
             }
             view.resizeMode = if (aspectMode != null) AspectRatioFrameLayout.RESIZE_MODE_FIT else resizeMode
+            view.setSubtitleAppearance(subtitleAppearance)
             reshape(view)
         }
     )
