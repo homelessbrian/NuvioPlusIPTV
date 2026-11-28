@@ -15,6 +15,7 @@ import com.nuvio.tv.livetv.model.ChannelSort
 import com.nuvio.tv.livetv.model.matchFrameRate
 import com.nuvio.tv.livetv.model.CustomGroup
 import com.nuvio.tv.livetv.model.EpgSource
+import com.nuvio.tv.livetv.model.LiveSubtitleAppearance
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.LiveUserState
 import com.nuvio.tv.livetv.model.PlaylistSource
@@ -231,6 +232,8 @@ class LiveTvPreferences @Inject constructor(
         val timeshiftMinutes = intPreferencesKey("timeshift_minutes")
         val rewindAlways = booleanPreferencesKey("rewind_always")
         val captionsByDefault = booleanPreferencesKey("captions_by_default")
+        val subtitleSizePercent = intPreferencesKey("subtitle_size_percent")
+        val subtitleVerticalOffsetPercent = intPreferencesKey("subtitle_vertical_offset_percent")
         val clockMode = stringPreferencesKey("clock_mode")
         val playlistAccounts = stringPreferencesKey("playlist_accounts")
         val clockPosition = stringPreferencesKey("clock_position")
@@ -751,6 +754,10 @@ class LiveTvPreferences @Inject constructor(
             timeshiftMinutes = p[Keys.timeshiftMinutes] ?: d.timeshiftMinutes,
             rewindAlways = p[Keys.rewindAlways] ?: d.rewindAlways,
             captionsByDefault = p[Keys.captionsByDefault] ?: d.captionsByDefault,
+            subtitleAppearance = LiveSubtitleAppearance(
+                sizePercent = p[Keys.subtitleSizePercent] ?: d.subtitleAppearance.sizePercent,
+                verticalOffsetPercent = p[Keys.subtitleVerticalOffsetPercent] ?: d.subtitleAppearance.verticalOffsetPercent
+            ).clamped(),
             clockMode = p[Keys.clockMode] ?: d.clockMode,
             clockPosition = p[Keys.clockPosition] ?: d.clockPosition,
             clockSize = p[Keys.clockSize] ?: d.clockSize,
@@ -1107,6 +1114,9 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.timeshiftMinutes] = s.timeshiftMinutes
         p[Keys.rewindAlways] = s.rewindAlways
         p[Keys.captionsByDefault] = s.captionsByDefault
+        val subtitleAppearance = s.subtitleAppearance.clamped()
+        p[Keys.subtitleSizePercent] = subtitleAppearance.sizePercent
+        p[Keys.subtitleVerticalOffsetPercent] = subtitleAppearance.verticalOffsetPercent
         p[Keys.clockMode] = s.clockMode
         p[Keys.clockPosition] = s.clockPosition
         p[Keys.clockSize] = s.clockSize
@@ -2048,6 +2058,19 @@ class LiveTvPreferences @Inject constructor(
                 val name = nativeName ?: wire
                 if (nativeName == null && (name in SYNC_EXCLUDED || isExternalBackupKey(name))) return@forEach
                 val e = data.optJSONObject(wire) ?: return@forEach
+                val subtitleRange = when (name) {
+                    Keys.subtitleSizePercent.name -> LiveSubtitleAppearance.SIZE_RANGE
+                    Keys.subtitleVerticalOffsetPercent.name -> LiveSubtitleAppearance.VERTICAL_OFFSET_RANGE
+                    else -> null
+                }
+                if (subtitleRange != null) {
+                    val value = e.opt("v") as? Number
+                    if (e.optString("t") == "i" && value != null) {
+                        p[intPreferencesKey(name)] =
+                            value.toLong().coerceIn(subtitleRange.first.toLong(), subtitleRange.last.toLong()).toInt()
+                    }
+                    return@forEach
+                }
                 when (e.optString("t")) {
                     "b" -> p[booleanPreferencesKey(name)] = e.optBoolean("v")
                     "i" -> p[intPreferencesKey(name)] = e.optInt("v")

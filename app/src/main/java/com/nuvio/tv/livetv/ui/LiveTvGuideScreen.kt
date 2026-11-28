@@ -1841,6 +1841,7 @@ private fun LiveTvGuideScreenBody(
         val pictureShapeNow = com.nuvio.tv.livetv.player.PictureShape.of(playback.channelKey?.let { shapes[it] })
         LivePlayerSurface(
             player = viewModel.playback.player,
+            subtitleAppearance = settings.subtitleAppearance,
             useSurfaceView = true,
             modifier = videoModifier,
             onAttached = { viewModel.playback.onSurfaceAttached() },

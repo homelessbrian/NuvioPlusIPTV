@@ -88,6 +88,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.model.LiveSubtitleAppearance
 import com.nuvio.tv.livetv.model.BackupOrder
 import com.nuvio.tv.ui.screens.settings.SportsSourceOrderDialog
 import com.nuvio.tv.livetv.sports.probe.sportsGameChannelRows
@@ -109,6 +110,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -667,11 +669,16 @@ fun SportsScreen(
         }
         // The picture, on top of the page where its slot is (one view for every page, so it
         // never restarts), then the rounded corners and the "nothing playing" note over it.
-        if (videoOn) VideoLayer(
-            slot, root, playerRef, playing = playingKey != null, backdrop = backdrop,
-            onAttached = { viewModel.onSurfaceAttached() },
-            onHidden = { viewModel.setPictureHidden(it) }
-        )
+        if (videoOn) {
+            val subtitleAppearance by remember(viewModel) {
+                viewModel.liveSettings.map { it.subtitleAppearance }.distinctUntilChanged()
+            }.collectAsStateWithLifecycle(initialValue = LiveSubtitleAppearance())
+            VideoLayer(
+                slot, root, playerRef, subtitleAppearance, playing = playingKey != null, backdrop = backdrop,
+                onAttached = { viewModel.onSurfaceAttached() },
+                onHidden = { viewModel.setPictureHidden(it) }
+            )
+        }
     }
     overtimeFor?.let { ev ->
         EndedGameChannelsDialog(ev, matches[ev.id].orEmpty(), viewModel, onDismiss = { overtimeFor = null }) { channel ->
@@ -704,7 +711,8 @@ private fun VideoSlot(modifier: Modifier, onBounds: (Rect?) -> Unit) {
 
 @Composable
 private fun VideoLayer(
-    slot: Rect?, root: Rect?, player: androidx.media3.common.Player?, playing: Boolean, backdrop: String,
+    slot: Rect?, root: Rect?, player: androidx.media3.common.Player?, subtitleAppearance: LiveSubtitleAppearance,
+    playing: Boolean, backdrop: String,
     onAttached: () -> Unit, onHidden: (Boolean) -> Unit
 ) {
     val density = LocalDensity.current
@@ -729,7 +737,9 @@ private fun VideoLayer(
             .offset { IntOffset((slot!!.left - root!!.left).toInt(), (slot.top - root.top).toInt()) }
             .size(slot!!.width.toDp(), slot.height.toDp())
     } else Modifier.size(1.dp)
-    if (!hidden || placed) LivePlayerSurface(player = player, useSurfaceView = true, modifier = place, onAttached = onAttached)
+    if (!hidden || placed) LivePlayerSurface(
+        player = player, subtitleAppearance = subtitleAppearance, useSurfaceView = true, modifier = place, onAttached = onAttached
+    )
     if (!placed) return
     val bg = NuvioTheme.colors.Background
     val backdropResolved = com.nuvio.tv.livetv.ui.resolveBackdrop(backdrop)

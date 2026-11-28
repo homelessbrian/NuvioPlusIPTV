@@ -1057,6 +1057,7 @@ fun LiveTvPlayerScreen(
     ) {
         if (!embedded) LivePlayerSurface(
             player = viewModel.playback.player,
+            subtitleAppearance = settings.subtitleAppearance,
             modifier = Modifier.fillMaxSize(),
             useSurfaceView = true,
             onAttached = { viewModel.playback.onSurfaceAttached() },

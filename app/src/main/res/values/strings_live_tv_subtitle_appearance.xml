@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_tv_subtitle_size">Subtitle Size</string>
+    <string name="live_tv_subtitle_size_percent">%1$d%%</string>
+    <string name="live_tv_subtitle_position">Subtitle Position</string>
+    <string name="live_tv_subtitle_position_default">Default</string>
+    <string name="live_tv_subtitle_position_higher">%1$d%% higher</string>
+    <string name="live_tv_subtitle_position_lower">%1$d%% lower</string>
+</resources>

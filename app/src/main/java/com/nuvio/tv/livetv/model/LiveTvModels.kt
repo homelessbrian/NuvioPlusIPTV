@@ -432,6 +432,25 @@ data class PlaylistAccount(
     }
 }
 
+/** The size and vertical position of subtitle text in the Live TV player. */
+data class LiveSubtitleAppearance(
+    val sizePercent: Int = 100,
+    /** Positive values raise the text from its default position. */
+    val verticalOffsetPercent: Int = 0
+) {
+    fun clamped(): LiveSubtitleAppearance = copy(
+        sizePercent = sizePercent.coerceIn(SIZE_RANGE),
+        verticalOffsetPercent = verticalOffsetPercent.coerceIn(VERTICAL_OFFSET_RANGE)
+    )
+
+    companion object {
+        val SIZE_RANGE = 50..150
+        val VERTICAL_OFFSET_RANGE = -10..40
+        const val SIZE_STEP = 10
+        const val VERTICAL_OFFSET_STEP = 5
+    }
+}
+
 data class LiveTvSettings(
     val showInSidebar: Boolean = true,
     val showChannelNames: Boolean = true,
@@ -677,6 +696,7 @@ data class LiveTvSettings(
     val rewindAlways: Boolean = false,
     /** Turn closed captions on automatically when a channel has them. */
     val captionsByDefault: Boolean = false,
+    val subtitleAppearance: LiveSubtitleAppearance = LiveSubtitleAppearance(),
     /** On-screen clock while watching: "always", "panel" (only with the info panel) or "never". */
     val clockMode: String = "panel",
     /** Corner for the always-on clock: "top_left", "top_right", "bottom_left", "bottom_right". */
