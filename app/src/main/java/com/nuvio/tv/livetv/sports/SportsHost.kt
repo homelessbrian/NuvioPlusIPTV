@@ -310,7 +310,7 @@ private fun ScoringAlertCard(a: SportsAlert) {
             val lead = sides.maxByOrNull { it.score?.toDoubleOrNull() ?: 0.0 }
             val tied = sides[0].score == sides[1].score
             sides.forEach { s ->
-                TeamBand(s, showScore = true, dim = !tied && s != lead, followed = false, modifier = Modifier.height(40.dp), logo = 28.dp, name = 13.sp, score = 20.sp)
+                TeamBand(ev.id, s, showScore = true, dim = !tied && s != lead, followed = false, modifier = Modifier.height(40.dp), logo = 28.dp, name = 13.sp, score = 20.sp)
             }
         }
     }
@@ -346,7 +346,7 @@ fun SportsScoreTag(channelKey: String?) {
             ) {
                 LiveText(s.team.abbr.ifBlank { s.team.name }, color = Color.White, size = 10.sp, weight = FontWeight.Black)
                 Spacer(Modifier.width(4.dp))
-                ScoreLabel(s.score.orEmpty(), dim = false, size = 11.sp)
+                ScoreLabel(ev.id, s.score.orEmpty(), dim = false, size = 11.sp, teamId = s.team.id)
             }
             if (i == 0) Box(Modifier.width(1.dp).height(14.dp).background(SportsLook.Divider))
         }
@@ -386,7 +386,7 @@ fun SportsCornerCard(channelKey: String?, use24h: Boolean, modifier: Modifier = 
                 val lead = if (showScore) sides.maxByOrNull { it.score?.toDoubleOrNull() ?: 0.0 } else null
                 val tied = showScore && sides[0].score == sides[1].score
                 sides.forEach { s ->
-                    TeamBand(s, showScore, showScore && !tied && s != lead, followed = false, modifier = Modifier.weight(1f), logo = 26.dp, name = 12.sp, score = 19.sp)
+                    TeamBand(ev.id, s, showScore, showScore && !tied && s != lead, followed = false, modifier = Modifier.weight(1f), logo = 26.dp, name = 12.sp, score = 19.sp)
                 }
             } else {
                 EventBand(ev, league, league.sport, Modifier.fillMaxSize())

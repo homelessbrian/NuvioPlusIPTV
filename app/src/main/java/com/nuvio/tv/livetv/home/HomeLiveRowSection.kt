@@ -740,6 +740,7 @@ private fun TallGameCard(
             val tied = showScore && sides[0].score == sides[1].score
             sides.forEach { side ->
                 TeamBand(
+                    eventId = ev.id,
                     side = side,
                     showScore = showScore,
                     dim = showScore && !tied && side != lead,

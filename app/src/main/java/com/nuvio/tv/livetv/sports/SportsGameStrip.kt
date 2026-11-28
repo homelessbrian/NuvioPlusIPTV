@@ -696,7 +696,7 @@ internal fun StripGameCard(
         }
         if (sides.size == 2) {
             sides.forEach { side ->
-                TeamBand(side, showScore = event.hasScore && !hideScores, dim = false, followed = false,
+                TeamBand(event.id, side, showScore = event.hasScore && !hideScores, dim = false, followed = false,
                     modifier = Modifier.height(26.dp), logo = 20.dp, name = 11.sp, score = 17.sp, extra = null,
                     offenseSport = sport.takeIf { event.state == GameState.LIVE && !hideScores },
                     inlineRecord = sport == Sport.AMERICAN_FOOTBALL && !hideScores)

@@ -481,6 +481,7 @@ internal fun RowCard(
             val tied = showScore && sides[0].score == sides[1].score
             sides.forEach { side ->
                 TeamBand(
+                    eventId = ev.id,
                     side = side,
                     showScore = showScore,
                     dim = showScore && !tied && side != lead,
@@ -647,7 +648,7 @@ private fun HeroCard(
                         Modifier.clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 12.dp, vertical = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (showScore) ScoreLabel("${sides[0].score} – ${sides[1].score}", false, 24.sp)
+                        if (showScore) ScoreLabel(ev.id, "${sides[0].score} – ${sides[1].score}", dim = false, size = 24.sp)
                         else LiveText(if (sport.homeFirst) "VS" else "AT", color = Color.White, size = 14.sp, weight = FontWeight.Black)
                     }
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {

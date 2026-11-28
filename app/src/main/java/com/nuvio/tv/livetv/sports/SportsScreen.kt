@@ -1602,6 +1602,7 @@ internal fun ScoreboardStrip(
                 val tied = showScore && sides[0].score == sides[1].score
                 sides.forEach { s ->
                     TeamBand(
+                        eventId = ev.id,
                         side = s, showScore = showScore, dim = showScore && !tied && s != lead, followed = false,
                         modifier = Modifier.weight(1f)
                             .then(if (downTo != null && s == sides.last()) Modifier.focusProperties { down = downTo } else Modifier)
