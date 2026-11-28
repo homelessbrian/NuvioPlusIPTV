@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"תוסף"</string>
     <string name="livetv_backups_playlist_tag">"רשימת השמעה"</string>
     <string name="livetv_backups_quality_other">"איכות אחרת"</string>
-    <string name="iptv_backup_order_title">"גיבויים וערוצי המשחק"</string>
-    <string name="iptv_backup_order_row_subtitle">"איך רשימת הגיבויים וערוצי המשחק בערוצים המהירים מקובצים וממוינים"</string>
+    <string name="iptv_backup_order_title">"סדר הערוצים"</string>
+    <string name="iptv_backup_order_row_subtitle">"איך הגיבויים, הערוצים המהירים ודפי המשחקים מסדרים את המקורות של ערוץ, ואיזה ספורט בוחר"</string>
     <string name="iptv_backup_order_gear_hint">"כותרות והסדר שלהן"</string>
     <string name="iptv_backup_order_group_by">"קיבוץ לפי"</string>
     <string name="iptv_backup_order_group_by_hint">"OK משנה. בתוך כל כותרת הערוצים לפי הסדר השני למטה"</string>

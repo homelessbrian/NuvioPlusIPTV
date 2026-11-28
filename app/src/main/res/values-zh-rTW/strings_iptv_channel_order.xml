@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"偏好分組"</string>
+    <string name="iptv_backup_order_groups_hint">"在上面的順序相同時決定先後"</string>
+    <string name="iptv_backup_order_add_group">"新增偏好分組"</string>
+    <string name="iptv_backup_order_choose_playlist">"選擇播放清單"</string>
+    <string name="iptv_backup_order_search_groups">"搜尋此播放清單的分組"</string>
+    <string name="iptv_backup_order_no_groups">"沒有相符的分組"</string>
+    <string name="iptv_backup_order_loading">"正在載入…"</string>
+    <string name="iptv_backup_order_remove">"移除"</string>
+    <string name="iptv_sports_sort_sources">"排序頻道"</string>
+</resources>

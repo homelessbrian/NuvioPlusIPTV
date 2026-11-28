@@ -1956,7 +1956,7 @@ private fun BackupChannelsDialog(
     val first = remember { FocusRequester() }
     val colors = NuvioTheme.colors
     // A game's other channels and this channel's copies together, under the headings chosen in
-    // Backups & Game Channels (playlist / add-on, quality or none).
+    // Channel Order (playlist / add-on, quality or none).
     val copies = channels
     val sections = rememberBackupSections(copies, gameChannels, settings, playlistNames)
     val all = remember(sections) { sections.flatMap { it.channels } }

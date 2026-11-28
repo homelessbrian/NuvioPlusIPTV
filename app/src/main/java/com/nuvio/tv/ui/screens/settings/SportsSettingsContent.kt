@@ -225,12 +225,12 @@ fun SportsSettingsContent(
             }
             item(key = "channels") {
                 SettingsGroupCard(title = "Channels") {
+                    // The same Channel Order as Live TV settings (Backups, Quick Channels and game pages).
                     SettingsActionRow(
-                        title = stringResource(R.string.sports_advanced_channel_sort),
-                        subtitle = stringResource(R.string.sports_advanced_channel_sort_description),
-                        value = stringResource(if (s.channelSort.enabled) R.string.sports_sort_on else R.string.sports_sort_off),
+                        title = stringResource(R.string.iptv_backup_order_title),
+                        subtitle = stringResource(R.string.iptv_backup_order_row_subtitle),
                         leadingIcon = Icons.Default.Tune,
-                        onClick = { dialog = "channelSort" }
+                        onClick = { dialog = "channelOrder" }
                     )
                     SettingsActionRow(
                         title = "Find Channels Again",
@@ -302,12 +302,19 @@ fun SportsSettingsContent(
 
     val close: () -> Unit = { dialog = null }
     when (dialog) {
-        "channelSort" -> SportsChannelSortDialog(
-            initial = s.channelSort,
-            viewModel = viewModel,
-            onSave = { sort -> update { it.copy(channelSort = sort) }; close() },
-            onDismiss = close
-        )
+        "channelOrder" -> {
+            val live by viewModel.liveSettings.collectAsStateWithLifecycle(initialValue = null)
+            val playlists by viewModel.playlists.collectAsStateWithLifecycle(initialValue = null)
+            val current = live
+            if (current != null && playlists != null) BackupOrderDialog(
+                settings = current,
+                playlists = playlists.orEmpty(),
+                addonNames = { viewModel.repo.liveStreamAddonNames() },
+                groupNames = viewModel::groupNames,
+                onUpdate = viewModel::updateLiveSettings,
+                onDismiss = close
+            )
+        }
         "channelChecks" -> SettingsSingleChoiceDialog(
             title = "Channel Checks",
             options = ChannelCheckMode.entries.map { SettingsPickerOption(it, it.title, description = it.description) },

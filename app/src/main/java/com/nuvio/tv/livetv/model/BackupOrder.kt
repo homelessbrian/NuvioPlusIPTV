@@ -2,6 +2,7 @@ package com.nuvio.tv.livetv.model
 
 import com.nuvio.tv.livetv.sports.SportsAddonSource
 import com.nuvio.tv.livetv.ui.backupQuality
+import java.util.Locale
 
 /** One heading in a backup list (a playlist, an add-on or a quality) and its channels. */
 data class BackupSection(
@@ -12,10 +13,17 @@ data class BackupSection(
     val channels: List<LiveChannel>
 )
 
+/** A preferred channel group: the playlist it's in and its name. */
+data class PreferredGroup(val sourceId: String, val name: String)
+
 /**
- * How the Backups list and a game's channels in Quick Channels › Games are split under headings
- * ([LiveTvSettings.backupGroupBy]) and in what order ([LiveTvSettings.backupSourceOrder],
- * [LiveTvSettings.backupQualityOrder]). Settings › Live TV › Playback › Backups & Game Channels.
+ * Your channel order, used everywhere a game or channel has several feeds: how the Backups list
+ * and a game's channels in Quick Channels › Games are split under headings
+ * ([LiveTvSettings.backupGroupBy]), the order of playlists and add-ons, qualities and preferred
+ * groups ([LiveTvSettings.backupSourceOrder], [LiveTvSettings.backupQualityOrder],
+ * [LiveTvSettings.backupGroupOrder]), the Sports game page, which channel Sports tunes by itself
+ * and which channels a game keeps when it has too many. Settings › Live TV › Playback › Backups &
+ * Game Channels (also from Sports settings and a game page's Sort button).
  */
 object BackupOrder {
     const val SOURCE = "SOURCE"
@@ -72,7 +80,78 @@ object BackupOrder {
         if (order.isEmpty()) s.copy(backupSourceOrder = "")
         else withSources(s.copy(backupGroupBy = SOURCE), order)
 
-    fun reset(s: LiveTvSettings): LiveTvSettings = s.copy(backupSourceOrder = "", backupQualityOrder = "")
+    fun reset(s: LiveTvSettings): LiveTvSettings = s.copy(backupSourceOrder = "", backupQualityOrder = "", backupGroupOrder = "")
+
+    /** Something in the order has been changed from the app's own. */
+    fun customized(s: LiveTvSettings): Boolean =
+        s.backupSourceOrder.isNotBlank() || s.backupQualityOrder.isNotBlank() || s.backupGroupOrder.isNotBlank()
+
+    /** Preferred channel groups, best first. */
+    fun groups(s: LiveTvSettings): List<PreferredGroup> = s.backupGroupOrder.split('\n').mapNotNull { line ->
+        val tab = line.indexOf('\t')
+        if (tab <= 0) return@mapNotNull null
+        val name = line.substring(tab + 1).trim()
+        if (name.isEmpty()) null else PreferredGroup(line.substring(0, tab), name)
+    }.distinctBy { groupKey(it.sourceId, it.name) }
+
+    fun withGroups(s: LiveTvSettings, order: List<PreferredGroup>): LiveTvSettings =
+        s.copy(backupGroupOrder = order.distinctBy { groupKey(it.sourceId, it.name) }
+            .joinToString("\n") { it.sourceId + "\t" + it.name.trim() })
+
+    /** A group matches whatever its letters' case or spacing in a playlist update. */
+    fun groupKey(sourceId: String, name: String): String =
+        sourceId + "\t" + name.trim().lowercase(Locale.ROOT).replace(SPACES, " ")
+
+    /** A playlist's channel groups, by name, for picking preferred groups. */
+    fun groupNames(channels: List<LiveChannel>, sourceId: String): List<String> = channels.asSequence()
+        .filter { it.sourceId == sourceId && it.group.isNotBlank() }
+        .map { it.group.trim() }
+        .distinctBy { it.lowercase(Locale.ROOT).replace(SPACES, " ") }
+        .sortedBy { it.lowercase(Locale.ROOT) }
+        .toList()
+
+    private val SPACES = Regex("\\s+")
+
+    /**
+     * Your order as a ranking for picking between channels, or null while nothing's been changed
+     * (then the app's own order stays exactly as it was). Only what you changed counts: the playlist
+     * order once you've moved one, the quality order once you've moved one, and preferred groups.
+     * Grouping by quality puts quality before playlists; otherwise playlists come first. Groups
+     * break ties. Anything not in a list ranks after what is, in the order it came.
+     */
+    fun ranking(s: LiveTvSettings): Ranking? {
+        if (!customized(s)) return null
+        val sources = s.backupSourceOrder.split('\n').filter { it.isNotBlank() }.distinct()
+            .withIndex().associate { (i, k) -> k to i }
+        val qualities = if (s.backupQualityOrder.isBlank()) null
+            else qualities(s).withIndex().associate { (i, q) -> q to i }
+        val groups = groups(s).withIndex().associate { (i, g) -> groupKey(g.sourceId, g.name) to i }
+        return Ranking(groupBy(s) == QUALITY, sources, qualities, groups)
+    }
+
+    /** See [ranking]. Equal when the order is the same, so a list is only sorted again when it changes. */
+    data class Ranking(
+        val qualityFirst: Boolean,
+        val sources: Map<String, Int>,
+        val qualities: Map<String, Int>?,
+        val groups: Map<String, Int>,
+    ) {
+        private fun sourceRank(ch: LiveChannel) = if (sources.isEmpty()) 0 else sources[sourceKey(ch)] ?: UNRANKED
+        private fun qualityRank(q: String) = qualities?.let { it[q] ?: UNRANKED } ?: 0
+        fun groupRank(ch: LiveChannel) = if (groups.isEmpty()) 0 else groups[groupKey(ch.sourceId, ch.group)] ?: UNRANKED
+
+        /** [items] in this order; ties keep the order they came in. [quality]: "4K", "FHD", "HD", "SD" or [UNKNOWN]. */
+        fun <T> sorted(items: List<T>, channel: (T) -> LiveChannel, quality: (T) -> String): List<T> {
+            if (items.size < 2) return items
+            val first = if (qualityFirst) compareBy<T> { qualityRank(quality(it)) }.thenBy { sourceRank(channel(it)) }
+                else compareBy<T> { sourceRank(channel(it)) }.thenBy { qualityRank(quality(it)) }
+            return items.sortedWith(first.thenBy { groupRank(channel(it)) })
+        }
+
+        fun sortedChannels(channels: List<LiveChannel>): List<LiveChannel> = sorted(channels, { it }) { quality(it) }
+    }
+
+    private const val UNRANKED = Int.MAX_VALUE
 
     /**
      * [channels] under their headings. [playlistNames]: playlist id → name, in the app's order.
@@ -87,8 +166,10 @@ object BackupOrder {
     ): List<BackupSection> {
         if (channels.isEmpty()) return emptyList()
         val mode = groupBy(s)
-        if (mode == NONE) return listOf(BackupSection("all", "", false, channels))
+        if (mode == NONE) return listOf(BackupSection("all", "", false, ranking(s)?.sortedChannels(channels) ?: channels))
         val qOrder = qualities(s)
+        val preferred = ranking(s)
+        fun gRank(ch: LiveChannel) = preferred?.groupRank(ch) ?: 0
         fun qRank(ch: LiveChannel) = qOrder.indexOf(quality(ch)).let { if (it < 0) qOrder.size else it }
         val addonNames = channels.filter { isAddon(it) }.map { it.sourceName }.distinct()
         val sOrder = sources(s, playlistNames.keys.toList(), addonNames)
@@ -96,7 +177,7 @@ object BackupOrder {
         return if (mode == QUALITY) {
             channels.groupBy { quality(it) }.entries
                 .sortedBy { qOrder.indexOf(it.key).let { i -> if (i < 0) qOrder.size else i } }
-                .map { (q, list) -> BackupSection("q:$q", qualityTitle(q), false, list.sortedBy { sRank(it) }) }
+                .map { (q, list) -> BackupSection("q:$q", qualityTitle(q), false, list.sortedWith(compareBy<LiveChannel> { sRank(it) }.thenBy { gRank(it) })) }
         } else {
             channels.groupBy { sourceKey(it) }.entries
                 .sortedBy { sOrder.indexOf(it.key).let { i -> if (i < 0) sOrder.size else i } }
@@ -104,7 +185,7 @@ object BackupOrder {
                     val first = list.first()
                     val addon = isAddon(first)
                     val title = if (addon) first.sourceName else playlistNames[first.sourceId] ?: first.sourceName
-                    BackupSection("s:$k", title, addon, list.sortedBy { qRank(it) })
+                    BackupSection("s:$k", title, addon, list.sortedWith(compareBy<LiveChannel> { qRank(it) }.thenBy { gRank(it) }))
                 }
         }
     }

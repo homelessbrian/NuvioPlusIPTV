@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Add-on"</string>
     <string name="livetv_backups_playlist_tag">"Playlist"</string>
     <string name="livetv_backups_quality_other">"Andere Qualität"</string>
-    <string name="iptv_backup_order_title">"Ersatzsender &amp; Spielsender"</string>
-    <string name="iptv_backup_order_row_subtitle">"Wie die Ersatzliste und die Sender eines Spiels in den Schnellsendern gruppiert und sortiert werden"</string>
+    <string name="iptv_backup_order_title">"Senderreihenfolge"</string>
+    <string name="iptv_backup_order_row_subtitle">"Wie Ersatzsender, Schnellsender und Spielseiten die Quellen eines Senders sortieren und welche Sport auswählt"</string>
     <string name="iptv_backup_order_gear_hint">"Überschriften und ihre Reihenfolge"</string>
     <string name="iptv_backup_order_group_by">"Gruppieren nach"</string>
     <string name="iptv_backup_order_group_by_hint">"OK ändert es. Innerhalb jeder Überschrift folgen die Sender der anderen Reihenfolge unten"</string>

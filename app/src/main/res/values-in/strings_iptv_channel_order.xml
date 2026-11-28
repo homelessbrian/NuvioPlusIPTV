@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Grup favorit"</string>
+    <string name="iptv_backup_order_groups_hint">"menentukan jika urutan di atas sama"</string>
+    <string name="iptv_backup_order_add_group">"Tambah grup favorit"</string>
+    <string name="iptv_backup_order_choose_playlist">"Pilih playlist"</string>
+    <string name="iptv_backup_order_search_groups">"Cari grup di playlist ini"</string>
+    <string name="iptv_backup_order_no_groups">"Tidak ada grup yang cocok"</string>
+    <string name="iptv_backup_order_loading">"Memuat…"</string>
+    <string name="iptv_backup_order_remove">"Hapus"</string>
+    <string name="iptv_sports_sort_sources">"Urutkan saluran"</string>
+</resources>

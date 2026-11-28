@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"விருப்பக் குழுக்கள்"</string>
+    <string name="iptv_backup_order_groups_hint">"மேலே உள்ள வரிசை சமமாக இருந்தால் இவை முடிவு செய்யும்"</string>
+    <string name="iptv_backup_order_add_group">"விருப்பக் குழுவைச் சேர்"</string>
+    <string name="iptv_backup_order_choose_playlist">"ஒரு பிளேலிஸ்ட்டைத் தேர்ந்தெடு"</string>
+    <string name="iptv_backup_order_search_groups">"இந்த பிளேலிஸ்ட்டின் குழுக்களில் தேடு"</string>
+    <string name="iptv_backup_order_no_groups">"பொருந்தும் குழுக்கள் இல்லை"</string>
+    <string name="iptv_backup_order_loading">"ஏற்றுகிறது…"</string>
+    <string name="iptv_backup_order_remove">"நீக்கு"</string>
+    <string name="iptv_sports_sort_sources">"சேனல்களை வரிசைப்படுத்து"</string>
+</resources>

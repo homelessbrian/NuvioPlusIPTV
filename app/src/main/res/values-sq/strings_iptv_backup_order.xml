@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Shtesë"</string>
     <string name="livetv_backups_playlist_tag">"Listë"</string>
     <string name="livetv_backups_quality_other">"Cilësi tjetër"</string>
-    <string name="iptv_backup_order_title">"Rezervat dhe kanalet e ndeshjes"</string>
-    <string name="iptv_backup_order_row_subtitle">"Si grupohen dhe renditen lista e rezervave dhe kanalet e një ndeshjeje te Kanalet e shpejta"</string>
+    <string name="iptv_backup_order_title">"Rendi i kanaleve"</string>
+    <string name="iptv_backup_order_row_subtitle">"Si i renditin rezervat, kanalet e shpejta dhe faqet e ndeshjeve burimet e një kanali dhe cilin zgjedh Sporti"</string>
     <string name="iptv_backup_order_gear_hint">"Titujt dhe rendi i tyre"</string>
     <string name="iptv_backup_order_group_by">"Grupo sipas"</string>
     <string name="iptv_backup_order_group_by_hint">"OK e ndryshon. Brenda çdo titulli kanalet ndjekin rendin tjetër më poshtë"</string>

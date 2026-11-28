@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"קבוצות מועדפות"</string>
+    <string name="iptv_backup_order_groups_hint">"מכריעות כשהסדר למעלה שווה"</string>
+    <string name="iptv_backup_order_add_group">"הוספת קבוצה מועדפת"</string>
+    <string name="iptv_backup_order_choose_playlist">"בחרו רשימת השמעה"</string>
+    <string name="iptv_backup_order_search_groups">"חיפוש בקבוצות של רשימה זו"</string>
+    <string name="iptv_backup_order_no_groups">"אין קבוצות תואמות"</string>
+    <string name="iptv_backup_order_loading">"טוען…"</string>
+    <string name="iptv_backup_order_remove">"הסרה"</string>
+    <string name="iptv_sports_sort_sources">"מיון ערוצים"</string>
+</resources>

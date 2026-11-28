@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Add-on"</string>
     <string name="livetv_backups_playlist_tag">"Playlist"</string>
     <string name="livetv_backups_quality_other">"Kualitas lain"</string>
-    <string name="iptv_backup_order_title">"Cadangan &amp; saluran pertandingan"</string>
-    <string name="iptv_backup_order_row_subtitle">"Cara daftar cadangan dan saluran pertandingan di Saluran Cepat dikelompokkan dan diurutkan"</string>
+    <string name="iptv_backup_order_title">"Urutan saluran"</string>
+    <string name="iptv_backup_order_row_subtitle">"Cara cadangan, saluran cepat, dan halaman pertandingan mengurutkan sumber saluran, dan mana yang dipilih Olahraga"</string>
     <string name="iptv_backup_order_gear_hint">"Judul dan urutannya"</string>
     <string name="iptv_backup_order_group_by">"Kelompokkan menurut"</string>
     <string name="iptv_backup_order_group_by_hint">"OK mengubahnya. Di setiap judul, saluran mengikuti urutan lain di bawah"</string>

@@ -90,7 +90,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveSubtitleAppearance
 import com.nuvio.tv.livetv.model.BackupOrder
-import com.nuvio.tv.ui.screens.settings.SportsSourceOrderDialog
+import com.nuvio.tv.ui.screens.settings.BackupOrderDialog
 import com.nuvio.tv.livetv.sports.probe.sportsGameChannelRows
 import com.nuvio.tv.livetv.record.LiveTvNotice
 import com.nuvio.tv.livetv.ui.ChannelLogo
@@ -1858,21 +1858,16 @@ private fun GamePage(
     val addonNames = remember(matches) {
         matches.map { it.channel }.filter(BackupOrder::isAddon).map { it.sourceName }.distinct()
     }
-    val playlistIds = remember(playlists, matches) {
-        (playlists.orEmpty().map { it.id } + matches.map { it.channel }.filterNot(BackupOrder::isAddon).map { it.sourceId }).distinct()
-    }
-    val channelSort = settings.channelSort
-    val sourceOrder = remember(channelSort.enabled, liveSettings?.backupGroupBy, liveSettings?.backupSourceOrder, playlistIds, addonNames) {
-        if (channelSort.enabled) emptyList() else liveSettings?.let { BackupOrder.gameSourceOrder(it, playlistIds, addonNames) }.orEmpty()
-    }
-    val separateFeeds = sourceOrder.isNotEmpty() || channelSort.enabled
+    // Your channel order (Channel Order): once set, every feed is its own row in that order.
+    val channelSort by viewModel.repo.channelOrder.collectAsStateWithLifecycle()
+    val separateFeeds = channelSort.enabled
     val shownRows = remember(shown, playingKey, separateFeeds) {
         if (separateFeeds) shown.map { listOf(it) } else SportsMatcher.groupCopies(shown, playingKey)
     }
     val channelChecks by viewModel.channelChecks.collectAsStateWithLifecycle()
     // Each actual provider/copy is playable. Verified working sources lead, unavailable ones trail.
-    val displayRows = remember(shownRows, settings.autoCheckChannels, settings.bestChannelFirst, channelChecks, sourceOrder, channelSort) {
-        sportsGameChannelRows(shownRows, channelChecks, settings.autoCheckChannels, settings.bestChannelFirst, sourceOrder, channelSort)
+    val displayRows = remember(shownRows, settings.autoCheckChannels, settings.bestChannelFirst, channelChecks, channelSort) {
+        sportsGameChannelRows(shownRows, channelChecks, settings.autoCheckChannels, settings.bestChannelFirst, channelSort)
     }
     val probeChannels = remember(shownRows) { shownRows.flatten().map { it.channel }.distinctBy { it.key } }
     val latestProbeChannels = androidx.compose.runtime.rememberUpdatedState(probeChannels)
@@ -1927,7 +1922,7 @@ private fun GamePage(
     val sortFocus = remember(ev.id) { FocusRequester() }
     var sortSources by remember(ev.id) { mutableStateOf(false) }
     var restoreSortFocus by remember(ev.id) { mutableStateOf(false) }
-    val sortButton = !channelSort.enabled && liveSettings != null && playlists != null
+    val sortButton = liveSettings != null && playlists != null
     fun dismissSort() {
         sortSources = false
         restoreSortFocus = true
@@ -1940,14 +1935,12 @@ private fun GamePage(
         }
     }
     if (sortSources && sortButton && ev.state != GameState.POST) {
-        val installedAddons by androidx.compose.runtime.produceState<List<String>?>(initialValue = null) {
-            value = viewModel.repo.liveStreamAddonNames()
-        }
-        SportsSourceOrderDialog(
+        // The same Channel Order screen as Live TV settings and Sports settings.
+        BackupOrderDialog(
             settings = checkNotNull(liveSettings), playlists = playlists.orEmpty(),
-            addonNames = (installedAddons.orEmpty() + addonNames).distinct(), loading = installedAddons == null,
-            onSave = { order -> viewModel.saveGameSourceOrder(order); dismissSort() },
-            onReset = { viewModel.saveGameSourceOrder(emptyList()); dismissSort() }, onDismiss = ::dismissSort,
+            addonNames = { (viewModel.repo.liveStreamAddonNames() + addonNames).distinct() },
+            groupNames = viewModel::groupNames,
+            onUpdate = viewModel::updateLiveSettings, onDismiss = ::dismissSort,
         )
     }
     // What each channel's guide says now (the "Watch on" list's coloured lines), checked every minute.

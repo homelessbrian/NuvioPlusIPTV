@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"優先グループ"</string>
+    <string name="iptv_backup_order_groups_hint">"上の順番が同じときに使われます"</string>
+    <string name="iptv_backup_order_add_group">"優先グループを追加"</string>
+    <string name="iptv_backup_order_choose_playlist">"プレイリストを選択"</string>
+    <string name="iptv_backup_order_search_groups">"このプレイリストのグループを検索"</string>
+    <string name="iptv_backup_order_no_groups">"一致するグループはありません"</string>
+    <string name="iptv_backup_order_loading">"読み込み中…"</string>
+    <string name="iptv_backup_order_remove">"削除"</string>
+    <string name="iptv_sports_sort_sources">"チャンネルを並べ替え"</string>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"পছন্দের গ্রুপ"</string>
+    <string name="iptv_backup_order_groups_hint">"উপরের ক্রমে সমান হলে এগুলো ঠিক করে"</string>
+    <string name="iptv_backup_order_add_group">"পছন্দের গ্রুপ যোগ করুন"</string>
+    <string name="iptv_backup_order_choose_playlist">"একটি প্লেলিস্ট বেছে নিন"</string>
+    <string name="iptv_backup_order_search_groups">"এই প্লেলিস্টের গ্রুপ খুঁজুন"</string>
+    <string name="iptv_backup_order_no_groups">"কোনো গ্রুপ মেলেনি"</string>
+    <string name="iptv_backup_order_loading">"লোড হচ্ছে…"</string>
+    <string name="iptv_backup_order_remove">"সরান"</string>
+    <string name="iptv_sports_sort_sources">"চ্যানেল সাজান"</string>
+</resources>

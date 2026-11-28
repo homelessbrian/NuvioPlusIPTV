@@ -543,6 +543,10 @@ class SportsRepository @Inject constructor(
     private var channelEdits = 0L
     private val _addonLive = MutableStateFlow<Map<String, List<ChannelMatch>>>(emptyMap())
 
+    /** Your channel order (Live TV › Playback › Backups & Game Channels), as Sports uses it. */
+    val channelOrder: StateFlow<SportsChannelSort> = prefs.settings.map { SportsChannelSort.from(it) }
+        .distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, SportsChannelSort())
+
     private class RankedMatches(
         val order: Pair<String, SportsChannelSort>,
         val playlists: Map<String, List<ChannelMatch>>,
@@ -561,10 +565,11 @@ class SportsRepository @Inject constructor(
         .stateIn(scope, SharingStarted.Eagerly, emptyMap())
     val matches: StateFlow<Map<String, List<ChannelMatch>>> = combine(
         visiblePlaylistMatches,
-        settings.map { it.channelRegion to it.channelSort.takeIf { sort -> sort.enabled } }.distinctUntilChanged(),
+        settings.map { it.channelRegion }.distinctUntilChanged(),
+        channelOrder,
         _addonLive
-    ) { visible, (region, sort), addon ->
-        if (sort != null) return@combine rankGameMatches(visible, region, sort, addon)
+    ) { visible, region, sort, addon ->
+        if (sort.enabled) return@combine rankGameMatches(visible, region, sort, addon)
         lastRankedMatches = null
         val m = if (region.isBlank()) visible else visible.mapValues { (_, list) -> ChannelRegions.regionFirst(list, region) }
         // Streams from your sports addons (HighFly…) go after your own channels.
@@ -2202,9 +2207,11 @@ class SportsRepository @Inject constructor(
                 for (c in list) h = h * 31 + c.key.hashCode()
                 list.size to h
             }.distinctUntilChanged(),
+            // Changing your channel order doesn't search again: the shown lists follow it at once
+            // (see [matches]), and the next search uses it to pick which channels a game keeps.
             settings.map {
                 listOf(it.networkChannels, it.eventChannels, it.teamChannels, it.leagueChannels, it.blocked,
-                    it.bestChannelFirst, it.hiddenLeagues, it.region, it.preferredGroups, it.channelSort.takeIf { sort -> sort.enabled })
+                    it.bestChannelFirst, it.hiddenLeagues, it.region, it.preferredGroups)
             }.distinctUntilChanged(),
             follows.map { Triple(it.words, it.leagues, it.excludedGuideTitles) }.distinctUntilChanged(),
             // Live TV ready, and the guide really replaced (not every update check that found nothing new).
@@ -2566,7 +2573,8 @@ class SportsRepository @Inject constructor(
                 events = listOf(selected) + context.filterNot { it.id == selected.id }, channels = channels,
                 quality = user.channelQuality, shiftMs = live.epgOffsetMinutes * MINUTE,
                 settings = rules, now = now, requestedGames = setOf(event.id), onlyGame = event.id,
-                exclusions = SportsGuideTitleExclusions(follows.value.excludedGuideTitles)
+                exclusions = SportsGuideTitleExclusions(follows.value.excludedGuideTitles),
+                channelSort = SportsChannelSort.from(live)
             )).matches[event.id].orEmpty()
             // A profile or playlist switch must never publish channels from the old search.
             val latestLive = prefs.settings.first()
@@ -2628,7 +2636,8 @@ class SportsRepository @Inject constructor(
                     matcher.match(SportsMatcher.Input(
                         events = matchingEvents, channels = channels, quality = user.channelQuality,
                         shiftMs = shift, settings = s, now = now, readGuide = false,
-                        networksUntil = now + 3 * HOUR, exclusions = exclusions
+                        networksUntil = now + 3 * HOUR, exclusions = exclusions,
+                        channelSort = SportsChannelSort.from(live)
                     ))
                 }.onSuccess { quick ->
                     if (quick.matches.isNotEmpty()) {
@@ -2662,7 +2671,8 @@ class SportsRepository @Inject constructor(
                     settings = s,
                     now = now,
                     gentle = !pageOnly(), requestedGames = requested.keys,
-                    exclusions = exclusions
+                    exclusions = exclusions,
+                    channelSort = SportsChannelSort.from(live)
                 ),
                 onUrgent = { early ->
                     matchingCheckpoint()
@@ -2710,7 +2720,7 @@ class SportsRepository @Inject constructor(
                     if (old == null || m.score > old.score) byChannel[m.channel.key] = m
                 }
                 val ranked = SportsMatcher.sortMatches(byChannel.values.toList(), s.bestChannelFirst, rank)
-                next[id] = SportsMatcher.capMatches(ranked, s.channelSort)
+                next[id] = SportsMatcher.capMatches(ranked, channelOrder.value)
             }
             next
         }
@@ -3299,7 +3309,7 @@ class SportsRepository @Inject constructor(
     /** The channel to tune for a reminder or "watch now": the best match, if any. */
     fun bestChannel(eventId: String, requireSure: Boolean = false): ChannelMatch? {
         val settings = settings.value
-        if (settings.channelSort.enabled) {
+        if (channelOrder.value.enabled) {
             return matches.value[eventId]?.firstOrNull {
                 it.channel.sourceId != SportsAddonSource.SOURCE_ID && (!requireSure || it.sure)
             }

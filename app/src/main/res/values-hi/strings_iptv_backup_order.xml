@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"ऐड-ऑन"</string>
     <string name="livetv_backups_playlist_tag">"प्लेलिस्ट"</string>
     <string name="livetv_backups_quality_other">"अन्य क्वालिटी"</string>
-    <string name="iptv_backup_order_title">"बैकअप और मैच चैनल"</string>
-    <string name="iptv_backup_order_row_subtitle">"क्विक चैनल में बैकअप सूची और किसी मैच के चैनल कैसे समूहित और क्रमबद्ध हों"</string>
+    <string name="iptv_backup_order_title">"चैनल क्रम"</string>
+    <string name="iptv_backup_order_row_subtitle">"बैकअप, क्विक चैनल और मैच पेज किसी चैनल के फ़ीड कैसे क्रमित करते हैं, और स्पोर्ट्स कौन सा चुनता है"</string>
     <string name="iptv_backup_order_gear_hint">"शीर्षक और उनका क्रम"</string>
     <string name="iptv_backup_order_group_by">"इसके अनुसार समूह"</string>
     <string name="iptv_backup_order_group_by_hint">"OK से बदलें। हर शीर्षक के अंदर चैनल नीचे दिए दूसरे क्रम में रहते हैं"</string>

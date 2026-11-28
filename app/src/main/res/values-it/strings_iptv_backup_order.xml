@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Componente aggiuntivo"</string>
     <string name="livetv_backups_playlist_tag">"Playlist"</string>
     <string name="livetv_backups_quality_other">"Altra qualità"</string>
-    <string name="iptv_backup_order_title">"Riserve e canali della partita"</string>
-    <string name="iptv_backup_order_row_subtitle">"Come la lista di riserva e i canali di una partita nei Canali rapidi vengono raggruppati e ordinati"</string>
+    <string name="iptv_backup_order_title">"Ordine dei canali"</string>
+    <string name="iptv_backup_order_row_subtitle">"Come riserve, canali rapidi e pagine delle partite ordinano le fonti di un canale, e quale sceglie Sport"</string>
     <string name="iptv_backup_order_gear_hint">"Intestazioni e il loro ordine"</string>
     <string name="iptv_backup_order_group_by">"Raggruppa per"</string>
     <string name="iptv_backup_order_group_by_hint">"OK lo cambia. In ogni intestazione i canali seguono l'altro ordine qui sotto"</string>

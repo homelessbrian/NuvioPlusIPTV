@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Mėgstamos grupės"</string>
+    <string name="iptv_backup_order_groups_hint">"nusprendžia, kai tvarka viršuje lygi"</string>
+    <string name="iptv_backup_order_add_group">"Pridėti mėgstamą grupę"</string>
+    <string name="iptv_backup_order_choose_playlist">"Pasirinkite grojaraštį"</string>
+    <string name="iptv_backup_order_search_groups">"Ieškoti šio grojaraščio grupėse"</string>
+    <string name="iptv_backup_order_no_groups">"Nėra atitinkančių grupių"</string>
+    <string name="iptv_backup_order_loading">"Įkeliama…"</string>
+    <string name="iptv_backup_order_remove">"Pašalinti"</string>
+    <string name="iptv_sports_sort_sources">"Rikiuoti kanalus"</string>
+</resources>

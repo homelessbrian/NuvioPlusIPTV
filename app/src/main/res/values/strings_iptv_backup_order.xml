@@ -5,8 +5,8 @@
     <string name="livetv_backups_addon_tag">"Add-on"</string>
     <string name="livetv_backups_playlist_tag">"Playlist"</string>
     <string name="livetv_backups_quality_other">"Other quality"</string>
-    <string name="iptv_backup_order_title">"Backups &amp; Game Channels"</string>
-    <string name="iptv_backup_order_row_subtitle">"How the Backups list and a game's channels in Quick Channels are grouped and sorted"</string>
+    <string name="iptv_backup_order_title">"Channel Order"</string>
+    <string name="iptv_backup_order_row_subtitle">"How Backups, Quick Channels and Sports game pages sort a channel\'s feeds, and which one Sports picks"</string>
     <string name="iptv_backup_order_gear_hint">"Headings and their order"</string>
     <string name="iptv_backup_order_group_by">"Group by"</string>
     <string name="iptv_backup_order_group_by_hint">"OK changes it. Inside each heading, channels follow the other order below"</string>
@@ -14,9 +14,7 @@
     <string name="iptv_backup_order_by_quality">"Quality"</string>
     <string name="iptv_backup_order_no_headings">"No headings"</string>
     <string name="iptv_backup_order_sources">"Playlist &amp; add-on order"</string>
-    <string name="iptv_sports_sort_sources">Sort sources</string>
-    <string name="iptv_sports_source_order_hint">Move your preferred playlists and add-ons to the top. This order is shared with Backups and Quick Channels.</string>
-    <string name="iptv_sports_use_source_order">Use this order</string>
+    <string name="iptv_sports_sort_sources">"Sort channels"</string>
     <string name="iptv_backup_order_sources_hint">"the arrows move one; new ones go at the bottom"</string>
     <string name="iptv_backup_order_qualities">"Quality order"</string>
     <string name="iptv_backup_order_qualities_hint">"put FHD above 4K if 4K struggles on this TV"</string>

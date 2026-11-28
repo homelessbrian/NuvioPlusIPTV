@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Tiện ích"</string>
     <string name="livetv_backups_playlist_tag">"Danh sách phát"</string>
     <string name="livetv_backups_quality_other">"Chất lượng khác"</string>
-    <string name="iptv_backup_order_title">"Kênh dự phòng &amp; kênh trận đấu"</string>
-    <string name="iptv_backup_order_row_subtitle">"Cách danh sách dự phòng và các kênh của trận đấu trong Kênh nhanh được nhóm và sắp xếp"</string>
+    <string name="iptv_backup_order_title">"Thứ tự kênh"</string>
+    <string name="iptv_backup_order_row_subtitle">"Cách kênh dự phòng, kênh nhanh và trang trận đấu sắp xếp các nguồn của một kênh, và Thể thao chọn nguồn nào"</string>
     <string name="iptv_backup_order_gear_hint">"Tiêu đề và thứ tự"</string>
     <string name="iptv_backup_order_group_by">"Nhóm theo"</string>
     <string name="iptv_backup_order_group_by_hint">"OK để đổi. Trong mỗi tiêu đề, kênh theo thứ tự còn lại bên dưới"</string>

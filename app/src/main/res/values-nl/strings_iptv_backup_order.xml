@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Add-on"</string>
     <string name="livetv_backups_playlist_tag">"Playlist"</string>
     <string name="livetv_backups_quality_other">"Andere kwaliteit"</string>
-    <string name="iptv_backup_order_title">"Back-ups &amp; wedstrijdzenders"</string>
-    <string name="iptv_backup_order_row_subtitle">"Hoe de back-uplijst en de zenders van een wedstrijd in Snelle zenders worden gegroepeerd en gesorteerd"</string>
+    <string name="iptv_backup_order_title">"Kanaalvolgorde"</string>
+    <string name="iptv_backup_order_row_subtitle">"Hoe reserves, snelle zenders en wedstrijdpagina\'s de bronnen van een zender sorteren, en welke Sport kiest"</string>
     <string name="iptv_backup_order_gear_hint">"Kopjes en hun volgorde"</string>
     <string name="iptv_backup_order_group_by">"Groeperen op"</string>
     <string name="iptv_backup_order_group_by_hint">"OK wijzigt het. Binnen elk kopje volgen zenders de andere volgorde hieronder"</string>

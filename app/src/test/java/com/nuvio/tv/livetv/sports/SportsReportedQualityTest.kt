@@ -57,13 +57,9 @@ class SportsReportedQualityTest {
         val copies = List(40) { index -> match("Channel $index 1080p", key = "copy-$index") }
         val preferred = match("Other channel 720p")
         val candidates = listOf(picked) + copies + preferred
-        val sort = SportsChannelSort(
-            enabled = true,
-            criteria = listOf(SportsSortCriterion.RESOLUTION),
-            resolutionOrder = listOf(SportsSortResolution.HD, SportsSortResolution.FHD),
-        )
+        val sort = SportsChannelSort.from(com.nuvio.tv.livetv.model.LiveTvSettings(backupQualityOrder = "HD,FHD"))
 
-        assertEquals(candidates.take(40), SportsMatcher.capMatches(candidates, sort.copy(enabled = false)))
+        assertEquals(candidates.take(40), SportsMatcher.capMatches(candidates, SportsChannelSort()))
         assertEquals(listOf(picked) + copies.take(38) + preferred, SportsMatcher.capMatches(candidates, sort))
     }
 }

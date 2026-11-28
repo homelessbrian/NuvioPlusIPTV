@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Supliment"</string>
     <string name="livetv_backups_playlist_tag">"Listă"</string>
     <string name="livetv_backups_quality_other">"Altă calitate"</string>
-    <string name="iptv_backup_order_title">"Rezerve și canalele meciului"</string>
-    <string name="iptv_backup_order_row_subtitle">"Cum sunt grupate și sortate lista de rezerve și canalele unui meci din Canale rapide"</string>
+    <string name="iptv_backup_order_title">"Ordinea canalelor"</string>
+    <string name="iptv_backup_order_row_subtitle">"Cum ordonează rezervele, canalele rapide și paginile meciurilor sursele unui canal și pe care o alege Sport"</string>
     <string name="iptv_backup_order_gear_hint">"Titluri și ordinea lor"</string>
     <string name="iptv_backup_order_group_by">"Grupează după"</string>
     <string name="iptv_backup_order_group_by_hint">"OK schimbă. În fiecare titlu, canalele urmează cealaltă ordine de mai jos"</string>

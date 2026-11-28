@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"إضافة"</string>
     <string name="livetv_backups_playlist_tag">"قائمة تشغيل"</string>
     <string name="livetv_backups_quality_other">"جودة أخرى"</string>
-    <string name="iptv_backup_order_title">"البدائل وقنوات المباراة"</string>
-    <string name="iptv_backup_order_row_subtitle">"كيف تُجمَّع وتُرتَّب قائمة البدائل وقنوات المباراة في القنوات السريعة"</string>
+    <string name="iptv_backup_order_title">"ترتيب القنوات"</string>
+    <string name="iptv_backup_order_row_subtitle">"كيف ترتّب القنوات الاحتياطية والقنوات السريعة وصفحات المباريات مصادر القناة، وأيها تختاره الرياضة"</string>
     <string name="iptv_backup_order_gear_hint">"العناوين وترتيبها"</string>
     <string name="iptv_backup_order_group_by">"التجميع حسب"</string>
     <string name="iptv_backup_order_group_by_hint">"يغيّره OK. داخل كل عنوان تتبع القنوات الترتيب الآخر أدناه"</string>

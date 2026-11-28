@@ -853,7 +853,17 @@ private fun BackupOrderPage(
                 moved(qualities, i, by)?.let { l -> onUpdate { bo.withQualities(it, l) } }
             }
         }
-        if (settings.backupSourceOrder.isNotBlank() || settings.backupQualityOrder.isNotBlank()) {
+        // Preferred groups are added in Settings (it needs a search); here they can be moved.
+        val groups = bo.groups(settings)
+        if (groups.isNotEmpty()) {
+            heading(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_groups))
+            groups.forEachIndexed { i, g ->
+                orderRow("g:" + bo.groupKey(g.sourceId, g.name), g.name, playlists[g.sourceId] ?: playlistTag, i, groups.size) { by ->
+                    moved(groups, i, by)?.let { l -> onUpdate { bo.withGroups(it, l) } }
+                }
+            }
+        }
+        if (bo.customized(settings)) {
             GearRow(Modifier.fillMaxWidth(), onClick = { onUpdate { bo.reset(it) } }) { focused ->
                 LiveText(androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.iptv_backup_order_reset), size = 13.sp, weight = FontWeight.Medium, color = gearText(focused), modifier = Modifier.weight(1f))
             }

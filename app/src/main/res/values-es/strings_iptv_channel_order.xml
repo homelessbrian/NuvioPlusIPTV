@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Grupos preferidos"</string>
+    <string name="iptv_backup_order_groups_hint">"deciden los empates dentro del orden de arriba"</string>
+    <string name="iptv_backup_order_add_group">"Añadir un grupo preferido"</string>
+    <string name="iptv_backup_order_choose_playlist">"Elige una lista"</string>
+    <string name="iptv_backup_order_search_groups">"Buscar en los grupos de esta lista"</string>
+    <string name="iptv_backup_order_no_groups">"Ningún grupo coincide"</string>
+    <string name="iptv_backup_order_loading">"Cargando…"</string>
+    <string name="iptv_backup_order_remove">"Quitar"</string>
+    <string name="iptv_sports_sort_sources">"Ordenar canales"</string>
+</resources>

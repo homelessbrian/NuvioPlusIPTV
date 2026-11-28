@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"অ্যাড-অন"</string>
     <string name="livetv_backups_playlist_tag">"প্লেলিস্ট"</string>
     <string name="livetv_backups_quality_other">"অন্য মান"</string>
-    <string name="iptv_backup_order_title">"ব্যাকআপ ও খেলার চ্যানেল"</string>
-    <string name="iptv_backup_order_row_subtitle">"কুইক চ্যানেলে ব্যাকআপ তালিকা ও একটি খেলার চ্যানেল কীভাবে সাজানো ও ভাগ করা হয়"</string>
+    <string name="iptv_backup_order_title">"চ্যানেলের ক্রম"</string>
+    <string name="iptv_backup_order_row_subtitle">"ব্যাকআপ, কুইক চ্যানেল ও খেলার পাতা কীভাবে চ্যানেলের ফিড সাজায়, আর স্পোর্টস কোনটি বেছে নেয়"</string>
     <string name="iptv_backup_order_gear_hint">"শিরোনাম ও তাদের ক্রম"</string>
     <string name="iptv_backup_order_group_by">"যে অনুযায়ী ভাগ"</string>
     <string name="iptv_backup_order_group_by_hint">"OK দিয়ে বদলান। প্রতিটি শিরোনামের ভেতরে চ্যানেল নিচের অন্য ক্রম মানে"</string>

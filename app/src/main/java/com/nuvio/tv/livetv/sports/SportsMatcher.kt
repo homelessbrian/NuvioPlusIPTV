@@ -58,7 +58,9 @@ internal class SportsMatcher(
         val requestedGames: Set<String> = emptySet(),
         /** Search just this game. Other events supply context to distinguish overlapping tournaments. */
         val onlyGame: String? = null,
-        val exclusions: SportsGuideTitleExclusions = SportsGuideTitleExclusions.Empty
+        val exclusions: SportsGuideTitleExclusions = SportsGuideTitleExclusions.Empty,
+        /** Your channel order (Backups & Game Channels): which channels a game keeps when it has too many. */
+        val channelSort: SportsChannelSort = SportsChannelSort()
     )
 
     /** One guide find from step 1, kept to be used again while the guide and the half-hour's games stay the same. */
@@ -357,7 +359,7 @@ internal class SportsMatcher(
             // game page, other regions under "+ N from other regions"), so nothing the guide shows
             // is left out. 40 is only a guard against a runaway list; it costs no extra searching.
             val ranked = orderedMatches(list, input.settings.bestChannelFirst, rank) { quality(it.channel) }
-            return capMatches(ranked, input.settings.channelSort) { quality(it.channel).height }
+            return capMatches(ranked, input.channelSort) { quality(it.channel).height }
         }
         fun urgent(ev: SportsEvent) = ev.state == GameState.LIVE ||
             (ev.state == GameState.PRE && ev.startMs in (input.now - 15 * MINUTE)..(input.now + 15 * MINUTE))
@@ -564,7 +566,7 @@ internal class SportsMatcher(
                         )
                     // Let the same preferences pick survivors of the smaller per-network limit.
                     // Keep copies and alternate providers as backups if one freezes.
-                    capMatches(networkMatches, input.settings.channelSort, if (national) 8 else 12) { quality(it.channel).height }
+                    capMatches(networkMatches, input.channelSort, if (national) 8 else 12) { quality(it.channel).height }
                         .forEach { add(ev.id, it.channel.key, it.score, it.how, it.program); byNetwork++ }
                 }
             }

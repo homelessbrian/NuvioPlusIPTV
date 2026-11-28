@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Tilføjelse"</string>
     <string name="livetv_backups_playlist_tag">"Playliste"</string>
     <string name="livetv_backups_quality_other">"Anden kvalitet"</string>
-    <string name="iptv_backup_order_title">"Reserver &amp; kampkanaler"</string>
-    <string name="iptv_backup_order_row_subtitle">"Hvordan reservelisten og en kamps kanaler i Hurtige kanaler grupperes og sorteres"</string>
+    <string name="iptv_backup_order_title">"Kanalrækkefølge"</string>
+    <string name="iptv_backup_order_row_subtitle">"Hvordan reserver, hurtigkanaler og kampsider sorterer en kanals kilder, og hvilken Sport vælger"</string>
     <string name="iptv_backup_order_gear_hint">"Overskrifter og deres rækkefølge"</string>
     <string name="iptv_backup_order_group_by">"Gruppér efter"</string>
     <string name="iptv_backup_order_group_by_hint">"OK ændrer det. Under hver overskrift følger kanalerne den anden rækkefølge nedenfor"</string>

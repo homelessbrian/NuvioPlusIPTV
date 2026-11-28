@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Eklenti"</string>
     <string name="livetv_backups_playlist_tag">"Liste"</string>
     <string name="livetv_backups_quality_other">"Diğer kalite"</string>
-    <string name="iptv_backup_order_title">"Yedekler ve maç kanalları"</string>
-    <string name="iptv_backup_order_row_subtitle">"Yedek listesi ve Hızlı Kanallar'daki bir maçın kanallarının nasıl gruplanıp sıralandığı"</string>
+    <string name="iptv_backup_order_title">"Kanal sırası"</string>
+    <string name="iptv_backup_order_row_subtitle">"Yedekler, hızlı kanallar ve maç sayfaları bir kanalın kaynaklarını nasıl sıralar ve Spor hangisini seçer"</string>
     <string name="iptv_backup_order_gear_hint">"Başlıklar ve sıraları"</string>
     <string name="iptv_backup_order_group_by">"Grupla"</string>
     <string name="iptv_backup_order_group_by_hint">"OK değiştirir. Her başlıkta kanallar aşağıdaki diğer sırayı izler"</string>

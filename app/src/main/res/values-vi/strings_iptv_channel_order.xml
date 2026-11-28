@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Nhóm ưu tiên"</string>
+    <string name="iptv_backup_order_groups_hint">"quyết định khi thứ tự ở trên ngang nhau"</string>
+    <string name="iptv_backup_order_add_group">"Thêm nhóm ưu tiên"</string>
+    <string name="iptv_backup_order_choose_playlist">"Chọn danh sách phát"</string>
+    <string name="iptv_backup_order_search_groups">"Tìm trong các nhóm của danh sách này"</string>
+    <string name="iptv_backup_order_no_groups">"Không có nhóm phù hợp"</string>
+    <string name="iptv_backup_order_loading">"Đang tải…"</string>
+    <string name="iptv_backup_order_remove">"Xóa"</string>
+    <string name="iptv_sports_sort_sources">"Sắp xếp kênh"</string>
+</resources>

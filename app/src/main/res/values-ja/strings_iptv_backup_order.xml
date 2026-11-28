@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"アドオン"</string>
     <string name="livetv_backups_playlist_tag">"プレイリスト"</string>
     <string name="livetv_backups_quality_other">"その他の画質"</string>
-    <string name="iptv_backup_order_title">"予備と試合のチャンネル"</string>
-    <string name="iptv_backup_order_row_subtitle">"予備リストとクイックチャンネルの試合のチャンネルの分け方と並び順"</string>
+    <string name="iptv_backup_order_title">"チャンネルの順番"</string>
+    <string name="iptv_backup_order_row_subtitle">"予備、クイックチャンネル、試合ページでの配信の並び順と、スポーツが選ぶチャンネル"</string>
     <string name="iptv_backup_order_gear_hint">"見出しとその順番"</string>
     <string name="iptv_backup_order_group_by">"グループ分け"</string>
     <string name="iptv_backup_order_group_by_hint">"OKで変更。各見出しの中では下のもう一方の順番で並びます"</string>

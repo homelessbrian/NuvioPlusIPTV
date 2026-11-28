@@ -251,6 +251,7 @@ class LiveTvPreferences @Inject constructor(
         val backupGroupBy = stringPreferencesKey("backup_group_by")
         val backupSourceOrder = stringPreferencesKey("backup_source_order")
         val backupQualityOrder = stringPreferencesKey("backup_quality_order")
+        val backupGroupOrder = stringPreferencesKey("backup_group_order")
         val simpleLiveTv = booleanPreferencesKey("simple_live_tv")
         val channelSurf = booleanPreferencesKey("channel_surf")
         val barHidden = stringPreferencesKey("bar_hidden")
@@ -776,6 +777,7 @@ class LiveTvPreferences @Inject constructor(
             backupGroupBy = p[Keys.backupGroupBy] ?: d.backupGroupBy,
             backupSourceOrder = p[Keys.backupSourceOrder] ?: d.backupSourceOrder,
             backupQualityOrder = p[Keys.backupQualityOrder] ?: d.backupQualityOrder,
+            backupGroupOrder = p[Keys.backupGroupOrder] ?: d.backupGroupOrder,
             simpleLiveTv = p[Keys.simpleLiveTv] ?: d.simpleLiveTv,
             channelSurf = p[Keys.channelSurf] ?: d.channelSurf,
             barHidden = p[Keys.barHidden] ?: d.barHidden,
@@ -1135,6 +1137,7 @@ class LiveTvPreferences @Inject constructor(
         p[Keys.backupGroupBy] = s.backupGroupBy
         p[Keys.backupSourceOrder] = s.backupSourceOrder
         p[Keys.backupQualityOrder] = s.backupQualityOrder
+        p[Keys.backupGroupOrder] = s.backupGroupOrder
         p[Keys.simpleLiveTv] = s.simpleLiveTv
         p[Keys.channelSurf] = s.channelSurf
         p[Keys.barHidden] = s.barHidden

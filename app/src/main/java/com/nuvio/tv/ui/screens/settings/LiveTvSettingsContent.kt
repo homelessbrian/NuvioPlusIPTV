@@ -2696,6 +2696,7 @@ internal fun LiveTvSettingsContent(
             settings = s,
             playlists = playlists,
             addonNames = { viewModel.liveStreamAddonNames() },
+            groupNames = { id -> viewModel.groupNames(id) },
             onUpdate = { t -> update(t) },
             onDismiss = close
         )

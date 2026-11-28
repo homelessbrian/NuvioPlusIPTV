@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
@@ -18,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -27,6 +29,8 @@ import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.livetv.model.BackupOrder
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.model.PlaylistSource
+import com.nuvio.tv.livetv.model.PreferredGroup
+import com.nuvio.tv.livetv.ui.LiveTextField
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
 
@@ -55,15 +59,18 @@ internal fun livetvQualityHeading(q: String, unknown: String): String = when (q)
 }
 
 /**
- * Settings → Live TV → Playback → Backups & Game Channels: the headings in the Backups list and
- * in a game's channels (Quick Channels › Games), and the order of playlists, add-ons and qualities.
- * The play bar's gear panel has the same page (Play bar layout › Backups & game channels).
+ * Channel Order (Settings → Live TV → Playback, Sports settings › Channels, and a game page's Sort
+ * button): the headings in the Backups list and a game's channels (Quick Channels › Games), and
+ * the order of playlists, add-ons, qualities and preferred channel groups. The same order sorts a
+ * Sports game's channels, picks the channel Sports tunes by itself and decides which channels a
+ * game keeps when it has too many. The play bar's gear panel has the same page.
  */
 @Composable
 internal fun BackupOrderDialog(
     settings: LiveTvSettings,
     playlists: List<PlaylistSource>,
     addonNames: suspend () -> List<String>,
+    groupNames: suspend (playlistId: String) -> List<String>,
     onUpdate: ((LiveTvSettings) -> LiveTvSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -71,123 +78,190 @@ internal fun BackupOrderDialog(
     val names = remember(playlists) { playlists.associate { it.id to it.name } }
     val sources = BackupOrder.sources(settings, playlists.map { it.id }, addons)
     val qualities = BackupOrder.qualities(settings)
+    val groups = BackupOrder.groups(settings)
+    // Adding a preferred group: pick its playlist, then the group.
+    var adding by remember { mutableStateOf(false) }
+    var groupsOf by remember { mutableStateOf<PlaylistSource?>(null) }
     fun <T> moved(l: List<T>, i: Int, by: Int): List<T>? {
         val j = i + by
         if (i < 0 || j !in l.indices) return null
         return l.toMutableList().apply { add(j, removeAt(i)) }
     }
     val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
+    val addGroupFocus = remember { FocusRequester() }
+    var backToAdd by remember { mutableStateOf(false) }
+    LaunchedEffect(adding, groupsOf) {
+        delay(80)
+        runCatching { (if (!adding && backToAdd) addGroupFocus else first).requestFocus() }
+        backToAdd = false
+    }
+    fun back() {
+        when {
+            groupsOf != null -> groupsOf = null
+            adding -> { adding = false; backToAdd = true }
+            else -> onDismiss()
+        }
+    }
     val playlistTag = stringResource(R.string.livetv_backups_playlist_tag)
     val addonTag = stringResource(R.string.livetv_backups_addon_tag)
+    val picking = groupsOf
     NuvioDialog(
-        onDismiss = onDismiss,
-        title = stringResource(R.string.iptv_backup_order_title),
-        subtitle = stringResource(R.string.iptv_backup_order_row_subtitle),
+        onDismiss = ::back,
+        title = when {
+            picking != null -> picking.name
+            adding -> stringResource(R.string.iptv_backup_order_choose_playlist)
+            else -> stringResource(R.string.iptv_backup_order_title)
+        },
+        subtitle = if (adding) null else stringResource(R.string.iptv_backup_order_row_subtitle),
         width = 640.dp
     ) {
-        LazyColumn(
-            modifier = Modifier.heightIn(max = 430.dp),
-            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
-        ) {
-            item(key = "group") {
-                SettingsActionRow(
-                    title = stringResource(R.string.iptv_backup_order_group_by),
-                    subtitle = stringResource(R.string.iptv_backup_order_group_by_hint),
-                    value = backupGroupByLabel(settings),
-                    onClick = {
-                        onUpdate {
-                            it.copy(backupGroupBy = when (BackupOrder.groupBy(it)) {
-                                BackupOrder.SOURCE -> BackupOrder.QUALITY
-                                BackupOrder.QUALITY -> BackupOrder.NONE
-                                else -> BackupOrder.SOURCE
-                            })
-                        }
-                    },
-                    modifier = Modifier.focusRequester(first)
-                )
+        when {
+            picking != null -> GroupPicker(
+                playlist = picking,
+                groupNames = groupNames,
+                taken = remember(groups) { groups.mapTo(HashSet()) { BackupOrder.groupKey(it.sourceId, it.name) } },
+                first = first,
+                onPick = { name ->
+                    onUpdate { BackupOrder.withGroups(it, BackupOrder.groups(it) + PreferredGroup(picking.id, name)) }
+                    groupsOf = null
+                    adding = false
+                    backToAdd = true
+                }
+            )
+            adding -> LazyColumn(
+                modifier = Modifier.heightIn(max = 430.dp),
+                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+            ) {
+                val enabled = playlists.filter { it.enabled }
+                if (enabled.isEmpty()) item(key = "none") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.iptv_backup_order_no_sources), subtitle = null,
+                        onClick = ::back, modifier = Modifier.focusRequester(first)
+                    )
+                }
+                itemsIndexed(enabled, key = { _, p -> "p:${p.id}" }) { i, p ->
+                    SettingsActionRow(
+                        title = p.name, subtitle = null,
+                        onClick = { groupsOf = p },
+                        modifier = if (i == 0) Modifier.focusRequester(first) else Modifier
+                    )
+                }
             }
-            item(key = "h:sources") { Heading(stringResource(R.string.iptv_backup_order_sources), stringResource(R.string.iptv_backup_order_sources_hint)) }
-            if (sources.isEmpty()) item(key = "none") { Heading(stringResource(R.string.iptv_backup_order_no_sources), null) }
-            itemsIndexed(sources, key = { _, k -> "s:$k" }) { i, k ->
-                val addon = BackupOrder.isAddonKey(k)
-                OrderRow(
-                    title = if (addon) BackupOrder.addonName(k) else names[k] ?: k,
-                    subtitle = if (addon) addonTag else playlistTag,
-                    canUp = i > 0, canDown = i < sources.lastIndex,
-                    onMove = { by -> moved(sources, i, by)?.let { l -> onUpdate { BackupOrder.withSources(it, l) } } }
-                )
-            }
-            item(key = "h:qualities") { Heading(stringResource(R.string.iptv_backup_order_qualities), stringResource(R.string.iptv_backup_order_qualities_hint)) }
-            itemsIndexed(qualities, key = { _, q -> "q:$q" }) { i, q ->
-                OrderRow(
-                    title = backupQualityLabel(q),
-                    subtitle = null,
-                    canUp = i > 0, canDown = i < qualities.lastIndex,
-                    onMove = { by -> moved(qualities, i, by)?.let { l -> onUpdate { BackupOrder.withQualities(it, l) } } }
-                )
-            }
-            item(key = "reset") {
-                SettingsActionRow(
-                    title = stringResource(R.string.iptv_backup_order_reset),
-                    subtitle = null,
-                    enabled = settings.backupSourceOrder.isNotBlank() || settings.backupQualityOrder.isNotBlank(),
-                    onClick = { onUpdate { BackupOrder.reset(it) } }
-                )
+            else -> LazyColumn(
+                modifier = Modifier.heightIn(max = 430.dp),
+                verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+            ) {
+                item(key = "group") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.iptv_backup_order_group_by),
+                        subtitle = stringResource(R.string.iptv_backup_order_group_by_hint),
+                        value = backupGroupByLabel(settings),
+                        onClick = {
+                            onUpdate {
+                                it.copy(backupGroupBy = when (BackupOrder.groupBy(it)) {
+                                    BackupOrder.SOURCE -> BackupOrder.QUALITY
+                                    BackupOrder.QUALITY -> BackupOrder.NONE
+                                    else -> BackupOrder.SOURCE
+                                })
+                            }
+                        },
+                        modifier = Modifier.focusRequester(first)
+                    )
+                }
+                item(key = "h:sources") { Heading(stringResource(R.string.iptv_backup_order_sources), stringResource(R.string.iptv_backup_order_sources_hint)) }
+                if (sources.isEmpty()) item(key = "none") { Heading(stringResource(R.string.iptv_backup_order_no_sources), null) }
+                itemsIndexed(sources, key = { _, k -> "s:$k" }) { i, k ->
+                    val addon = BackupOrder.isAddonKey(k)
+                    OrderRow(
+                        title = if (addon) BackupOrder.addonName(k) else names[k] ?: k,
+                        subtitle = if (addon) addonTag else playlistTag,
+                        canUp = i > 0, canDown = i < sources.lastIndex,
+                        onMove = { by -> moved(sources, i, by)?.let { l -> onUpdate { BackupOrder.withSources(it, l) } } }
+                    )
+                }
+                item(key = "h:qualities") { Heading(stringResource(R.string.iptv_backup_order_qualities), stringResource(R.string.iptv_backup_order_qualities_hint)) }
+                itemsIndexed(qualities, key = { _, q -> "q:$q" }) { i, q ->
+                    OrderRow(
+                        title = backupQualityLabel(q),
+                        subtitle = null,
+                        canUp = i > 0, canDown = i < qualities.lastIndex,
+                        onMove = { by -> moved(qualities, i, by)?.let { l -> onUpdate { BackupOrder.withQualities(it, l) } } }
+                    )
+                }
+                item(key = "h:groups") { Heading(stringResource(R.string.iptv_backup_order_groups), stringResource(R.string.iptv_backup_order_groups_hint)) }
+                itemsIndexed(groups, key = { _, g -> "g:" + BackupOrder.groupKey(g.sourceId, g.name) }) { i, g ->
+                    OrderRow(
+                        title = g.name,
+                        subtitle = names[g.sourceId] ?: playlistTag,
+                        canUp = i > 0, canDown = i < groups.lastIndex,
+                        onMove = { by -> moved(groups, i, by)?.let { l -> onUpdate { BackupOrder.withGroups(it, l) } } },
+                        onRemove = { onUpdate { BackupOrder.withGroups(it, BackupOrder.groups(it) - g) } }
+                    )
+                }
+                item(key = "add-group") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.iptv_backup_order_add_group),
+                        subtitle = null,
+                        onClick = { adding = true },
+                        modifier = Modifier.focusRequester(addGroupFocus)
+                    )
+                }
+                item(key = "reset") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.iptv_backup_order_reset),
+                        subtitle = null,
+                        enabled = BackupOrder.customized(settings),
+                        onClick = { onUpdate { BackupOrder.reset(it) } }
+                    )
+                }
             }
         }
     }
 }
 
-/** Edits the same source order as Backups without exposing unrelated heading or quality settings. */
+/** One playlist's channel groups, searchable; OK on one adds it to the preferred groups. */
 @Composable
-internal fun SportsSourceOrderDialog(
-    settings: LiveTvSettings,
-    playlists: List<PlaylistSource>,
-    addonNames: List<String>,
-    onSave: (List<String>) -> Unit,
-    onReset: () -> Unit,
-    onDismiss: () -> Unit,
-    loading: Boolean = false,
+private fun GroupPicker(
+    playlist: PlaylistSource,
+    groupNames: suspend (String) -> List<String>,
+    taken: Set<String>,
+    first: FocusRequester,
+    onPick: (String) -> Unit
 ) {
-    val names = remember(playlists) { playlists.associate { it.id to it.name } }
-    val current = remember(settings.backupSourceOrder, names, addonNames) {
-        BackupOrder.sources(settings, names.keys.toList(), addonNames)
+    var query by remember(playlist.id) { mutableStateOf("") }
+    val all by produceState<List<String>?>(null, playlist.id) {
+        value = runCatching { groupNames(playlist.id) }.getOrDefault(emptyList())
     }
-    var edited by remember { mutableStateOf<List<String>?>(null) }
-    val order = edited?.let { draft -> draft.filter { it in current } + current.filter { it !in draft } } ?: current
-    val first = remember { FocusRequester() }
-    val addonTag = stringResource(R.string.livetv_backups_addon_tag)
-    val playlistTag = stringResource(R.string.livetv_backups_playlist_tag)
-    NuvioDialog(
-        onDismiss = onDismiss, title = stringResource(R.string.iptv_sports_sort_sources),
-        subtitle = stringResource(R.string.iptv_sports_source_order_hint), width = 640.dp,
-    ) {
-        LazyColumn(Modifier.heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)) {
-            item(key = "apply") {
+    val results = remember(all, query, taken) {
+        val text = query.trim()
+        all.orEmpty().filter { BackupOrder.groupKey(playlist.id, it) !in taken && it.contains(text, ignoreCase = true) }
+    }
+    val firstResult = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    Column(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xs)) {
+        LiveTextField(
+            value = query,
+            onValueChange = { query = it },
+            hint = stringResource(R.string.iptv_backup_order_search_groups),
+            focusRequester = first,
+            onDone = {
+                keyboard?.hide()
+                if (results.isNotEmpty()) runCatching { firstResult.requestFocus() }
+            }
+        )
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 360.dp),
+            verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.xxs)
+        ) {
+            if (results.isEmpty()) item(key = "empty") {
+                Heading(stringResource(if (all == null) R.string.iptv_backup_order_loading else R.string.iptv_backup_order_no_groups), null)
+            }
+            itemsIndexed(results, key = { _, name -> "r:$name" }) { i, name ->
                 SettingsActionRow(
-                    title = stringResource(R.string.iptv_sports_use_source_order), subtitle = null,
-                    enabled = !loading && order.isNotEmpty(), onClick = { onSave(order) },
-                    modifier = Modifier.focusRequester(first),
+                    title = name, subtitle = null,
+                    onClick = { onPick(name) },
+                    modifier = if (i == 0) Modifier.focusRequester(firstResult) else Modifier
                 )
-            }
-            itemsIndexed(order, key = { _, source -> "source:$source" }) { i, source ->
-                val addon = BackupOrder.isAddonKey(source)
-                OrderRow(
-                    title = if (addon) BackupOrder.addonName(source) else names[source] ?: source,
-                    subtitle = if (addon) addonTag else playlistTag, canUp = i > 0, canDown = i < order.lastIndex,
-                    onMove = { by -> edited = order.toMutableList().apply { add(i + by, removeAt(i)) } },
-                )
-            }
-            if (order.isEmpty() && !loading) item { Heading(stringResource(R.string.iptv_backup_order_no_sources), null) }
-            if (settings.backupSourceOrder.isNotBlank()) item(key = "reset") {
-                SettingsActionRow(title = stringResource(R.string.iptv_backup_order_reset), subtitle = null, onClick = onReset)
-            }
-        }
-        LaunchedEffect(loading, order.isEmpty()) {
-            if (!loading && order.isNotEmpty()) {
-                androidx.compose.runtime.withFrameNanos { }
-                first.requestFocus()
             }
         }
     }
@@ -204,7 +278,10 @@ private fun Heading(text: String, hint: String?) {
 }
 
 @Composable
-private fun OrderRow(title: String, subtitle: String?, canUp: Boolean, canDown: Boolean, onMove: (Int) -> Unit) {
+private fun OrderRow(
+    title: String, subtitle: String?, canUp: Boolean, canDown: Boolean, onMove: (Int) -> Unit,
+    onRemove: (() -> Unit)? = null
+) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         SettingsActionRow(
             title = title,
@@ -216,5 +293,6 @@ private fun OrderRow(title: String, subtitle: String?, canUp: Boolean, canDown: 
         )
         ArrowButton(up = true, enabled = canUp) { onMove(-1) }
         ArrowButton(up = false, enabled = canDown) { onMove(1) }
+        if (onRemove != null) SettingsDialogActionButton(text = stringResource(R.string.iptv_backup_order_remove), onClick = onRemove)
     }
 }

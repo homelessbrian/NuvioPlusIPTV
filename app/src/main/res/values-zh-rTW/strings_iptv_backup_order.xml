@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"外掛"</string>
     <string name="livetv_backups_playlist_tag">"播放清單"</string>
     <string name="livetv_backups_quality_other">"其他畫質"</string>
-    <string name="iptv_backup_order_title">"備用與比賽頻道"</string>
-    <string name="iptv_backup_order_row_subtitle">"備用清單和快速頻道中比賽頻道的分組與排序方式"</string>
+    <string name="iptv_backup_order_title">"頻道順序"</string>
+    <string name="iptv_backup_order_row_subtitle">"備用、快速頻道和比賽頁面如何排列頻道的來源，以及運動會選哪一個"</string>
     <string name="iptv_backup_order_gear_hint">"標題及其順序"</string>
     <string name="iptv_backup_order_group_by">"分組方式"</string>
     <string name="iptv_backup_order_group_by_hint">"按 OK 切換。每個標題下，頻道依下方另一種順序排列"</string>

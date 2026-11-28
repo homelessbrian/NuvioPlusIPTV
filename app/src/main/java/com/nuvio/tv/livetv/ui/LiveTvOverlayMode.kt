@@ -1153,7 +1153,7 @@ private fun BackupFlyoutContent(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val playlistNames by viewModel.playlistNames.collectAsStateWithLifecycle()
     // A game's other channels and this channel's copies together, under the headings chosen in
-    // Backups & Game Channels (playlist / add-on, quality or none); one list to move through.
+    // Channel Order (playlist / add-on, quality or none); one list to move through.
     val sections = rememberBackupSections(copies, gameChannels, settings, playlistNames)
     val channels = remember(sections) { sections.flatMap { it.channels } }
     val gameKeys = remember(gameChannels) { gameChannels.mapTo(HashSet()) { it.key } }

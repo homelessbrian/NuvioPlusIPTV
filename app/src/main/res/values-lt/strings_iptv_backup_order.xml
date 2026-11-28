@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Priedas"</string>
     <string name="livetv_backups_playlist_tag">"Grojaraštis"</string>
     <string name="livetv_backups_quality_other">"Kita kokybė"</string>
-    <string name="iptv_backup_order_title">"Atsarginiai ir rungtynių kanalai"</string>
-    <string name="iptv_backup_order_row_subtitle">"Kaip sugrupuojamas ir rikiuojamas atsarginių sąrašas bei rungtynių kanalai greituosiuose kanaluose"</string>
+    <string name="iptv_backup_order_title">"Kanalų tvarka"</string>
+    <string name="iptv_backup_order_row_subtitle">"Kaip atsarginiai, greitieji kanalai ir rungtynių puslapiai rikiuoja kanalo šaltinius ir kurį pasirenka Sportas"</string>
     <string name="iptv_backup_order_gear_hint">"Antraštės ir jų tvarka"</string>
     <string name="iptv_backup_order_group_by">"Grupuoti pagal"</string>
     <string name="iptv_backup_order_group_by_hint">"OK keičia. Kiekvienoje antraštėje kanalai eina pagal kitą tvarką žemiau"</string>

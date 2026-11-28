@@ -37,6 +37,12 @@ class LiveTvSettingsViewModel @Inject constructor(
     /** Add-ons that give live game streams, for Backups & Game Channels' order. */
     suspend fun liveStreamAddonNames(): List<String> = sportsAddons.liveStreamAddonNames()
 
+    /** A playlist's channel groups, for Channel Order's preferred groups. */
+    suspend fun groupNames(playlistId: String): List<String> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            com.nuvio.tv.livetv.model.BackupOrder.groupNames(repository.channels.value, playlistId)
+        }
+
     /** Nuvio's profiles, for "Show on Profiles" on a playlist. */
     val profiles: StateFlow<List<com.nuvio.tv.domain.model.UserProfile>> = profileManager.profiles
 

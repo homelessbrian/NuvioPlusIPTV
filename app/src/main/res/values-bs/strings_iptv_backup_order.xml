@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Dodatak"</string>
     <string name="livetv_backups_playlist_tag">"Lista"</string>
     <string name="livetv_backups_quality_other">"Drugi kvalitet"</string>
-    <string name="iptv_backup_order_title">"Rezervni i kanali utakmice"</string>
-    <string name="iptv_backup_order_row_subtitle">"Kako se grupišu i slažu lista rezervi i kanali utakmice u Brzim kanalima"</string>
+    <string name="iptv_backup_order_title">"Redoslijed kanala"</string>
+    <string name="iptv_backup_order_row_subtitle">"Kako rezervni kanali, brzi kanali i stranice utakmica slažu izvore kanala i koji Sport bira"</string>
     <string name="iptv_backup_order_gear_hint">"Naslovi i njihov redoslijed"</string>
     <string name="iptv_backup_order_group_by">"Grupiši po"</string>
     <string name="iptv_backup_order_group_by_hint">"OK mijenja. Unutar svakog naslova kanali prate drugi redoslijed ispod"</string>

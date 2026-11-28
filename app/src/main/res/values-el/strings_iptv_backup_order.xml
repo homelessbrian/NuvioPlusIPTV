@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Πρόσθετο"</string>
     <string name="livetv_backups_playlist_tag">"Λίστα"</string>
     <string name="livetv_backups_quality_other">"Άλλη ποιότητα"</string>
-    <string name="iptv_backup_order_title">"Εφεδρικά και κανάλια αγώνα"</string>
-    <string name="iptv_backup_order_row_subtitle">"Πώς ομαδοποιούνται και ταξινομούνται η εφεδρική λίστα και τα κανάλια ενός αγώνα στα Γρήγορα κανάλια"</string>
+    <string name="iptv_backup_order_title">"Σειρά καναλιών"</string>
+    <string name="iptv_backup_order_row_subtitle">"Πώς οι εφεδρικοί, τα γρήγορα κανάλια και οι σελίδες αγώνων ταξινομούν τις πηγές ενός καναλιού και ποια επιλέγει το Sports"</string>
     <string name="iptv_backup_order_gear_hint">"Επικεφαλίδες και η σειρά τους"</string>
     <string name="iptv_backup_order_group_by">"Ομαδοποίηση κατά"</string>
     <string name="iptv_backup_order_group_by_hint">"Το OK το αλλάζει. Σε κάθε επικεφαλίδα τα κανάλια ακολουθούν την άλλη σειρά παρακάτω"</string>

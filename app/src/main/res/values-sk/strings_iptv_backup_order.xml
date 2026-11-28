@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Doplnok"</string>
     <string name="livetv_backups_playlist_tag">"Playlist"</string>
     <string name="livetv_backups_quality_other">"Iná kvalita"</string>
-    <string name="iptv_backup_order_title">"Záložné a kanály zápasu"</string>
-    <string name="iptv_backup_order_row_subtitle">"Ako sa zoskupuje a radí zoznam záloh a kanály zápasu v Rýchlych kanáloch"</string>
+    <string name="iptv_backup_order_title">"Poradie kanálov"</string>
+    <string name="iptv_backup_order_row_subtitle">"Ako záložné kanály, rýchle kanály a stránky zápasov radia zdroje kanála a ktorý vyberie Šport"</string>
     <string name="iptv_backup_order_gear_hint">"Nadpisy a ich poradie"</string>
     <string name="iptv_backup_order_group_by">"Zoskupiť podľa"</string>
     <string name="iptv_backup_order_group_by_hint">"OK to zmení. V každom nadpise idú kanály podľa druhého poradia nižšie"</string>

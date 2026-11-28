@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Dodatek"</string>
     <string name="livetv_backups_playlist_tag">"Playlista"</string>
     <string name="livetv_backups_quality_other">"Inna jakość"</string>
-    <string name="iptv_backup_order_title">"Zapasowe i kanały meczu"</string>
-    <string name="iptv_backup_order_row_subtitle">"Jak lista zapasowa i kanały meczu w Szybkich kanałach są grupowane i sortowane"</string>
+    <string name="iptv_backup_order_title">"Kolejność kanałów"</string>
+    <string name="iptv_backup_order_row_subtitle">"Jak kanały zapasowe, szybkie kanały i strony meczów sortują źródła kanału i który wybiera Sport"</string>
     <string name="iptv_backup_order_gear_hint">"Nagłówki i ich kolejność"</string>
     <string name="iptv_backup_order_group_by">"Grupuj według"</string>
     <string name="iptv_backup_order_group_by_hint">"OK zmienia. W każdym nagłówku kanały idą według drugiej kolejności poniżej"</string>

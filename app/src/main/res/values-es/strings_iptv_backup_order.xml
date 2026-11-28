@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Complemento"</string>
     <string name="livetv_backups_playlist_tag">"Lista"</string>
     <string name="livetv_backups_quality_other">"Otra calidad"</string>
-    <string name="iptv_backup_order_title">"Respaldo y canales del partido"</string>
-    <string name="iptv_backup_order_row_subtitle">"Cómo se agrupan y ordenan la lista de respaldo y los canales de un partido en Canales rápidos"</string>
+    <string name="iptv_backup_order_title">"Orden de canales"</string>
+    <string name="iptv_backup_order_row_subtitle">"Cómo los canales de respaldo, los canales rápidos y las páginas de partidos ordenan las fuentes de un canal, y cuál elige Deportes"</string>
     <string name="iptv_backup_order_gear_hint">"Encabezados y su orden"</string>
     <string name="iptv_backup_order_group_by">"Agrupar por"</string>
     <string name="iptv_backup_order_group_by_hint">"OK lo cambia. Dentro de cada encabezado, los canales siguen el otro orden de abajo"</string>

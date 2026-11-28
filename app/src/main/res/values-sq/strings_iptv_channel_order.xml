@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Grupet e preferuara"</string>
+    <string name="iptv_backup_order_groups_hint">"vendosin kur rendi më sipër është i barabartë"</string>
+    <string name="iptv_backup_order_add_group">"Shto një grup të preferuar"</string>
+    <string name="iptv_backup_order_choose_playlist">"Zgjidh një listë"</string>
+    <string name="iptv_backup_order_search_groups">"Kërko në grupet e kësaj liste"</string>
+    <string name="iptv_backup_order_no_groups">"Asnjë grup nuk përputhet"</string>
+    <string name="iptv_backup_order_loading">"Po ngarkohet…"</string>
+    <string name="iptv_backup_order_remove">"Hiq"</string>
+    <string name="iptv_sports_sort_sources">"Rendit kanalet"</string>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Kedvelt csoportok"</string>
+    <string name="iptv_backup_order_groups_hint">"döntenek, ha a fenti sorrend egyenlő"</string>
+    <string name="iptv_backup_order_add_group">"Kedvelt csoport hozzáadása"</string>
+    <string name="iptv_backup_order_choose_playlist">"Válassz lejátszási listát"</string>
+    <string name="iptv_backup_order_search_groups">"Keresés a lista csoportjaiban"</string>
+    <string name="iptv_backup_order_no_groups">"Nincs egyező csoport"</string>
+    <string name="iptv_backup_order_loading">"Betöltés…"</string>
+    <string name="iptv_backup_order_remove">"Eltávolítás"</string>
+    <string name="iptv_sports_sort_sources">"Csatornák rendezése"</string>
+</resources>

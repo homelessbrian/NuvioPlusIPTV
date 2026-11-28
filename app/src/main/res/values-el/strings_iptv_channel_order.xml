@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Προτιμώμενες ομάδες"</string>
+    <string name="iptv_backup_order_groups_hint">"κρίνουν τις ισοπαλίες στη σειρά παραπάνω"</string>
+    <string name="iptv_backup_order_add_group">"Προσθήκη προτιμώμενης ομάδας"</string>
+    <string name="iptv_backup_order_choose_playlist">"Επιλέξτε λίστα"</string>
+    <string name="iptv_backup_order_search_groups">"Αναζήτηση στις ομάδες αυτής της λίστας"</string>
+    <string name="iptv_backup_order_no_groups">"Καμία ομάδα δεν ταιριάζει"</string>
+    <string name="iptv_backup_order_loading">"Φόρτωση…"</string>
+    <string name="iptv_backup_order_remove">"Αφαίρεση"</string>
+    <string name="iptv_sports_sort_sources">"Ταξινόμηση καναλιών"</string>
+</resources>

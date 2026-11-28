@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Oblíbené skupiny"</string>
+    <string name="iptv_backup_order_groups_hint">"rozhodují, když je pořadí výše stejné"</string>
+    <string name="iptv_backup_order_add_group">"Přidat oblíbenou skupinu"</string>
+    <string name="iptv_backup_order_choose_playlist">"Vyberte playlist"</string>
+    <string name="iptv_backup_order_search_groups">"Hledat ve skupinách tohoto playlistu"</string>
+    <string name="iptv_backup_order_no_groups">"Žádné odpovídající skupiny"</string>
+    <string name="iptv_backup_order_loading">"Načítání…"</string>
+    <string name="iptv_backup_order_remove">"Odebrat"</string>
+    <string name="iptv_sports_sort_sources">"Seřadit kanály"</string>
+</resources>

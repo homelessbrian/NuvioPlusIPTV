@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Föredragna grupper"</string>
+    <string name="iptv_backup_order_groups_hint">"avgör när ordningen ovan är lika"</string>
+    <string name="iptv_backup_order_add_group">"Lägg till en föredragen grupp"</string>
+    <string name="iptv_backup_order_choose_playlist">"Välj en spellista"</string>
+    <string name="iptv_backup_order_search_groups">"Sök i spellistans grupper"</string>
+    <string name="iptv_backup_order_no_groups">"Inga grupper matchar"</string>
+    <string name="iptv_backup_order_loading">"Läser in…"</string>
+    <string name="iptv_backup_order_remove">"Ta bort"</string>
+    <string name="iptv_sports_sort_sources">"Sortera kanaler"</string>
+</resources>

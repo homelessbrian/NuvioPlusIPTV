@@ -7,8 +7,6 @@ import com.nuvio.tv.livetv.sports.ChannelMatch
 import com.nuvio.tv.livetv.sports.SportsAddonSource
 import com.nuvio.tv.livetv.sports.SportsChannelSort
 import com.nuvio.tv.livetv.sports.SportsMatcher
-import com.nuvio.tv.livetv.sports.SportsSortCriterion
-import com.nuvio.tv.livetv.sports.SportsSortResolution
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -26,13 +24,14 @@ class SportsGameSourceOrderTest {
     private val another = feed("other-addon-match", "Other add-on", "TNT 4 (1080p50)", addon = true)
     private val chosen = listOf(BackupOrder.addonKey("Sports Stream"), "main", "backup")
     private val groups = SportsMatcher.groupCopies(listOf(backup, low, another, high, addon))
+    private val bySource = SportsChannelSort.from(LiveTvSettings(backupSourceOrder = chosen.joinToString("\n")))
 
     @Test fun sourcePriorityPrecedesHealthAndQualityAndEverySelectedCopyRemainsTheOriginal() {
         val checks = listOf(low, backup, addon, high).associate {
             it.channel.key to SportsProbeResult(SportsProbeStatus.WORKING)
         }
         fun ranked(checksByKey: Map<String, SportsProbeResult>) = sportsGameChannelRows(
-            groups, checksByKey, automatic = true, bestChannelFirst = true, sourceOrder = chosen).map { it.single() }
+            groups, checksByKey, automatic = true, bestChannelFirst = true, channelSort = bySource).map { it.single() }
         val rows = ranked(checks)
         assertEquals(listOf(addon, high, low, backup, another), rows)
         assertSame(high, rows[1])
@@ -41,19 +40,15 @@ class SportsGameSourceOrderTest {
     }
 
     @Test fun sourceOrderExposesEveryCopyEvenWithBestFirstOffAndDefaultStillFolds() {
-        val rows = sportsGameChannelRows(groups, emptyMap(), automatic = false, bestChannelFirst = false, sourceOrder = chosen)
+        val rows = sportsGameChannelRows(groups, emptyMap(), automatic = false, bestChannelFirst = false, channelSort = bySource)
         assertEquals(listOf(addon, low, high, backup, another), rows.map { it.single() })
         assertEquals(rows.size, rows.map { it.first().channel.key }.distinct().size)
-        assertSame(groups, sportsGameChannelRows(groups, emptyMap(), false, false, emptyList()))
+        assertSame(groups, sportsGameChannelRows(groups, emptyMap(), false, false, SportsChannelSort()))
     }
 
     @Test fun advancedRowsUseMeasuredResolutionBeforeHealthAndKeepManualPicksFirst() {
         val picked = addon.copy(score = 200)
-        val sort = SportsChannelSort(
-            enabled = true,
-            criteria = listOf(SportsSortCriterion.RESOLUTION),
-            resolutionOrder = listOf(SportsSortResolution.FHD, SportsSortResolution.UHD, SportsSortResolution.SD),
-        )
+        val sort = SportsChannelSort.from(LiveTvSettings(backupQualityOrder = "FHD,4K,SD"))
         val checks = mapOf(
             low.channel.key to SportsProbeResult(SportsProbeStatus.UNAVAILABLE, height = 1080),
             high.channel.key to SportsProbeResult(SportsProbeStatus.WORKING, height = 480),
@@ -61,7 +56,7 @@ class SportsGameSourceOrderTest {
         )
         val rows = sportsGameChannelRows(
             listOf(listOf(backup, low, another, high, picked)), checks,
-            automatic = true, bestChannelFirst = true, sourceOrder = listOf("backup"), channelSort = sort,
+            automatic = true, bestChannelFirst = true, channelSort = sort,
         )
         assertEquals(listOf(picked, another, low, backup, high), rows.map { it.single() })
     }

@@ -249,7 +249,7 @@ internal fun GameChannelsDialog(
     onWatch: (ChannelMatch) -> Unit,
     onMultiview: (ChannelMatch) -> Unit,
     onDismiss: () -> Unit,
-    /** Headings and their order (Backups & Game Channels); null: one list as before. */
+    /** Headings and their order (Channel Order); null: one list as before. */
     settings: com.nuvio.tv.livetv.model.LiveTvSettings? = null,
     playlistNames: Map<String, String> = emptyMap()
 ) {
@@ -259,7 +259,7 @@ internal fun GameChannelsDialog(
     val first = remember { FocusRequester() }
     // One row per channel: its other copies (HD, SD) folded in, as on the game page.
     val grouped = remember(game) { SportsMatcher.groupCopies(game.channels.filter { it.channel.sourceId != SportsVideos.SOURCE_ID }, null) }
-    // Under the headings chosen in Backups & Game Channels (playlist / add-on, quality or none).
+    // Under the headings chosen in Channel Order (playlist / add-on, quality or none).
     val other = androidx.compose.ui.res.stringResource(com.nuvio.tv.R.string.livetv_backups_quality_other)
     val sections = remember(grouped, settings?.backupGroupBy, settings?.backupSourceOrder, settings?.backupQualityOrder, playlistNames, other) {
         if (settings == null) emptyList()

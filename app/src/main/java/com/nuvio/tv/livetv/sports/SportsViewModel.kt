@@ -59,9 +59,16 @@ class SportsViewModel @Inject constructor(
     val settings = repo.settings
     internal val liveSettings = livePrefs.settings
     internal val playlists = livePrefs.playlists
-    internal fun saveGameSourceOrder(order: List<String>) {
-        viewModelScope.launch { livePrefs.updateSettings { BackupOrder.withGameSourceOrder(it, order) } }
+    /** Changes to your channel order (Backups & Game Channels), from a game page's Sort button. */
+    internal fun updateLiveSettings(change: (com.nuvio.tv.livetv.model.LiveTvSettings) -> com.nuvio.tv.livetv.model.LiveTvSettings) {
+        viewModelScope.launch { livePrefs.updateSettings(change) }
     }
+
+    /** A playlist's channel groups, for picking preferred groups. */
+    internal suspend fun groupNames(playlistId: String): List<String> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            BackupOrder.groupNames(repo.channelsForPicker(), playlistId)
+        }
     val follows = repo.follows
     val events = repo.events
     private val _now = MutableStateFlow(System.currentTimeMillis())

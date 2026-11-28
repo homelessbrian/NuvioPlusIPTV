@@ -12,7 +12,7 @@ import com.nuvio.tv.ui.screens.settings.livetvQualityHeading
 
 /**
  * Both backup lists (Right twice, the bar's Backups button): a game's other channels and this
- * channel's own copies together, under the headings chosen in Backups & Game Channels.
+ * channel's own copies together, under the headings chosen in Channel Order.
  * Headings show only when there are two or more.
  */
 @Composable

@@ -4,8 +4,8 @@
     <string name="livetv_backups_addon_tag">"Kiegészítő"</string>
     <string name="livetv_backups_playlist_tag">"Lejátszási lista"</string>
     <string name="livetv_backups_quality_other">"Egyéb minőség"</string>
-    <string name="iptv_backup_order_title">"Tartalékok és meccscsatornák"</string>
-    <string name="iptv_backup_order_row_subtitle">"Hogyan csoportosítja és rendezi a tartaléklistát és egy meccs csatornáit a Gyorscsatornák"</string>
+    <string name="iptv_backup_order_title">"Csatornasorrend"</string>
+    <string name="iptv_backup_order_row_subtitle">"Hogyan rendezik a tartalék csatornák, a gyorscsatornák és a meccsoldalak egy csatorna forrásait, és melyiket választja a Sport"</string>
     <string name="iptv_backup_order_gear_hint">"Címsorok és sorrendjük"</string>
     <string name="iptv_backup_order_group_by">"Csoportosítás"</string>
     <string name="iptv_backup_order_group_by_hint">"Az OK módosítja. Minden címsoron belül a csatornák a lenti másik sorrendet követik"</string>

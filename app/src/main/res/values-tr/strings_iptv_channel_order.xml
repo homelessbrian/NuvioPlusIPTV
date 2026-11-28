@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Tercih edilen gruplar"</string>
+    <string name="iptv_backup_order_groups_hint">"yukarıdaki sıra eşitse karar verir"</string>
+    <string name="iptv_backup_order_add_group">"Tercih edilen grup ekle"</string>
+    <string name="iptv_backup_order_choose_playlist">"Bir oynatma listesi seç"</string>
+    <string name="iptv_backup_order_search_groups">"Bu listenin gruplarında ara"</string>
+    <string name="iptv_backup_order_no_groups">"Eşleşen grup yok"</string>
+    <string name="iptv_backup_order_loading">"Yükleniyor…"</string>
+    <string name="iptv_backup_order_remove">"Kaldır"</string>
+    <string name="iptv_sports_sort_sources">"Kanalları sırala"</string>
+</resources>

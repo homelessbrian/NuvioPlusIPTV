@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel Order: preferred channel groups -->
+    <string name="iptv_backup_order_groups">"Omiljene grupe"</string>
+    <string name="iptv_backup_order_groups_hint">"odlučuju kada je redosled iznad isti"</string>
+    <string name="iptv_backup_order_add_group">"Dodaj omiljenu grupu"</string>
+    <string name="iptv_backup_order_choose_playlist">"Izaberi plejlistu"</string>
+    <string name="iptv_backup_order_search_groups">"Pretraži grupe ove plejliste"</string>
+    <string name="iptv_backup_order_no_groups">"Nema odgovarajućih grupa"</string>
+    <string name="iptv_backup_order_loading">"Učitavanje…"</string>
+    <string name="iptv_backup_order_remove">"Ukloni"</string>
+    <string name="iptv_sports_sort_sources">"Poređaj kanale"</string>
+</resources>
