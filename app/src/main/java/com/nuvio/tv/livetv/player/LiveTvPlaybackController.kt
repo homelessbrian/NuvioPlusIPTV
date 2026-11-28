@@ -2106,6 +2106,36 @@ class LiveTvPlaybackController @Inject constructor(
     private fun buildPlayer(): ExoPlayer {
         val passthrough = audioPassthrough
         val renderers = object : DefaultRenderersFactory(context) {
+            override fun buildVideoRenderers(
+                context: android.content.Context,
+                extensionRendererMode: Int,
+                mediaCodecSelector: androidx.media3.exoplayer.mediacodec.MediaCodecSelector,
+                enableDecoderFallback: Boolean,
+                eventHandler: android.os.Handler,
+                eventListener: androidx.media3.exoplayer.video.VideoRendererEventListener,
+                allowedVideoJoiningTimeMs: Long,
+                out: ArrayList<androidx.media3.exoplayer.Renderer>
+            ) {
+                val first = out.size
+                super.buildVideoRenderers(context, extensionRendererMode, mediaCodecSelector,
+                    enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out)
+                // Preserve extension ordering and replace only the standard video renderer.
+                val index = (first until out.size).firstOrNull {
+                    out[it].javaClass == androidx.media3.exoplayer.video.MediaCodecVideoRenderer::class.java
+                } ?: return
+                // Keep this builder in sync with the Live TV factory defaults.
+                out[index] = LiveCadenceVideoRenderer(
+                    androidx.media3.exoplayer.video.MediaCodecVideoRenderer.Builder(context)
+                        .setCodecAdapterFactory(codecAdapterFactory)
+                        .setMediaCodecSelector(mediaCodecSelector)
+                        .setAllowedJoiningTimeMs(allowedVideoJoiningTimeMs)
+                        .setEnableDecoderFallback(enableDecoderFallback)
+                        .setEventHandler(eventHandler)
+                        .setEventListener(eventListener)
+                        .setMaxDroppedFramesToNotify(MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY)
+                )
+            }
+
             override fun buildAudioSink(
                 context: android.content.Context,
                 enableFloatOutput: Boolean,
