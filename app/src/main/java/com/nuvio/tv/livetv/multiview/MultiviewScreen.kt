@@ -36,6 +36,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import com.nuvio.tv.data.watchstats.WatchStatsSession
+import com.nuvio.tv.livetv.player.watchStatsActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.key
@@ -362,6 +365,21 @@ fun MultiviewScreen(
     // back to all panes is instant. Never saved: it is a temporary zoom, not a layout.
     var zoomedPane by remember { mutableStateOf<Int?>(null) }
     val fullPane = zoomedPane?.takeIf { it < state.layout.paneCount }
+    val trackViewing by viewModel.watchStats.trackingEnabled.collectAsStateWithLifecycle()
+    if (trackViewing) {
+        val statsScope = rememberCoroutineScope()
+        val viewing = remember { WatchStatsSession(viewModel.watchStats, statsScope) }
+        val pane = state.panes.getOrNull(fullPane ?: state.focusedPane)
+        val channelKey = pane?.channelKey
+        val activity = remember(channelKey, validChannels, profileId) {
+            validChannels.firstOrNull { it.key == channelKey && profileId == openingProfile }
+                ?.watchStatsActivity(profileId)
+        }
+        DisposableEffect(viewing) { onDispose { viewing.close() } }
+        SideEffect {
+            viewing.update(activity, state.isForeground && pane != null && pane.isPlaying && !pane.isBuffering)
+        }
+    }
     fun paneHasVideo(id: Int) = state.panes.getOrNull(id)?.let { it.channelKey != null || it.error != null } == true
     fun applyLayout(layout: MultiviewLayout) {
         zoomedPane = null

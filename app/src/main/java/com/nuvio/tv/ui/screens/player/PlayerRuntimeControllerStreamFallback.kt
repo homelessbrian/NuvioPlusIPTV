@@ -126,7 +126,7 @@ internal fun PlayerRuntimeController.tryNextStream(detailedError: String): Boole
                 streamFallbackStartPaused = paused
                 // Allow an immediately failing replacement to schedule its own fallback.
                 streamFallbackJob = null
-                switchToSourceStream(resolved)
+                switchToSourceStream(resolved, recoveringPlayback = true)
             }
         } catch (cancelled: CancellationException) {
             throw cancelled

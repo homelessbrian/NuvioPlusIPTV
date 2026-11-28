@@ -44,6 +44,7 @@ class MultiviewViewModel @Inject constructor(
     private val guideDb: EpgDatabase,
     private val preferences: LiveTvPreferences,
     private val hooks: com.nuvio.tv.livetv.player.LiveTvPlayerHooks,
+    internal val watchStats: com.nuvio.tv.data.watchstats.WatchStatsRepository,
 ) : ViewModel() {
     init {
         // A restored route may bypass both the guide and the optional Live TV startup preload.

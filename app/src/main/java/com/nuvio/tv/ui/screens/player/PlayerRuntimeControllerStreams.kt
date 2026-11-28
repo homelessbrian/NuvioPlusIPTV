@@ -912,9 +912,10 @@ private fun PlayerRuntimeController.openExternalStreamInBrowser(
 
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.switchToSourceStream(
-    stream: Stream
+    stream: Stream,
+    recoveringPlayback: Boolean = false
 ) {
-    if (resolveUsenetForSwitch(stream, fromEpisodePanel = false)) return
+    if (resolveUsenetForSwitch(stream, fromEpisodePanel = false, recoveringPlayback = recoveringPlayback)) return
     sourceStreamsScope?.cancel()
     sourceStreamsScope = null
     sourceStreamsJob = null
@@ -930,7 +931,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
             val prepared = prepareServerStream(stream)
             debridResolveJob = null
             if (prepared != null) {
-                switchToSourceStream(prepared)
+                switchToSourceStream(prepared, recoveringPlayback)
             } else {
                 _uiState.update { it.copy(isLoadingSourceStreams = false) }
             }
@@ -945,7 +946,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
             val resolved = resolveYouTubeStream(stream)
             debridResolveJob = null
             if (resolved != null) {
-                switchToSourceStream(resolved)
+                switchToSourceStream(resolved, recoveringPlayback)
             } else {
                 _uiState.update {
                     it.copy(
@@ -965,9 +966,9 @@ internal fun PlayerRuntimeController.switchToSourceStream(
             val resolved = resolveDirectDebridStreamIfNeeded(stream, currentSeason, currentEpisode)
             debridResolveJob = null
             if (resolved != null && !resolved.getStreamUrl().isNullOrBlank()) {
-                switchToSourceStream(resolved)
+                switchToSourceStream(resolved, recoveringPlayback)
             } else if (resolved != null) {
-                switchToTorrentSourceStream(resolved)
+                switchToTorrentSourceStream(resolved, recoveringPlayback)
             } else {
                 _uiState.update {
                     it.copy(
@@ -989,7 +990,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
                 val resolved = resolveDirectDebridStreamIfNeeded(stream, currentSeason, currentEpisode)
                 if (resolved != null && !resolved.getStreamUrl().isNullOrBlank()) {
                     debridResolveJob = null
-                    switchToSourceStream(resolved)
+                    switchToSourceStream(resolved, recoveringPlayback)
                 } else {
                     debridResolveJob = null
                     _uiState.update {
@@ -1022,6 +1023,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(
 
     resetLoadingOverlayForNewStream()
     releasePlayer(flushPlaybackState = false)
+    if (!recoveringPlayback) resetWatchStatsPlayback()
 
     applySelectedStreamState(
         stream = stream,
@@ -1182,7 +1184,8 @@ internal fun PlayerRuntimeController.selectEpisodesSeason(season: Int) {
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun PlayerRuntimeController.switchToTorrentSourceStream(
-    stream: Stream
+    stream: Stream,
+    recoveringPlayback: Boolean
 ) {
     val infoHash = stream.getEffectiveInfoHash() ?: return
     sourceStreamsScope?.cancel()
@@ -1194,6 +1197,7 @@ private fun PlayerRuntimeController.switchToTorrentSourceStream(
     flushPlaybackSnapshotForSwitchOrExit()
     resetLoadingOverlayForNewStream()
     releasePlayer(flushPlaybackState = false)
+    if (!recoveringPlayback) resetWatchStatsPlayback()
     hasRetriedCurrentStreamAfter416 = false
     errorRetryCount = 0
     subtitleDisabledByPersistedPreference = false
@@ -1773,6 +1777,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
     // Pause current playback immediately so the old stream doesn't continue
     // playing audio/video in the background while the new episode is being prepared.
     _exoPlayer?.stop()
+    resetWatchStatsPlayback()
     cancelAfrPreflight()
 
     val newHeaders = PlayerMediaSourceFactory.sanitizeHeaders(
@@ -1924,6 +1929,7 @@ private fun PlayerRuntimeController.switchToEpisodeStreamCommon(
 
     resetLoadingOverlayForNewStream()
     releasePlayer(flushPlaybackState = false)
+    resetWatchStatsPlayback()
 
     applyStreamMetadata(stream)
     currentFilename = stream.behaviorHints?.filename

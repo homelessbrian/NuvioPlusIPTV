@@ -92,7 +92,7 @@ internal fun PlayerRuntimeController.tryRefreshExpiredLinkAfterError(errorMessag
         }
         val wasAutoSelected = failedUrl == autoSelectedSourceUrl
         // Saves the fresh link for reuse and resumes from the saved position.
-        switchToSourceStream(refreshed)
+        switchToSourceStream(refreshed, recoveringPlayback = true)
         if (wasAutoSelected) autoSelectedSourceUrl = currentStreamUrl
     }
     return true

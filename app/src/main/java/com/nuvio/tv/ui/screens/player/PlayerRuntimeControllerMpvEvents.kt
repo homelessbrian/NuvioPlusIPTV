@@ -107,7 +107,16 @@ internal class MpvEventRelay(
     }
 
     override fun eventProperty(property: String, value: Long) = Unit
-    override fun eventProperty(property: String, value: Boolean) = Unit
+    override fun eventProperty(property: String, value: Boolean) {
+        if (property !in MPV_WATCH_STATS_PLAYBACK_PROPERTIES ||
+            !controller.watchStatsRepository.trackingEnabled.value ||
+            !active.get() || epoch != controller.mpvEventRelayEpoch
+        ) return
+        controller.scope.launch {
+            if (!active.get() || epoch != controller.mpvEventRelayEpoch) return@launch
+            controller.refreshMpvWatchStats()
+        }
+    }
     override fun eventProperty(property: String, value: String) {
         if (property != MPV_SID_PROPERTY && property != MPV_SUB_TEXT_PROPERTY) return
         if (!active.get() || epoch != controller.mpvEventRelayEpoch) return
@@ -171,8 +180,9 @@ private fun PlayerRuntimeController.onMpvEndFile(data: MPVNode) {
         "MPV_END_FILE: reason=${event.reason.ifBlank { "n/a" }} " +
             "file_error=${event.fileError ?: "n/a"} entry=${event.playlistEntryId ?: -1}"
     )
-    if (!event.isPlaybackError) return
     if (isStaleMpvEndFile(mpvActivePlaylistEntryId, event.playlistEntryId)) return
+    pauseWatchStatsPlayback()
+    if (!event.isPlaybackError) return
 
     mpvLastFileError = event.fileError
     handleMpvPlaybackError(
@@ -182,6 +192,7 @@ private fun PlayerRuntimeController.onMpvEndFile(data: MPVNode) {
 }
 
 private fun PlayerRuntimeController.onMpvCoreShutdown() {
+    pauseWatchStatsPlayback()
     playbackAnalyticsDiagnostics.recordRawEventLine("MPV_SHUTDOWN: core terminated")
     if (hasRenderedFirstFrame) return
     if (currentStreamUrl.isBlank()) return

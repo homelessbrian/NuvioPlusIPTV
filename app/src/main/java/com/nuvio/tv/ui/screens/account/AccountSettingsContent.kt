@@ -28,12 +28,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +59,8 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.AuthState
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+import com.nuvio.tv.ui.screens.detail.requestFocusAfterFrames
+import kotlinx.coroutines.launch
 
 @Composable
 fun AccountSettingsContent(
@@ -65,11 +69,21 @@ fun AccountSettingsContent(
     onNavigateToAuthQrSignIn: () -> Unit = {},
     initialFocusRequester: FocusRequester? = null
 ) {
+    val statsFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    var showWatchStats by remember { mutableStateOf(false) }
+    if (showWatchStats) {
+        WatchStatsDialog(onDismiss = {
+            showWatchStats = false
+            scope.launch { statsFocus.requestFocusAfterFrames() }
+        })
+    }
     if (uiState.authState is AuthState.FullAccount) {
         SignedInAccountSettingsContent(
             uiState = uiState,
             viewModel = viewModel,
-            initialFocusRequester = initialFocusRequester
+            initialFocusRequester = initialFocusRequester,
+            watchStatsEntry = { WatchStatsEntry(statsFocus) { showWatchStats = true } },
         )
         return
     }
@@ -118,6 +132,7 @@ fun AccountSettingsContent(
                         }
                     )
                 }
+                item(key = "account_watch_stats") { WatchStatsEntry(statsFocus) { showWatchStats = true } }
             }
 
             is AuthState.FullAccount -> Unit
@@ -130,7 +145,8 @@ fun AccountSettingsContent(
 private fun SignedInAccountSettingsContent(
     uiState: AccountUiState,
     viewModel: AccountViewModel,
-    initialFocusRequester: FocusRequester?
+    initialFocusRequester: FocusRequester?,
+    watchStatsEntry: @Composable () -> Unit,
 ) {
     val listState = rememberLazyListState()
     var showSignOutConfirmation by remember { mutableStateOf(false) }
@@ -154,6 +170,7 @@ private fun SignedInAccountSettingsContent(
             item(key = "account_sync_note_signed_in") {
                 AccountInlineNote(text = stringResource(R.string.account_sync_restart_note))
             }
+            item(key = "account_watch_stats") { watchStatsEntry() }
 
             val overview = uiState.syncOverview
             if (overview != null) {
@@ -182,6 +199,17 @@ private fun SignedInAccountSettingsContent(
             onDismiss = { showSignOutConfirmation = false }
         )
     }
+}
+
+@Composable
+private fun WatchStatsEntry(focus: FocusRequester, onClick: () -> Unit) {
+    SettingsActionButton(
+        icon = Icons.Default.BarChart,
+        title = stringResource(R.string.watch_stats_title),
+        subtitle = stringResource(R.string.watch_stats_entry_detail),
+        onClick = onClick,
+        modifier = Modifier.focusRequester(focus),
+    )
 }
 
 @Composable

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="watch_stats_title">Watch Stats</string>
+    <string name="watch_stats_entry_detail">Watched totals and viewing activity by profile</string>
+    <string name="watch_stats_track">Track viewing activity</string>
+    <string name="watch_stats_track_detail">Save play counts and viewing time on this TV for all profiles. Off by default.</string>
+    <string name="watch_stats_profile">Profile</string>
+    <string name="watch_stats_check_access">Checking profile access…</string>
+    <string name="watch_stats_pin_required">PIN required</string>
+    <string name="watch_stats_profile_unavailable">Could not verify access to this profile. Try again while signed in and online.</string>
+    <string name="watch_stats_tracking_failed">Could not change activity tracking.</string>
+    <string name="watch_stats_loading">Loading stats…</string>
+    <string name="watch_stats_read_failed">Could not load stats.</string>
+    <string name="watch_stats_watched_totals">Lifetime watched totals</string>
+    <string name="watch_stats_watched_detail">From this profile’s watched history on this TV. Trakt or Simkl history may be incomplete here.</string>
+    <string name="watch_stats_movies">Movies watched</string>
+    <string name="watch_stats_episodes">Episodes watched</string>
+    <string name="watch_stats_shows">Shows watched</string>
+    <string name="watch_stats_activity">Viewing activity on this TV</string>
+    <string name="watch_stats_paused">Tracking is off. Previously tracked activity is still available.</string>
+    <string name="watch_stats_no_activity">No viewing activity recorded for this period.</string>
+    <string name="watch_stats_live_time">Live TV time</string>
+    <string name="watch_stats_on_demand_time">Movies &amp; shows time</string>
+    <string name="watch_stats_movie_plays">Movie plays</string>
+    <string name="watch_stats_episode_plays">Episode plays</string>
+    <string name="watch_stats_top_channels">Most watched channels</string>
+    <string name="watch_stats_no_channels">No channel activity recorded.</string>
+    <string name="watch_stats_top_genres">Top genres by plays</string>
+    <string name="watch_stats_genre_plays">Movies %1$d · Episodes %2$d</string>
+    <string name="watch_stats_no_genres">No genre activity recorded.</string>
+    <string name="watch_stats_today">Today</string>
+    <string name="watch_stats_this_week">This Week</string>
+    <string name="watch_stats_all_time">All Time</string>
+    <string name="watch_stats_minutes">%1$d min</string>
+    <string name="watch_stats_under_minute">&lt;1 min</string>
+    <string name="watch_stats_hours_minutes">%1$d h %2$d min</string>
+</resources>

@@ -1,8 +1,12 @@
 package com.nuvio.tv.livetv.player
 
+import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.data.watchstats.WatchStatsRepository
+import com.nuvio.tv.data.watchstats.WatchStatsSession
 import com.nuvio.tv.livetv.data.LiveTvPreferences
 import com.nuvio.tv.livetv.data.LiveTvRepository
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.ui.LiveTvFullscreen
 import com.nuvio.tv.livetv.ui.backupName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -30,7 +35,9 @@ class LiveTvPlayerHooks @Inject constructor(
     private val playback: LiveTvPlaybackController,
     private val prefs: LiveTvPreferences,
     private val repository: LiveTvRepository,
-    private val channelStore: com.nuvio.tv.livetv.data.LiveTvChannelStore
+    private val channelStore: com.nuvio.tv.livetv.data.LiveTvChannelStore,
+    private val profileManager: ProfileManager,
+    private val watchStats: WatchStatsRepository,
 ) {
     /** A Live TV screen that can switch to a backup channel and carry on a stalled replay. */
     interface Owner {
@@ -62,7 +69,31 @@ class LiveTvPlayerHooks @Inject constructor(
 
     private fun newestOwner(): Owner? = synchronized(owners) { owners.lastOrNull() }
 
+    private fun watchFullscreenActivity() {
+        scope.launch {
+            watchStats.trackingEnabled.collectLatest { enabled ->
+                if (!enabled) return@collectLatest
+                val session = WatchStatsSession(watchStats, scope)
+                var viewingProfile: Int? = null
+                try {
+                    combine(playback.state, LiveTvFullscreen.active, profileManager.activeProfileId) { state, full, profileId ->
+                        if (!full || state.channelKey == null) viewingProfile = null
+                        else if (viewingProfile == null) viewingProfile = profileId
+                        val channel = playback.playingChannel
+                        val activity = channel?.takeIf {
+                            full && viewingProfile == profileId && it.key == state.channelKey && state.catchupTitle == null
+                        }?.watchStatsActivity(profileId)
+                        session.update(activity, state.isPlaying && !state.isBuffering && state.error == null)
+                    }.collect {}
+                } finally {
+                    session.close()
+                }
+            }
+        }
+    }
+
     init {
+        watchFullscreenActivity()
         playback.onLiveFailure = { key, canTry -> newestOwner()?.onLiveFailure(key, canTry) ?: false }
         playback.dispatcharrSources = { dispatcharrIds.value }
         playback.onCatchupStalled = { newestOwner()?.onCatchupStalled() ?: false }

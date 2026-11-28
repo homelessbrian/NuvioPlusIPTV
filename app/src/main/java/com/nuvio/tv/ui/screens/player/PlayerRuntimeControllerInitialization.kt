@@ -163,6 +163,7 @@ private fun MediaLoadData.isStartupMediaLoad(): Boolean =
     dataType == C.DATA_TYPE_MANIFEST || (dataType == C.DATA_TYPE_MEDIA && trackType != C.TRACK_TYPE_TEXT)
 
 private fun PlayerRuntimeController.disposeExoPlayerBeforeRebuild() {
+    pauseWatchStatsPlayback()
     notifyAudioSessionUpdate(false)
     releaseMediaSession()
     _exoPlayer?.let { player ->
@@ -1586,6 +1587,16 @@ internal fun PlayerRuntimeController.initializePlayer(
                             }
                         }
                         refreshStableProgressResetGate()
+                    }
+
+                    override fun onEvents(player: Player, events: Player.Events) {
+                        if (watchStatsRepository.trackingEnabled.value && events.containsAny(
+                                Player.EVENT_IS_PLAYING_CHANGED,
+                                Player.EVENT_TIMELINE_CHANGED
+                            )
+                        ) {
+                            updateExoWatchStats(player)
+                        }
                     }
 
                     override fun onTracksChanged(tracks: Tracks) {

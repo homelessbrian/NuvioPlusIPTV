@@ -2150,6 +2150,30 @@ internal fun EditProfileOverlay(
 }
 
 @Composable
+internal fun ProfileUnlockDialog(
+    profile: UserProfile,
+    isWorking: Boolean,
+    errorMessage: String?,
+    onClearError: () -> Unit,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        ProfilePinOverlay(
+            state = ProfilePinOverlayState.Unlock(profile),
+            isWorking = isWorking,
+            errorMessage = errorMessage,
+            onClearError = onClearError,
+            onDismiss = onDismiss,
+            onSubmit = onSubmit,
+        )
+    }
+}
+
+@Composable
 private fun ProfilePinOverlay(
     state: ProfilePinOverlayState,
     isWorking: Boolean,
