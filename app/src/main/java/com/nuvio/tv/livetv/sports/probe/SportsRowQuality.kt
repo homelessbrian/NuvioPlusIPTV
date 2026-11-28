@@ -25,7 +25,7 @@ internal fun sportsRowQuality(match: ChannelMatch, probe: SportsProbeResult?): S
         val matchingReport = advertised?.takeIf { it.height == height && it.frameRate > 0 }
         val label = if (measuredRate == null) size else "$size · ${formatRate(measuredRate)} fps"
         val source = if (measuredRate == null && matchingReport != null)
-            "Measured · ${matchingReport.label} reported" else "Measured"
+            "${formatRate(matchingReport.frameRate)} fps reported" else "Measured"
         return SportsRowQuality(height, measuredRate ?: matchingReport?.frameRate ?: 0f, label, source)
     }
     if (fallback == null) {
@@ -33,7 +33,7 @@ internal fun sportsRowQuality(match: ChannelMatch, probe: SportsProbeResult?): S
     }
     val source = if (advertised == fallback || match.channel.sourceId == SportsAddonSource.SOURCE_ID) "Reported" else "Saved"
     return if (measuredRate == null) SportsRowQuality(fallback.height, fallback.frameRate, fallback.label, source)
-    else SportsRowQuality(fallback.height, measuredRate, "${formatRate(measuredRate)} fps", "Measured · ${fallback.label} ${source.lowercase()}")
+    else SportsRowQuality(fallback.height, measuredRate, "${formatRate(measuredRate)} fps", "${fallback.label} ${source.lowercase()}")
 }
 
 private fun formatRate(value: Float): String {

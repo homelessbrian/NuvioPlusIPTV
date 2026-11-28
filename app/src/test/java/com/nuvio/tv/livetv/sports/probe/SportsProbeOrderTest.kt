@@ -86,7 +86,7 @@ class SportsProbeOrderTest {
         val sizeOnly = SportsProbeResult(SportsProbeStatus.WORKING, 1920, 1080)
         val partial = sportsRowQuality(source, sizeOnly)!!
         assertEquals("1920×1080", partial.label)
-        assertEquals("Measured · 1080p50 reported", partial.source)
+        assertEquals("50 fps reported", partial.source)
         assertEquals(50f, partial.frameRate, 0f)
         val mismatch = sportsRowQuality(source, sizeOnly.copy(height = 720))!!
         assertEquals(0f, mismatch.frameRate, 0f)

@@ -55,10 +55,14 @@ private val REMIND_TIMES = listOf(0, 5, 10, 15, 30, 60)
 
 private fun remindLabel(m: Int): String = if (m <= 0) "When it starts" else "$m minutes before"
 
-private enum class ChannelCheckMode(val title: String, val description: String) {
-    OFF("Off", "Skip automatic checks."),
-    IDLE("Automatic when idle", "Check game channels only when no other stream is open."),
-    WHILE_WATCHING("Automatic while watching", "Check game channels even while watching. This uses a second provider connection.")
+private enum class ChannelCheckMode(val title: String, val shortLabel: String, val description: String) {
+    OFF("Off", "Off", "Skip automatic checks."),
+    IDLE("Auto when idle", "Idle only", "Check when no stream is open."),
+    WHILE_WATCHING(
+        "Auto with preview",
+        "With preview",
+        "Also check during the Sports preview. Uses a second provider connection."
+    )
 }
 
 /** Sports, in Nuvio's settings (next to Live TV). */
@@ -175,14 +179,14 @@ fun SportsSettingsContent(
                     )
                     SettingsToggleRow(
                         "Best Channel First",
-                        "Lists each feed by resolution, then frame rate. With channel checks on, working feeds come first.",
+                        "Sorts by resolution, then FPS. With checks on, working feeds come first.",
                         s.bestChannelFirst,
                         { update { it.copy(bestChannelFirst = !it.bestChannelFirst) } }
                     )
                     SettingsActionRow(
-                        title = "Channel checks",
-                        subtitle = "Automatically checks channel availability, resolution and FPS when you open a game.",
-                        value = channelCheckMode.title,
+                        title = "Channel Checks",
+                        subtitle = "Checks channel availability, resolution and FPS.",
+                        value = channelCheckMode.shortLabel,
                         leadingIcon = Icons.Default.Tune,
                         onClick = { dialog = "channelChecks" }
                     )
@@ -290,7 +294,7 @@ fun SportsSettingsContent(
     val close: () -> Unit = { dialog = null }
     when (dialog) {
         "channelChecks" -> SettingsSingleChoiceDialog(
-            title = "Channel checks",
+            title = "Channel Checks",
             options = ChannelCheckMode.entries.map { SettingsPickerOption(it, it.title, description = it.description) },
             selectedValue = channelCheckMode,
             onOptionSelected = { mode ->
@@ -302,7 +306,8 @@ fun SportsSettingsContent(
                 }
                 close()
             },
-            onDismiss = close
+            onDismiss = close,
+            subtitle = "Checks run on the game page."
         )
         "region" -> SettingsSingleChoiceDialog(
             title = "Your region",

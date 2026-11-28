@@ -91,7 +91,7 @@ internal class SportsProbeQueue(
                     if (current(work) && !busy() && !cancelledForPlayback) completed[work.key] = deferred("Check cancelled")
                     continue
                 } catch (_: Exception) {
-                    SportsProbeResult(SportsProbeStatus.UNVERIFIED, detail = "Check could not finish")
+                    SportsProbeResult(SportsProbeStatus.UNVERIFIED)
                 }
                 if (!current(work) || !permitted(channel) || !current(work)) {
                     if (current(work)) completed[work.key] = deferred("Channel changed; check again")
@@ -250,8 +250,8 @@ internal class SportsProbeQueue(
             val value = observed ?: previous
                 ?: when {
                     !requested -> null
-                    waiting -> deferred("Video is playing; check when idle").also { blocked = true }
-                    channel.key == playing -> deferred("Waiting for playback details")
+                    waiting -> deferred("Video playing").also { blocked = true }
+                    channel.key == playing -> deferred("Video info pending")
                     activeWork?.let { current(it) && it.key == key } == true -> SportsProbeResult(SportsProbeStatus.CHECKING)
                     else -> SportsProbeResult(SportsProbeStatus.QUEUED)
                 }

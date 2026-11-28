@@ -999,16 +999,20 @@ internal fun SportsChannelRow(
     val ink = Color.White
     val sub = SportsLook.Dim
     val withGuide = guide != null && !finished
+    val probeHeight = if (showProbe) 18.dp else 0.dp
     Box(
         modifier
             .bringIntoViewRequester(bringIntoView)
             .fillMaxWidth()
-            .height((if (withGuide) 66.dp else 56.dp) + if (showProbe) 18.dp else 0.dp)
+            .height((if (withGuide) 66.dp else 56.dp) + probeHeight)
             .sportsFrame(focused, false, accent, radius = 12.dp)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
     ) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, bottom = probeHeight),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 Modifier.size(width = 46.dp, height = 30.dp).clip(RoundedCornerShape(6.dp))
                     .background(Color.White.copy(alpha = 0.08f)),
@@ -1043,7 +1047,6 @@ internal fun SportsChannelRow(
                     GuideLineText(guide, modifier = Modifier.padding(vertical = 1.dp))
                     LiveText(if (focused && !m.sure) line else guide.detail ?: line, color = sub, size = 10.sp, maxLines = 1)
                 } else LiveText(line, color = sub, size = 10.sp, maxLines = 1)
-                if (showProbe) SportsProbeStatusLine(probe, now)
             }
             Spacer(Modifier.width(8.dp))
             when {
@@ -1079,6 +1082,10 @@ internal fun SportsChannelRow(
                 )
             }
         }
+        if (showProbe) SportsProbeStatusLine(
+            probe, now,
+            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 3.dp)
+        )
         m.program?.takeIf { !finished && now in it.startMs until it.stopMs }?.let { p ->
             val f = ((now - p.startMs).toFloat() / (p.stopMs - p.startMs).coerceAtLeast(1L)).coerceIn(0f, 1f)
             Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(f).height(2.dp).background(accent.copy(alpha = if (m.sure) 1f else 0.5f)))
