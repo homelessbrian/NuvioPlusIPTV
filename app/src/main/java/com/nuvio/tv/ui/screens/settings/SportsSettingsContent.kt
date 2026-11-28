@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.R
 import com.nuvio.tv.livetv.record.LiveTvNotice
 import com.nuvio.tv.livetv.sports.ChannelLink
 import com.nuvio.tv.livetv.sports.ChannelRegions
@@ -224,6 +226,13 @@ fun SportsSettingsContent(
             item(key = "channels") {
                 SettingsGroupCard(title = "Channels") {
                     SettingsActionRow(
+                        title = stringResource(R.string.sports_advanced_channel_sort),
+                        subtitle = stringResource(R.string.sports_advanced_channel_sort_description),
+                        value = stringResource(if (s.channelSort.enabled) R.string.sports_sort_on else R.string.sports_sort_off),
+                        leadingIcon = Icons.Default.Tune,
+                        onClick = { dialog = "channelSort" }
+                    )
+                    SettingsActionRow(
                         title = "Find Channels Again",
                         subtitle = "Looks through your channels and guide for today's games now",
                         leadingIcon = Icons.Default.Refresh,
@@ -293,6 +302,12 @@ fun SportsSettingsContent(
 
     val close: () -> Unit = { dialog = null }
     when (dialog) {
+        "channelSort" -> SportsChannelSortDialog(
+            initial = s.channelSort,
+            viewModel = viewModel,
+            onSave = { sort -> update { it.copy(channelSort = sort) }; close() },
+            onDismiss = close
+        )
         "channelChecks" -> SettingsSingleChoiceDialog(
             title = "Channel Checks",
             options = ChannelCheckMode.entries.map { SettingsPickerOption(it, it.title, description = it.description) },

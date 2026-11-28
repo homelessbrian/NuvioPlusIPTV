@@ -50,4 +50,20 @@ class SportsReportedQualityTest {
             SportsMatcher.sortMatches(listOf(sdPlayback, standardRate, highRate, hd, pick), true))
         assertEquals(listOf(hd, highRate), SportsMatcher.sortMatches(listOf(hd, highRate), false))
     }
+
+    @Test
+    fun advancedPriorityChoosesWhichMatchesSurviveTheCapWithoutChangingLegacyTieOrder() {
+        val picked = match("Manual", score = 200)
+        val copies = List(40) { index -> match("Channel $index 1080p", key = "copy-$index") }
+        val preferred = match("Other channel 720p")
+        val candidates = listOf(picked) + copies + preferred
+        val sort = SportsChannelSort(
+            enabled = true,
+            criteria = listOf(SportsSortCriterion.RESOLUTION),
+            resolutionOrder = listOf(SportsSortResolution.HD, SportsSortResolution.FHD),
+        )
+
+        assertEquals(candidates.take(40), SportsMatcher.capMatches(candidates, sort.copy(enabled = false)))
+        assertEquals(listOf(picked) + copies.take(38) + preferred, SportsMatcher.capMatches(candidates, sort))
+    }
 }

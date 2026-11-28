@@ -227,7 +227,8 @@ data class SportsSettings(
     /** Automatically check the open game's channels. Each check uses a provider connection. */
     val autoCheckChannels: Boolean = false,
     /** Allow an automatic channel check while another stream is open. */
-    val checkChannelsDuringPlayback: Boolean = false
+    val checkChannelsDuringPlayback: Boolean = false,
+    val channelSort: SportsChannelSort = SportsChannelSort()
 ) {
     fun toJson(): String = JSONObject()
         .put("showInSidebar", showInSidebar)
@@ -239,6 +240,7 @@ data class SportsSettings(
         .put("bestChannelFirst", bestChannelFirst)
         .put("autoCheckChannels", autoCheckChannels)
         .put("checkChannelsDuringPlayback", checkChannelsDuringPlayback)
+        .put("channelSort", channelSort.toJson())
         .put("remindMyTeams", remindMyTeams)
         .put("remindMinutes", remindMinutes)
         .put("autoSwitch", autoSwitch)
@@ -274,6 +276,7 @@ data class SportsSettings(
                     bestChannelFirst = o.optBoolean("bestChannelFirst", d.bestChannelFirst),
                     autoCheckChannels = o.optBoolean("autoCheckChannels", d.autoCheckChannels),
                     checkChannelsDuringPlayback = o.optBoolean("checkChannelsDuringPlayback", d.checkChannelsDuringPlayback),
+                    channelSort = SportsChannelSort.fromJson(o.optJSONObject("channelSort")),
                     remindMyTeams = o.optBoolean("remindMyTeams", d.remindMyTeams),
                     remindMinutes = o.optInt("remindMinutes", d.remindMinutes),
                     autoSwitch = o.optBoolean("autoSwitch", d.autoSwitch),

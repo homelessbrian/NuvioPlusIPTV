@@ -1861,16 +1861,18 @@ private fun GamePage(
     val playlistIds = remember(playlists, matches) {
         (playlists.orEmpty().map { it.id } + matches.map { it.channel }.filterNot(BackupOrder::isAddon).map { it.sourceId }).distinct()
     }
-    val sourceOrder = remember(liveSettings?.backupGroupBy, liveSettings?.backupSourceOrder, playlistIds, addonNames) {
-        liveSettings?.let { BackupOrder.gameSourceOrder(it, playlistIds, addonNames) }.orEmpty()
+    val channelSort = settings.channelSort
+    val sourceOrder = remember(channelSort.enabled, liveSettings?.backupGroupBy, liveSettings?.backupSourceOrder, playlistIds, addonNames) {
+        if (channelSort.enabled) emptyList() else liveSettings?.let { BackupOrder.gameSourceOrder(it, playlistIds, addonNames) }.orEmpty()
     }
-    val shownRows = remember(shown, playingKey, sourceOrder.isNotEmpty()) {
-        if (sourceOrder.isNotEmpty()) shown.map { listOf(it) } else SportsMatcher.groupCopies(shown, playingKey)
+    val separateFeeds = sourceOrder.isNotEmpty() || channelSort.enabled
+    val shownRows = remember(shown, playingKey, separateFeeds) {
+        if (separateFeeds) shown.map { listOf(it) } else SportsMatcher.groupCopies(shown, playingKey)
     }
     val channelChecks by viewModel.channelChecks.collectAsStateWithLifecycle()
     // Each actual provider/copy is playable. Verified working sources lead, unavailable ones trail.
-    val displayRows = remember(shownRows, settings.autoCheckChannels, settings.bestChannelFirst, channelChecks, sourceOrder) {
-        sportsGameChannelRows(shownRows, channelChecks, settings.autoCheckChannels, settings.bestChannelFirst, sourceOrder)
+    val displayRows = remember(shownRows, settings.autoCheckChannels, settings.bestChannelFirst, channelChecks, sourceOrder, channelSort) {
+        sportsGameChannelRows(shownRows, channelChecks, settings.autoCheckChannels, settings.bestChannelFirst, sourceOrder, channelSort)
     }
     val probeChannels = remember(shownRows) { shownRows.flatten().map { it.channel }.distinctBy { it.key } }
     val latestProbeChannels = androidx.compose.runtime.rememberUpdatedState(probeChannels)
@@ -1925,12 +1927,12 @@ private fun GamePage(
     val sortFocus = remember(ev.id) { FocusRequester() }
     var sortSources by remember(ev.id) { mutableStateOf(false) }
     var restoreSortFocus by remember(ev.id) { mutableStateOf(false) }
-    val sortButton = liveSettings != null && playlists != null
+    val sortButton = !channelSort.enabled && liveSettings != null && playlists != null
     fun dismissSort() {
         sortSources = false
         restoreSortFocus = true
     }
-    LaunchedEffect(sortSources, restoreSortFocus) {
+    LaunchedEffect(sortSources, restoreSortFocus, sortButton) {
         if (!sortSources && restoreSortFocus && sortButton && ev.state != GameState.POST) {
             androidx.compose.runtime.withFrameNanos { }
             sortFocus.requestFocus()

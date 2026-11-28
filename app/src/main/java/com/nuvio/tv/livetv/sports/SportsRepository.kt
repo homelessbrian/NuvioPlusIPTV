@@ -542,6 +542,16 @@ class SportsRepository @Inject constructor(
     @Volatile private var initialMatchesRead = false
     private var channelEdits = 0L
     private val _addonLive = MutableStateFlow<Map<String, List<ChannelMatch>>>(emptyMap())
+
+    private class RankedMatches(
+        val order: Pair<String, SportsChannelSort>,
+        val playlists: Map<String, List<ChannelMatch>>,
+        val addons: Map<String, List<ChannelMatch>>,
+        val matches: Map<String, List<ChannelMatch>>,
+    )
+
+    // Used only by the single matches collector. Add-on lookups can update one game at a time.
+    private var lastRankedMatches: RankedMatches? = null
     /**
      * Event id -> the channels showing it, best first, with your "Channels from" region's
      * channels moved up. That's done here, on what's already matched, so changing the region
@@ -551,9 +561,11 @@ class SportsRepository @Inject constructor(
         .stateIn(scope, SharingStarted.Eagerly, emptyMap())
     val matches: StateFlow<Map<String, List<ChannelMatch>>> = combine(
         visiblePlaylistMatches,
-        settings.map { it.channelRegion }.distinctUntilChanged(),
+        settings.map { it.channelRegion to it.channelSort.takeIf { sort -> sort.enabled } }.distinctUntilChanged(),
         _addonLive
-    ) { visible, region, addon ->
+    ) { visible, (region, sort), addon ->
+        if (sort != null) return@combine rankGameMatches(visible, region, sort, addon)
+        lastRankedMatches = null
         val m = if (region.isBlank()) visible else visible.mapValues { (_, list) -> ChannelRegions.regionFirst(list, region) }
         // Streams from your sports addons (HighFly…) go after your own channels.
         if (addon.isEmpty()) m else {
@@ -562,6 +574,34 @@ class SportsRepository @Inject constructor(
             out
         }
     }.stateIn(scope, SharingStarted.Eagerly, emptyMap())
+
+    private fun rankGameMatches(
+        visible: Map<String, List<ChannelMatch>>,
+        region: String,
+        sort: SportsChannelSort,
+        addons: Map<String, List<ChannelMatch>>,
+    ): Map<String, List<ChannelMatch>> {
+        val order = region to sort
+        val previous = lastRankedMatches?.takeIf { it.order == order }
+        val heights = HashMap<Pair<String, String?>, Int>()
+        val ids = visible.keys + addons.keys
+        val ranked = buildMap(ids.size) {
+            for (id in ids) {
+                val playlistMatches = visible[id].orEmpty()
+                val addonMatches = addons[id].orEmpty()
+                if (playlistMatches.isEmpty() && addonMatches.isEmpty()) continue
+                val saved = previous?.takeIf { it.playlists[id] == visible[id] && it.addons[id] == addons[id] }
+                    ?.matches?.get(id)
+                val ordered = saved ?: sort.ordered(ChannelRegions.regionFirst(playlistMatches, region) + addonMatches) { match ->
+                    val name = match.channel.name
+                    heights.getOrPut(name to match.quality) { sportsMatchQuality(name, match.quality)?.height ?: 0 }
+                }
+                put(id, ordered)
+            }
+        }
+        lastRankedMatches = RankedMatches(order, visible, addons, ranked)
+        return ranked
+    }
 
     /** Add-ons that give live game streams (Backups & Game Channels' order). */
     suspend fun liveStreamAddonNames(): List<String> = addonSource.liveStreamAddonNames()
@@ -2162,7 +2202,10 @@ class SportsRepository @Inject constructor(
                 for (c in list) h = h * 31 + c.key.hashCode()
                 list.size to h
             }.distinctUntilChanged(),
-            settings.map { listOf(it.networkChannels, it.eventChannels, it.teamChannels, it.leagueChannels, it.blocked, it.bestChannelFirst, it.hiddenLeagues, it.region, it.preferredGroups) }.distinctUntilChanged(),
+            settings.map {
+                listOf(it.networkChannels, it.eventChannels, it.teamChannels, it.leagueChannels, it.blocked,
+                    it.bestChannelFirst, it.hiddenLeagues, it.region, it.preferredGroups, it.channelSort.takeIf { sort -> sort.enabled })
+            }.distinctUntilChanged(),
             follows.map { Triple(it.words, it.leagues, it.excludedGuideTitles) }.distinctUntilChanged(),
             // Live TV ready, and the guide really replaced (not every update check that found nothing new).
             combine(liveRepo.status.map { it.loadedOnce }, liveRepo.guideGeneration) { a, b -> a to b }.distinctUntilChanged()
@@ -2666,7 +2709,8 @@ class SportsRepository @Inject constructor(
                     val old = byChannel[m.channel.key]
                     if (old == null || m.score > old.score) byChannel[m.channel.key] = m
                 }
-                next[id] = SportsMatcher.sortMatches(byChannel.values.toList(), s.bestChannelFirst, rank).take(40)
+                val ranked = SportsMatcher.sortMatches(byChannel.values.toList(), s.bestChannelFirst, rank)
+                next[id] = SportsMatcher.capMatches(ranked, s.channelSort)
             }
             next
         }
@@ -3253,8 +3297,16 @@ class SportsRepository @Inject constructor(
     fun clearFixes() = updateSettings { it.copy(networkChannels = emptyMap(), eventChannels = emptyMap(), blocked = emptySet(), teamChannels = emptyMap(), leagueChannels = emptyMap()) }
 
     /** The channel to tune for a reminder or "watch now": the best match, if any. */
-    fun bestChannel(eventId: String): ChannelMatch? =
-        visiblePlaylistMatches.value[eventId]?.let { ChannelRegions.regionFirst(it, settings.value.channelRegion) }?.firstOrNull()
+    fun bestChannel(eventId: String, requireSure: Boolean = false): ChannelMatch? {
+        val settings = settings.value
+        if (settings.channelSort.enabled) {
+            return matches.value[eventId]?.firstOrNull {
+                it.channel.sourceId != SportsAddonSource.SOURCE_ID && (!requireSure || it.sure)
+            }
+        }
+        return visiblePlaylistMatches.value[eventId]?.let { ChannelRegions.regionFirst(it, settings.channelRegion) }
+            ?.firstOrNull()?.takeIf { !requireSure || it.sure }
+    }
 
     fun channelsForPicker(): List<LiveChannel> = channelStore.displayChannels.value
 
