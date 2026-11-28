@@ -287,7 +287,7 @@ class PlayerRuntimeController(
 
     fun stopAndRelease() {
         movieStartupAttempt?.mark(MovieStartupStep.STOP)
-        vpnSettingsSubscription.close()
+        releaseProcessWideReferences()
         leavePartyPlayback()
         // Cache counters only reach the card on a natural finish, so capture them when the user exits too.
         val diagnostics = lastPlaybackDiagnosticsForReport
@@ -310,21 +310,17 @@ class PlayerRuntimeController(
             }
         }
         mediaSourceFactory.logVodCacheStats()
-        releaseProcessWideReferences()
         mediaSourceFactory.evictCachedSession()
         releasePlayer()
         playerSession.close()
     }
 
-    // These are process wide, so without this the exited player stays reachable until the next one
-    // replaces them; the identity checks keep a player that has already started from losing its own.
     private fun releaseProcessWideReferences() {
+        vpnSettingsSubscription?.close()
+        vpnSettingsSubscription = null
+        // Another player may already have registered its own playhead.
         if (PlayerMediaSourceFactory.vodCachePlayheadBytesProvider === vodCachePlayheadBytesProvider) {
             PlayerMediaSourceFactory.vodCachePlayheadBytesProvider = null
-        }
-        val ownAllocator = _loadControl?.allocator
-        if (ownAllocator != null && NuvioExoPlayerPerformanceHelper.liveAllocator === ownAllocator) {
-            NuvioExoPlayerPerformanceHelper.liveAllocator = null
         }
     }
 
@@ -665,7 +661,7 @@ class PlayerRuntimeController(
     internal var currentMediaSession: MediaSession? = null
     internal var mpvMediaSessionPlayer: MpvMediaSessionPlayer? = null
     internal var ffmpegAudioRenderer: FfmpegAudioRenderer? = null
-    private val vpnSettingsSubscription = com.nuvio.vpn.android.VpnPlaybackProtection.observeSettings {
+    private var vpnSettingsSubscription: AutoCloseable? = com.nuvio.vpn.android.VpnPlaybackProtection.observeSettings {
         if (currentStreamUrl.isNotBlank()) {
             val wasPaused = !_uiState.value.isPlaying
             _exoPlayer?.stop()
@@ -913,6 +909,7 @@ class PlayerRuntimeController(
     }
 
     fun onCleared() {
+        releaseProcessWideReferences()
         playerSession.close()
         stopServerPlayback()
         cancelStreamFallback()
