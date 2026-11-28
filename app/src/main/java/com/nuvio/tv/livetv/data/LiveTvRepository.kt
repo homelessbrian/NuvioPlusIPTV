@@ -1935,7 +1935,7 @@ class LiveTvRepository @Inject constructor(
     }
 
     /** Add-on lists whose guide matching by channel name is switched off. */
-    private fun nameMatchOff(): Set<String> =
+    private suspend fun nameMatchOff(): Set<String> =
         prefs.currentPlaylists().filter { it.isAddon && !it.guideNameMatch }.mapTo(HashSet()) { it.id }
 
     /** One guide file as the fingerprint sees it (also the format of the Assign EPG lists' stamp). */
