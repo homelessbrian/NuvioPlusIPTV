@@ -4,9 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import androidx.media3.exoplayer.ExoPlayer
+import com.nuvio.stalker.StalkerContentKind
+import com.nuvio.stalker.StalkerStreamRef
 import com.nuvio.tv.MainDispatcherRule
 import com.nuvio.tv.livetv.model.LiveChannel
+import com.nuvio.tv.livetv.stalker.StalkerGateway
 import com.nuvio.vpn.android.VpnPlaybackProtection
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -16,6 +20,7 @@ import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -34,6 +39,7 @@ class LiveTvReplayReleaseTest {
     @get:Rule val main = MainDispatcherRule()
     @get:Rule val temporary = TemporaryFolder()
     private lateinit var controller: LiveTvPlaybackController
+    private lateinit var gateway: StalkerGateway
     private lateinit var player: ExoPlayer
     private lateinit var originalReplayCache: LiveTvTimeshift
 
@@ -45,7 +51,8 @@ class LiveTvReplayReleaseTest {
             every { cacheDir } returns temporary.root
             every { getSharedPreferences("livetv_start_guard", Context.MODE_PRIVATE) } returns preferences
         }
-        controller = LiveTvPlaybackController(context, mockk(relaxed = true))
+        gateway = mockk(relaxed = true)
+        controller = LiveTvPlaybackController(context, gateway)
         originalReplayCache = field(controller, "replayCache") as LiveTvTimeshift
         player = mockk(relaxed = true)
         set(controller, "_player", player)
@@ -116,6 +123,38 @@ class LiveTvReplayReleaseTest {
         verify(exactly = 0) { player.prepare() }
         verify(exactly = 0) { player.playWhenReady = true }
         verify(exactly = 1) { player.release() }
+        assertNull(controller.player)
+    }
+
+    @Test fun `release cancels a Stalker tune before it creates a player`() = runTest {
+        set(controller, "_player", null)
+        val ref = StalkerStreamRef(StalkerContentKind.LIVE, "channel", "fixture")
+        val channel = LiveChannel("channel", "playlist", "Playlist", "Channel", null, null,
+            null, "group", "Group", 1, "https://example.invalid/live.ts", stalkerRef = ref)
+        var started = false
+        var cancelled = false
+        coEvery { gateway.prepare(channel.sourceId, ref) } coAnswers {
+            started = true
+            try {
+                awaitCancellation()
+            } finally {
+                cancelled = true
+            }
+        }
+
+        controller.play(channel)
+        runCurrent()
+        assertTrue(started)
+        assertTrue(controller.state.value.isBuffering)
+        assertNull(controller.player)
+
+        controller.releaseNow()
+        runCurrent()
+
+        assertTrue(cancelled)
+        assertNull(controller.playingChannel)
+        assertNull(controller.state.value.channelKey)
+        assertFalse(controller.state.value.isBuffering)
         assertNull(controller.player)
     }
 
