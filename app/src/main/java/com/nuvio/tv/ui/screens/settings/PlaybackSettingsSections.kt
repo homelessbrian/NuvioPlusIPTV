@@ -20,7 +20,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.ui.components.P2pConsentDialog
-import com.nuvio.tv.remote.ui.RemoteGuideSettingsEntry
 
 internal object PlaybackSettingsTestTags {
     fun section(section: PlaybackSection): String = "playback_section_${section.name.lowercase()}"
@@ -49,9 +48,6 @@ internal fun PlaybackSettingsSections(
             contentPadding = PaddingValues(top = NuvioTheme.spacing.xs, bottom = NuvioTheme.spacing.xxl),
             verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)
         ) {
-            item(key = "remote_guide") {
-                RemoteGuideSettingsEntry()
-            }
             items(items = sections, key = { it.name }) { section ->
                 val expanded = section.name in expandedSections
                 SettingsCollapsibleSection(

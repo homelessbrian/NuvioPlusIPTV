@@ -4,7 +4,7 @@ How to get around Nuvio + IPTV with your TV remote. [Back to the README](README.
 
 ### Your remote
 
-Open **Settings → Playback → Your remote** to learn what each button does. Choose
+Open **Settings → Live TV → Setup → Your remote** to learn what each button does. Choose
 the screen you use it on, then a button and **Press once** or **Press and hold**.
 Press **OK** to open its explanation and options. The button's name and selected
 press stay visible as you scroll. After a change, the guide also shows its original action.
