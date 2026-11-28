@@ -196,7 +196,8 @@ internal fun TablesPage(
             }
             if (settings.hideScores) {
                 LiveText(
-                    "Tables are hidden while Hide Scores is on (Sports settings), so they don't give results away.",
+                    if (request == null) "Choose Show Scores in the Sports bar to see tables."
+                    else "Return to Sports Hub and choose Show Scores to see tables.",
                     color = SportsLook.Dim, size = 12.sp, maxLines = 3, modifier = Modifier.padding(top = 14.dp, start = 4.dp)
                 )
                 return@Column

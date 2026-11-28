@@ -85,12 +85,13 @@ internal fun gameExtrasPanels(
     val awayColor = teamColor(ev.away, Color(0xFF5B8DEF))
     val homeColor = teamColor(ev.home, Color(0xFFE5484D))
     val us = SportsCatalog.regionOf(settings) == "US"
+    val info = if (x.hasMatchInfo || (x.hasOdds && !settings.hideScores)) ExtrasPanel("info") { InfoPanel(ev, x, us, showOdds = !settings.hideScores, awayColor, homeColor) } else null
+    if (settings.hideScores) return listOfNotNull(info)
+
     val out = ArrayList<ExtrasPanel>()
     val form = if (x.form.isNotEmpty() || x.meetings.isNotEmpty()) ExtrasPanel("form") { FormPanel(x) } else null
-    val info = if (x.hasMatchInfo || (x.hasOdds && !settings.hideScores)) ExtrasPanel("info") { InfoPanel(ev, x, us, showOdds = !settings.hideScores, awayColor, homeColor) } else null
     val table = if (x.table.isNotEmpty()) ExtrasPanel("table", onTable) { TablePanel(x, opens = onTable != null) } else null
-    if (ev.state == GameState.PRE || settings.hideScores) {
-        // Before it starts (or with scores hidden: nothing that gives the result away).
+    if (ev.state == GameState.PRE) {
         listOfNotNull(form, info, table).forEach { out += it }
     } else {
         if (x.stats.isNotEmpty()) out += ExtrasPanel("stats") { StatsPanel(x, sides, awayColor, homeColor) }
@@ -116,13 +117,14 @@ internal fun gameExtrasTabs(ev: SportsEvent, x: GameExtras?, settings: SportsSet
     val awayColor = teamColor(ev.away, Color(0xFF5B8DEF))
     val homeColor = teamColor(ev.home, Color(0xFFE5484D))
     val us = SportsCatalog.regionOf(settings) == "US"
-    val form = if (x.form.isNotEmpty() || x.meetings.isNotEmpty())
-        (if (x.meetings.isNotEmpty()) "Head to Head" else "Form") to ExtrasPanel("form") { FormPanel(x) } else null
     val info = if (x.hasMatchInfo || (x.hasOdds && !settings.hideScores))
         "Match Info" to ExtrasPanel("info") { InfoPanel(ev, x, us, showOdds = !settings.hideScores, awayColor, homeColor) } else null
+    if (settings.hideScores) return listOfNotNull(info)
+
+    val form = if (x.form.isNotEmpty() || x.meetings.isNotEmpty())
+        (if (x.meetings.isNotEmpty()) "Head to Head" else "Form") to ExtrasPanel("form") { FormPanel(x) } else null
     val table = if (x.table.isNotEmpty()) "Table" to ExtrasPanel("table") { TablePanel(x, opens = true) } else null
-    if (ev.state == GameState.PRE || settings.hideScores) {
-        // Before it starts (or with scores hidden: nothing that gives the result away).
+    if (ev.state == GameState.PRE) {
         return listOfNotNull(form, table, info)
     }
     val out = ArrayList<Pair<String, ExtrasPanel>>()
