@@ -356,7 +356,8 @@ internal class SportsMatcher(
             // Every channel the guide has for it (FHD/HD/SD copies are folded into one row on the
             // game page, other regions under "+ N from other regions"), so nothing the guide shows
             // is left out. 40 is only a guard against a runaway list; it costs no extra searching.
-            return orderedMatches(list, input.settings.bestChannelFirst, rank) { quality(it.channel) }.take(40)
+            val ranked = orderedMatches(list, input.settings.bestChannelFirst, rank) { quality(it.channel) }
+            return capMatches(ranked, input.settings.channelSort) { quality(it.channel).height }
         }
         fun urgent(ev: SportsEvent) = ev.state == GameState.LIVE ||
             (ev.state == GameState.PRE && ev.startMs in (input.now - 15 * MINUTE)..(input.now + 15 * MINUTE))
@@ -539,8 +540,9 @@ internal class SportsMatcher(
                     // No start time (a race weekend, a tournament): the network's listing says nothing about what's on now.
                     if (ev.id in noStart) continue
                     val national = n in NATIONAL
-                    candidates[n].orEmpty()
-                        .map { ch ->
+                    val reason = "$b listed by ESPN"
+                    val networkMatches = candidates[n].orEmpty()
+                        .mapNotNull { ch ->
                             val p = onNow[ch.key]
                             val showText = p?.let { norm(it.title + " " + (it.episode ?: "")) }
                             val score = when {
@@ -553,18 +555,17 @@ internal class SportsMatcher(
                                     if (national) NATIONAL_GUIDE_SCORE else REGIONAL_GUIDE_SCORE
                                 else -> 0
                             }
-                            Triple(ch, score, p)
+                            if (score > 0) ChannelMatch(ch, score, reason, p, null, false) else null
                         }
-                        .filter { it.second > 0 }
                         .sortedWith(
-                            compareByDescending<Triple<LiveChannel, Int, EpgProgram?>> { rank(it.first) }
-                                .thenByDescending { quality(it.first).height }
-                                .thenByDescending { quality(it.first).frameRate }
+                            compareByDescending<ChannelMatch> { rank(it.channel) }
+                                .thenByDescending { quality(it.channel).height }
+                                .thenByDescending { quality(it.channel).frameRate }
                         )
-                        // More than the top few: their FHD/HD/SD copies (one row on the game page)
-                        // and the same network from other providers, as backups if one freezes.
-                        .take(if (national) 8 else 12)
-                        .forEach { (ch, score, p) -> add(ev.id, ch.key, score, "$b listed by ESPN", p); byNetwork++ }
+                    // Let the same preferences pick survivors of the smaller per-network limit.
+                    // Keep copies and alternate providers as backups if one freezes.
+                    capMatches(networkMatches, input.settings.channelSort, if (national) 8 else 12) { quality(it.channel).height }
+                        .forEach { add(ev.id, it.channel.key, it.score, it.how, it.program); byNetwork++ }
                 }
             }
         }
@@ -1927,6 +1928,18 @@ internal class SportsMatcher(
         fun sortMatches(list: List<ChannelMatch>, bestFirst: Boolean, rank: (LiveChannel) -> Int = { 0 }): List<ChannelMatch> {
             val qualities = if (bestFirst) list.associate { it.channel.key to sportsMatchQuality(it.channel.name, it.quality) } else emptyMap()
             return orderedMatches(list, bestFirst, rank) { qualities[it.channel.key] ?: UNKNOWN_QUALITY }
+        }
+
+        fun capMatches(
+            ranked: List<ChannelMatch>,
+            channelSort: SportsChannelSort,
+            limit: Int = 40,
+            heightOf: (ChannelMatch) -> Int = { sportsMatchQuality(it.channel.name, it.quality)?.height ?: 0 },
+        ): List<ChannelMatch> {
+            if (!channelSort.enabled || ranked.size <= limit) return ranked.take(limit)
+            val kept = channelSort.ordered(ranked, heightOf).take(limit).mapTo(HashSet()) { it.channel.key }
+            // Keep the legacy tie order in the match cache so the display can switch modes immediately.
+            return ranked.filter { it.channel.key in kept }
         }
 
         private fun orderedMatches(

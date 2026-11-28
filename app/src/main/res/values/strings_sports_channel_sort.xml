@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sports_advanced_channel_sort">Advanced Channel Sort</string>
+    <string name="sports_advanced_channel_sort_description">Set the priority of sources, resolution, and channel groups on game pages.</string>
+    <string name="sports_sort_on">On</string>
+    <string name="sports_sort_off">Off</string>
+    <string name="sports_sort_use_advanced">Use Advanced Channel Sort</string>
+    <string name="sports_sort_rules_hint">Rules apply from top to bottom. Select a rule to edit it. Channel checks and Best Channel First break ties when enabled. Off uses the standard order.</string>
+    <string name="sports_sort_preference_hint">Move preferred entries up. Other channels are still eligible.</string>
+    <string name="sports_sort_resolution_hint">Move the resolutions you prefer up.</string>
+    <string name="sports_sort_sources">Sources</string>
+    <string name="sports_sort_resolution">Resolution</string>
+    <string name="sports_sort_groups">Channel Groups</string>
+    <string name="sports_sort_add_source">Add Preferred Source</string>
+    <string name="sports_sort_add_group">Add Preferred Group</string>
+    <string name="sports_sort_choose_playlist">Choose a Playlist</string>
+    <string name="sports_sort_search_groups">Search groups in this playlist</string>
+    <string name="sports_sort_source_unavailable">Playlist unavailable</string>
+    <string name="sports_sort_no_sources">No more sources to add.</string>
+    <string name="sports_sort_no_playlists">No enabled playlists.</string>
+    <string name="sports_sort_no_groups">No available groups match.</string>
+    <string name="sports_sort_loading">Loading…</string>
+    <string name="sports_sort_remove">Remove</string>
+    <string name="sports_sort_uhd">UHD · 4K</string>
+    <string name="sports_sort_fhd">FHD · 1080p</string>
+    <string name="sports_sort_hd">HD · 720p</string>
+    <string name="sports_sort_sd">SD</string>
+</resources>

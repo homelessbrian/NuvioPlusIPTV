@@ -146,7 +146,7 @@ fun SportsHost(navController: NavController) {
             if (next != null) {
                 shown += next.id
                 // Switches by itself (this game's choice, or the setting) to a channel we're sure of.
-                val best = repo.bestChannel(next.id)?.takeIf { it.sure }
+                val best = repo.bestChannel(next.id, requireSure = true)
                 if (best != null && repo.switchesFor(next)) armed = next to best
                 val mins = ((next.startMs - now) / 60_000L).toInt()
                 due = next to when {

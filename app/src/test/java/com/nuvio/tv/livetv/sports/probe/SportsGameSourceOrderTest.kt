@@ -5,7 +5,10 @@ import com.nuvio.tv.livetv.model.LiveChannel
 import com.nuvio.tv.livetv.model.LiveTvSettings
 import com.nuvio.tv.livetv.sports.ChannelMatch
 import com.nuvio.tv.livetv.sports.SportsAddonSource
+import com.nuvio.tv.livetv.sports.SportsChannelSort
 import com.nuvio.tv.livetv.sports.SportsMatcher
+import com.nuvio.tv.livetv.sports.SportsSortCriterion
+import com.nuvio.tv.livetv.sports.SportsSortResolution
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -42,6 +45,25 @@ class SportsGameSourceOrderTest {
         assertEquals(listOf(addon, low, high, backup, another), rows.map { it.single() })
         assertEquals(rows.size, rows.map { it.first().channel.key }.distinct().size)
         assertSame(groups, sportsGameChannelRows(groups, emptyMap(), false, false, emptyList()))
+    }
+
+    @Test fun advancedRowsUseMeasuredResolutionBeforeHealthAndKeepManualPicksFirst() {
+        val picked = addon.copy(score = 200)
+        val sort = SportsChannelSort(
+            enabled = true,
+            criteria = listOf(SportsSortCriterion.RESOLUTION),
+            resolutionOrder = listOf(SportsSortResolution.FHD, SportsSortResolution.UHD, SportsSortResolution.SD),
+        )
+        val checks = mapOf(
+            low.channel.key to SportsProbeResult(SportsProbeStatus.UNAVAILABLE, height = 1080),
+            high.channel.key to SportsProbeResult(SportsProbeStatus.WORKING, height = 480),
+            another.channel.key to SportsProbeResult(SportsProbeStatus.WORKING, height = 1080),
+        )
+        val rows = sportsGameChannelRows(
+            listOf(listOf(backup, low, another, high, picked)), checks,
+            automatic = true, bestChannelFirst = true, sourceOrder = listOf("backup"), channelSort = sort,
+        )
+        assertEquals(listOf(picked, another, low, backup, high), rows.map { it.single() })
     }
 
     @Test fun appliedDefaultOrderIsExplicitNewSourcesAreAppendedAndResetOnlyClearsSourcePriority() {
