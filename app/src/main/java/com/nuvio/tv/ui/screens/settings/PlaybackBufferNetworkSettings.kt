@@ -84,6 +84,13 @@ internal fun PlaybackBufferNetworkSection(
         }
     )
 
+    SettingsToggleRow(
+        title = stringResource(R.string.playback_buffer_adaptive),
+        subtitle = stringResource(R.string.playback_buffer_adaptive_sub),
+        checked = settings.adaptiveVodBufferEnabled,
+        onToggle = { onUpdate { setAdaptiveVodBufferEnabled(!settings.adaptiveVodBufferEnabled) } }
+    )
+
     if (settings.bufferEngineEnabled) {
         CustomBufferControls(settings = settings, onUpdate = onUpdate, updateMemory = updateMemory)
     }

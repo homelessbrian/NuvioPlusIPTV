@@ -144,5 +144,10 @@ data class PlaybackIssuePlaybackHealthSnapshotInput(
     val loadStartedCount: Int,
     val loadCompletedCount: Int,
     val loadCanceledCount: Int,
-    val loadErrorCount: Int
+    val loadErrorCount: Int,
+    val bufferedAheadMs: Long? = null,
+    val javaHeapUsedBytes: Long? = null,
+    val javaHeapLimitBytes: Long? = null,
+    val exoAllocatedBufferBytes: Long? = null,
+    val exoTargetBufferBytes: Long? = null
 )

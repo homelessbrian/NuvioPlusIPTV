@@ -461,6 +461,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setBufferEngineEnabled(enabled)
     }
 
+    suspend fun setAdaptiveVodBufferEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setAdaptiveVodBufferEnabled(enabled)
+    }
+
     suspend fun setParallelNetworkEnabled(enabled: Boolean) {
         playerSettingsDataStore.setParallelNetworkEnabled(enabled)
     }

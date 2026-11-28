@@ -6,7 +6,9 @@ import android.net.Uri
 import android.util.Log
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.SeekParameters
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import com.nuvio.tv.R
+import com.nuvio.tv.core.player.BitrateAwareLoadControl
 import com.nuvio.tv.core.player.LastPlaybackDiagnostics
 import com.nuvio.tv.core.tracking.TRACKING_COMPLETION_BAR_PERCENT
 import com.nuvio.tv.core.tracking.TRACKING_SCROBBLE_DIAGNOSTIC_TAG
@@ -352,6 +354,42 @@ internal fun shouldTreatAsNaturalPlaybackCompletion(
 /** Streams shorter than ~2:01 are treated as error/placeholder clips, not real episodes. */
 internal fun isShortPlaceholderDuration(duration: Long): Boolean = duration in 1..120_999L
 
+private val allocatorTargetBufferSize by lazy {
+    runCatching {
+        DefaultAllocator::class.java.getDeclaredField("targetBufferSize").apply { isAccessible = true }
+    }.getOrNull()
+}
+
+private fun PlayerRuntimeController.isOnDemandForDiagnostics(): Boolean =
+    !LivePlaybackUiPolicy.isLivePlayback(
+        playerReportsLive = _exoPlayer?.isCurrentMediaItemLive == true,
+        contentType = contentType,
+        latchedLive = _playbackTimeline.value.isLive
+    ) && !com.nuvio.tv.livetv.record.RecordingResume.isRecording(contentType)
+
+internal fun PlayerRuntimeController.captureOnDemandPlaybackMemorySnapshot(): PlaybackMemorySnapshot? =
+    if (isOnDemandForDiagnostics()) capturePlaybackMemorySnapshot() else null
+
+internal fun PlayerRuntimeController.capturePlaybackMemorySnapshot(): PlaybackMemorySnapshot {
+    val runtime = Runtime.getRuntime()
+    val loadControl = _loadControl.takeIf { _exoPlayer != null && !isUsingMpvEngine() }
+    val allocator = loadControl?.allocator
+    val targetBytes = when (loadControl) {
+        is BitrateAwareLoadControl -> loadControl.activeTargetBufferBytes
+        // Stock Media3 exposes allocated bytes publicly, but keeps the selected target private.
+        else -> (allocator as? DefaultAllocator)?.let {
+            runCatching { synchronized(it) { allocatorTargetBufferSize?.getInt(it) } }.getOrNull()
+        }
+    }
+
+    return PlaybackMemorySnapshot(
+        javaHeapUsedBytes = (runtime.totalMemory() - runtime.freeMemory()).coerceAtLeast(0L),
+        javaHeapLimitBytes = runtime.maxMemory(),
+        exoAllocatedBufferBytes = allocator?.totalBytesAllocated?.toLong()?.takeIf { it >= 0L },
+        exoTargetBufferBytes = targetBytes?.toLong()?.takeIf { it > 0L }
+    )
+}
+
 internal fun PlayerRuntimeController.startProgressUpdates() {
     progressJob?.cancel()
     progressJob = scope.launch {
@@ -378,10 +416,12 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     )
                     val playingNow = view.isPlayingNow()
                     subtitleCueTracker.updateText(view.currentSubtitleText())
-                    val cacheBuffering = view.isPausedForCacheNow() || view.isCoreIdleNow()
+                    val pausedForCache = view.isPausedForCacheNow()
+                    val cacheBuffering = pausedForCache || view.isCoreIdleNow()
+                    val fromRequestedMedia = view.isPositionFromRequestedMedia()
                     var firstFrameReady = hasRenderedFirstFrame
                         if (!firstFrameReady) {
-                            firstFrameReady = view.isPositionFromRequestedMedia() &&
+                            firstFrameReady = fromRequestedMedia &&
                                 (pos > 0L || (playingNow && !cacheBuffering && playerDuration > 0L))
                             if (firstFrameReady) {
                                 hasRenderedFirstFrame = true
@@ -410,24 +450,36 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         lastKnownDuration = playerDuration
                     }
                     val displayPosition = pendingPreviewSeekPosition ?: pos
+                    val bufferedPosition = pos + (view.demuxerCacheDurationSec() * 1000.0).toLong()
                     val playingForWatchClock = playingNow && !cacheBuffering
                     mpvDurationGrowth = LivePlaybackUiPolicy.nextDurationGrowth(
                         previous = mpvDurationGrowth,
                         mediaKey = currentStreamUrl,
                         durationMs = playerDuration,
-                        fromRequestedMedia = view.isPositionFromRequestedMedia()
+                        fromRequestedMedia = fromRequestedMedia
                     )
                     publishPlaybackTimeline(
                         currentPosition = displayPosition,
                         duration = playerDuration,
-                        bufferedPosition = (pos + (view.demuxerCacheDurationSec() * 1000.0).toLong())
-                            .coerceAtLeast(displayPosition),
+                        bufferedPosition = bufferedPosition.coerceAtLeast(displayPosition),
                         // Live TV fork: a recording still being made looks live to the player (and its
                         // length keeps growing), but it's a recording: skipping back and forward stay on.
                         playerReportsLive = (view.isLiveStreamNow() || mpvDurationGrowth.grew) &&
                             !com.nuvio.tv.livetv.record.RecordingResume.isRecording(contentType),
                         isPlaying = playingForWatchClock
                     )
+                    if (fromRequestedMedia && isOnDemandForDiagnostics()) {
+                        playbackAnalyticsDiagnostics.recordMpvProgressSnapshot(
+                            positionMs = pos,
+                            bufferedPositionMs = bufferedPosition,
+                            durationMs = playerDuration,
+                            speed = _uiState.value.playbackSpeed,
+                            playWhenReady = playingNow,
+                            isBuffering = !firstFrameReady || pausedForCache,
+                            rebufferCount = rebufferCount,
+                            rebufferTotalMs = rebufferTotalMs
+                        )
+                    }
                     // Prefer the largest known duration; MPV can report a shorter one transiently.
                     // The playerDuration check stays: lastKnownDuration can still hold the previous
                     // stream's value until it resets.
@@ -876,7 +928,8 @@ private fun PlayerRuntimeController.buildPlaybackIssuePlaybackSettingsInput(): P
         nextEpisodeThresholdPercent = settings.nextEpisodeThresholdPercent,
         nextEpisodeThresholdMinutesBeforeEnd = settings.nextEpisodeThresholdMinutesBeforeEnd,
         streamReuseLastLinkEnabled = settings.streamReuseLastLinkEnabled,
-        streamReuseLastLinkCacheHours = settings.streamReuseLastLinkCacheHours
+        streamReuseLastLinkCacheHours = settings.streamReuseLastLinkCacheHours,
+        adaptiveVodBufferEnabled = settings.adaptiveVodBufferEnabled
     )
 }
 

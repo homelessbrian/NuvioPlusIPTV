@@ -511,7 +511,8 @@ class PlayerRuntimeController(
         LastPlaybackDiagnostics.EMPTY
     internal var lastPlaybackIssueError: PlaybackIssueErrorInput? = null
     internal val playbackIssueReportRequestVersion = AtomicLong(0L)
-    internal val playbackAnalyticsDiagnostics = PlayerPlaybackAnalyticsDiagnostics()
+    internal val playbackAnalyticsDiagnostics =
+        PlayerPlaybackAnalyticsDiagnostics(memorySnapshotProvider = this::captureOnDemandPlaybackMemorySnapshot)
     internal val loadingDiagnosticEvents: ArrayDeque<PlayerLoadingDiagnosticEvent> = ArrayDeque()
     internal val loadingDiagnosticRawEventLines: ArrayDeque<String> = ArrayDeque()
     internal val pendingPlaybackRawEventLines: ArrayDeque<String> = ArrayDeque()

@@ -3392,6 +3392,8 @@
     <string name="playback_net_nuvio_performance_mode_not_supported">This feature is not supported by your device.</string>
     <string name="playback_buffer_custom">Custom Playback Buffers</string>
     <string name="playback_buffer_custom_sub">Override Media3\'s default buffering with the values below. When off, the player uses Media3\'s stock buffer durations and target size.</string>
+    <string name="playback_buffer_adaptive">Adaptive Buffer Limit (Experimental)</string>
+    <string name="playback_buffer_adaptive_sub">Reduce how much ExoPlayer downloads ahead during movies and episodes when memory is low. Applies the next time you open playback.</string>
     <string name="playback_buffer_header">Buffer</string>
     <string name="playback_buffer_warning">These settings affect buffering behavior. Incorrect values may cause playback issues.</string>
     <string name="playback_buffer_min">Min Buffer Duration</string>
