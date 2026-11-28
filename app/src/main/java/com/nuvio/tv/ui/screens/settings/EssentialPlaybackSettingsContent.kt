@@ -25,7 +25,6 @@ import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.SubtitleLanguageOption
 import com.nuvio.tv.ui.components.P2pConsentDialog
-import com.nuvio.tv.remote.ui.RemoteGuideSettingsEntry
 import kotlinx.coroutines.launch
 
 @Composable
@@ -55,9 +54,6 @@ fun EssentialPlaybackSettingsContent(
                     title = stringResource(R.string.essential_playback_header_title),
                     subtitle = stringResource(R.string.essential_playback_header_subtitle)
                 )
-            }
-            item(key = "remote_guide") {
-                RemoteGuideSettingsEntry()
             }
             item(key = "playback_basics") {
                 SettingsGroupCard(modifier = Modifier.fillMaxWidth(), title = stringResource(R.string.essential_playback_basics)) {

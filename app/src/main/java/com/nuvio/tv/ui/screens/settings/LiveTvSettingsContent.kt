@@ -81,6 +81,7 @@ import com.nuvio.tv.livetv.ui.LiveTvSettingsViewModel
 import com.nuvio.tv.livetv.ui.TextInputDialog
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.livetv.model.effectiveGuideSize
+import com.nuvio.tv.remote.ui.RemoteGuideSettingsEntry
 import com.nuvio.tv.ui.screens.collection.NuvioTextField
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.theme.brandWordmarkResource
@@ -662,6 +663,10 @@ internal fun LiveTvSettingsContent(
                         dnsLabel(context, dnsChoice), onClick = { dialog = LiveDialog.Dns }
                     )
                 }
+            }
+
+            if (show(LiveTvPage.MAIN)) item(key = "remote_guide") {
+                RemoteGuideSettingsEntry()
             }
 
             // ------------------------------------------------------------ Channels

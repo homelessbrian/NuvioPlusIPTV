@@ -10,7 +10,7 @@
     <string name="remote_guide_find_add">Add to your guide</string>
     <string name="remote_guide_entry_subtitle">Learn what each button does, or change it for this TV</string>
     <string name="remote_guide_subtitle">Choose a button. Press OK to use its options on the right.</string>
-    <string name="remote_guide_close">Back to Playback settings</string>
+    <string name="remote_guide_close">Back to Live TV settings</string>
     <string name="remote_guide_context">When using</string>
     <string name="remote_screen_live_tv">Watching Live TV</string>
     <string name="remote_screen_tv_guide">TV Guide</string>
